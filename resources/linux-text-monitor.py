@@ -107,34 +107,41 @@ def main():
                 states.contains(Atspi.StateType.EDITABLE)
                 and states.contains(Atspi.StateType.ENABLED)
                 and states.contains(Atspi.StateType.FOCUSABLE)
-                and not states.contains(Atspi.StateType.PROTECTED)
             )
         except Exception:
             editable = False
-        # A shell prompt must never read as a writable caret: pasted newlines
-        # execute. VTE and Qt terminals expose the TERMINAL role; the caller
-        # separately refuses terminals by executable name.
+        # AT-SPI has no "protected" state; a secure field is known only by its
+        # role (GTK, Qt, Chromium and Firefox all report PASSWORD_TEXT), and
+        # generated text must never be pasted into one. A shell prompt must
+        # never read as a writable caret either: pasted newlines execute. VTE
+        # and Qt terminals expose the TERMINAL role; the caller separately
+        # refuses terminals by executable name. A role that cannot be read
+        # could be either, so it is not editable.
         if editable:
             try:
-                if focused.get_role() == Atspi.Role.TERMINAL:
+                if focused.get_role() in (Atspi.Role.PASSWORD_TEXT, Atspi.Role.TERMINAL):
                     editable = False
             except Exception:
-                pass
+                editable = False
         # A live selection means an EDITABLE verdict would let generated text
         # paste over the user's highlighted text. This is the authoritative
         # check: the caller's clipboard-based capture cannot see a selection
         # whose text already matches the clipboard.
+        # GI returns the text interface as an Atspi.Accessible, whose own
+        # get_selection() is the unrelated Selection interface, so the Text
+        # methods are called unbound. A selection that cannot be read could
+        # be live, so it is not editable.
         if editable:
             try:
                 text_iface = focused.get_text_iface()
                 if text_iface:
-                    for i in range(text_iface.get_n_selections()):
-                        selection = text_iface.get_selection(i)
+                    for i in range(Atspi.Text.get_n_selections(text_iface)):
+                        selection = Atspi.Text.get_selection(text_iface, i)
                         if selection and selection.end_offset > selection.start_offset:
                             editable = False
                             break
             except Exception:
-                pass
+                editable = False
         print("EDITABLE" if editable else "NOT_EDITABLE", flush=True)
         sys.exit(0)
 

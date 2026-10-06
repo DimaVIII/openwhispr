@@ -135,6 +135,45 @@ test("isFocusedEditable answers from a stale binary's first monitor line", darwi
   assert.ok(Date.now() - startedAt < 900, "must resolve on the first output line");
 });
 
+async function withLinuxPlatform(run) {
+  const original = Object.getOwnPropertyDescriptor(process, "platform");
+  Object.defineProperty(process, "platform", { value: "linux", configurable: true });
+  try {
+    return await run();
+  } finally {
+    Object.defineProperty(process, "platform", original);
+  }
+}
+
+// The -c script sees the appended --probe-editable as $0.
+const linuxProbe = (script) => {
+  const m = new TextEditMonitor();
+  m.resolveBinary = () => ({ command: "/bin/sh", args: ["-c", script] });
+  return m;
+};
+const posixOnly = { skip: process.platform === "win32" };
+
+test("isFocusedEditable passes --probe-editable on Linux", posixOnly, async () => {
+  const m = linuxProbe('[ "$0" = "--probe-editable" ] && echo EDITABLE || echo NOT_EDITABLE');
+  assert.equal(await withLinuxPlatform(() => m.isFocusedEditable(null)), "editable");
+});
+
+// linux-text-monitor-v1.0.0 predates --probe-editable and shipped in every
+// Linux build until the probe compiled. It ignores its arguments and runs
+// monitor mode, so a field whose text is literally "EDITABLE" must still not
+// read as a writable caret.
+test("isFocusedEditable fails closed on a pre-probe Linux binary", posixOnly, async () => {
+  const m = linuxProbe('echo "INITIAL_VALUE:EDITABLE"; sleep 2');
+  const startedAt = Date.now();
+  assert.equal(await withLinuxPlatform(() => m.isFocusedEditable(null)), "not_editable");
+  assert.ok(Date.now() - startedAt < 900, "must resolve on the first output line");
+
+  for (const line of ["NO_ELEMENT", "NO_VALUE"]) {
+    const exiting = linuxProbe(`echo ${line}; exit 1`);
+    assert.equal(await withLinuxPlatform(() => exiting.isFocusedEditable(null)), "not_editable");
+  }
+});
+
 // The bare window as the focused element is the dormant-Chromium signature —
 // the selection state is unreadable, not empty, so the caller must fall to the
 // synthetic-copy read instead of treating it as "no selection".

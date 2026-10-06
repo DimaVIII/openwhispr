@@ -212,15 +212,24 @@ int main(int argc, char **argv) {
         int editable = states &&
             atspi_state_set_contains(states, ATSPI_STATE_EDITABLE) &&
             atspi_state_set_contains(states, ATSPI_STATE_ENABLED) &&
-            atspi_state_set_contains(states, ATSPI_STATE_FOCUSABLE) &&
-            !atspi_state_set_contains(states, ATSPI_STATE_PROTECTED);
+            atspi_state_set_contains(states, ATSPI_STATE_FOCUSABLE);
         if (states) g_object_unref(states);
-        /* A shell prompt must never read as a writable caret: pasted newlines
-         * execute. VTE and Qt terminals expose ATSPI_ROLE_TERMINAL; the caller
-         * separately refuses terminals by executable name. */
-        if (editable &&
-            atspi_accessible_get_role(focused, NULL) == ATSPI_ROLE_TERMINAL) {
-            editable = 0;
+        /* AT-SPI has no "protected" state; a secure field is known only by
+         * its role (GTK, Qt, Chromium and Firefox all report PASSWORD_TEXT),
+         * and generated text must never be pasted into one. A shell prompt
+         * must never read as a writable caret either: pasted newlines
+         * execute. VTE and Qt terminals expose ATSPI_ROLE_TERMINAL; the
+         * caller separately refuses terminals by executable name. A role
+         * that cannot be read could be either, so it is not editable. */
+        if (editable) {
+            GError *role_error = NULL;
+            AtspiRole role = atspi_accessible_get_role(focused, &role_error);
+            if (role_error) {
+                g_error_free(role_error);
+                editable = 0;
+            } else if (role == ATSPI_ROLE_PASSWORD_TEXT || role == ATSPI_ROLE_TERMINAL) {
+                editable = 0;
+            }
         }
         /* A live selection means an EDITABLE verdict would let generated text
          * paste over the user's highlighted text. This is the authoritative
