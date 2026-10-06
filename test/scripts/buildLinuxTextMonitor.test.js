@@ -30,6 +30,8 @@ test("a downloaded binary is replaced as soon as the source can be compiled", ()
 test("a binary with no recorded hash is rebuilt", () => {
   assert.equal(isBinaryUpToDate(state({ savedHash: null })), false);
   assert.equal(isBinaryUpToDate(state({ savedHash: null, canCompile: false })), false);
+  // A source that could not be hashed must not match a missing hash.
+  assert.equal(isBinaryUpToDate(state({ savedHash: null, currentHash: null })), false);
 });
 
 test("a binary with no source beside it is kept", () => {
