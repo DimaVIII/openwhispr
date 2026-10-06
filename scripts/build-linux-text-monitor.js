@@ -4,10 +4,13 @@
  *
  * Strategy:
  * 1. If binary exists and is up-to-date, do nothing
- * 2. Try to download prebuilt binary from GitHub releases
- * 3. Fall back to local compilation if download fails
+ * 2. Compile locally when the AT-SPI2 dev headers are installed
+ * 3. Otherwise download the prebuilt binary from GitHub releases
  *
- * This allows developers without AT-SPI2 dev headers to still build the app.
+ * Compiling comes first because a release carries no source hash: it can
+ * predate resources/linux-text-monitor.c, as linux-text-monitor-v1.0.0 did
+ * once --probe-editable was added. The download lets developers without
+ * AT-SPI2 dev headers still build the app.
  */
 
 const { spawnSync } = require("child_process");
@@ -15,16 +18,13 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 
-const isLinux = process.platform === "linux";
-if (!isLinux) {
-  process.exit(0);
-}
-
 const projectRoot = path.resolve(__dirname, "..");
 const cSource = path.join(projectRoot, "resources", "linux-text-monitor.c");
 const outputDir = path.join(projectRoot, "resources", "bin");
 const outputBinary = path.join(outputDir, "linux-text-monitor");
 const hashFile = path.join(outputDir, ".linux-text-monitor.hash");
+// Stored in place of a source hash when the binary came from a release.
+const DOWNLOADED_MARKER = "downloaded";
 
 function log(message) {
   console.log(`[linux-text-monitor] ${message}`);
@@ -36,50 +36,44 @@ function ensureDir(dirPath) {
   }
 }
 
-function isBinaryUpToDate() {
-  if (!fs.existsSync(outputBinary)) {
-    return false;
-  }
+function sourceHash(pkgFlags) {
+  const sourceContent = fs.readFileSync(cSource, "utf8");
+  const flagStr = pkgFlags ? pkgFlags.join(" ") : "";
+  return crypto
+    .createHash("sha256")
+    .update(sourceContent + flagStr)
+    .digest("hex");
+}
 
-  if (!fs.existsSync(cSource)) {
-    return true;
-  }
+/**
+ * A downloaded binary stands only while there is no way to compile, since it
+ * may predate the source. A binary with no recorded hash is of unknown origin
+ * and is rebuilt.
+ */
+function isBinaryUpToDate({ binaryExists, sourceExists, savedHash, currentHash, canCompile }) {
+  if (!binaryExists) return false;
+  if (!sourceExists) return true;
+  if (savedHash === DOWNLOADED_MARKER) return !canCompile;
+  return Boolean(savedHash) && savedHash === currentHash;
+}
 
+function readBuildState(pkgFlags) {
+  const sourceExists = fs.existsSync(cSource);
+  let savedHash = null;
+  let currentHash = null;
   try {
-    const binaryStat = fs.statSync(outputBinary);
-    const sourceStat = fs.statSync(cSource);
-    if (binaryStat.mtimeMs < sourceStat.mtimeMs) {
-      return false;
-    }
-  } catch {
-    return false;
-  }
-
-  // Check source + build flags hash
-  try {
-    const pkgFlags = getPkgConfigFlags();
-    const flagStr = pkgFlags ? pkgFlags.join(" ") : "";
-    const sourceContent = fs.readFileSync(cSource, "utf8");
-    const currentHash = crypto
-      .createHash("sha256")
-      .update(sourceContent + flagStr)
-      .digest("hex");
-
-    if (fs.existsSync(hashFile)) {
-      const savedHash = fs.readFileSync(hashFile, "utf8").trim();
-      if (savedHash !== currentHash) {
-        log("Source or build flags changed, rebuild needed");
-        return false;
-      }
-    } else {
-      fs.writeFileSync(hashFile, currentHash);
-    }
+    if (fs.existsSync(hashFile)) savedHash = fs.readFileSync(hashFile, "utf8").trim();
+    if (sourceExists) currentHash = sourceHash(pkgFlags);
   } catch (err) {
     log(`Hash check failed: ${err.message}, forcing rebuild`);
-    return false;
   }
-
-  return true;
+  return {
+    binaryExists: fs.existsSync(outputBinary),
+    sourceExists,
+    savedHash,
+    currentHash,
+    canCompile: Boolean(pkgFlags),
+  };
 }
 
 async function tryDownload() {
@@ -97,6 +91,11 @@ async function tryDownload() {
   });
 
   if (result.status === 0 && fs.existsSync(outputBinary)) {
+    try {
+      fs.writeFileSync(hashFile, DOWNLOADED_MARKER);
+    } catch (err) {
+      log(`Warning: Could not record download: ${err.message}`);
+    }
     log("Successfully downloaded prebuilt binary");
     return true;
   }
@@ -135,15 +134,9 @@ function attemptCompile(command, args) {
   });
 }
 
-function tryCompile() {
+function tryCompile(pkgFlags) {
   if (!fs.existsSync(cSource)) {
     log("C source not found, cannot compile locally");
-    return false;
-  }
-
-  const pkgFlags = getPkgConfigFlags();
-  if (!pkgFlags) {
-    log("AT-SPI2 development headers not found, cannot compile locally");
     return false;
   }
 
@@ -167,13 +160,7 @@ function tryCompile() {
   }
 
   try {
-    const sourceContent = fs.readFileSync(cSource, "utf8");
-    const flagStr = pkgFlags.join(" ");
-    const hash = crypto
-      .createHash("sha256")
-      .update(sourceContent + flagStr)
-      .digest("hex");
-    fs.writeFileSync(hashFile, hash);
+    fs.writeFileSync(hashFile, sourceHash(pkgFlags));
   } catch (err) {
     log(`Warning: Could not save source hash: ${err.message}`);
   }
@@ -185,18 +172,32 @@ function tryCompile() {
 async function main() {
   ensureDir(outputDir);
 
-  if (isBinaryUpToDate()) {
+  const pkgFlags = getPkgConfigFlags();
+  if (isBinaryUpToDate(readBuildState(pkgFlags))) {
     log("Binary is up to date, skipping build");
     return;
   }
 
-  const downloaded = await tryDownload();
-  if (downloaded) {
-    return;
+  if (pkgFlags) {
+    if (tryCompile(pkgFlags)) {
+      return;
+    }
+    // With headers installed, a failed compile is a broken source. CI must
+    // not paper over it with a release that may predate that source.
+    if (process.env.CI) {
+      console.error("[linux-text-monitor] Compilation failed; refusing a prebuilt fallback in CI.");
+      process.exitCode = 1;
+      return;
+    }
+    console.warn(
+      "[linux-text-monitor] Compilation failed; the prebuilt release may predate resources/linux-text-monitor.c."
+    );
+  } else {
+    log("AT-SPI2 development headers not found, cannot compile locally");
   }
 
-  const compiled = tryCompile();
-  if (compiled) {
+  const downloaded = await tryDownload();
+  if (downloaded) {
     return;
   }
 
@@ -207,6 +208,10 @@ async function main() {
   );
 }
 
-main().catch((error) => {
-  console.error("[linux-text-monitor] Unexpected error:", error);
-});
+if (require.main === module && process.platform === "linux") {
+  main().catch((error) => {
+    console.error("[linux-text-monitor] Unexpected error:", error);
+  });
+}
+
+module.exports = { DOWNLOADED_MARKER, isBinaryUpToDate };
