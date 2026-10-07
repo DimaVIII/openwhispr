@@ -130,6 +130,24 @@ static AtspiAccessible *find_focused(AtspiAccessible *accessible) {
     return NULL;
 }
 
+/* The editable probe vouches for the window a paste will reach, so it looks
+ * only inside the active window: a FOCUSED state left behind in a background
+ * app must not count. linux-fast-paste scopes its AT-SPI target the same way. */
+static AtspiAccessible *find_focused_in_active_window(AtspiAccessible *app) {
+    int window_count = atspi_accessible_get_child_count(app, NULL);
+    for (int i = 0; i < window_count; i++) {
+        AtspiAccessible *win = atspi_accessible_get_child_at_index(app, i, NULL);
+        if (!win) continue;
+        AtspiStateSet *states = atspi_accessible_get_state_set(win);
+        int active = states && atspi_state_set_contains(states, ATSPI_STATE_ACTIVE);
+        if (states) g_object_unref(states);
+        AtspiAccessible *focused = active ? find_focused(win) : NULL;
+        g_object_unref(win);
+        if (active) return focused;
+    }
+    return NULL;
+}
+
 static char *read_text_value(AtspiText *text_iface) {
     GError *error = NULL;
 
@@ -195,7 +213,7 @@ int main(int argc, char **argv) {
         }
         if (!app) continue;
 
-        focused = find_focused(app);
+        focused = probe_editable ? find_focused_in_active_window(app) : find_focused(app);
         g_object_unref(app);
     }
 
@@ -208,10 +226,13 @@ int main(int argc, char **argv) {
     }
 
     if (probe_editable) {
+        /* GTK4 reports a usable field as SENSITIVE without ENABLED; a
+         * disabled one has neither. */
         AtspiStateSet *states = atspi_accessible_get_state_set(focused);
         int editable = states &&
             atspi_state_set_contains(states, ATSPI_STATE_EDITABLE) &&
-            atspi_state_set_contains(states, ATSPI_STATE_ENABLED) &&
+            (atspi_state_set_contains(states, ATSPI_STATE_ENABLED) ||
+             atspi_state_set_contains(states, ATSPI_STATE_SENSITIVE)) &&
             atspi_state_set_contains(states, ATSPI_STATE_FOCUSABLE);
         if (states) g_object_unref(states);
         /* AT-SPI has no "protected" state; a secure field is known only by

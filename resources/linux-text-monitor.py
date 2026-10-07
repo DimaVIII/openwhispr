@@ -55,6 +55,20 @@ def _find_focused(accessible):
     return None
 
 
+# The editable probe vouches for the window a paste will reach, so it looks
+# only inside the active window: a FOCUSED state left behind in a background
+# app must not count. linux-fast-paste scopes its AT-SPI target the same way.
+def _find_focused_in_active_window(app):
+    try:
+        for i in range(app.get_child_count()):
+            window = app.get_child_at_index(i)
+            if window is not None and window.get_state_set().contains(Atspi.StateType.ACTIVE):
+                return _find_focused(window)
+    except Exception:
+        pass
+    return None
+
+
 def _emit_text(prefix, value):
     truncated = value[:MAX_OUTPUT_CHARS]
     if "\n" in truncated or "\r" in truncated:
@@ -90,7 +104,9 @@ def main():
             app = desktop.get_child_at_index(i)
             if app is None:
                 continue
-            focused = _find_focused(app)
+            focused = (
+                _find_focused_in_active_window(app) if probe_editable else _find_focused(app)
+            )
             if focused is not None:
                 break
         except Exception:
@@ -103,9 +119,14 @@ def main():
     if probe_editable:
         try:
             states = focused.get_state_set()
+            # GTK4 reports a usable field as SENSITIVE without ENABLED; a
+            # disabled one has neither.
             editable = (
                 states.contains(Atspi.StateType.EDITABLE)
-                and states.contains(Atspi.StateType.ENABLED)
+                and (
+                    states.contains(Atspi.StateType.ENABLED)
+                    or states.contains(Atspi.StateType.SENSITIVE)
+                )
                 and states.contains(Atspi.StateType.FOCUSABLE)
             )
         except Exception:
