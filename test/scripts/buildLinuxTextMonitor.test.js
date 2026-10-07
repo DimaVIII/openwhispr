@@ -1,7 +1,11 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { DOWNLOADED_MARKER, isBinaryUpToDate } = require("../../scripts/build-linux-text-monitor");
+const {
+  downloadedHash,
+  isBinaryUpToDate,
+  obtainSteps,
+} = require("../../scripts/build-linux-text-monitor");
 
 const state = (overrides) => ({
   binaryExists: true,
@@ -21,8 +25,27 @@ test("a compiled binary is current only while its source hash matches", () => {
 // linux-text-monitor-v1.0.0 predated --probe-editable, yet every Linux build
 // shipped it: the download ran first and was never checked against the source.
 test("a downloaded binary is replaced as soon as the source can be compiled", () => {
-  assert.equal(isBinaryUpToDate(state({ savedHash: DOWNLOADED_MARKER })), false);
-  assert.equal(isBinaryUpToDate(state({ savedHash: DOWNLOADED_MARKER, canCompile: false })), true);
+  const downloaded = downloadedHash("abc");
+  assert.equal(isBinaryUpToDate(state({ savedHash: downloaded })), false);
+  assert.equal(isBinaryUpToDate(state({ savedHash: downloaded, canCompile: false })), true);
+});
+
+// Without headers the download is the only source, so a source change must
+// fetch again: the newer release is the only way to pick up the change.
+test("a downloaded binary is fetched again when the source changes", () => {
+  assert.equal(
+    isBinaryUpToDate(
+      state({ savedHash: downloadedHash("abc"), currentHash: "def", canCompile: false })
+    ),
+    false
+  );
+});
+
+test("compiling comes first, and CI never falls back to a release", () => {
+  assert.deepEqual(obtainSteps({ canCompile: true, inCI: false }), ["compile", "download"]);
+  assert.deepEqual(obtainSteps({ canCompile: true, inCI: true }), ["compile"]);
+  assert.deepEqual(obtainSteps({ canCompile: false, inCI: true }), ["download"]);
+  assert.deepEqual(obtainSteps({ canCompile: false, inCI: false }), ["download"]);
 });
 
 // The old check stamped the current hash onto a binary with none, so a stale

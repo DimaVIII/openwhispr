@@ -23,8 +23,6 @@ const cSource = path.join(projectRoot, "resources", "linux-text-monitor.c");
 const outputDir = path.join(projectRoot, "resources", "bin");
 const outputBinary = path.join(outputDir, "linux-text-monitor");
 const hashFile = path.join(outputDir, ".linux-text-monitor.hash");
-// Stored in place of a source hash when the binary came from a release.
-const DOWNLOADED_MARKER = "downloaded";
 
 function log(message) {
   console.log(`[linux-text-monitor] ${message}`);
@@ -45,6 +43,12 @@ function sourceHash(pkgFlags) {
     .digest("hex");
 }
 
+// A download is recorded against the source it was fetched for, so a source
+// change fetches again and picks up a newer release.
+function downloadedHash(hash) {
+  return `downloaded:${hash}`;
+}
+
 /**
  * A downloaded binary stands only while there is no way to compile, since it
  * may predate the source. A binary with no recorded hash is of unknown origin
@@ -53,8 +57,19 @@ function sourceHash(pkgFlags) {
 function isBinaryUpToDate({ binaryExists, sourceExists, savedHash, currentHash, canCompile }) {
   if (!binaryExists) return false;
   if (!sourceExists) return true;
-  if (savedHash === DOWNLOADED_MARKER) return !canCompile;
-  return Boolean(savedHash) && savedHash === currentHash;
+  if (!currentHash) return false;
+  if (savedHash === downloadedHash(currentHash)) return !canCompile;
+  return savedHash === currentHash;
+}
+
+/**
+ * Compiling comes first, since a release can predate the source. With headers
+ * installed, a failed compile is a broken source, which CI must not paper over
+ * with that release.
+ */
+function obtainSteps({ canCompile, inCI }) {
+  if (!canCompile) return ["download"];
+  return inCI ? ["compile"] : ["compile", "download"];
 }
 
 function readBuildState(pkgFlags) {
@@ -76,7 +91,7 @@ function readBuildState(pkgFlags) {
   };
 }
 
-async function tryDownload() {
+async function tryDownload(pkgFlags) {
   log("Attempting to download prebuilt binary...");
 
   const downloadScript = path.join(__dirname, "download-text-monitor.js");
@@ -92,7 +107,7 @@ async function tryDownload() {
 
   if (result.status === 0 && fs.existsSync(outputBinary)) {
     try {
-      fs.writeFileSync(hashFile, DOWNLOADED_MARKER);
+      fs.writeFileSync(hashFile, downloadedHash(sourceHash(pkgFlags)));
     } catch (err) {
       log(`Warning: Could not record download: ${err.message}`);
     }
@@ -178,26 +193,26 @@ async function main() {
     return;
   }
 
-  if (pkgFlags) {
-    if (tryCompile(pkgFlags)) {
-      return;
-    }
-    // With headers installed, a failed compile is a broken source. CI must
-    // not paper over it with a release that may predate that source.
-    if (process.env.CI) {
-      console.error("[linux-text-monitor] Compilation failed; refusing a prebuilt fallback in CI.");
-      process.exitCode = 1;
-      return;
-    }
-    console.warn(
-      "[linux-text-monitor] Compilation failed; the prebuilt release may predate resources/linux-text-monitor.c."
-    );
-  } else {
+  if (!pkgFlags) {
     log("AT-SPI2 development headers not found, cannot compile locally");
   }
 
-  const downloaded = await tryDownload();
-  if (downloaded) {
+  const steps = obtainSteps({ canCompile: Boolean(pkgFlags), inCI: Boolean(process.env.CI) });
+  for (const step of steps) {
+    if (step === "compile" && tryCompile(pkgFlags)) return;
+    if (step === "download") {
+      if (pkgFlags) {
+        console.warn(
+          "[linux-text-monitor] Compilation failed; the prebuilt release may predate resources/linux-text-monitor.c."
+        );
+      }
+      if (await tryDownload(pkgFlags)) return;
+    }
+  }
+
+  if (!steps.includes("download")) {
+    console.error("[linux-text-monitor] Compilation failed; refusing a prebuilt fallback in CI.");
+    process.exitCode = 1;
     return;
   }
 
@@ -214,4 +229,4 @@ if (require.main === module && process.platform === "linux") {
   });
 }
 
-module.exports = { DOWNLOADED_MARKER, isBinaryUpToDate };
+module.exports = { downloadedHash, isBinaryUpToDate, obtainSteps };
