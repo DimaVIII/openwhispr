@@ -112,7 +112,7 @@ test("Retry runs the check again, and the icon changes state in place", async (t
   await render({ phase: "checking" });
   const first = icon();
   await render(failed("network"));
-  assert.equal(icon(), first, "the same SVG moves from spinning to failed");
+  assert.ok(icon() === first, "the same SVG moves from spinning to failed");
   assert.equal(first.getAttribute("data-state"), "failed");
   const retry = findElement(container, (element) => element.tagName === "BUTTON");
   await React.act(async () => retry.dispatchEvent({ type: "click", bubbles: true }));

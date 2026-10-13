@@ -107,7 +107,7 @@ test("a rejected key keeps Proceed off; Retry and an edit both check again", asy
 
 test("Corti checks once both the client ID and secret are filled, in the secret", async (t) => {
   const step = await mountByokStep(t, { settings: CORTI, secrets: { cortiClientId: "corti-id" } });
-  assert.equal(step.checkField(LABEL.apiKey), undefined);
+  assert.ok(step.checkField(LABEL.apiKey) === undefined, "Corti has no API key field");
   assert.equal(phase(step, LABEL.clientSecret), "idle");
   await step.wait(1000);
   assert.equal(step.connectionRequests().length, 0);

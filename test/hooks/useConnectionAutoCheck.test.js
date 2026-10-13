@@ -101,6 +101,19 @@ test("an answer for an earlier entry is discarded", async (t) => {
   assert.equal(auto.state().failure.errorCode, "credentialsRejected");
 });
 
+test("a late answer for an earlier entry leaves the newer request alone", async (t) => {
+  const auto = await mountCheck(t);
+  await auto.wait(500);
+  await auto.edit("gsk-b");
+  await auto.wait(500);
+  await auto.answer(PASS, 0);
+  assert.equal(auto.state().phase, "checking");
+  await auto.wait(2000);
+  assert.equal(auto.requests.length, 2, "no second request for the current entry");
+  await auto.answer(REJECTED, 1);
+  assert.equal(auto.state().phase, "failed");
+});
+
 test("returning to an earlier value still checks again", async (t) => {
   const auto = await mountCheck(t);
   await auto.wait(500);

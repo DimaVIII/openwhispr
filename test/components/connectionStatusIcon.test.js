@@ -52,5 +52,6 @@ test("reduced motion stops the spin and settles the shapes at once", () => {
     assert.match(properties, new RegExp(`\\b${fade}\\b`), fade);
   }
   assert.doesNotMatch(properties, /stroke-dash|transform/);
+  assert.match(reduced, /animation-duration: 0\.01ms !important;/);
   assert.match(reduced, /animation-iteration-count: 1 !important;/);
 });

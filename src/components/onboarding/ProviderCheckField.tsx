@@ -14,8 +14,8 @@ export function FieldLabel({ children }: { children: ReactNode }) {
   );
 }
 
-// Only these say the value in the field is wrong; a network, timeout or status failure
-// says nothing about it.
+// A refused key or a missing model is about what was entered; a network, timeout or status
+// failure says nothing about it.
 const VALUE_REJECTED = new Set(["credentialsRejected", "modelNotFound"]);
 
 type ProviderCheckFieldProps = Omit<
