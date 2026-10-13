@@ -269,13 +269,15 @@ class MetaActivation {
         .run(stream.id, result.acceptedThrough);
       this.db
         .prepare(
-          "UPDATE streams SET complete_through=?,state=CASE WHEN state='closing' THEN 'closed' ELSE state END WHERE id=?"
+          "UPDATE streams SET complete_through=?,state=CASE WHEN ? AND state='closing' THEN 'closed' ELSE state END WHERE id=?"
         )
-        .run(completeThrough, stream.id);
+        .run(completeThrough, stream.state === "closing" ? 1 : 0, stream.id);
     })();
   }
 
   retire(id) {
+    for (const row of this.db.prepare("SELECT id FROM captures WHERE stream_id=?").all(id))
+      this.failedCaptures.delete(row.id);
     this.db.transaction(() => {
       this.db.prepare("UPDATE streams SET state='done' WHERE id=?").run(id);
       this.db.prepare("DELETE FROM captures WHERE stream_id=?").run(id);
@@ -288,7 +290,7 @@ class MetaActivation {
     const unresolved = this.db
       .prepare("SELECT 1 FROM captures WHERE stream_id=? AND words IS NULL LIMIT 1")
       .get(stream.id);
-    if (unresolved || this.failedCaptures.size) {
+    if (unresolved) {
       this.db.prepare("UPDATE streams SET gap=1 WHERE id=?").run(stream.id);
     }
     this.db.prepare("DELETE FROM captures WHERE stream_id=? AND words IS NULL").run(stream.id);
@@ -300,6 +302,12 @@ class MetaActivation {
   }
 
   purge(accountId) {
+    const captures = this.db
+      .prepare(
+        "SELECT c.id FROM captures c JOIN streams s ON s.id=c.stream_id WHERE s.account_id=?"
+      )
+      .all(accountId);
+    for (const row of captures) this.failedCaptures.delete(row.id);
     this.db.prepare("DELETE FROM streams WHERE account_id=?").run(accountId);
     this.anchor = null;
   }
@@ -308,6 +316,7 @@ class MetaActivation {
     this.disposed = true;
     clearInterval(this.timer);
     this.anchor = null;
+    this.failedCaptures.clear();
     this.db.close();
   }
 

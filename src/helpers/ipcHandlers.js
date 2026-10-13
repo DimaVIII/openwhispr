@@ -6311,7 +6311,7 @@ class IPCHandlers {
         await Promise.race([
           this.metaActivation?.close(),
           new Promise((resolve) => setTimeout(resolve, 1500)),
-        ]);
+        ]).catch(() => {});
         const tokenState = tokenStore.clear();
         const win = BrowserWindow.fromWebContents(event.sender);
         if (win) {

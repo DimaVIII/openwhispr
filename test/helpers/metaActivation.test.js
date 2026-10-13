@@ -249,3 +249,75 @@ test("cancellation during activation IPC cannot restart streaming or retain its 
   assert.equal(manager._activationCapture ?? null, null);
   assert.equal(manager.streamingStartInProgress, false);
 });
+
+test("close waits for a closing acknowledgement, not an earlier open batch", async (t) => {
+  const r = rig(t);
+  await r.manager.flush();
+  const original = r.manager.request;
+  let release;
+  let hold = true;
+  const flags = [];
+  r.manager.request = async (req) => {
+    if (req.path.endsWith("/batch")) {
+      flags.push(req.body.close);
+      if (hold) {
+        hold = false;
+        await new Promise((resolve) => (release = resolve));
+      }
+    }
+    return original(req);
+  };
+  const flushing = r.manager.flush();
+  const closing = r.manager.close();
+  release();
+  await Promise.all([flushing, closing]);
+  assert.deepEqual(flags, [false, true]);
+  assert.equal(r.manager.current().state, "closed");
+});
+test("erasing an account's failed capture cannot suppress another account", async (t) => {
+  const r = rig(t);
+  await r.manager.flush();
+  r.tick();
+  const id = r.manager.begin();
+  r.tick();
+  r.manager.stopCapture(id);
+  r.db.exec(
+    "CREATE TRIGGER fail_a BEFORE UPDATE OF words ON captures BEGIN SELECT RAISE(ABORT, 'disk full'); END;"
+  );
+  assert.throws(() => r.manager.finish(id, 10));
+  r.manager.purge("a");
+  r.db.exec("DROP TRIGGER fail_a;");
+  r.scope({ accountId: "b", authGeneration: 2 });
+  await r.manager.flush();
+  await r.manager.close();
+  assert.equal(r.calls.at(-1).body.gap, false);
+  assert.equal(r.manager.failedCaptures.size, 0);
+});
+
+test("excluded assistant capture still honors immediate startup cancellation", async (t) => {
+  const { createManager } = await loadAudioManager(t, {
+    cachePrefix: "activation-assistant-cancel-",
+    settingsKey: "__activationAssistantCancel",
+    settings: {},
+  });
+  const states = [];
+  const manager = createManager({
+    voiceAgentRequested: true,
+    micRecovery: { stop() {} },
+    cleanupStreamingAudio() {},
+    cleanupStreamingListeners() {},
+    cleanupPreview: async () => {},
+    getStreamingProvider: () => ({ stop: async () => {} }),
+    _streamingCancellationGeneration: 0,
+    _streamingStartSettlementWaiters: [],
+    isRecordingAllowedByPolicy: () => true,
+    onStateChange: (state) => states.push(state),
+  });
+  const start = manager.startStreamingRecording();
+  const cancel = manager.cancelStreamingRecording();
+  assert.deepEqual(await Promise.all([start, cancel]), [false, true]);
+  assert.equal(
+    states.some((state) => state.isRecording),
+    false
+  );
+});
