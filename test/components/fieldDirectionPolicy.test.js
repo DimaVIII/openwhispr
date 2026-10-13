@@ -73,7 +73,6 @@ const EXPECTED_SHARED_FIELD_DIRECTIONS = {
   "src/components/notes/ActionManagerDialog.tsx": ["auto", "auto", "auto"],
   "src/components/notes/DeleteSpaceDialog.tsx": ["auto"],
   "src/components/notes/UploadAudioView.tsx": ["auto"],
-  "src/components/onboarding/ProviderCheckField.tsx": ["ltr"],
   "src/components/onboarding/ProviderSetupStep.tsx": ["ltr", "ltr", "ltr"],
   "src/components/settings/DictationAgentSettings.tsx": ["auto"],
   "src/components/settings/EnterpriseCheckoutDialog.tsx": ["inherit"],
@@ -83,6 +82,7 @@ const EXPECTED_SHARED_FIELD_DIRECTIONS = {
   "src/components/ui/ApiKeyInput.tsx": ["ltr"],
   "src/components/ui/CustomModelInput.tsx": ["ltr"],
   "src/components/ui/PromptStudio.tsx": ["auto", "auto"],
+  "src/components/ui/ProviderCheckField.tsx": ["ltr"],
   "src/components/ui/SearchableModelList.tsx": ["ltr"],
 };
 

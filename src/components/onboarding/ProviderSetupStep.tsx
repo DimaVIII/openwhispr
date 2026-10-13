@@ -9,7 +9,7 @@ import {
 } from "react";
 import { AudioLines, Check, CircleCheck, Download, MousePointer2 } from "../icons";
 import { useTranslation } from "react-i18next";
-import { FieldLabel, ProviderCheckField } from "./ProviderCheckField";
+import { FieldLabel, ProviderCheckField } from "../ui/ProviderCheckField";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { ProviderIcon } from "../ui/ProviderIcon";
@@ -648,7 +648,6 @@ export function ByokProviderStep({
               value={draftCustomModel}
               onChange={(event) => setDraftCustomModel(event.target.value)}
               placeholder={t("onboarding.rehaul.provider.modelIdPlaceholder")}
-              className={inputClass}
             />
           </>
         ) : (
@@ -737,7 +736,6 @@ export function ByokProviderStep({
                   type="password"
                   value={draftCortiClientSecret}
                   onChange={(event) => setDraftCortiClientSecret(event.target.value)}
-                  className={inputClass}
                   autoComplete="off"
                 />
               </div>
@@ -753,7 +751,6 @@ export function ByokProviderStep({
                 disabled={!selectedProvider}
                 autoComplete="off"
                 spellCheck={false}
-                className={inputClass}
               />
             )}
           </>
