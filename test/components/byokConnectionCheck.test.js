@@ -183,6 +183,19 @@ test("a mode switch with the address focused still checks both forms", async (t)
   assert.deepEqual(sent(step, "provider"), ["groq", "custom"]);
 });
 
+test("each checked field is marked invalid only by a failure about its own value", async (t) => {
+  for (const [name, options, label, invalidOn] of [
+    ["hosted key", { settings: HOSTED_GROQ }, LABEL.apiKey, "credentialsRejected"],
+    ["Corti secret", { settings: CORTI }, LABEL.clientSecret, "credentialsRejected"],
+    ["self-hosted model", { selfHostedRequested: true }, LABEL.modelId, "modelNotFound"],
+  ]) {
+    await t.test(name, async (t) => {
+      const step = await mountByokStep(t, options);
+      assert.equal(step.checkField(label).props.invalidOn, invalidOn);
+    });
+  }
+});
+
 test("the live region is always there and says only what the check found", async (t) => {
   for (const [name, options] of [
     ["hosted", { settings: HOSTED_GROQ }],

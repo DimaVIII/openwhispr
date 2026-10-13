@@ -644,6 +644,7 @@ export function ByokProviderStep({
             <ProviderCheckField
               label={t("onboarding.rehaul.provider.modelId")}
               check={check}
+              invalidOn="modelNotFound"
               value={draftCustomModel}
               onChange={(event) => setDraftCustomModel(event.target.value)}
               placeholder={t("onboarding.rehaul.provider.modelIdPlaceholder")}
@@ -732,6 +733,7 @@ export function ByokProviderStep({
                 <ProviderCheckField
                   label={t("onboarding.rehaul.provider.clientSecret")}
                   check={check}
+                  invalidOn="credentialsRejected"
                   type="password"
                   value={draftCortiClientSecret}
                   onChange={(event) => setDraftCortiClientSecret(event.target.value)}
@@ -743,6 +745,7 @@ export function ByokProviderStep({
               <ProviderCheckField
                 label={t("onboarding.rehaul.provider.apiKey")}
                 check={check}
+                invalidOn="credentialsRejected"
                 type="password"
                 value={draftApiKey}
                 onChange={(event) => setDraftApiKey(event.target.value)}

@@ -14,16 +14,15 @@ export function FieldLabel({ children }: { children: ReactNode }) {
   );
 }
 
-// A refused key or a missing model is about what was entered; a network, timeout or status
-// failure says nothing about it.
-const VALUE_REJECTED = new Set(["credentialsRejected", "modelNotFound"]);
-
 type ProviderCheckFieldProps = Omit<
   ComponentProps<typeof Input>,
   "dir" | "aria-invalid" | "aria-describedby"
 > & {
   label: string;
   check: Pick<ConnectionAutoCheck, "phase" | "failure" | "retry">;
+  /** The failure that says this field's value is wrong: a refused key for a key or secret, a
+   * missing model for a Model ID. Any other failure leaves the value valid. */
+  invalidOn: "credentialsRejected" | "modelNotFound";
 };
 
 /**
@@ -33,6 +32,7 @@ type ProviderCheckFieldProps = Omit<
 export function ProviderCheckField({
   label,
   check,
+  invalidOn,
   className,
   ...inputProps
 }: ProviderCheckFieldProps) {
@@ -57,7 +57,7 @@ export function ProviderCheckField({
           <Input
             dir="ltr"
             {...inputProps}
-            aria-invalid={failure && VALUE_REJECTED.has(failure.errorCode ?? "") ? true : undefined}
+            aria-invalid={failure?.errorCode === invalidOn ? true : undefined}
             aria-describedby={reasonId}
             className={cn(className, phase !== "idle" && "pe-9")}
           />

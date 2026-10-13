@@ -24,11 +24,12 @@ async function loadField(t) {
   return module.ProviderCheckField;
 }
 
-const markup = (Field, check) =>
+const markup = (Field, check, invalidOn = "credentialsRejected") =>
   renderToStaticMarkup(
     React.createElement(Field, {
       label: LABEL,
       check: { failure: null, retry() {}, ...check },
+      invalidOn,
       type: "password",
       value: "sk-test",
       readOnly: true,
@@ -67,15 +68,27 @@ test("the status sits at the field's own end and changes with the check", async 
   }
 });
 
-test("a rejected key or missing model shows the reason, Retry and aria-invalid", async (t) => {
+test("the field's own failure shows the reason, Retry and aria-invalid", async (t) => {
   const Field = await loadField(t);
   for (const errorCode of ["credentialsRejected", "modelNotFound"]) {
-    const html = markup(Field, failed(errorCode));
+    const html = markup(Field, failed(errorCode), errorCode);
     assert.match(html, /data-state="failed"/);
     assert.match(html, /aria-invalid="true"/);
     const reason = `role="alert">onboarding\\.rehaul\\.provider\\.errors\\.${errorCode}<`;
     assert.match(html, new RegExp(reason));
     assert.match(html, /<button type="button"[^>]*>common\.retry<\/button>/);
+  }
+});
+
+test("a failure about another field shows its reason but leaves this value valid", async (t) => {
+  const Field = await loadField(t);
+  for (const [errorCode, invalidOn] of [
+    ["modelNotFound", "credentialsRejected"],
+    ["credentialsRejected", "modelNotFound"],
+  ]) {
+    const html = markup(Field, failed(errorCode), invalidOn);
+    assert.doesNotMatch(html, /aria-invalid="/, `${errorCode} in a ${invalidOn} field`);
+    assert.match(html, new RegExp(`errors\\.${errorCode}<`));
   }
 });
 
@@ -103,6 +116,7 @@ test("Retry runs the check again, and the icon changes state in place", async (t
         React.createElement(Field, {
           label: LABEL,
           check: { failure: null, retry: () => (retries += 1), ...check },
+          invalidOn: "credentialsRejected",
           value: "sk-test",
           readOnly: true,
         })
