@@ -230,8 +230,13 @@ test("cancellation during activation IPC cannot restart streaming or retain its 
     new Promise((resolve) => (resolveBegin = resolve));
   window.electronAPI.cancelActivationCapture = async (id) => cancelled.push(id);
   const manager = createManager({
-    micRecovery:{stop(){}}, cleanupStreamingAudio(){}, cleanupStreamingListeners(){}, cleanupPreview:async()=>{},
-    getStreamingProvider:()=>({stop:async()=>{}}),_streamingCancellationGeneration:0,_streamingStartSettlementWaiters:[],
+    micRecovery: { stop() {} },
+    cleanupStreamingAudio() {},
+    cleanupStreamingListeners() {},
+    cleanupPreview: async () => {},
+    getStreamingProvider: () => ({ stop: async () => {} }),
+    _streamingCancellationGeneration: 0,
+    _streamingStartSettlementWaiters: [],
   });
   manager.isRecordingAllowedByPolicy = () => true;
   const starting = manager.startStreamingRecording();
