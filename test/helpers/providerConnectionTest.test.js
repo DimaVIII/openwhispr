@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const http = require("node:http");
 const test = require("node:test");
 const providerTest = require("../../src/helpers/providerConnectionTest.js");
 
@@ -16,6 +17,7 @@ test("honors OpenAI base URL overrides from the environment", () => {
   try {
     const request = resolveProviderRequest({ provider: "openai", apiKey: "secret" });
     assert.deepEqual(request.endpoints, ["https://proxy.example.com/v1/models"]);
+    assert.equal(request.redirect, "follow");
   } finally {
     delete process.env.OPENAI_BASE_URL;
   }
@@ -23,7 +25,7 @@ test("honors OpenAI base URL overrides from the environment", () => {
 
 test("the realtime STT providers use their own auth schemes, not Bearer", () => {
   const deepgram = resolveProviderRequest({ provider: "deepgram", apiKey: "dg-secret" });
-  assert.equal(deepgram.endpoint, "https://api.deepgram.com/v1/models");
+  assert.equal(deepgram.endpoint, "https://api.deepgram.com/v1/auth/token");
   assert.equal(deepgram.endpoint.includes("dg-secret"), false);
   assert.equal(deepgram.headers.Authorization, "Token dg-secret");
 
@@ -278,4 +280,230 @@ test("reports endpointNotFound only after every candidate 404s", async () => {
       status: 401,
     }
   );
+});
+
+const jsonResponse = (status, body) => ({
+  ok: status >= 200 && status < 300,
+  status,
+  // undefined is an empty body; a string is raw text (JSON.parse throws on non-JSON).
+  json: async () => {
+    if (body === undefined) throw new SyntaxError("Unexpected end of JSON input");
+    return typeof body === "string" ? JSON.parse(body) : body;
+  },
+});
+
+function recordingFetch(answer) {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url, init });
+    return answer(url, init);
+  };
+  return { calls, fetchImpl };
+}
+
+async function listen(t, handler) {
+  const server = http.createServer(handler);
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => {
+    server.closeAllConnections();
+    server.close();
+  });
+  return `http://127.0.0.1:${server.address().port}`;
+}
+
+const GEMINI_INVALID_KEY = {
+  error: {
+    code: 400,
+    status: "INVALID_ARGUMENT",
+    details: [
+      {
+        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+        reason: "API_KEY_INVALID",
+        domain: "googleapis.com",
+      },
+    ],
+  },
+};
+const XAI_BAD_KEY = { code: "invalid-argument", error: "Incorrect API key provided: xa***00." };
+const CORTI_MALFORMED_HEADER = { message: "Missing or malformed Authorization header" };
+
+test("Deepgram is checked at its key endpoint with its own scheme", () => {
+  const request = resolveProviderRequest({ provider: "deepgram", apiKey: "dg-secret" });
+  assert.equal(request.endpoint, "https://api.deepgram.com/v1/auth/token");
+  assert.equal(request.headers.Authorization, "Token dg-secret");
+  assert.equal(request.redirect, "error");
+});
+
+test("any 2xx from Deepgram's key check passes, whatever the body or model", async () => {
+  const { calls, fetchImpl } = recordingFetch(() => ({ ok: true, status: 200 }));
+  const config = { provider: "deepgram", apiKey: "dg-key", model: "nova-3" };
+  assert.deepEqual(await testProviderConnection(config, fetchImpl), { success: true });
+  assert.deepEqual(
+    calls.map((call) => call.url),
+    ["https://api.deepgram.com/v1/auth/token"]
+  );
+});
+
+test("Deepgram rejects a made-up key without trying the fallback", async () => {
+  for (const status of [401, 403]) {
+    const { calls, fetchImpl } = recordingFetch(() => jsonResponse(status));
+    const config = { provider: "deepgram", apiKey: "made-up" };
+    const result = await testProviderConnection(config, fetchImpl);
+    assert.equal(result.errorCode, "credentialsRejected");
+    assert.equal(result.status, status);
+    assert.deepEqual(
+      calls.map((call) => call.url),
+      ["https://api.deepgram.com/v1/auth/token"]
+    );
+  }
+});
+
+test("a retired Deepgram key route falls back to the key's project list", async () => {
+  const { calls, fetchImpl } = recordingFetch((url) =>
+    url.endsWith("/v1/auth/token") ? jsonResponse(404) : jsonResponse(200, { projects: [] })
+  );
+  const config = { provider: "deepgram", apiKey: "dg-key" };
+  assert.deepEqual(await testProviderConnection(config, fetchImpl), { success: true });
+  assert.deepEqual(
+    calls.map((call) => [call.url, call.init.headers.Authorization, call.init.redirect]),
+    [
+      ["https://api.deepgram.com/v1/auth/token", "Token dg-key", "error"],
+      ["https://api.deepgram.com/v1/projects", "Token dg-key", "error"],
+    ]
+  );
+});
+
+test("the project-list fallback passes only with its project list", async () => {
+  const afterRetiredRoute = (answer) =>
+    recordingFetch((url) => (url.endsWith("/v1/auth/token") ? jsonResponse(404) : answer))
+      .fetchImpl;
+  const config = { provider: "deepgram", apiKey: "dg-key" };
+  assert.deepEqual(
+    await testProviderConnection(config, afterRetiredRoute(jsonResponse(200, { data: [] }))),
+    { success: false }
+  );
+  const rejected = await testProviderConnection(config, afterRetiredRoute(jsonResponse(401)));
+  assert.equal(rejected.errorCode, "credentialsRejected");
+});
+
+test("a network failure on Deepgram's key check does not try the fallback", async () => {
+  const { calls, fetchImpl } = recordingFetch(() => {
+    throw new TypeError("fetch failed");
+  });
+  const result = await testProviderConnection({ provider: "deepgram", apiKey: "k" }, fetchImpl);
+  assert.equal(result.errorCode, "network");
+  assert.deepEqual(
+    calls.map((call) => call.url),
+    ["https://api.deepgram.com/v1/auth/token"]
+  );
+});
+
+test("Anthropic and Gemini are asked for their largest page of models", () => {
+  assert.equal(
+    resolveProviderRequest({ provider: "anthropic", apiKey: "k" }).endpoint,
+    "https://api.anthropic.com/v1/models?limit=1000"
+  );
+  assert.equal(
+    resolveProviderRequest({ provider: "gemini", apiKey: "k" }).endpoint,
+    "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000"
+  );
+});
+
+test("Gemini, xAI and Corti rejections are read from the provider's error body", async () => {
+  const cases = [
+    ["gemini", 400, GEMINI_INVALID_KEY, "credentialsRejected"],
+    ["gemini", 400, { error: { status: "FAILED_PRECONDITION" } }, "providerStatus"],
+    ["xai", 400, XAI_BAD_KEY, "credentialsRejected"],
+    ["xai", 400, { error: "incorrect api KEY provided." }, "credentialsRejected"],
+    ["xai", 400, { error: "Model grok-x does not exist" }, "providerStatus"],
+    ["corti", 400, undefined, "credentialsRejected"],
+    ["corti", 400, "Bad Request", "credentialsRejected"],
+    ["corti", 400, { message: "Unsupported model" }, "providerStatus"],
+    ["corti", 401, CORTI_MALFORMED_HEADER, "credentialsRejected"],
+  ];
+  for (const [provider, status, body, errorCode] of cases) {
+    const fetchImpl = async () => jsonResponse(status, body);
+    const result = await testProviderConnection({ provider, apiKey: "made-up" }, fetchImpl);
+    assert.equal(result.errorCode, errorCode, `${provider} ${status} ${JSON.stringify(body)}`);
+    assert.equal(result.status, status);
+  }
+});
+
+test("other providers' error bodies are never read", async () => {
+  let reads = 0;
+  const fetchImpl = async () => ({
+    ok: false,
+    status: 400,
+    json: async () => {
+      reads += 1;
+      return { error: { message: "Incorrect API key provided: sk-ma****" } };
+    },
+  });
+  for (const provider of ["openai", "groq", "mistral", "anthropic", "assemblyai", "deepgram"]) {
+    const result = await testProviderConnection({ provider, apiKey: "k" }, fetchImpl);
+    assert.equal(result.errorCode, "providerStatus", provider);
+  }
+  assert.equal(reads, 0);
+});
+
+test("a Corti key of only spaces is never sent", async () => {
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+  };
+  const result = await testProviderConnection({ provider: "corti", apiKey: "   " }, fetchImpl);
+  assert.equal(result.errorCode, "apiKeyRequired");
+  assert.equal(calls, 0);
+});
+
+test("hosted providers refuse redirects; custom servers keep following them", async () => {
+  const hosted = [
+    "openai", "groq", "xai", "mistral", "anthropic", "gemini",
+    "openrouter", "corti", "deepgram", "assemblyai",
+  ];
+  for (const provider of hosted) {
+    assert.equal(resolveProviderRequest({ provider, apiKey: "k" }).redirect, "error", provider);
+  }
+  const custom = resolveProviderRequest({ provider: "custom", baseUrl: "http://localhost:1234" });
+  assert.equal(custom.redirect, "follow");
+
+  const { calls, fetchImpl } = recordingFetch(() => jsonResponse(200, { data: [{ id: "m" }] }));
+  await testProviderConnection({ provider: "openai", apiKey: "k", model: "m" }, fetchImpl);
+  assert.equal(calls[0].init.redirect, "error");
+});
+
+test("a hosted provider's redirect fails before the key reaches another host", async (t) => {
+  const received = [];
+  const target = await listen(t, (request, response) => {
+    received.push(request.headers["x-api-key"]);
+    response.end("{}");
+  });
+  const origin = await listen(t, (request, response) => {
+    response.writeHead(302, { location: `${target}/v1/models` }).end();
+  });
+  const inits = [];
+  // Only the host changes: the real request, headers and redirect mode go to the local origin.
+  const viaOrigin = (url, init) => {
+    inits.push(init);
+    return fetch(`${origin}${new URL(url).pathname}`, init);
+  };
+  const config = { provider: "anthropic", apiKey: "sk-ant-test", model: "claude-test" };
+  assert.equal((await testProviderConnection(config, viaOrigin)).errorCode, "network");
+  assert.deepEqual(received, []);
+  // The same request allowed to follow would hand the key over, so this test can fail.
+  await fetch(`${origin}/v1/models`, { ...inits[0], redirect: "follow", signal: undefined });
+  assert.deepEqual(received, ["sk-ant-test"]);
+});
+
+test("a custom server can still redirect within itself", async (t) => {
+  const base = await listen(t, (request, response) => {
+    if (request.url === "/v1/models") {
+      response.writeHead(308, { location: "/v1/models/" }).end();
+      return;
+    }
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ data: [{ id: "local-model" }] }));
+  });
+  const config = { provider: "custom", baseUrl: `${base}/v1`, model: "local-model" };
+  assert.deepEqual(await testProviderConnection(config), { success: true });
 });
