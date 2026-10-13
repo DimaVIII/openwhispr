@@ -9,7 +9,6 @@ import type {
 } from "../types/electron";
 import { Button } from "./ui/button";
 import { CircleAlert, Cloud, Lock, Zap } from "./icons";
-import ApiKeyInput from "./ui/ApiKeyInput";
 import ModelCardList from "./ui/ModelCardList";
 import LocalModelPicker, { type LocalProvider } from "./LocalModelPicker";
 import { ProviderTabs, type ProviderTabItem } from "./ui/ProviderTabs";
@@ -24,6 +23,11 @@ import {
 import { useTinfoilModels } from "../hooks/useTinfoilModels";
 import { getRemoteProviderIcon } from "../utils/providerIcons";
 import { GetApiKeyLink } from "./ui/GetApiKeyLink";
+import { ConnectionCheckAnnouncer } from "./ui/ConnectionCheckAnnouncer";
+import { ProviderCheckField } from "./ui/ProviderCheckField";
+import { usePanelVisible } from "./ui/usePanelVisible";
+import { CONNECTION_CHECK_DELAY_MS, useConnectionAutoCheck } from "../hooks/useConnectionAutoCheck";
+import { useFocusHold } from "../hooks/useFocusHold";
 import { getCachedPlatform } from "../utils/platform";
 import { useSettingsStore } from "../stores/settingsStore";
 import {
@@ -407,6 +411,58 @@ export default function ReasoningModelSelector({
       ? selectedMode
       : (modeTabs[0]?.id as "cloud" | "local" | undefined));
 
+  // One key per hosted provider, shared with every other panel. OpenRouter and Custom check
+  // themselves in OpenAICompatiblePanel.
+  const hostedKeys: Partial<
+    Record<string, { value: string; set: (key: string) => void; url: string }>
+  > = {
+    openai: {
+      value: openaiApiKey,
+      set: setOpenaiApiKey,
+      url: "https://platform.openai.com/api-keys",
+    },
+    anthropic: {
+      value: anthropicApiKey,
+      set: setAnthropicApiKey,
+      url: "https://console.anthropic.com/settings/keys",
+    },
+    gemini: {
+      value: geminiApiKey,
+      set: setGeminiApiKey,
+      url: "https://aistudio.google.com/app/api-keys",
+    },
+    groq: { value: groqApiKey, set: setGroqApiKey, url: "https://console.groq.com/keys" },
+    tinfoil: {
+      value: tinfoilApiKey,
+      set: setTinfoilApiKey,
+      url: "https://tinfoil.sh/inference?utm_source=referral&utm_campaign=openwhispr",
+    },
+    corti: {
+      value: cortiApiKey,
+      set: setCortiApiKey,
+      url: "https://www.corti.ai/?utm_source=referral&utm_campaign=openwhispr",
+    },
+  };
+  const hostedKey = hostedKeys[displayedCloudProvider];
+  const visible = usePanelVisible();
+  // Typing keeps the pause; showing the panel, a tab or a model checks at once.
+  const editing = useFocusHold();
+  const check = useConnectionAutoCheck({
+    config: {
+      scope: "reasoning",
+      provider: displayedCloudProvider,
+      apiKey: hostedKey?.value ?? "",
+      // A tab that is only being browsed has no model of this panel's: the key alone is checked.
+      model: localReasoningProvider === displayedCloudProvider ? reasoningModel : "",
+    },
+    ready:
+      effectiveMode === "cloud" &&
+      providerAllowed(displayedCloudProvider) &&
+      Boolean(hostedKey?.value.trim()),
+    hold: !visible,
+    delayMs: editing.held ? CONNECTION_CHECK_DELAY_MS : 0,
+  });
+
   const localProviders = useMemo<LocalProvider[]>(() => {
     return modelRegistry.getAllProviders().map((provider) => ({
       id: provider.id,
@@ -517,6 +573,7 @@ export default function ReasoningModelSelector({
 
   return (
     <div className="space-y-4">
+      <ConnectionCheckAnnouncer announcement={check.announcement} />
       {!mode && (
         <div className="space-y-2">
           {modeTabs.length > 0 ? (
@@ -568,6 +625,7 @@ export default function ReasoningModelSelector({
                     setLocalReasoningProvider(OPENROUTER_TAB);
                     setReasoningModel(m);
                   }}
+                  provider="openrouter"
                   lockedBaseUrl
                   apiKeyRequired
                   getKeyUrl={OPENROUTER_KEYS_URL}
@@ -588,93 +646,26 @@ export default function ReasoningModelSelector({
                 />
               ) : (
                 <>
-                  {displayedCloudProvider === "openai" && (
-                    <div className="space-y-2">
+                  {hostedKey && (
+                    <div className="space-y-2" onFocus={editing.onFocus} onBlur={editing.onBlur}>
+                      {displayedCloudProvider === "corti" && (
+                        <p className="text-xs text-muted-foreground">
+                          {t("reasoning.corti.euOnly")}
+                        </p>
+                      )}
                       <div className="flex items-baseline justify-between">
                         <h4 className="font-medium text-foreground">{t("common.apiKey")}</h4>
-                        <GetApiKeyLink url="https://platform.openai.com/api-keys" />
+                        <GetApiKeyLink url={hostedKey.url} />
                       </div>
-                      <ApiKeyInput
-                        apiKey={openaiApiKey}
-                        setApiKey={setOpenaiApiKey}
-                        label=""
-                        helpText=""
-                      />
-                    </div>
-                  )}
-
-                  {displayedCloudProvider === "anthropic" && (
-                    <div className="space-y-2">
-                      <div className="flex items-baseline justify-between">
-                        <h4 className="font-medium text-foreground">{t("common.apiKey")}</h4>
-                        <GetApiKeyLink url="https://console.anthropic.com/settings/keys" />
-                      </div>
-                      <ApiKeyInput
-                        apiKey={anthropicApiKey}
-                        setApiKey={setAnthropicApiKey}
-                        label=""
-                        helpText=""
-                      />
-                    </div>
-                  )}
-
-                  {displayedCloudProvider === "gemini" && (
-                    <div className="space-y-2">
-                      <div className="flex items-baseline justify-between">
-                        <h4 className="font-medium text-foreground">{t("common.apiKey")}</h4>
-                        <GetApiKeyLink url="https://aistudio.google.com/app/api-keys" />
-                      </div>
-                      <ApiKeyInput
-                        apiKey={geminiApiKey}
-                        setApiKey={setGeminiApiKey}
-                        label=""
-                        helpText=""
-                      />
-                    </div>
-                  )}
-
-                  {displayedCloudProvider === "groq" && (
-                    <div className="space-y-2">
-                      <div className="flex items-baseline justify-between">
-                        <h4 className="font-medium text-foreground">{t("common.apiKey")}</h4>
-                        <GetApiKeyLink url="https://console.groq.com/keys" />
-                      </div>
-                      <ApiKeyInput
-                        apiKey={groqApiKey}
-                        setApiKey={setGroqApiKey}
-                        label=""
-                        helpText=""
-                      />
-                    </div>
-                  )}
-
-                  {displayedCloudProvider === "tinfoil" && (
-                    <div className="space-y-2">
-                      <div className="flex items-baseline justify-between">
-                        <h4 className="font-medium text-foreground">{t("common.apiKey")}</h4>
-                        <GetApiKeyLink url="https://tinfoil.sh/inference?utm_source=referral&utm_campaign=openwhispr" />
-                      </div>
-                      <ApiKeyInput
-                        apiKey={tinfoilApiKey}
-                        setApiKey={setTinfoilApiKey}
-                        label=""
-                        helpText=""
-                      />
-                    </div>
-                  )}
-
-                  {displayedCloudProvider === "corti" && (
-                    <div className="space-y-2">
-                      <p className="text-xs text-muted-foreground">{t("reasoning.corti.euOnly")}</p>
-                      <div className="flex items-baseline justify-between">
-                        <h4 className="font-medium text-foreground">{t("common.apiKey")}</h4>
-                        <GetApiKeyLink url="https://www.corti.ai/?utm_source=referral&utm_campaign=openwhispr" />
-                      </div>
-                      <ApiKeyInput
-                        apiKey={cortiApiKey}
-                        setApiKey={setCortiApiKey}
-                        label=""
-                        helpText=""
+                      <ProviderCheckField
+                        aria-label={t("common.apiKey")}
+                        check={check}
+                        type="password"
+                        value={hostedKey.value}
+                        onChange={(event) => hostedKey.set(event.target.value.trim())}
+                        placeholder={t("apiKeyInput.placeholder")}
+                        autoComplete="off"
+                        spellCheck={false}
                       />
                     </div>
                   )}
