@@ -73,7 +73,6 @@ const EXPECTED_SHARED_FIELD_DIRECTIONS = {
   "src/components/notes/ActionManagerDialog.tsx": ["auto", "auto", "auto"],
   "src/components/notes/DeleteSpaceDialog.tsx": ["auto"],
   "src/components/notes/UploadAudioView.tsx": ["auto"],
-  "src/components/onboarding/ProviderSetupStep.tsx": ["ltr", "ltr", "ltr"],
   "src/components/settings/DictationAgentSettings.tsx": ["auto"],
   "src/components/settings/EnterpriseCheckoutDialog.tsx": ["inherit"],
   "src/components/settings/ProfileSection.tsx": ["auto", "ltr", "ltr", "ltr"],
@@ -170,8 +169,8 @@ test("representative prose, identity, secret, and rich-editor surfaces keep thei
     /<Input\s+dir="ltr"\s+type="password"/
   );
   assert.match(
-    source("src/components/onboarding/ProviderSetupStep.tsx"),
-    /<Input\s+dir="ltr"\s+type="password"/
+    source("src/components/ui/ProviderCheckField.tsx"),
+    /<Input\s+dir="ltr"\s+\{\.\.\.inputProps\}/
   );
   assert.match(
     source("src/components/DictionaryView.tsx"),
