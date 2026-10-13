@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { AudioLines, Check, CircleCheck, Download, MousePointer2 } from "../icons";
 import { useTranslation } from "react-i18next";
 import ProviderConnectionTest from "./ProviderConnectionTest";
+import { FieldLabel } from "./ProviderCheckField";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { ProviderIcon } from "../ui/ProviderIcon";
@@ -300,12 +301,6 @@ function resolveInitialLocalSelection(
 }
 
 type HostedProvider = CloudProviderData | TranscriptionProviderData;
-
-function FieldLabel({ children }: { children: ReactNode }) {
-  return (
-    <span className="mb-1.5 block text-xs text-[var(--onboarding-text-tertiary)]">{children}</span>
-  );
-}
 
 export function ByokProviderStep({
   stepId,
