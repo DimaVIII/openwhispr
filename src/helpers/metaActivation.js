@@ -59,14 +59,17 @@ class MetaActivation {
     if (!scope) return null;
     if (!stream || stream.state === "closed") {
       this.db
-        .prepare("INSERT INTO streams(id,account_id,gap) VALUES(?,?,1)")
+        .prepare("INSERT INTO streams(id,account_id) VALUES(?,?)")
         .run(randomUUID(), scope.accountId);
       stream = this.current(scope);
     }
     if (stream.state === "done") return null;
     const time = this.clock(scope);
     if (time === null || stream.state !== "open") {
-      this.db.prepare("UPDATE streams SET gap=1 WHERE id=?").run(stream.id);
+      // The cohort starts only after permitted registration. Earlier usage
+      // is intentionally untracked; a missing clock after enrollment is a gap.
+      if (stream.registered_at)
+        this.db.prepare("UPDATE streams SET gap=1 WHERE id=?").run(stream.id);
       void this.flush();
       return null;
     }

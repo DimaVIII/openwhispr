@@ -176,11 +176,14 @@ test("live capture counts original speech with history off, excluding assistant/
   ]);
 });
 
-test("dictation before registration preserves the unknown interval as a gap", async (t) => {
+test("dictation before registration stays outside the prospective tracked count", async (t) => {
   const r = rig(t);
   assert.equal(r.manager.begin(), null);
   await r.manager.flush();
-  assert.equal(r.calls.at(-1).body.gap, true);
+  assert.equal(r.calls.at(-1).body.gap, false);
+  assert.deepEqual(r.calls.at(-1).body.events, []);
+  await capture(r, 199);
+  assert.equal(r.manager.current().total_words, 199);
 });
 test("storage failure cannot be erased by finalizer cancellation or clean shutdown", async (t) => {
   const r = rig(t);
