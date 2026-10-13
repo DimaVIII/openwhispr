@@ -289,15 +289,21 @@ const KEY_REJECTED_BY_BODY = {
 };
 
 async function describeResponseFailure(response, provider) {
+  const failure = describeStatusFailure(response.status, provider);
   const keyRejected = KEY_REJECTED_BY_BODY[provider];
-  if (keyRejected && keyRejected(response.status, await readJson(response))) {
+  // A 401 or 403 already says the key was refused; only a vaguer status needs the body.
+  if (
+    failure.errorCode !== "credentialsRejected" &&
+    keyRejected &&
+    keyRejected(response.status, await readJson(response))
+  ) {
     return {
       errorCode: "credentialsRejected",
       error: "The provider rejected these credentials.",
       status: response.status,
     };
   }
-  return describeStatusFailure(response.status, provider);
+  return failure;
 }
 
 function normalizeModelId(value) {
@@ -332,7 +338,7 @@ async function responseOffersModel(response, model) {
 }
 
 // One GET under the 12 s cap. `judge` reads the response inside that window, so a body
-// that never finishes still times out. It returns null when the check passes.
+// that stalls cannot hold the check past the cap. It returns null when the check passes.
 async function probe(endpoint, request, fetchImpl, judge) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 12000);

@@ -466,6 +466,25 @@ test("an error body that never arrives is a timeout or a network failure", async
   }
 });
 
+test("a 401 or 403 is a rejection whatever its body does", async () => {
+  let reads = 0;
+  for (const provider of ["gemini", "xai", "corti"]) {
+    for (const status of [401, 403]) {
+      const fetchImpl = async () => ({
+        ok: false,
+        status,
+        json: async () => {
+          reads += 1;
+          throw new TypeError("terminated");
+        },
+      });
+      const result = await testProviderConnection({ provider, apiKey: "made-up" }, fetchImpl);
+      assert.equal(result.errorCode, "credentialsRejected", `${provider} ${status}`);
+    }
+  }
+  assert.equal(reads, 0, "the status alone decides");
+});
+
 test("the 12 s cap covers the whole answer, body included", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const aborted = Object.assign(new Error("This operation was aborted"), { name: "AbortError" });
