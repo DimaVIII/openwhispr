@@ -324,6 +324,9 @@ const GEMINI_INVALID_KEY = {
     ],
   },
 };
+const GEMINI_OTHER_REASON = {
+  error: { code: 400, details: [{ reason: "API_KEY_SERVICE_BLOCKED" }] },
+};
 const XAI_BAD_KEY = { code: "invalid-argument", error: "Incorrect API key provided: xa***00." };
 const CORTI_MALFORMED_HEADER = { message: "Missing or malformed Authorization header" };
 
@@ -398,6 +401,15 @@ test("a network failure on Deepgram's key check does not try the fallback", asyn
   );
 });
 
+test("Deepgram's other failures keep their status and skip the fallback", async () => {
+  for (const status of [400, 429, 500]) {
+    const { calls, fetchImpl } = recordingFetch(() => jsonResponse(status));
+    const result = await testProviderConnection({ provider: "deepgram", apiKey: "k" }, fetchImpl);
+    assert.equal(result.errorCode, "providerStatus", String(status));
+    assert.equal(calls.length, 1, String(status));
+  }
+});
+
 test("Anthropic and Gemini are asked for their largest page of models", () => {
   assert.equal(
     resolveProviderRequest({ provider: "anthropic", apiKey: "k" }).endpoint,
@@ -413,19 +425,66 @@ test("Gemini, xAI and Corti rejections are read from the provider's error body",
   const cases = [
     ["gemini", 400, GEMINI_INVALID_KEY, "credentialsRejected"],
     ["gemini", 400, { error: { status: "FAILED_PRECONDITION" } }, "providerStatus"],
+    ["gemini", 400, GEMINI_OTHER_REASON, "providerStatus"],
+    ["gemini", 400, undefined, "providerStatus"],
     ["xai", 400, XAI_BAD_KEY, "credentialsRejected"],
     ["xai", 400, { error: "incorrect api KEY provided." }, "credentialsRejected"],
     ["xai", 400, { error: "Model grok-x does not exist" }, "providerStatus"],
+    ["xai", 400, "Bad Request", "providerStatus"],
+    ["xai", 500, XAI_BAD_KEY, "providerStatus"],
     ["corti", 400, undefined, "credentialsRejected"],
     ["corti", 400, "Bad Request", "credentialsRejected"],
     ["corti", 400, { message: "Unsupported model" }, "providerStatus"],
     ["corti", 401, CORTI_MALFORMED_HEADER, "credentialsRejected"],
+    ["corti", 500, undefined, "providerStatus"],
   ];
   for (const [provider, status, body, errorCode] of cases) {
     const fetchImpl = async () => jsonResponse(status, body);
     const result = await testProviderConnection({ provider, apiKey: "made-up" }, fetchImpl);
     assert.equal(result.errorCode, errorCode, `${provider} ${status} ${JSON.stringify(body)}`);
     assert.equal(result.status, status);
+  }
+});
+
+test("an error body that never arrives is a timeout or a network failure", async () => {
+  const aborted = Object.assign(new Error("This operation was aborted"), { name: "AbortError" });
+  for (const [error, errorCode] of [
+    [aborted, "timeout"],
+    [new TypeError("terminated"), "network"],
+  ]) {
+    for (const provider of ["gemini", "xai", "corti"]) {
+      const fetchImpl = async () => ({
+        ok: false,
+        status: 400,
+        json: async () => {
+          throw error;
+        },
+      });
+      const result = await testProviderConnection({ provider, apiKey: "made-up" }, fetchImpl);
+      assert.equal(result.errorCode, errorCode, `${provider} ${error.name}`);
+    }
+  }
+});
+
+test("the 12 s cap covers the whole answer, body included", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const aborted = Object.assign(new Error("This operation was aborted"), { name: "AbortError" });
+  // Like fetch's own promises, these settle only when the probe's signal aborts.
+  const whenAborted = (signal) =>
+    new Promise((resolve, reject) => signal.addEventListener("abort", () => reject(aborted)));
+  const stalls = {
+    headers: (url, init) => whenAborted(init.signal),
+    body: async (url, init) => ({ ok: false, status: 400, json: () => whenAborted(init.signal) }),
+  };
+  for (const [stage, fetchImpl] of Object.entries(stalls)) {
+    const pending = testProviderConnection({ provider: "gemini", apiKey: "made-up" }, fetchImpl);
+    await new Promise(setImmediate);
+    t.mock.timers.tick(12000);
+    const settled = await Promise.race([
+      pending,
+      new Promise((resolve) => setImmediate(resolve, { errorCode: "still pending" })),
+    ]);
+    assert.equal(settled.errorCode, "timeout", stage);
   }
 });
 

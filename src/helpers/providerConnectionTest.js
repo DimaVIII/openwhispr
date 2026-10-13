@@ -265,12 +265,14 @@ const MODEL_NOT_FOUND = {
 const TIMEOUT_FAILURE = { errorCode: "timeout", error: "The connection test timed out." };
 const NETWORK_FAILURE = { errorCode: "network", error: "The provider could not be reached." };
 
-// An empty or non-JSON body reads as undefined.
+// An empty or non-JSON body reads as undefined. A body that never arrives (the 12 s cap
+// firing, a dropped connection) is not an answer, so its error goes on to probe's catch.
 async function readJson(response) {
   try {
     return await response.json();
-  } catch {
-    return undefined;
+  } catch (error) {
+    if (error instanceof SyntaxError) return undefined;
+    throw error;
   }
 }
 
