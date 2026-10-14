@@ -1,0 +1,98 @@
+[
+  {
+    "id": "state:callbacks.creatorCodeApply.data",
+    "initialValue": "",
+    "currentValue": null,
+    "effectiveValue": ""
+  },
+  {
+    "id": "state:callbacks.creatorCodeApply.result",
+    "initialValue": "unknown",
+    "currentValue": null,
+    "effectiveValue": "unknown"
+  },
+  {
+    "id": "state:callbacks.creatorOfferRedeem.data",
+    "initialValue": "",
+    "currentValue": null,
+    "effectiveValue": ""
+  },
+  {
+    "id": "state:callbacks.creatorOfferRedeem.result",
+    "initialValue": "unknown",
+    "currentValue": null,
+    "effectiveValue": "unknown"
+  },
+  {
+    "id": "state:params.affiliate_entry",
+    "initialValue": "cloud",
+    "currentValue": null,
+    "effectiveValue": "cloud"
+  },
+  {
+    "id": "state:params.creator_offer_price",
+    "initialValue": "",
+    "currentValue": null,
+    "effectiveValue": ""
+  },
+  {
+    "id": "state:params.creator_offer_ready",
+    "initialValue": false,
+    "currentValue": null,
+    "effectiveValue": false
+  },
+  {
+    "id": "state:params.creator_offer_renewal",
+    "initialValue": "",
+    "currentValue": null,
+    "effectiveValue": ""
+  },
+  {
+    "id": "state:params.creator_offer_token",
+    "initialValue": "",
+    "currentValue": null,
+    "effectiveValue": ""
+  },
+  {
+    "id": "state:products.selectedIndex",
+    "initialValue": 1,
+    "currentValue": null,
+    "effectiveValue": 1
+  },
+  {
+    "id": "state:state.creatorOpen",
+    "initialValue": false,
+    "currentValue": null,
+    "effectiveValue": false
+  },
+  {
+    "id": "state:state.creatorPhase",
+    "initialValue": "empty",
+    "currentValue": null,
+    "effectiveValue": "empty"
+  },
+  {
+    "id": "state:state.didAbandonTransaction",
+    "initialValue": false,
+    "currentValue": null,
+    "effectiveValue": false
+  },
+  {
+    "id": "state:state.didCompleteTransaction",
+    "initialValue": false,
+    "currentValue": null,
+    "effectiveValue": false
+  },
+  {
+    "id": "state:state.now",
+    "initialValue": null,
+    "currentValue": null,
+    "effectiveValue": "Wed Oct 14 2026 15:47:32 GMT-0700 (Pacific Daylight Time)"
+  },
+  {
+    "id": "state:state.regularMonthlyChosen",
+    "initialValue": false,
+    "currentValue": null,
+    "effectiveValue": false
+  }
+]

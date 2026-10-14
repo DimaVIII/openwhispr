@@ -1,0 +1,1311 @@
+PASS src/components/superwall/__tests__/SuperwallGateProvider.test.tsx
+  ● Console
+
+    console.log
+      [superwall] register {
+        placement: 'onboarding_paywall',
+        requiresAccount: false,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'onboarding_paywall', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'account_billing_open', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall presented { placement: 'account_billing_open', paywall: 'Paywall' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall dismissed { placement: 'account_billing_open', result: 'declined' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'onboarding_paywall',
+        requiresAccount: false,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'onboarding_paywall', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registerPlacement resolved (access granted) { placement: 'onboarding_paywall' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'onboarding_paywall',
+        requiresAccount: false,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'onboarding_paywall', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'onboarding_paywall',
+        requiresAccount: false,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'onboarding_paywall', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall SKIPPED { placement: 'onboarding_paywall', reason: 'PlacementNotFound' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'account_billing_open', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall presented { placement: 'account_billing_open', paywall: 'Paywall' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'account_billing_open', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall SKIPPED { placement: 'account_billing_open', reason: 'PlacementNotFound' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'account_billing_open', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall ERROR { placement: 'account_billing_open', error: 'presentation failed' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'cloud_usage_limit_reached',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'cloud_usage_limit_reached', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall presented { placement: 'cloud_usage_limit_reached', paywall: 'Paywall' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall dismissed { placement: 'cloud_usage_limit_reached', result: 'declined' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'cloud_usage_limit_reached',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'cloud_usage_limit_reached', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall presented { placement: 'cloud_usage_limit_reached', paywall: 'Paywall' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall dismissed {
+        placement: 'cloud_usage_limit_reached',
+        result: 'purchased:pro.monthly'
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registerPlacement resolved (access granted) { placement: 'cloud_usage_limit_reached' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'cloud_usage_limit_reached',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'cloud_usage_limit_reached', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall presented { placement: 'cloud_usage_limit_reached', paywall: 'Paywall' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall dismissed {
+        placement: 'cloud_usage_limit_reached',
+        result: 'purchased:pro.monthly'
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'cloud_usage_limit_reached',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'cloud_usage_limit_reached', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall presented { placement: 'cloud_usage_limit_reached', paywall: 'Paywall' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall dismissed {
+        placement: 'cloud_usage_limit_reached',
+        result: 'purchased:pro.monthly'
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] feature gate granted { placement: 'cloud_usage_limit_reached' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registerPlacement resolved (access granted) { placement: 'cloud_usage_limit_reached' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'account_billing_open', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall presented { placement: 'account_billing_open', paywall: 'Paywall' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall dismissed { placement: 'account_billing_open', result: 'purchased:pro.monthly' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall dismissed { placement: 'account_billing_open', result: 'purchased:pro.monthly' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'account_billing_open', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall presented { placement: 'account_billing_open', paywall: 'Paywall' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall dismissed { placement: 'account_billing_open', result: 'purchased:pro.monthly' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'account_billing_open', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall presented { placement: 'account_billing_open', paywall: 'Paywall' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall dismissed { placement: 'account_billing_open', result: 'purchased:pro.monthly' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'cloud_usage_limit_reached',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'cloud_usage_limit_reached', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall presented { placement: 'cloud_usage_limit_reached', paywall: 'Paywall' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall dismissed {
+        placement: 'cloud_usage_limit_reached',
+        result: 'purchased:pro.monthly'
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'account_billing_open', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall presented { placement: 'account_billing_open', paywall: 'Paywall' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall dismissed { placement: 'account_billing_open', result: 'restored' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'account_billing_open', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall presented { placement: 'account_billing_open', paywall: 'Paywall' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall dismissed { placement: 'account_billing_open', result: 'purchased:pro.monthly' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registerPlacement resolved (access granted) { placement: 'account_billing_open' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'account_billing_open', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall presented { placement: 'account_billing_open', paywall: 'Paywall' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall dismissed { placement: 'account_billing_open', result: 'restored' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'account_billing_open', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall presented { placement: 'account_billing_open', paywall: 'Paywall' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] feature gate granted { placement: 'account_billing_open' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall dismissed { placement: 'account_billing_open', result: 'purchased:pro.monthly' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'account_billing_open', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall presented { placement: 'account_billing_open', paywall: 'Paywall' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registerPlacement resolved (access granted) { placement: 'account_billing_open' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] BLOCKED: another gate is active { activePlacement: 'account_billing_open' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall dismissed { placement: 'account_billing_open', result: 'restored' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'account_billing_open', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall presented { placement: 'account_billing_open', paywall: 'Paywall' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall dismissed { placement: 'account_billing_open', result: 'purchased:pro.monthly' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'account_billing_open', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall presented { placement: 'account_billing_open', paywall: 'Paywall' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall dismissed { placement: 'account_billing_open', result: 'declined' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'account_billing_open', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall presented { placement: 'account_billing_open', paywall: 'Paywall' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall dismissed { placement: 'account_billing_open', result: 'purchased:pro.monthly' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'account_billing_open', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] feature gate granted { placement: 'account_billing_open' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'account_billing_open', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall presented { placement: 'account_billing_open', paywall: 'Paywall' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall dismissed { placement: 'account_billing_open', result: 'purchased:pro.monthly' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'account_billing_open', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] feature gate granted { placement: 'account_billing_open' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registerPlacement resolved (access granted) { placement: 'account_billing_open' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'account_billing_open', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall presented { placement: 'account_billing_open', paywall: 'Paywall' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] feature gate granted { placement: 'account_billing_open' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall dismissed { placement: 'account_billing_open', result: 'purchased:pro.monthly' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'account_billing_open', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall presented { placement: 'account_billing_open', paywall: 'Paywall' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] feature gate granted { placement: 'account_billing_open' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall dismissed { placement: 'account_billing_open', result: 'restored' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'account_billing_open', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall presented { placement: 'account_billing_open', paywall: 'Paywall' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall dismissed { placement: 'account_billing_open', result: 'purchased:pro.monthly' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registerPlacement resolved (access granted) { placement: 'account_billing_open' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'account_billing_open', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall presented { placement: 'account_billing_open', paywall: 'Paywall' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall dismissed { placement: 'account_billing_open', result: 'restored' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registerPlacement resolved (access granted) { placement: 'account_billing_open' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'account_billing_open', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall presented { placement: 'account_billing_open', paywall: 'Paywall' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall dismissed { placement: 'account_billing_open', result: 'declined' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'account_billing_open', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall SKIPPED { placement: 'account_billing_open', reason: 'PlacementNotFound' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'account_billing_open', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall presented { placement: 'account_billing_open', paywall: 'Paywall' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall SKIPPED { placement: 'account_billing_open', reason: 'PlacementNotFound' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall dismissed { placement: 'account_billing_open', result: 'purchased:pro.monthly' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'account_billing_open', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall SKIPPED { placement: 'account_billing_open', reason: 'PlacementNotFound' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registerPlacement resolved (access granted) { placement: 'account_billing_open' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'ai_action_run',
+        requiresAccount: false,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'ai_action_run', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall ERROR { placement: 'ai_action_run', error: 'presentation failed' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'account_billing_open', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall presented { placement: 'account_billing_open', paywall: 'Paywall' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall dismissed { placement: 'account_billing_open', result: 'purchased:pro.monthly' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'account_billing_open', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall presented { placement: 'account_billing_open', paywall: 'Paywall' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall ERROR { placement: 'account_billing_open', error: 'presentation failed' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'account_billing_open', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall presented { placement: 'account_billing_open', paywall: 'Paywall' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall dismissed { placement: 'account_billing_open', result: 'purchased:pro.monthly' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'ai_action_run',
+        requiresAccount: false,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'ai_action_run', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall ERROR { placement: 'ai_action_run', error: 'presentation failed' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] routing to auth (no account)
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register (Superwall DISABLED — no API key in this build) { placement: 'account_billing_open' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'account_billing_open', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall SKIPPED { placement: 'account_billing_open', reason: 'Holdout:holdout-1' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: false,
+        configurationError: 'invalid key',
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] BLOCKED by configuration error { configurationError: 'invalid key' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'onboarding_paywall',
+        requiresAccount: false,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'onboarding_paywall', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall presented { placement: 'onboarding_paywall', paywall: 'Paywall' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall dismissed { placement: 'onboarding_paywall', result: 'declined' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'onboarding_paywall',
+        requiresAccount: false,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'onboarding_paywall', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall presented { placement: 'onboarding_paywall', paywall: 'Paywall' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'account_billing_open', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall presented { placement: 'account_billing_open', paywall: 'Paywall' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall dismissed { placement: 'account_billing_open', result: 'declined' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'account_billing_open', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall presented { placement: 'account_billing_open', paywall: 'Paywall' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'account_billing_open', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall presented { placement: 'account_billing_open', paywall: 'Fixture' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registerPlacement REJECTED { placement: 'account_billing_open', error: 'Error: native failure' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: true,
+        isConfigured: true,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] registering placement with Superwall { placement: 'account_billing_open', params: undefined }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] paywall presented { placement: 'account_billing_open', paywall: 'Paywall' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: false,
+        isConfigured: false,
+        configurationError: null,
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] BLOCKED: configuration still pending
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] register {
+        placement: 'account_billing_open',
+        requiresAccount: false,
+        isConfigured: false,
+        configurationError: 'failed',
+        signedIn: true
+      }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+    console.log
+      [superwall] BLOCKED by configuration error { configurationError: 'failed' }
+
+      at log (src/components/superwall/SuperwallGateProvider.tsx:105:24)
+
+PASS src/lib/__tests__/affiliatePaywall.test.ts
+PASS src/lib/__tests__/affiliateOffer.test.ts
+PASS src/lib/__tests__/affiliateAttribution.test.ts
+PASS scripts/creator-paywall-probe/__tests__/callback.test.ts
+PASS src/lib/__tests__/superwall.test.ts
+PASS src/lib/__tests__/affiliateLink.test.ts
+PASS src/components/superwall/__tests__/OpenWhisprSuperwallProvider.test.tsx
+PASS src/lib/__tests__/affiliateIntent.test.ts
+
+Test Suites: 9 passed, 9 total
+Tests:       125 passed, 125 total
+Snapshots:   0 total
+Time:        3.152 s
+Ran all test suites within paths "src/lib/__tests__/affiliatePaywall.test.ts", "src/lib/__tests__/affiliateOffer.test.ts", "src/lib/__tests__/affiliateAttribution.test.ts", "src/lib/__tests__/affiliateLink.test.ts", "src/lib/__tests__/affiliateIntent.test.ts", "src/lib/__tests__/superwall.test.ts", "src/components/superwall/__tests__/OpenWhisprSuperwallProvider.test.tsx", "src/components/superwall/__tests__/SuperwallGateProvider.test.tsx", "scripts/creator-paywall-probe/__tests__/callback.test.ts".

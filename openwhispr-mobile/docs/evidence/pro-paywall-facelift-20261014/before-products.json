@@ -1,0 +1,26 @@
+{
+  "paywallProducts": [
+    {
+      "referenceName": "primary",
+      "liquidPrefix": "products.primary",
+      "identifier": "com.openwhispr.pro.annual",
+      "store": "app-store",
+      "index": "a0",
+      "productVariablesSource": "sdk",
+      "variables": null,
+      "isDefault": false
+    },
+    {
+      "referenceName": "secondary",
+      "liquidPrefix": "products.secondary",
+      "identifier": "com.openwhispr.pro.monthly",
+      "store": "app-store",
+      "index": "a1",
+      "productVariablesSource": "sdk",
+      "variables": null,
+      "isDefault": true
+    }
+  ],
+  "defaultSelectedIndex": 1,
+  "defaultSelectedReferenceName": "secondary"
+}
