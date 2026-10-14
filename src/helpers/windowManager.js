@@ -1790,12 +1790,12 @@ class WindowManager {
     this._controlPanelVisibilityTimer = null;
   }
 
-  _showControlPanel({ onlyAtStartup = false } = {}) {
+  _showControlPanel({ onlyBeforeFirstShow = false } = {}) {
     const win = this.controlPanelWindow;
     if (!win || win.isDestroyed()) return;
-    // onlyAtStartup reveals the panel only while the startup timer is pending;
+    // onlyBeforeFirstShow reveals a new panel only while its visibility timer is pending;
     // after that, a hidden or minimized panel stays as the user left it.
-    if (onlyAtStartup && this._controlPanelVisibilityTimer === null) return;
+    if (onlyBeforeFirstShow && this._controlPanelVisibilityTimer === null) return;
     // Cancel the backstop either way: once the window has been shown on purpose,
     // a later timer firing could pull it back out of the tray.
     this._clearControlPanelVisibilityTimer();
@@ -1884,7 +1884,7 @@ class WindowManager {
       this._onboardingRestoreBounds = null;
       this._onboardingWindowMode = null;
       this._onboardingWindowState = null;
-      this._showControlPanel({ onlyAtStartup: true });
+      this._showControlPanel({ onlyBeforeFirstShow: true });
       return true;
     }
 
@@ -1903,7 +1903,7 @@ class WindowManager {
     this._applyOnboardingWindowChrome(win, mode);
 
     if (this._onboardingWindowMode === mode) {
-      this._showControlPanel({ onlyAtStartup: true });
+      this._showControlPanel({ onlyBeforeFirstShow: true });
       return true;
     }
 
@@ -1917,13 +1917,13 @@ class WindowManager {
       current.height === next.height
     ) {
       this._onboardingWindowMode = mode;
-      this._showControlPanel({ onlyAtStartup: true });
+      this._showControlPanel({ onlyBeforeFirstShow: true });
       return true;
     }
 
     win.setContentBounds(next, true);
     this._onboardingWindowMode = mode;
-    this._showControlPanel({ onlyAtStartup: true });
+    this._showControlPanel({ onlyBeforeFirstShow: true });
     return true;
   }
 
