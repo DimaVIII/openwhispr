@@ -13,6 +13,7 @@ function rig(t) {
   let scope = { accountId: "a", authGeneration: 1 };
   let clock = 0;
   let offline = false;
+  let permitted = true;
   const calls = [];
   let seq = 0;
   let total = 0;
@@ -20,6 +21,8 @@ function rig(t) {
   const request = async ({ path, body }) => {
     calls.push({ path, body: structuredClone(body) });
     if (offline) throw new Error("offline");
+    if (path.endsWith("/device") && !permitted)
+      return { success: true, data: { status: "awaiting_permission", serverTime, device: null } };
     if (path.endsWith("/device"))
       return {
         success: true,
@@ -54,6 +57,7 @@ function rig(t) {
     calls,
     tick: (n = 1000) => (clock += n),
     offline: (v) => (offline = v),
+    permitted: (v) => (permitted = v),
     scope: (v) => (scope = v),
   };
 }
@@ -184,6 +188,20 @@ test("dictation before registration stays outside the prospective tracked count"
   assert.deepEqual(r.calls.at(-1).body.events, []);
   await capture(r, 199);
   assert.equal(r.manager.current().total_words, 199);
+});
+test("an unenrolled device registers on dictation, not on the 30 s timer", async (t) => {
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  const r = rig(t);
+  r.permitted(false);
+  r.manager.start();
+  await r.manager.flush();
+  t.mock.timers.tick(90_000);
+  await r.manager.flush();
+  assert.equal(r.calls.length, 1);
+  r.permitted(true);
+  assert.equal(r.manager.begin(), null);
+  await r.manager.flush();
+  assert.equal(r.manager.current().state, "open");
 });
 test("storage failure cannot be erased by finalizer cancellation or clean shutdown", async (t) => {
   const r = rig(t);

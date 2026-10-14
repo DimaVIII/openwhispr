@@ -31,7 +31,7 @@ class MetaActivation {
   }
 
   start() {
-    this.timer = setInterval(() => void this.flush(), 30_000);
+    this.timer = setInterval(() => void this.flush(true), 30_000);
     this.timer.unref?.();
     void this.flush();
   }
@@ -156,10 +156,10 @@ class MetaActivation {
     void this.flush();
   }
 
-  async flush() {
+  async flush(scheduled = false) {
     if (this.disposed) return;
     if (this.running) return this.running;
-    this.running = this.runPass()
+    this.running = this.runPass(scheduled)
       .catch(() => {})
       .finally(() => {
         this.running = null;
@@ -167,7 +167,7 @@ class MetaActivation {
     return this.running;
   }
 
-  async runPass() {
+  async runPass(scheduled) {
     const scope = this.getScope();
     if (!scope) return;
     const assertCurrent = () => {
@@ -187,6 +187,8 @@ class MetaActivation {
       stream = this.current(scope);
     }
     if (stream.state === "done") return;
+    // An unenrolled device registers on activity only, never on the timer.
+    if (scheduled && !stream.registered_at) return;
     const post = async (path, body) => {
       assertCurrent();
       const result = await this.request({
