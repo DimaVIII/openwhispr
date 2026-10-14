@@ -1,0 +1,22 @@
+PASS all original nodes retained
+PASS all original actions byte-identical except visible-form recovery
+PASS verified monthly price binding unchanged
+PASS verified renewal bindings unchanged
+PASS product identities, order and default unchanged
+PASS authored defaults contain no preview fixtures
+PASS CTA empty
+PASS CTA unchecked
+PASS CTA checking
+PASS CTA error with entered code
+PASS CTA resolved missing fields
+PASS CTA seed missing fields
+PASS CTA verified callback
+PASS CTA verified seed
+PASS CTA annual
+PASS empty apply and duplicate checking apply are blocked
+PASS recovery clears input and keeps new entries guarded
+PASS readonly applied field uses original complete-offer condition
+PASS blue design asset and transparent panels are present
+KNOWN BASELINE GAP: error + manually empty input permits ordinary purchase; no transaction executed.
+KNOWN BASELINE GAP: unavailable + manually empty input permits ordinary purchase; no transaction executed.
+19 contract checks passed; 2 pre-existing guard gaps remain. This is exported-configuration evidence, not native/storefront acceptance.

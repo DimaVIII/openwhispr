@@ -1,0 +1,417 @@
+{
+  "data": [
+    {
+      "id": "state:callbacks.creatorCodeApply.data",
+      "path": "callbacks.creatorCodeApply.data",
+      "group": "callbacks",
+      "name": "creatorCodeApply.data",
+      "kind": "callback",
+      "valueType": "text",
+      "initialValue": "",
+      "currentValue": null,
+      "effectiveValue": "",
+      "initialLiteral": {
+        "type": "variable-string",
+        "value": ""
+      },
+      "currentLiteral": null,
+      "effectiveLiteral": {
+        "type": "variable-string",
+        "value": ""
+      },
+      "locked": true,
+      "nonRemovable": true,
+      "isDerived": true,
+      "canUpdateInitialValue": false,
+      "canUpdateCurrentValue": false,
+      "canDelete": false
+    },
+    {
+      "id": "state:callbacks.creatorCodeApply.result",
+      "path": "callbacks.creatorCodeApply.result",
+      "group": "callbacks",
+      "name": "creatorCodeApply.result",
+      "kind": "callback",
+      "valueType": "text",
+      "initialValue": "unknown",
+      "currentValue": null,
+      "effectiveValue": "unknown",
+      "initialLiteral": {
+        "type": "variable-string",
+        "value": "unknown"
+      },
+      "currentLiteral": null,
+      "effectiveLiteral": {
+        "type": "variable-string",
+        "value": "unknown"
+      },
+      "locked": true,
+      "nonRemovable": true,
+      "isDerived": true,
+      "canUpdateInitialValue": false,
+      "canUpdateCurrentValue": false,
+      "canDelete": false
+    },
+    {
+      "id": "state:callbacks.creatorOfferRedeem.data",
+      "path": "callbacks.creatorOfferRedeem.data",
+      "group": "callbacks",
+      "name": "creatorOfferRedeem.data",
+      "kind": "callback",
+      "valueType": "text",
+      "initialValue": "",
+      "currentValue": null,
+      "effectiveValue": "",
+      "initialLiteral": {
+        "type": "variable-string",
+        "value": ""
+      },
+      "currentLiteral": null,
+      "effectiveLiteral": {
+        "type": "variable-string",
+        "value": ""
+      },
+      "locked": true,
+      "nonRemovable": true,
+      "isDerived": true,
+      "canUpdateInitialValue": false,
+      "canUpdateCurrentValue": false,
+      "canDelete": false
+    },
+    {
+      "id": "state:callbacks.creatorOfferRedeem.result",
+      "path": "callbacks.creatorOfferRedeem.result",
+      "group": "callbacks",
+      "name": "creatorOfferRedeem.result",
+      "kind": "callback",
+      "valueType": "text",
+      "initialValue": "unknown",
+      "currentValue": null,
+      "effectiveValue": "unknown",
+      "initialLiteral": {
+        "type": "variable-string",
+        "value": "unknown"
+      },
+      "currentLiteral": null,
+      "effectiveLiteral": {
+        "type": "variable-string",
+        "value": "unknown"
+      },
+      "locked": true,
+      "nonRemovable": true,
+      "isDerived": true,
+      "canUpdateInitialValue": false,
+      "canUpdateCurrentValue": false,
+      "canDelete": false
+    },
+    {
+      "id": "state:params.affiliate_entry",
+      "path": "params.affiliate_entry",
+      "group": "params",
+      "name": "affiliate_entry",
+      "kind": "parameter",
+      "valueType": "text",
+      "initialValue": "cloud",
+      "currentValue": null,
+      "effectiveValue": "cloud",
+      "initialLiteral": {
+        "type": "variable-string",
+        "value": "cloud"
+      },
+      "currentLiteral": null,
+      "effectiveLiteral": {
+        "type": "variable-string",
+        "value": "cloud"
+      },
+      "locked": false,
+      "nonRemovable": false,
+      "isDerived": false,
+      "canUpdateInitialValue": true,
+      "canUpdateCurrentValue": true,
+      "canDelete": true
+    },
+    {
+      "id": "state:params.creator_offer_price",
+      "path": "params.creator_offer_price",
+      "group": "params",
+      "name": "creator_offer_price",
+      "kind": "parameter",
+      "valueType": "text",
+      "initialValue": "",
+      "currentValue": null,
+      "effectiveValue": "",
+      "initialLiteral": {
+        "type": "variable-string",
+        "value": ""
+      },
+      "currentLiteral": null,
+      "effectiveLiteral": {
+        "type": "variable-string",
+        "value": ""
+      },
+      "locked": false,
+      "nonRemovable": false,
+      "isDerived": false,
+      "canUpdateInitialValue": true,
+      "canUpdateCurrentValue": true,
+      "canDelete": true
+    },
+    {
+      "id": "state:params.creator_offer_ready",
+      "path": "params.creator_offer_ready",
+      "group": "params",
+      "name": "creator_offer_ready",
+      "kind": "parameter",
+      "valueType": "boolean",
+      "initialValue": false,
+      "currentValue": null,
+      "effectiveValue": false,
+      "initialLiteral": {
+        "type": "variable-boolean",
+        "value": false
+      },
+      "currentLiteral": null,
+      "effectiveLiteral": {
+        "type": "variable-boolean",
+        "value": false
+      },
+      "locked": false,
+      "nonRemovable": false,
+      "isDerived": false,
+      "canUpdateInitialValue": true,
+      "canUpdateCurrentValue": true,
+      "canDelete": true
+    },
+    {
+      "id": "state:params.creator_offer_renewal",
+      "path": "params.creator_offer_renewal",
+      "group": "params",
+      "name": "creator_offer_renewal",
+      "kind": "parameter",
+      "valueType": "text",
+      "initialValue": "",
+      "currentValue": null,
+      "effectiveValue": "",
+      "initialLiteral": {
+        "type": "variable-string",
+        "value": ""
+      },
+      "currentLiteral": null,
+      "effectiveLiteral": {
+        "type": "variable-string",
+        "value": ""
+      },
+      "locked": false,
+      "nonRemovable": false,
+      "isDerived": false,
+      "canUpdateInitialValue": true,
+      "canUpdateCurrentValue": true,
+      "canDelete": true
+    },
+    {
+      "id": "state:params.creator_offer_token",
+      "path": "params.creator_offer_token",
+      "group": "params",
+      "name": "creator_offer_token",
+      "kind": "parameter",
+      "valueType": "text",
+      "initialValue": "",
+      "currentValue": null,
+      "effectiveValue": "",
+      "initialLiteral": {
+        "type": "variable-string",
+        "value": ""
+      },
+      "currentLiteral": null,
+      "effectiveLiteral": {
+        "type": "variable-string",
+        "value": ""
+      },
+      "locked": false,
+      "nonRemovable": false,
+      "isDerived": false,
+      "canUpdateInitialValue": true,
+      "canUpdateCurrentValue": true,
+      "canDelete": true
+    },
+    {
+      "id": "state:products.selectedIndex",
+      "path": "products.selectedIndex",
+      "group": "products",
+      "name": "selectedIndex",
+      "kind": "product",
+      "valueType": "number",
+      "initialValue": 1,
+      "currentValue": null,
+      "effectiveValue": 1,
+      "initialLiteral": {
+        "type": "variable-number",
+        "value": 1
+      },
+      "currentLiteral": null,
+      "effectiveLiteral": {
+        "type": "variable-number",
+        "value": 1
+      },
+      "locked": false,
+      "nonRemovable": true,
+      "isDerived": false,
+      "canUpdateInitialValue": false,
+      "canUpdateCurrentValue": true,
+      "canDelete": false
+    },
+    {
+      "id": "state:state.creatorOpen",
+      "path": "state.creatorOpen",
+      "group": "state",
+      "name": "creatorOpen",
+      "kind": "state",
+      "valueType": "boolean",
+      "initialValue": true,
+      "currentValue": null,
+      "effectiveValue": true,
+      "initialLiteral": {
+        "type": "variable-boolean",
+        "value": true
+      },
+      "currentLiteral": null,
+      "effectiveLiteral": {
+        "type": "variable-boolean",
+        "value": true
+      },
+      "locked": false,
+      "nonRemovable": false,
+      "isDerived": false,
+      "canUpdateInitialValue": true,
+      "canUpdateCurrentValue": true,
+      "canDelete": true
+    },
+    {
+      "id": "state:state.creatorPhase",
+      "path": "state.creatorPhase",
+      "group": "state",
+      "name": "creatorPhase",
+      "kind": "state",
+      "valueType": "text",
+      "initialValue": "empty",
+      "currentValue": null,
+      "effectiveValue": "empty",
+      "initialLiteral": {
+        "type": "variable-string",
+        "value": "empty"
+      },
+      "currentLiteral": null,
+      "effectiveLiteral": {
+        "type": "variable-string",
+        "value": "empty"
+      },
+      "locked": false,
+      "nonRemovable": false,
+      "isDerived": false,
+      "canUpdateInitialValue": true,
+      "canUpdateCurrentValue": true,
+      "canDelete": true
+    },
+    {
+      "id": "state:state.didAbandonTransaction",
+      "path": "state.didAbandonTransaction",
+      "group": "state",
+      "name": "didAbandonTransaction",
+      "kind": "state",
+      "valueType": "boolean",
+      "initialValue": false,
+      "currentValue": null,
+      "effectiveValue": false,
+      "initialLiteral": {
+        "type": "variable-boolean",
+        "value": false
+      },
+      "currentLiteral": null,
+      "effectiveLiteral": {
+        "type": "variable-boolean",
+        "value": false
+      },
+      "locked": false,
+      "nonRemovable": true,
+      "isDerived": true,
+      "canUpdateInitialValue": false,
+      "canUpdateCurrentValue": false,
+      "canDelete": false
+    },
+    {
+      "id": "state:state.didCompleteTransaction",
+      "path": "state.didCompleteTransaction",
+      "group": "state",
+      "name": "didCompleteTransaction",
+      "kind": "state",
+      "valueType": "boolean",
+      "initialValue": false,
+      "currentValue": null,
+      "effectiveValue": false,
+      "initialLiteral": {
+        "type": "variable-boolean",
+        "value": false
+      },
+      "currentLiteral": null,
+      "effectiveLiteral": {
+        "type": "variable-boolean",
+        "value": false
+      },
+      "locked": false,
+      "nonRemovable": true,
+      "isDerived": true,
+      "canUpdateInitialValue": false,
+      "canUpdateCurrentValue": false,
+      "canDelete": false
+    },
+    {
+      "id": "state:state.now",
+      "path": "state.now",
+      "group": "state",
+      "name": "now",
+      "kind": "state",
+      "valueType": "text",
+      "initialValue": null,
+      "currentValue": null,
+      "effectiveValue": "Wed Oct 14 2026 16:23:20 GMT-0700 (Pacific Daylight Time)",
+      "initialLiteral": null,
+      "currentLiteral": null,
+      "effectiveLiteral": {
+        "type": "variable-string",
+        "value": "Wed Oct 14 2026 16:23:20 GMT-0700 (Pacific Daylight Time)"
+      },
+      "locked": true,
+      "nonRemovable": true,
+      "isDerived": true,
+      "canUpdateInitialValue": false,
+      "canUpdateCurrentValue": false,
+      "canDelete": false
+    },
+    {
+      "id": "state:state.regularMonthlyChosen",
+      "path": "state.regularMonthlyChosen",
+      "group": "state",
+      "name": "regularMonthlyChosen",
+      "kind": "state",
+      "valueType": "boolean",
+      "initialValue": false,
+      "currentValue": null,
+      "effectiveValue": false,
+      "initialLiteral": {
+        "type": "variable-boolean",
+        "value": false
+      },
+      "currentLiteral": null,
+      "effectiveLiteral": {
+        "type": "variable-boolean",
+        "value": false
+      },
+      "locked": false,
+      "nonRemovable": false,
+      "isDerived": false,
+      "canUpdateInitialValue": true,
+      "canUpdateCurrentValue": true,
+      "canDelete": true
+    }
+  ]
+}
