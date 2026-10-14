@@ -1591,8 +1591,8 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
 
       return true;
     } catch (error) {
-      // A prepared value the recording never adopted still owns a live stream
       this._cancelActivationCapture(this._takeActivationCapture());
+      // A prepared value the recording never adopted still owns a live stream
       // (and possibly a pre-roll recorder); release it before any retry.
       freshTap?.close();
       if (prepared && !preparedAdopted) this._disposePrepared(prepared);

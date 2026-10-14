@@ -191,10 +191,10 @@ class MetaActivation {
     // policy) an unregistered stream, only activity posts again. A registered
     // stream keeps certifying its watermark, and a lost answer may have
     // committed a device, so the timer retries both.
-    if (scheduled && this.awaitingPermission === stream.id) return;
+    if (scheduled && this.unpermittedStream === stream.id) return;
     const post = async (path, body) => {
       assertCurrent();
-      this.awaitingPermission = null;
+      this.unpermittedStream = null;
       const result = await this.request({
         path,
         method: "POST",
@@ -203,7 +203,7 @@ class MetaActivation {
       });
       assertCurrent();
       if (!result?.success) {
-        if (result?.status === 403 && !stream.registered_at) this.awaitingPermission = stream.id;
+        if (result?.status === 403 && !stream.registered_at) this.unpermittedStream = stream.id;
         throw new Error("Activation sync unavailable");
       }
       return result.data;
@@ -214,7 +214,7 @@ class MetaActivation {
         deviceId: stream.id,
       });
       if (response.status === "awaiting_permission") {
-        this.awaitingPermission = stream.id;
+        this.unpermittedStream = stream.id;
         return;
       }
       if (response.status !== "collecting") {
@@ -305,7 +305,7 @@ class MetaActivation {
       !stream ||
       stream.state === "done" ||
       stream.state === "closed" ||
-      this.awaitingPermission === stream.id
+      this.unpermittedStream === stream.id
     )
       return;
     const unresolved = this.db
@@ -318,7 +318,8 @@ class MetaActivation {
     this.db.prepare("UPDATE streams SET state='closing' WHERE id=?").run(stream.id);
     await this.flush();
     // An already-running pass may have read the pre-close state.
-    if (this.current()?.state === "closing") await this.flush();
+    if (this.current()?.state === "closing" && this.unpermittedStream !== stream.id)
+      await this.flush();
     this.anchor = null;
   }
 
