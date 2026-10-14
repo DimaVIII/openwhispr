@@ -187,11 +187,13 @@ class MetaActivation {
       stream = this.current(scope);
     }
     if (stream.state === "done") return;
-    // Once the server answers awaiting_permission, only activity registers again.
-    // A lost answer may have committed a device, so the timer retries it.
+    // Once the server answers awaiting_permission or refuses (403, e.g. org
+    // policy), only activity posts again. A lost answer may have committed a
+    // device, so the timer retries it.
     if (scheduled && this.awaitingPermission === stream.id) return;
     const post = async (path, body) => {
       assertCurrent();
+      this.awaitingPermission = null;
       const result = await this.request({
         path,
         method: "POST",
@@ -199,11 +201,13 @@ class MetaActivation {
         expectedAuthGeneration: scope.authGeneration,
       });
       assertCurrent();
-      if (!result?.success) throw new Error("Activation sync unavailable");
+      if (!result?.success) {
+        if (result?.status === 403) this.awaitingPermission = stream.id;
+        throw new Error("Activation sync unavailable");
+      }
       return result.data;
     };
     if (this.clock(scope) === null || stream.state === "new") {
-      this.awaitingPermission = null;
       const response = await post("/api/activation/device", {
         accountId: scope.accountId,
         deviceId: stream.id,

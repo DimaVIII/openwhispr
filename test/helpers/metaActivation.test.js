@@ -13,6 +13,7 @@ function rig(t) {
   let scope = { accountId: "a", authGeneration: 1 };
   let clock = 0;
   let offline = false;
+  let blocked = false;
   let permitted = true;
   const calls = [];
   let seq = 0;
@@ -21,6 +22,7 @@ function rig(t) {
   const request = async ({ path, body }) => {
     calls.push({ path, body: structuredClone(body) });
     if (offline) throw new Error("offline");
+    if (blocked) return { success: false, status: 403, code: "POLICY_CLOUD_BACKUP_BLOCKED" };
     if (path.endsWith("/device") && !permitted)
       return { success: true, data: { status: "awaiting_permission", serverTime, device: null } };
     if (path.endsWith("/device"))
@@ -57,6 +59,7 @@ function rig(t) {
     calls,
     tick: (n = 1000) => (clock += n),
     offline: (v) => (offline = v),
+    blocked: (v) => (blocked = v),
     permitted: (v) => (permitted = v),
     scope: (v) => (scope = v),
   };
@@ -214,6 +217,32 @@ test("the timer retries a registration whose answer was lost", async (t) => {
   t.mock.timers.tick(30_000);
   await r.manager.running;
   assert.equal(r.manager.current().state, "open");
+});
+test("the timer stays quiet after a 403 refusal until activity succeeds", async (t) => {
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  const r = rig(t);
+  const tick = async () => {
+    t.mock.timers.tick(30_000);
+    await r.manager.running;
+  };
+  r.blocked(true);
+  r.manager.start();
+  await r.manager.flush();
+  await tick();
+  assert.equal(r.calls.length, 1);
+  r.blocked(false);
+  await r.manager.flush();
+  r.blocked(true);
+  await r.manager.flush();
+  await tick();
+  assert.equal(r.calls.length, 4);
+  r.blocked(false);
+  await r.manager.flush();
+  await tick();
+  assert.deepEqual(
+    r.calls.slice(4).map((c) => c.path),
+    ["/api/activation/batch", "/api/activation/batch"]
+  );
 });
 test("storage failure cannot be erased by finalizer cancellation or clean shutdown", async (t) => {
   const r = rig(t);
