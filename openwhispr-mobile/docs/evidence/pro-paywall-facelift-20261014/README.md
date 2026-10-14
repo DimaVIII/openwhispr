@@ -1,6 +1,6 @@
 # Pro paywall facelift — blue draft, 14 October 2026
 
-Status: **reviewable, unpublished Superwall draft; acceptance is still open**. Josh confirmed target 271365 and then explicitly selected the blue design. No Publish, campaign change, mobile release, purchase, redemption, restore, or creator validation request was executed.
+Status: **reviewable, unpublished Superwall draft; acceptance is still open**. Josh confirmed target 271365 and then explicitly selected the blue design. No Publish, campaign change, mobile release, financial transaction, real redemption, or live creator validation request was executed. Purchase, restore, and callback actions were exercised through the editor’s explicit simulation UI during the parity follow-up.
 
 ![Final blue editor preview](after-blue.jpg)
 
@@ -15,7 +15,7 @@ Status: **reviewable, unpublished Superwall draft; acceptance is still open**. J
 
 The source is greatcoat/titan commit `f474ca1075f4a50b033fcbc82f4d39397d7c5480`, `artefacts/reports/2026-10-13-pro-paywall-prototypes.html`. The exact embedded blue artwork was extracted and uploaded to Superwall, without generating replacement artwork. Provider asset: `https://user-content.superwalleditor.com/user-content/Qk5W_puKFGoJ0Ezp1vSpv.png` (786×1704; 1,775,075 bytes). It renders at 81% opacity with translucent benefit/form panels and footer.
 
-The draft includes the flat Pro keycap, all nine benefits, annual/monthly cards and selection indicators, catalog-bound prices, computed annual savings, 50px glossy CTA, directly visible monthly creator form, fixed 108px action width, loading spinner, verified Applied check, read-only accepted code, concise error/recovery copy, and preserved close/restore/terms routes. The spinner SVG respects reduced motion. Annual hides the creator area and shows ordinary monthly catalog pricing on the unselected Monthly card. Returning to Monthly restores the verified offer presentation.
+The draft includes the flat Pro keycap, all nine benefits, annual/monthly cards and selection indicators, catalog-bound prices, computed annual savings, 50px glossy CTA, directly visible monthly creator form, 108px action width at normal text size (8em, scaling with larger text), loading spinner, verified Applied check, read-only accepted code, concise error/recovery copy, and preserved close/restore/terms routes. The spinner SVG respects reduced motion. Annual hides the creator area and shows ordinary monthly catalog pricing on the unselected Monthly card. Returning to Monthly restores the verified offer presentation.
 
 No app-source presentation change was needed: Superwall owns these visuals. This PR contains the exported configuration, evidence, and an executable contract verifier rather than unrelated app changes.
 
@@ -34,11 +34,28 @@ The accepted-code display duplicates the original success visibility condition. 
 
 - **19 exported-configuration checks pass**: `contract-results.txt`. Run from repository root with Node 24: `node openwhispr-mobile/scripts/creator-paywall-probe/verify-facelift-contract.mjs`.
 - **125 existing tests / 9 suites passed** against the unchanged affiliate source at the baseline: `baseline-tests.txt`. No native affiliate, attribution, validation, backend, or purchase source was edited afterward. These are unit/probe tests, not financial acceptance.
-- Interactive editor checks: unchecked code disables CTA; checking disables apply/CTA; complete seeded offer shows Applied and a read-only entered code; Annual hides creator controls; Monthly restores the accepted presentation; error retains entered text; explicit Continue without code clears it; re-entry blocks ordinary payment. No request/financial action was clicked.
+- Interactive editor checks include actual Use code → Checking → simulated Failure → Try again; retry re-enters Checking; simulated Success without offer fields stays blocked. Complete seeded offer shows Applied and a read-only entered code; Annual hides creator controls and restores ordinary pricing; Monthly restores the accepted presentation; explicit recovery clears the input and re-entry blocks ordinary payment. Editor purchase simulation selects secondary for Monthly and primary for Annual; a complete seeded offer triggers the redemption callback; Restore triggers its existing action. No native transaction or live validation occurred.
 - The success/loading screenshots use explicitly temporary **preview fixtures**, including `PREVIEW20` and `$7.99`. They are not a validated creator, live discount, or assigned offer. All fixture overrides and input text were removed before the final readback. `after-variables.json` records empty/false offer defaults and null overrides.
-- Compact 375×667 with temporarily enlarged 125% font sizes: no horizontal overflow (375px scroll/client width), 60px form, 44px controls, 108px action. Scrolling exposed a small footer overlap at the initial 140px bottom padding; final padding is 180px. The final compact scroll clearance and native Dynamic Type still need acceptance. All temporary font-size edits were restored.
-- Screenshot names beginning `preview-` record intermediate state/size checks; they precede the final price-font asset normalization and bottom-padding adjustment. `after-blue.jpg` is the final default blue preview. These are editor renderings, not native app screenshots.
+- Final compact 375×667 with temporarily enlarged 125% font sizes: 375px scroll/client width, 60px entry/checking form, 44px controls, 135px action. After scrolling, form bottom is approximately 520px and CTA top is 541px: the expected 21px separation. Error/recovery also remains reachable with the same clearance. A fixed 108px grid column was caught and replaced with an automatic column during this check. All temporary font sizes were restored; native Dynamic Type is still unverified.
+- Screenshot names beginning `preview-` record the earlier handoff’s intermediate state/size checks and are superseded for layout by this follow-up. `after-blue.jpg` is the final default blue preview. These are editor renderings, not native app screenshots.
 - Final readback was rechecked after reload. `after-reload-tree.json` records the final persisted local draft; it is not proof of a publish.
+
+## Parity correction after review
+
+Josh correctly identified that the first draft placed the plan cards and code form under the benefits instead of against the payment footer. This follow-up replaces the arbitrary bottom padding with a viewport-height scroll area and flexible space above the cards. The 135px fixed footer now reserves a non-shrinking 50px CTA and 44px legal row. Error text and recovery share a wrapping feedback row (96px form at normal text size). Existing node identities/actions remain unchanged. Benefit and heading fonts now consistently use Space Grotesk.
+
+Matched-size comparison used the approved HTML with only its preview dimensions changed from 393×852 to the provider’s 390×845. Coordinates are CSS pixels from the phone’s top edge:
+
+| Element | Prototype y / height | Final editor y / height |
+| --- | --- | --- |
+| Plan cards | 514.11 / 111.89 | 514 / 112 |
+| Creator form | 638 / 60 | 638 / 60 |
+| Continue to payment | 719 / 50 | 719 / 50 |
+| Footer | 710 / 135 | 710 / 135 |
+
+Entry, checking, and Applied retain the same form/field/action footprint. The input and action are 226×44 and 108×44 at standard size. Applied was exercised with clearly labeled preview offer parameters; callback Failure and fieldless Success were exercised with the editor’s actual callback simulator. These checks prove editor presentation and wiring, not backend validation or native acceptance.
+
+The final font and layout changes were followed by a fresh reload and clean-default export. The 19 existing contract checks still pass. No click-action property changed in this follow-up, including recovery. The earlier layout and its evidence remain recoverable at commit `d5408795d97e9cd60f910a6dfea555fd338f6399`.
 
 ## Open acceptance items — do not publish as accepted
 
