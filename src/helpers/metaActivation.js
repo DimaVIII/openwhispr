@@ -188,8 +188,9 @@ class MetaActivation {
     }
     if (stream.state === "done") return;
     // Once the server answers awaiting_permission or refuses (403, e.g. org
-    // policy), only activity posts again. A lost answer may have committed a
-    // device, so the timer retries it.
+    // policy) an unregistered stream, only activity posts again. A registered
+    // stream keeps certifying its watermark, and a lost answer may have
+    // committed a device, so the timer retries both.
     if (scheduled && this.awaitingPermission === stream.id) return;
     const post = async (path, body) => {
       assertCurrent();
@@ -202,7 +203,7 @@ class MetaActivation {
       });
       assertCurrent();
       if (!result?.success) {
-        if (result?.status === 403) this.awaitingPermission = stream.id;
+        if (result?.status === 403 && !stream.registered_at) this.awaitingPermission = stream.id;
         throw new Error("Activation sync unavailable");
       }
       return result.data;

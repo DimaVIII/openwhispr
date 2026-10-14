@@ -218,7 +218,7 @@ test("the timer retries a registration whose answer was lost", async (t) => {
   await r.manager.running;
   assert.equal(r.manager.current().state, "open");
 });
-test("the timer stays quiet after a 403 refusal until activity succeeds", async (t) => {
+test("a 403 quiets the timer only for an unregistered stream", async (t) => {
   t.mock.timers.enable({ apis: ["setInterval"] });
   const r = rig(t);
   const tick = async () => {
@@ -234,13 +234,10 @@ test("the timer stays quiet after a 403 refusal until activity succeeds", async 
   await r.manager.flush();
   r.blocked(true);
   await r.manager.flush();
-  await tick();
-  assert.equal(r.calls.length, 4);
   r.blocked(false);
-  await r.manager.flush();
   await tick();
   assert.deepEqual(
-    r.calls.slice(4).map((c) => c.path),
+    r.calls.slice(3).map((c) => c.path),
     ["/api/activation/batch", "/api/activation/batch"]
   );
 });
