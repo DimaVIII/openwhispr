@@ -187,8 +187,9 @@ class MetaActivation {
       stream = this.current(scope);
     }
     if (stream.state === "done") return;
-    // An unenrolled device registers on activity only, never on the timer.
-    if (scheduled && !stream.registered_at) return;
+    // Once the server answers awaiting_permission, only activity registers again.
+    // A lost answer may have committed a device, so the timer retries it.
+    if (scheduled && this.awaitingPermission === stream.id) return;
     const post = async (path, body) => {
       assertCurrent();
       const result = await this.request({
@@ -202,11 +203,15 @@ class MetaActivation {
       return result.data;
     };
     if (this.clock(scope) === null || stream.state === "new") {
+      this.awaitingPermission = null;
       const response = await post("/api/activation/device", {
         accountId: scope.accountId,
         deviceId: stream.id,
       });
-      if (response.status === "awaiting_permission") return;
+      if (response.status === "awaiting_permission") {
+        this.awaitingPermission = stream.id;
+        return;
+      }
       if (response.status !== "collecting") {
         this.retire(stream.id);
         return;
@@ -291,7 +296,13 @@ class MetaActivation {
 
   async close() {
     const stream = this.current();
-    if (!stream || stream.state === "done" || stream.state === "closed") return;
+    if (
+      !stream ||
+      stream.state === "done" ||
+      stream.state === "closed" ||
+      this.awaitingPermission === stream.id
+    )
+      return;
     const unresolved = this.db
       .prepare("SELECT 1 FROM captures WHERE stream_id=? AND words IS NULL LIMIT 1")
       .get(stream.id);

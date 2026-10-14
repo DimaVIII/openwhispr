@@ -196,11 +196,23 @@ test("an unenrolled device registers on dictation, not on the 30 s timer", async
   r.manager.start();
   await r.manager.flush();
   t.mock.timers.tick(90_000);
-  await r.manager.flush();
+  await r.manager.running;
+  await r.manager.close();
   assert.equal(r.calls.length, 1);
   r.permitted(true);
   assert.equal(r.manager.begin(), null);
   await r.manager.flush();
+  assert.equal(r.manager.current().state, "open");
+});
+test("the timer retries a registration whose answer was lost", async (t) => {
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  const r = rig(t);
+  r.offline(true);
+  r.manager.start();
+  await r.manager.flush();
+  r.offline(false);
+  t.mock.timers.tick(30_000);
+  await r.manager.running;
   assert.equal(r.manager.current().state, "open");
 });
 test("storage failure cannot be erased by finalizer cancellation or clean shutdown", async (t) => {
