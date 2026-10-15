@@ -1,4 +1,4 @@
-import { useId, type ComponentProps, type ReactNode } from "react";
+import { useId, useRef, type ComponentProps, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type {
   ConnectionAutoCheck,
@@ -16,7 +16,7 @@ export function FieldLabel({ children }: { children: ReactNode }) {
 
 type ProviderCheckFieldProps = Omit<
   ComponentProps<typeof Input>,
-  "dir" | "aria-invalid" | "aria-describedby"
+  "dir" | "aria-invalid" | "aria-describedby" | "ref"
 > & {
   label: string;
   check: Pick<ConnectionAutoCheck, "phase" | "failure" | "retry">;
@@ -38,6 +38,7 @@ export function ProviderCheckField({
 }: ProviderCheckFieldProps) {
   const { t } = useTranslation();
   const reasonId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
   const { phase, failure, retry } = check;
   const describe = (result: ProviderConnectionResult) =>
     result.errorCode
@@ -57,6 +58,7 @@ export function ProviderCheckField({
           <Input
             dir="ltr"
             {...inputProps}
+            ref={inputRef}
             aria-invalid={failure?.errorCode === invalidOn ? true : undefined}
             aria-describedby={reasonId}
             className={cn(className, phase !== "idle" && "pe-9")}
@@ -78,7 +80,11 @@ export function ProviderCheckField({
             {" "}
             <button
               type="button"
-              onClick={retry}
+              // Retry goes away while the check runs, so focus moves to the field first.
+              onClick={() => {
+                inputRef.current?.focus();
+                retry();
+              }}
               className="font-medium underline underline-offset-2 hover:opacity-70"
             >
               {t("common.retry")}
