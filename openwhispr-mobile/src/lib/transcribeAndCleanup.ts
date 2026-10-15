@@ -20,6 +20,7 @@ import {
 } from './dictationAgent';
 import { isDictationContext } from './dictationHints';
 import { isToneApplicable } from './keyboardTone';
+import { getLocalReasoningReadiness } from './localReasoning';
 import { isNoSpeechError } from './permissions';
 import { withRetry, type RetryOptions } from './retry';
 import { expandSnippets } from './snippets';
@@ -74,6 +75,17 @@ function cleansLocalTranscript(request: TranscriptionRequest): boolean {
       useProcessingModeStore.getState().activeMode,
     )
   );
+}
+
+// Local Mode cleans On-Device with nothing of its own saved for cleanup. When Apple Intelligence
+// can't run, AI Models already says that cleanup is skipped, so it is skipped quietly rather than
+// warning on every transcript the user never asked to clean. The cached readiness outlives a fix in
+// iOS Settings, so it is checked again before skipping.
+async function skipsLocalModeCleanup(request: TranscriptionRequest): Promise<boolean> {
+  if (request.cleanupRoute?.mode !== 'local') return false;
+  if (useConfigStore.getState().config?.inference?.cleanup?.mode === 'local') return false;
+  if ((await getLocalReasoningReadiness()).status === 'ready') return false;
+  return (await getLocalReasoningReadiness({ refresh: true })).status !== 'ready';
 }
 
 // Tones are a Cloud cleanup option: On-Device cleanup never takes one, and in Private mode the
@@ -210,6 +222,7 @@ async function runSerialTranscribeAndCleanup(
   if (lifecycle.shouldCancel?.()) {
     return rawTranscriptResult(transcription);
   }
+  if (await skipsLocalModeCleanup(request)) return rawTranscriptResult(transcription);
 
   let cleanupWarning: string | undefined;
   lifecycle.onStage?.('cleaning', { fusedCleanup: false });

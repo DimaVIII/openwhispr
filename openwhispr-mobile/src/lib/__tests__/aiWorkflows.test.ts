@@ -23,12 +23,12 @@ describe('workflowSummary for Text Cleanup', () => {
     ).toBe('Skipped · Not supported on this iPhone');
   });
 
-  it('names the provider saved for cleanup in On-Device mode, which cleans there', () => {
+  it('runs On-Device in Local Mode with a provider saved, which applies again in Cloud', () => {
     const saved = config({
       inference: { cleanup: { mode: 'providers', providerId: 'openai', modelId: 'gpt-5-mini' } },
     });
-    expect(workflowSummary(saved, 'cleanup', 'private')).toBe('OpenAI');
-    expect(workflowSummary(saved, 'cleanup', 'private', { keyMissing: true })).toBe(
+    expect(workflowSummary(saved, 'cleanup', 'private')).toBe('On-Device');
+    expect(workflowSummary(saved, 'cleanup', 'cloud', { keyMissing: true })).toBe(
       'OpenAI · Key missing',
     );
   });
@@ -48,7 +48,7 @@ describe('workflowSummary for Text Cleanup', () => {
     },
   );
 
-  it('ignores On-Device availability for a cleanup provider in Local Mode', () => {
+  it('says Local Mode cleanup is skipped with a provider saved, when On-Device cannot run', () => {
     const saved = config({
       inference: { cleanup: { mode: 'providers', providerId: 'openai', modelId: 'gpt-5-mini' } },
     });
@@ -56,7 +56,7 @@ describe('workflowSummary for Text Cleanup', () => {
       workflowSummary(saved, 'cleanup', 'private', {
         onDeviceUnavailable: 'Apple Intelligence off',
       }),
-    ).toBe('OpenAI');
+    ).toBe('Skipped · Apple Intelligence off');
   });
 
   it('ignores On-Device availability for a cleanup that does not run on the phone', () => {

@@ -142,6 +142,17 @@ it('moves the dictation route with the chosen mode and restores both on failure'
   });
 });
 
+// Local Mode cleans On-Device with nothing saved, so setup leaves a cleanup choice as it is.
+it.each([
+  ['cloud', { mode: 'local' }],
+  ['private', { mode: 'openwhispr' }],
+] as const)('keeps a saved cleanup when a replay picks %s', async (mode, cleanup) => {
+  mockUser = { id: 'u', isAnonymous: false };
+  mockConfig = { defaultMode: mode, inference: { dictation: { mode: 'openwhispr' }, cleanup } };
+  await chooseOnboardingMode(mode, 'privacy-mode');
+  expect(mockUpdateConfig.mock.calls[0][0].inference.cleanup).toEqual(cleanup);
+});
+
 // A new identity there would read as an account switch and wipe the synced account's notes.
 describe('on a device that synced an account, signed out', () => {
   beforeEach(() => {

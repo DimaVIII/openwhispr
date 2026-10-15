@@ -32,6 +32,7 @@ import {
 import { MODE_LABELS, workflowSaveConfig } from '@/lib/inferenceModes';
 import { InferenceModePicker } from '@/components/settings/InferenceModePicker';
 import {
+  LOCAL_MODE_DICTATION_NOTES,
   ON_DEVICE_MODE_NOTES,
   PRIVATE_MODE_LOCKED,
   PRIVATE_MODE_LOCKED_REASON,
@@ -292,11 +293,9 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
   const activeMode = useProcessingModeStore((state) => state.activeMode);
   const storedSelection = config?.inference?.[scope] ?? unsetSelection(scope, activeMode);
   // Local Mode runs dictation, uploads and cleanup on this phone whatever is saved, so a saved mode
-  // it locks shows as On-Device (Automatic), which is what runs.
+  // it locks shows as On-Device (Automatic), which is what runs, and applies again when Local Mode is off.
   const lockedByPrivateMode =
-    activeMode === 'private' &&
-    (scope === 'dictation' || scope === 'upload' || scope === 'cleanup') &&
-    !!PRIVATE_MODE_LOCKED[scope]?.includes(storedSelection.mode);
+    activeMode === 'private' && !!PRIVATE_MODE_LOCKED[scope]?.includes(storedSelection.mode);
   const savedSelection: InferenceSelection = lockedByPrivateMode
     ? { mode: 'local' }
     : storedSelection;
@@ -347,12 +346,19 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
       cancelled = true;
     };
   }, [speechScope]);
+  // Nothing is shown as picked when the On-Device text workflow can never run on this iPhone.
+  const pickedMode =
+    !speechScope && onDeviceUnsupported && selection.mode === 'local' ? null : selection.mode;
+  const lockedChoice =
+    storedSelection.mode === 'providers' && storedSelection.providerId
+      ? providerDisplayName(storedSelection.providerId)
+      : MODE_LABELS[storedSelection.mode];
   const modeNote =
     (scope === 'cleanup' && selection.mode === 'local' && onDeviceUnsupported
       ? ON_DEVICE_CLEANUP_UNSUPPORTED_NOTE
       : undefined) ??
     (lockedByPrivateMode && ON_DEVICE_MODE_NOTES[scope]
-      ? `${ON_DEVICE_MODE_NOTES[scope]} Your ${MODE_LABELS[storedSelection.mode]} choice applies again when Local Mode is off.`
+      ? `${ON_DEVICE_MODE_NOTES[scope]} Your ${lockedChoice} choice applies again when Local Mode is off.`
       : undefined) ??
     (activeMode === 'private' ? ON_DEVICE_MODE_NOTES[scope] : undefined) ??
     (activeMode === 'providers' && !config?.inference?.[scope]
@@ -362,14 +368,18 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
       ? activeMode === 'private'
         ? 'Save to switch to Bring Your Own Key. This turns Local Mode off.'
         : 'Save to switch to Bring Your Own Key.'
+      : undefined) ??
+    (scope === 'dictation'
+      ? LOCAL_MODE_DICTATION_NOTES[activeMode === 'private' ? 'on' : 'off']
       : undefined);
-  // Private mode is switched in AI Models, so a mode it never runs here can't be picked.
+  // A mode Local Mode never runs can't be picked here, except on the Dictation page, where picking
+  // it turns Local Mode off.
   const modeUnavailable: Partial<Record<InferenceMode, string>> = {
     ...Object.fromEntries(
-      (activeMode === 'private' ? (PRIVATE_MODE_LOCKED[scope] ?? []) : []).map((mode) => [
-        mode,
-        PRIVATE_MODE_LOCKED_REASON,
-      ]),
+      (activeMode === 'private' && scope !== 'dictation'
+        ? (PRIVATE_MODE_LOCKED[scope] ?? [])
+        : []
+      ).map((mode) => [mode, PRIVATE_MODE_LOCKED_REASON]),
     ),
     ...(onDeviceUnsupported ? { local: onDeviceUnsupported } : {}),
   };
@@ -755,7 +765,7 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
           <>
             <InferenceModePicker
               scope={speechScope ? 'speech' : 'text'}
-              selectedMode={selection.mode}
+              selectedMode={pickedMode}
               onSelect={chooseMode}
               unavailable={modeUnavailable}
             />
@@ -769,7 +779,7 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
                 lockedChoice={lockedByPrivateMode}
               />
             ) : null}
-            {selection.mode === 'local' && !speechScope ? (
+            {selection.mode === 'local' && !speechScope && !onDeviceUnsupported ? (
               <SectionFooter>Runs on Apple Intelligence on this iPhone.</SectionFooter>
             ) : null}
             {selection.mode === 'providers' && provider ? (

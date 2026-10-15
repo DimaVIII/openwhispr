@@ -128,24 +128,12 @@ describe('cleanup line', () => {
     expect(screen.queryByText(/Apple Intelligence|iPhone/)).toBeNull();
   });
 
-  // A provider saved for cleanup keeps cleaning in Private mode, on any phone.
-  it.each(['ios', 'android'] as const)('names a saved cleanup provider (%s)', async (os) => {
-    Platform.OS = os;
-    mockReadiness = { status: 'unsupportedDevice' };
-    mockSavedCleanup = { mode: 'providers' };
-    const screen = await renderStep();
-    expect(screen.getByText('Cleanup with your saved provider')).toBeTruthy();
-    expect(
-      screen.getByText('Your transcription is sent to the provider you chose in AI Models.'),
-    ).toBeTruthy();
-    expect(screen.queryByText(/Apple Intelligence|raw transcription/)).toBeNull();
-  });
-
-  // Private mode never runs it, so the line is the one for this phone.
-  it('ignores a saved Cloud cleanup', async () => {
-    mockSavedCleanup = { mode: 'openwhispr' };
+  // Local Mode cleans On-Device whatever is saved, so the line is the one for this phone.
+  it.each(['openwhispr', 'providers'])('ignores a saved %s cleanup', async (mode) => {
+    mockSavedCleanup = { mode };
     const screen = await renderStep();
     expect(screen.getByText('Cleanup with Apple Intelligence')).toBeTruthy();
+    expect(screen.queryByText(/saved provider/)).toBeNull();
   });
 
   // Neither says whether this iPhone can run it, so the card makes no claim.

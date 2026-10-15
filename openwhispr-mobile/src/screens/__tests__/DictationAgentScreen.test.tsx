@@ -50,7 +50,7 @@ it('shows the voice assistant off in Local Mode and says where to turn it back o
   render(<DictationAgentScreen />);
   expect(
     screen.getByText(
-      'Off while Local Mode is on. Turn it off in AI Models. Your settings are saved and apply once Local Mode is off.',
+      'Off while Local Mode is on. Change Dictation in AI Models to turn it off. Your settings are saved and apply once Local Mode is off.',
     ),
   ).toBeTruthy();
   const [enable] = screen.UNSAFE_getAllByType(Switch);

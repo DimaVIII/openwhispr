@@ -1,6 +1,6 @@
 import React from 'react';
 import { Alert, Platform } from 'react-native';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 
 const mockPush = jest.fn();
 const mockClearCredentials = jest.fn().mockResolvedValue(undefined);
@@ -42,11 +42,6 @@ jest.mock('@/services/providers/ProviderCredentials', () => ({
   },
 }));
 
-const mockSetPrivateMode = jest.fn();
-jest.mock('@/lib/workflowModeSwitch', () => ({
-  setPrivateMode: (...args: unknown[]) => mockSetPrivateMode(...args),
-}));
-
 import AIModelsScreen from '../AIModelsScreen';
 
 const originalPlatform = Platform.OS;
@@ -58,7 +53,6 @@ beforeEach(() => {
   Platform.OS = 'ios';
   mockCredentialStatus.mockResolvedValue({ isConfigured: true });
   mockReadiness.mockResolvedValue({ status: 'ready', tokenCounting: false });
-  mockSetPrivateMode.mockResolvedValue('switched');
 });
 
 afterAll(() => {
@@ -154,7 +148,7 @@ it('runs cleanup On-Device in Local Mode with nothing saved', async () => {
   await screen.findByText(/Status: Ready/);
 });
 
-it('names the cleanup provider in On-Device mode, which cleans On-Device transcripts', async () => {
+it('runs cleanup On-Device in Local Mode with a provider saved for it', async () => {
   mockActiveMode = 'private';
   mockConfig = {
     defaultMode: 'private',
@@ -164,8 +158,8 @@ it('names the cleanup provider in On-Device mode, which cleans On-Device transcr
     },
   };
   render(<AIModelsScreen />);
-  expect(screen.queryByText('Skipped')).toBeNull();
-  expect(screen.getByText('OpenAI')).toBeTruthy();
+  expect(screen.queryByText('OpenAI')).toBeNull();
+  expect(screen.getAllByText('On-Device').length).toBeGreaterThan(0);
   await screen.findByText(/Status: Ready/);
 });
 
@@ -229,68 +223,19 @@ it.each([
 ])('says when this iPhone cannot run Apple Intelligence (%s)', async (status, label) => {
   mockReadiness.mockResolvedValue({ status, tokenCounting: false });
   render(<AIModelsScreen />);
-  expect(await screen.findByText(new RegExp(`Status: ${label}\\.`))).toBeTruthy();
+  expect(await screen.findByText(new RegExp(`Status: ${label}\\s`))).toBeTruthy();
 });
 
-// AI Models is the one place Private mode is switched; Home only shows that it's on.
-describe('Local Mode switch', () => {
-  it('shows Local Mode off, with what turning it on does', async () => {
-    render(<AIModelsScreen />);
-    expect(screen.getByLabelText('Local Mode').props.value).toBe(false);
-    expect(
-      screen.getByText('Keep audio on this iPhone and ask before notes leave it.'),
-    ).toBeTruthy();
-    await screen.findByText(/Status: Ready/);
-  });
+// Dictation owns Local Mode, so AI Models has no switch of its own.
+it('has no Local Mode switch', async () => {
+  render(<AIModelsScreen />);
+  expect(screen.queryByLabelText('Local Mode')).toBeNull();
+  await screen.findByText(/Status: Ready/);
+});
 
-  it('shows Local Mode on, and how to choose per workflow again', async () => {
-    mockActiveMode = 'private';
-    render(<AIModelsScreen />);
-    expect(screen.getByLabelText('Local Mode').props.value).toBe(true);
-    expect(
-      screen.getByText(
-        'Audio stays on this iPhone, notes ask before leaving it, and the voice assistant is off.',
-      ),
-    ).toBeTruthy();
-    await screen.findByText(/Status: Ready/);
-  });
-
-  it.each([
-    [true, 'Local Mode on.'],
-    [false, 'Local Mode off.'],
-  ])('switches Local Mode to %s', async (enabled, message) => {
-    mockActiveMode = enabled ? 'cloud' : 'private';
-    render(<AIModelsScreen />);
-    fireEvent(screen.getByLabelText('Local Mode'), 'valueChange', enabled);
-    expect(await screen.findByTestId('toast-success')).toHaveTextContent(message);
-    expect(mockSetPrivateMode).toHaveBeenCalledWith(enabled);
-  });
-
-  // The model list opened, or sign-in was asked for; nothing changed yet.
-  it.each(['needs-model', 'refused'])('says nothing when the switch is %s', async (result) => {
-    mockSetPrivateMode.mockResolvedValue(result);
-    render(<AIModelsScreen />);
-    fireEvent(screen.getByLabelText('Local Mode'), 'valueChange', true);
-    await waitFor(() => expect(mockSetPrivateMode).toHaveBeenCalledWith(true));
-    expect(screen.queryByTestId('toast-success')).toBeNull();
-    await screen.findByText(/Status: Ready/);
-  });
-
-  // Turning on waits for the model check; the switch must not bounce back off meanwhile, nor take a
-  // second tap.
-  it('holds the requested state while switching, then settles on the real mode', async () => {
-    let finish: (result: string) => void = () => undefined;
-    mockSetPrivateMode.mockReturnValue(new Promise((resolve) => (finish = resolve)));
-    render(<AIModelsScreen />);
-    fireEvent(screen.getByLabelText('Local Mode'), 'valueChange', true);
-    await waitFor(() => expect(screen.getByLabelText('Local Mode').props.disabled).toBe(true));
-    expect(screen.getByLabelText('Local Mode').props.value).toBe(true);
-    fireEvent(screen.getByLabelText('Local Mode'), 'valueChange', false);
-    expect(mockSetPrivateMode).toHaveBeenCalledTimes(1);
-
-    await act(async () => finish('refused'));
-    expect(screen.getByLabelText('Local Mode').props.value).toBe(false);
-    expect(screen.getByLabelText('Local Mode').props.disabled).toBe(false);
-    await screen.findByText(/Status: Ready/);
-  });
+it('puts the Apple Intelligence status on its own line', async () => {
+  render(<AIModelsScreen />);
+  expect((await screen.findByText(/Status: Ready/)).props.children).toBe(
+    'Status: Ready\nRuns On-Device text workflows, and private and signed-out note generation.',
+  );
 });

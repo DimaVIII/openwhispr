@@ -23,38 +23,44 @@ export const UNSET_PROVIDER_NOTES: Partial<Record<MobileInferenceScope, string>>
 
 // On-Device cleanup on an iPhone that can never run Apple Intelligence.
 export const ON_DEVICE_CLEANUP_UNSUPPORTED_NOTE =
-  "This iPhone can't run On-Device cleanup, so it's skipped. Choose Bring Your Own Key to clean up transcripts.";
+  "This iPhone can't run On-Device cleanup, so it's skipped. OpenWhispr Cloud can clean up your transcripts.";
 
-// What Private mode means for each workflow other than dictation.
+// Dictation owns Local Mode: On-Device dictation turns it on, and the other modes turn it off.
+export const LOCAL_MODE_DICTATION_NOTES = {
+  on: 'Local Mode is on, so uploads and cleanup also stay on this iPhone. Choose OpenWhispr Cloud or Bring Your Own Key to turn it off.',
+  off: 'On-Device turns on Local Mode, which also keeps uploads and cleanup on this iPhone.',
+};
+
+// What Local Mode means for each workflow other than dictation.
 export const ON_DEVICE_MODE_NOTES: Partial<Record<MobileInferenceScope, string>> = {
   upload: 'Local Mode keeps uploads on this iPhone.',
   notes: 'Local Mode formats notes on this iPhone and asks before sending one to your choice here.',
-  cleanup:
-    'In Local Mode, cleanup runs on this iPhone, or sends only the transcript text to your provider with Bring Your Own Key.',
+  cleanup: 'Local Mode cleans up transcripts on this iPhone.',
   agent:
     'In Local Mode the voice assistant is off, and note chat asks before sending a note off this iPhone.',
 };
 
-// Modes Private mode never runs for a workflow, so its page can't offer them as if they would.
-// Dictation keeps Bring Your Own Key, since saving it leaves Private mode (no account needed).
-// Notes and chat keep every mode: Private mode asks before sending a note to the one chosen.
+// Modes Local Mode never runs for a workflow. A saved one shows as On-Device, which is what runs,
+// and applies again when Local Mode is off. Other pages can't offer them, but Dictation's can:
+// choosing OpenWhispr Cloud or Bring Your Own Key there is how Local Mode is turned off (Bring Your
+// Own Key is also how a guest, who can't use Cloud, uses their own key). Notes and chat keep every
+// mode: Local Mode asks before sending a note to the one chosen.
 export const PRIVATE_MODE_LOCKED: Partial<Record<MobileInferenceScope, InferenceMode[]>> = {
   dictation: ['openwhispr'],
   upload: ['openwhispr', 'providers'],
-  cleanup: ['openwhispr'],
+  cleanup: ['openwhispr', 'providers'],
 };
 
-export const PRIVATE_MODE_LOCKED_REASON = 'Off while Local Mode is on. Turn it off in AI Models.';
+export const PRIVATE_MODE_LOCKED_REASON =
+  'Off while Local Mode is on. Change Dictation in AI Models to turn it off.';
 
-// Local Mode cleans transcripts On-Device, like every other workflow, unless a provider is saved
-// for cleanup, which is the user's consent to send it the text. Outside Local Mode, cleanup runs
-// On-Device only when it is saved as On-Device.
+// Local Mode cleans transcripts On-Device, like every other workflow, whatever is saved. Outside
+// Local Mode, cleanup runs On-Device only when it is saved as On-Device.
 export function cleanupRunsOnDevice(
   config: UserConfig | null,
   activeMode: ProcessingMode,
 ): boolean {
-  const mode = config?.inference?.cleanup?.mode;
-  return mode === 'local' || (activeMode === 'private' && mode !== 'providers');
+  return activeMode === 'private' || config?.inference?.cleanup?.mode === 'local';
 }
 
 export function parseWorkflow(value: unknown): MobileInferenceScope | null {
@@ -93,8 +99,8 @@ export function workflowSummary(
     if (cleanupRunsOnDevice(config, activeMode) && onDeviceUnavailable)
       return `Skipped · ${onDeviceUnavailable}`;
   }
-  // Local Mode runs everything on this phone first, whatever is saved, cleanup included unless a
-  // provider is saved for it. Only note chat set to OpenWhispr, or not set, goes straight to Cloud.
+  // Local Mode runs everything on this phone first, whatever is saved. Only note chat set to
+  // OpenWhispr, or not set, goes straight to Cloud.
   if (activeMode === 'private') {
     const chatOnCloud = (config?.inference?.agent?.mode ?? 'openwhispr') === 'openwhispr';
     if (scope === 'agent' && chatOnCloud) return MODE_LABELS.openwhispr;
@@ -102,8 +108,7 @@ export function workflowSummary(
   const selection = config?.inference?.[scope] ?? unsetSelection(scope, activeMode);
   if (selection.mode === 'local' && isLocalModelKey(selection.modelId))
     return LOCAL_MODEL_TITLES[selection.modelId];
-  if (activeMode === 'private' && !(scope === 'cleanup' && selection.mode === 'providers'))
-    return MODE_LABELS.local;
+  if (activeMode === 'private') return MODE_LABELS.local;
   if (selection.mode !== 'providers') return MODE_LABELS[selection.mode];
   if (!selection.providerId) return 'Not set';
   const name = providerDisplayName(selection.providerId);

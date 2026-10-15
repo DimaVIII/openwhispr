@@ -201,24 +201,31 @@ it('marks text stages unavailable, never Cloud, for BYOK dictation with no text 
   );
 });
 
-it('keeps a saved provider cleanup for an On-Device recording; everything else stays local', () => {
+const OPENAI_TEXT = {
+  mode: 'providers' as const,
+  providerId: 'openai',
+  modelId: 'gpt-5-mini',
+  credentialRef: 'provider.openai',
+};
+
+it('keeps every text workflow of a Local Mode recording on this phone, a saved provider included', () => {
   mockProcessing.activeMode = 'private';
   mockState.config.inference = {
     dictation: { mode: 'local' },
-    cleanup: {
-      mode: 'providers',
-      providerId: 'openai',
-      modelId: 'gpt-5-mini',
-      credentialRef: 'provider.openai',
-    },
-    agent: {
-      mode: 'providers',
-      providerId: 'openai',
-      modelId: 'gpt-5-mini',
-      credentialRef: 'provider.openai',
-    },
+    cleanup: OPENAI_TEXT,
+    agent: OPENAI_TEXT,
   };
   const snapshot = snapshotTranscriptionJob('dictation');
+  expect(snapshot.provider).toBe('local');
+  expect(snapshot.cleanupRoute).toEqual({ mode: 'local', scope: 'cleanup' });
+  expect(snapshot.agentRoute).toEqual({ mode: 'local', scope: 'agent' });
+  expect(snapshot.cleanupUnavailable).toBeUndefined();
+});
+
+it('sends an On-Device upload outside Local Mode to the provider saved for cleanup', () => {
+  mockProcessing.activeMode = 'cloud';
+  mockState.config.inference = { upload: { mode: 'local' }, cleanup: OPENAI_TEXT };
+  const snapshot = snapshotTranscriptionJob('upload');
   expect(snapshot.provider).toBe('local');
   expect(snapshot.cleanupRoute).toMatchObject({
     mode: 'providers',
@@ -226,8 +233,6 @@ it('keeps a saved provider cleanup for an On-Device recording; everything else s
     providerId: 'openai',
     modelId: 'gpt-5-mini',
   });
-  expect(snapshot.agentRoute).toEqual({ mode: 'local', scope: 'agent' });
-  expect(snapshot.cleanupUnavailable).toBeUndefined();
 });
 
 it.each([

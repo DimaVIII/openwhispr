@@ -403,7 +403,6 @@ it('closes the keyboard when a key is pasted, but not while typing', () => {
 
 it('checks a provider from Local Mode, since a check sends no user content', async () => {
   mockActiveMode = 'private';
-  mockScope = 'cleanup';
   render(<WorkflowSettingsScreen />);
   enableProviders();
   fireEvent.changeText(screen.getByLabelText('API key'), 'test-key');
@@ -832,18 +831,22 @@ it('adds no pins when an existing user re-saves dictation with their own key', a
   expect(saved.inference.notes).toBeUndefined();
 });
 
-// Local Mode cleans on this phone whatever Cloud choice was saved before it was on.
-it('shows On-Device for a Cloud cleanup choice Local Mode locks', () => {
-  mockConfig = { defaultMode: 'private', inference: { cleanup: { mode: 'openwhispr' } } };
+// Local Mode cleans on this phone whatever was saved before it was on.
+it.each([
+  ['OpenWhispr Cloud', { mode: 'openwhispr' }],
+  ['OpenAI', { mode: 'providers', providerId: 'openai', modelId: 'gpt-5-mini' }],
+])('shows On-Device for a %s cleanup choice Local Mode locks', (label, cleanup) => {
+  mockConfig = { defaultMode: 'private', inference: { cleanup } };
   mockActiveMode = 'private';
   mockScope = 'cleanup';
   render(<WorkflowSettingsScreen />);
   expect(selectedMode()).toBe('On-Device');
   expect(
     screen.getByText(
-      'In Local Mode, cleanup runs on this iPhone, or sends only the transcript text to your provider with Bring Your Own Key. Your OpenWhispr Cloud choice applies again when Local Mode is off.',
+      `Local Mode cleans up transcripts on this iPhone. Your ${label} choice applies again when Local Mode is off.`,
     ),
   ).toBeTruthy();
+  expect(screen.queryByLabelText('API key')).toBeNull();
 });
 
 it.each([
@@ -876,7 +879,7 @@ it('shows On-Device for an upload choice Local Mode locks, and keeps that choice
   expect(selectedMode()).toBe('On-Device');
   expect(
     screen.getByText(
-      'Local Mode keeps uploads on this iPhone. Your Bring Your Own Key choice applies again when Local Mode is off.',
+      'Local Mode keeps uploads on this iPhone. Your OpenAI choice applies again when Local Mode is off.',
     ),
   ).toBeTruthy();
   expect(screen.queryByLabelText('API key')).toBeNull();
@@ -926,12 +929,12 @@ function modeDisabled(title: string): boolean {
   return !!row?.props.accessibilityState.disabled;
 }
 
-// Private mode is switched in AI Models, so a page can't offer a mode it would ignore. Dictation
-// keeps Bring Your Own Key: saving it leaves Private mode, with no account needed.
+// A page can't offer a mode Local Mode would ignore, except Dictation's: picking OpenWhispr Cloud or
+// Bring Your Own Key there is how Local Mode is turned off.
 it.each([
-  ['dictation', ['OpenWhispr Cloud'], ['On-Device', 'Bring Your Own Key']],
+  ['dictation', [], ['OpenWhispr Cloud', 'On-Device', 'Bring Your Own Key']],
   ['upload', ['OpenWhispr Cloud', 'Bring Your Own Key'], ['On-Device']],
-  ['cleanup', ['OpenWhispr Cloud'], ['On-Device', 'Bring Your Own Key']],
+  ['cleanup', ['OpenWhispr Cloud', 'Bring Your Own Key'], ['On-Device']],
   ['notes', [], ['OpenWhispr Cloud', 'On-Device', 'Bring Your Own Key']],
   ['agent', [], ['OpenWhispr Cloud', 'On-Device', 'Bring Your Own Key']],
 ])('locks the modes Local Mode never runs for %s', (scope, locked, open) => {
@@ -943,14 +946,38 @@ it.each([
   for (const title of open) expect(modeDisabled(title)).toBe(false);
   // The agent page's Voice Assistant switch is off for the same reason.
   expect(
-    screen.queryAllByText('Off while Local Mode is on. Turn it off in AI Models.'),
+    screen.queryAllByText(
+      'Off while Local Mode is on. Change Dictation in AI Models to turn it off.',
+    ),
   ).toHaveLength(locked.length + (scope === 'agent' ? 1 : 0));
+});
+
+it('turns Local Mode off when OpenWhispr Cloud is picked on the Dictation page', async () => {
+  mockConfig = { defaultMode: 'private', inference: { dictation: { mode: 'local' } } };
+  mockActiveMode = 'private';
+  render(<WorkflowSettingsScreen />);
+  fireEvent.press(screen.getByText('OpenWhispr Cloud'));
+  await waitFor(() => expect(mockSwitchMode).toHaveBeenCalledWith('dictation', 'openwhispr'));
 });
 
 it('locks no mode outside Local Mode', () => {
   render(<WorkflowSettingsScreen />);
   for (const title of ['OpenWhispr Cloud', 'On-Device', 'Bring Your Own Key'])
     expect(modeDisabled(title)).toBe(false);
+});
+
+// Dictation owns Local Mode, so its page says what On-Device does and how to leave it.
+it.each([
+  ['cloud', 'On-Device turns on Local Mode, which also keeps uploads and cleanup on this iPhone.'],
+  [
+    'private',
+    'Local Mode is on, so uploads and cleanup also stay on this iPhone. Choose OpenWhispr Cloud or Bring Your Own Key to turn it off.',
+  ],
+])('explains Local Mode on the Dictation page in %s mode', (mode, note) => {
+  mockConfig = { defaultMode: mode };
+  mockActiveMode = mode;
+  render(<WorkflowSettingsScreen />);
+  expect(screen.getByText(note)).toBeTruthy();
 });
 
 it('does not show the Local Mode note on the Dictation page', () => {
@@ -1202,7 +1229,7 @@ describe('an iPhone that cannot run Apple Intelligence', () => {
     expect(modeRow('On-Device').props.accessibilityState?.disabled).toBeFalsy();
   });
 
-  it('says Local Mode cleanup is skipped and points at Bring Your Own Key', async () => {
+  it('says Local Mode cleanup is skipped, shows nothing picked and points at Cloud', async () => {
     mockActiveMode = 'private';
     mockConfig = { defaultMode: 'private', inference: {} };
     mockScope = 'cleanup';
@@ -1210,8 +1237,10 @@ describe('an iPhone that cannot run Apple Intelligence', () => {
 
     expect(
       await screen.findByText(
-        "This iPhone can't run On-Device cleanup, so it's skipped. Choose Bring Your Own Key to clean up transcripts.",
+        "This iPhone can't run On-Device cleanup, so it's skipped. OpenWhispr Cloud can clean up your transcripts.",
       ),
     ).toBeTruthy();
+    expect(selectedMode()).toBeUndefined();
+    expect(screen.queryByText('Runs on Apple Intelligence on this iPhone.')).not.toBeOnTheScreen();
   });
 });

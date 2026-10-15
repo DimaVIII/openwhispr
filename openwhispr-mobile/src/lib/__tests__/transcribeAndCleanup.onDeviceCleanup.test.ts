@@ -125,22 +125,26 @@ it('cleans an On-Device upload on this phone outside On-Device mode too', async 
   expect(result.text).toBe('cleaned:um hello there');
 });
 
-it('cleans an On-Device transcript with the provider saved for cleanup', async () => {
+const OPENAI_CLEANUP = {
+  mode: 'providers',
+  providerId: 'openai',
+  modelId: 'gpt-5-mini',
+  credentialRef: 'provider.openai',
+};
+
+it('sends an On-Device upload outside Local Mode to the provider saved for cleanup', async () => {
+  mockActiveMode = 'cloud';
   mockConfig = {
     cleanupEnabled: true,
-    defaultMode: 'private',
-    inference: {
-      dictation: { mode: 'local' },
-      cleanup: {
-        mode: 'providers',
-        providerId: 'openai',
-        modelId: 'gpt-5-mini',
-        credentialRef: 'provider.openai',
-      },
-    },
+    defaultMode: 'cloud',
+    inference: { upload: { mode: 'local' }, cleanup: OPENAI_CLEANUP },
   };
 
-  const result = await transcribeOnDevice();
+  const result = await transcribeAndCleanup({
+    audioUri: 'file://a.wav',
+    provider: 'local',
+    requestContext: 'file',
+  });
 
   expect(mockReason).toHaveBeenCalledTimes(1);
   const req = mockReason.mock.calls[0][0] as Record<string, unknown>;
@@ -159,6 +163,7 @@ it('cleans an On-Device transcript with the provider saved for cleanup', async (
 // Local Mode moves every workflow on this phone, cleanup included.
 it.each([
   ['OpenWhispr Cloud', { mode: 'openwhispr' }],
+  ['a provider', OPENAI_CLEANUP],
   ['nothing saved', undefined],
 ])('cleans in Local Mode on this phone when cleanup is set to %s', async (_label, cleanup) => {
   mockConfig = {
@@ -221,6 +226,43 @@ it.each([
   expect(mockReason).not.toHaveBeenCalled();
   expect(result.text).toBe('um hello there');
   expect(result.transcription.cleanupWarning).toBe(`${reason} Your raw transcript is saved.`);
+});
+
+// Nobody chose On-Device cleanup here, and AI Models already says it is skipped.
+describe('in Local Mode with nothing of its own saved for cleanup', () => {
+  beforeEach(() => {
+    mockConfig = {
+      cleanupEnabled: true,
+      defaultMode: 'private',
+      inference: { dictation: { mode: 'local' } },
+    };
+  });
+
+  it.each(['unsupportedDevice', 'unsupportedOS', 'disabled', 'appleIntelligenceOff'])(
+    'skips cleanup quietly when readiness is %s',
+    async (status) => {
+      mockReadiness.mockResolvedValue({ status, tokenCounting: false });
+      const onStage = jest.fn();
+
+      const result = await transcribeOnDevice({ onStage });
+
+      expect(mockReason).not.toHaveBeenCalled();
+      expect(onStage).not.toHaveBeenCalledWith('cleaning', expect.anything());
+      expect(result.text).toBe('um hello there');
+      expect(result.transcription.cleanupWarning).toBeUndefined();
+    },
+  );
+
+  it('cleans once a fresh readiness check finds Apple Intelligence ready', async () => {
+    mockReadiness
+      .mockResolvedValueOnce({ status: 'appleIntelligenceOff', tokenCounting: false })
+      .mockResolvedValue({ status: 'ready', tokenCounting: true });
+
+    const result = await transcribeOnDevice();
+
+    expect(mockReadiness).toHaveBeenCalledWith({ refresh: true });
+    expect(result.text).toBe('cleaned:um hello there');
+  });
 });
 
 it('checks readiness again before refusing, so a fix in iOS Settings takes effect', async () => {

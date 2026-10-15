@@ -73,22 +73,18 @@ function scopesToPin(leavingMode: ProcessingMode): MobileInferenceScope[] {
   return leavingMode === 'private' ? ['upload', 'notes', 'agent'] : ['upload', 'notes'];
 }
 
-// The Private Mode switch and the Dictation page both own the dictation mode;
+// The Dictation page and onboarding own the dictation mode;
 // writing the scope selection alongside defaultMode keeps routing and UI in step.
 export function dictationModeConfig(
   config: UserConfig | null,
   mode: 'cloud' | 'private',
 ): DictationModeConfig {
   // Leaving Bring Your Own Key releases the automatic pins, so those workflows follow the
-  // Cloud/On-Device choice again; selections the user saved themselves stay. Cleanup follows the
-  // mode outright: a Cloud or On-Device cleanup is dropped, so Local Mode cleans on this iPhone and
-  // Cloud on Cloud, while a provider saved for it stays.
+  // Cloud/On-Device choice again; selections the user saved themselves stay.
   const pinned = config?.pinnedInference ?? [];
   const inference = Object.fromEntries(
     Object.entries(config?.inference ?? {}).filter(
-      ([scope, selection]) =>
-        !pinned.includes(scope as MobileInferenceScope) &&
-        (scope !== 'cleanup' || selection.mode === 'providers'),
+      ([scope]) => !pinned.includes(scope as MobileInferenceScope),
     ),
   );
   return {

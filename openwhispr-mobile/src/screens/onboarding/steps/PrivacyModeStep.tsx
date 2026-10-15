@@ -8,29 +8,17 @@ import { BRAND } from '@/config/colors';
 import { useOnboardingStep } from '@/hooks/useOnboardingStep';
 import { canRunLocalReasoning, getLocalReasoningReadiness } from '@/lib/localReasoning';
 import { chooseOnboardingMode } from '@/lib/onboardingMode';
-import { useConfigStore } from '@/store/useConfigStore';
 import { useModelDownloadStore } from '@/store/useModelDownloadStore';
 import { useOnboardingStore } from '@/store/useOnboardingStore';
-import type { InferenceMode, LocalReasoningReadiness } from '@/types';
+import type { LocalReasoningReadiness } from '@/types';
 
 type ModeChoice = 'cloud' | 'private';
 
 type CleanupLine = { included: boolean; text: string; hint?: string };
 
-// What Local Mode's cleanup does on this phone: a cleanup provider saved earlier keeps cleaning,
-// and otherwise it's Apple Intelligence or nothing. On an iPhone nothing is shown until the check
-// answers.
-function privateCleanupLine(
-  readiness: LocalReasoningReadiness | null,
-  savedCleanup: InferenceMode | undefined,
-): CleanupLine | null {
-  if (savedCleanup === 'providers') {
-    return {
-      included: true,
-      text: 'Cleanup with your saved provider',
-      hint: 'Your transcription is sent to the provider you chose in AI Models.',
-    };
-  }
+// What Local Mode's cleanup does on this phone: Apple Intelligence or nothing. On an iPhone nothing
+// is shown until the check answers.
+function privateCleanupLine(readiness: LocalReasoningReadiness | null): CleanupLine | null {
   if (Platform.OS !== 'ios') {
     return {
       included: false,
@@ -83,8 +71,7 @@ export function PrivacyModeStep(): ReactElement {
       cancelled = true;
     };
   }, []);
-  const savedCleanup = useConfigStore((state) => state.config?.inference?.cleanup?.mode);
-  const cleanupLine = privateCleanupLine(readiness, savedCleanup);
+  const cleanupLine = privateCleanupLine(readiness);
 
   const handleContinue = async (): Promise<void> => {
     if (choice === 'private') {

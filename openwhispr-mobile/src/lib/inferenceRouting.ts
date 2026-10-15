@@ -98,8 +98,13 @@ export function snapshotTextInference(provider: TranscriptionProvider): TextInfe
     const routeKey = scope === 'cleanup' ? 'cleanupRoute' : 'agentRoute';
     const errorKey = scope === 'cleanup' ? 'cleanupUnavailable' : 'agentUnavailable';
     const selection = getInferenceSelection(scope);
-    // A local transcript leaves the phone only for a cleanup provider the user saved.
-    if (provider === 'local' && !(scope === 'cleanup' && selection?.mode === 'providers')) {
+    // A local transcript leaves the phone only for a cleanup provider the user saved, and never in
+    // Local Mode.
+    const cleansWithProvider =
+      scope === 'cleanup' &&
+      selection?.mode === 'providers' &&
+      useProcessingModeStore.getState().activeMode !== 'private';
+    if (provider === 'local' && !cleansWithProvider) {
       result[routeKey] = { mode: 'local', scope };
     } else if (!selection && provider === 'byok') {
       result[errorKey] =

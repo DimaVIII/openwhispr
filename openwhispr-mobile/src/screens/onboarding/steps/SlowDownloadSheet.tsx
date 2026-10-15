@@ -70,8 +70,8 @@ export function SlowDownloadSheet({
               <View className="flex-row items-center gap-2">
                 <SystemIcon name="lock.fill" mdName="Lock" size={16} color="brand" />
                 <Text className="flex-1 text-[13px] leading-[18px] text-secondaryLabel">
-                  Turn on <Text className="font-semibold text-label">Local Mode</Text> in Account →
-                  AI Models to switch once it&apos;s ready.
+                  Set <Text className="font-semibold text-label">Dictation</Text> to On-Device in
+                  Account → AI Models to switch once it&apos;s ready.
                 </Text>
               </View>
             </View>

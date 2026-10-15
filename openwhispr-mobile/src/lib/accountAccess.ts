@@ -39,7 +39,7 @@ export function getCloudAccountRequiredMessage(feature: string, anonymous = fals
   // Already in Private Mode, which is what turning it off asks Cloud for, so don't offer it back.
   return useProcessingModeStore.getState().activeMode === 'private'
     ? `${action}.`
-    : `${action}, or turn on Local Mode in Account → AI Models.`;
+    : `${action}, or set Dictation to On-Device in Account → AI Models.`;
 }
 
 // For features with no local model (AI actions, AI chat): Private Mode is not
