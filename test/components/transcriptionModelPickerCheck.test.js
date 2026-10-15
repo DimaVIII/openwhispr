@@ -163,6 +163,35 @@ test("Custom: the model holds the status, and the address waits until it is left
   assert.equal(panel.field(MODEL).props.failureReason, "reasoning.custom.endpointUnauthorized");
 });
 
+test("leaving an address that is tidied on blur checks at once", async (t) => {
+  // The setter saves straight into the picker's props, as the store does for its parent, so
+  // the tidied address and the hold's drop reach the picker in one render.
+  const live = props({
+    selectedCloudProvider: "custom",
+    selectedCloudModel: "whisper-1",
+    cloudTranscriptionBaseUrl: "http://127.0.0.1:8080/v1/",
+  });
+  live.setCloudTranscriptionBaseUrl = (value) => {
+    live.cloudTranscriptionBaseUrl = value;
+  };
+  const panel = await mountSettingsPanel(t, {
+    module: PICKER,
+    props: live,
+    electronAPI: DOWNLOADS,
+  });
+  await panel.wait(0);
+  await panel.answer({ success: true });
+  await panel.focus(ENDPOINT);
+  await panel.blur(ENDPOINT); // the hold drops and the address is saved without its slash
+  assert.equal(live.cloudTranscriptionBaseUrl, "http://127.0.0.1:8080/v1");
+  await panel.wait(0);
+  assert.deepEqual(
+    panel.requests().map((config) => config.baseUrl),
+    ["http://127.0.0.1:8080/v1/", "http://127.0.0.1:8080/v1"],
+    "leaving the address checks it at once"
+  );
+});
+
 test("moving focus between the panel's own fields keeps the pause", async (t) => {
   const panel = await mount(t, {
     overrides: {

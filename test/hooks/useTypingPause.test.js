@@ -63,6 +63,13 @@ test("leaving the fields sends at once, and focus alone starts no pause", async 
   assert.equal(pause.delay(), 0, "no typed change, so nothing waits");
 });
 
+test("a value saved on leaving the fields sends at once", async (t) => {
+  const pause = await mountPause(t, { typed: "http://127.0.0.1:8080/v1/", held: true });
+  // Leaving the address tidies and saves it in the same event as the hold's drop.
+  await pause.render({ typed: "http://127.0.0.1:8080/v1", held: false });
+  assert.equal(pause.delay(), 0, "the fields were left, so the save is not typing");
+});
+
 test("the pause outlives the field's focus until the check changes some other way", async (t) => {
   const pause = await mountPause(t);
   await pause.render({ typed: "sk" });

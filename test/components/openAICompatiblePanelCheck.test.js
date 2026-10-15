@@ -171,6 +171,32 @@ test("a key typed into a failed list waits for its check to settle", async (t) =
   assert.equal(init.headers.Authorization, "Bearer sk");
 });
 
+test("a key typed while the list is still loading retries once the load settles", async (t) => {
+  // The first list load answers only when the test says so; later loads answer at once.
+  let settle;
+  const slow = new Promise((resolve) => {
+    settle = resolve;
+  });
+  const panel = await mount(t, {
+    fetch: (...args) => (globalThis.fetch.mock.calls.length > 1 ? modelList(...args) : slow),
+  });
+  await panel.wait(0); // the list is still loading; the check goes out
+  await panel.answer(KEYLESS_REFUSAL);
+  await panel.type(OPTIONAL_KEY, "sk-late");
+  await panel.setProps({ apiKey: "sk-late" });
+  await panel.wait(500);
+  assert.equal(panel.requests().at(-1).apiKey, "sk-late");
+  await panel.answer({ success: true });
+  assert.equal(globalThis.fetch.mock.calls.length, 1, "the retry waits for the loading list");
+  settle(await respond(401)());
+  await panel.wait(0);
+  assert.equal(globalThis.fetch.mock.calls.length, 2, "the settled list retries with the key");
+  const [, init] = globalThis.fetch.mock.calls[1].arguments;
+  assert.equal(init.headers.Authorization, "Bearer sk-late");
+  await panel.wait(5000);
+  assert.equal(globalThis.fetch.mock.calls.length, 2, "once");
+});
+
 test("a hidden panel's failed list stays quiet when its key changes elsewhere", async (t) => {
   const panel = await mount(t, { fetch: respond(401), visible: false });
   await panel.wait(0);

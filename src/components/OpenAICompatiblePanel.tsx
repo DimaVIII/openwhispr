@@ -301,7 +301,8 @@ export default function OpenAICompatiblePanel({
 
   // A key change retries a failed list load once the check for that key has settled, so the
   // list never gets a half-typed key, and a hidden panel asks nothing: its check is not ready,
-  // so it never settles.
+  // so it never settles. It also runs when a load that was in flight settles (`modelsLoading`
+  // drops), since a key typed during that load has a check that settled before the load did.
   useEffect(() => {
     if (check.phase !== "connected" && check.phase !== "failed") return;
     if (!hasBase) return;
@@ -309,7 +310,7 @@ export default function OpenAICompatiblePanel({
     if (pendingBaseRef.current === normalizedBase) return;
     if (apiKey.trim() === lastLoadedKeyRef.current) return;
     loadRemoteModels();
-  }, [check.phase, apiKey, hasBase, normalizedBase, loadRemoteModels]);
+  }, [check.phase, apiKey, hasBase, normalizedBase, modelsLoading, loadRemoteModels]);
 
   const applyBase = useCallback(() => {
     const normalized = trimmedDraft ? normalizeBaseUrl(trimmedDraft) : trimmedDraft;

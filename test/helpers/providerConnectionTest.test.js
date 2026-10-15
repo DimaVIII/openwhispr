@@ -714,18 +714,20 @@ test("the transcription address is the one the app sends audio to", async (t) =>
 });
 
 test("the transcription address's answers keep their meaning", async (t) => {
-  for (const [status, errorCode] of [
-    [401, "credentialsRejected"],
-    [403, "credentialsRejected"],
-    [404, "endpointNotFound"],
-    [405, "endpointNotFound"],
-    [500, "providerStatus"],
-    [200, "providerStatus"],
+  const nothingHere = "Nothing takes transcriptions at this address.";
+  for (const [status, errorCode, error] of [
+    [401, "credentialsRejected", "The provider rejected these credentials."],
+    [403, "credentialsRejected", "The provider rejected these credentials."],
+    [404, "endpointNotFound", nothingHere],
+    [405, "endpointNotFound", nothingHere],
+    [500, "providerStatus", "The provider returned status 500."],
+    [200, "providerStatus", "The provider returned status 200."],
   ]) {
     const { base } = await speechServer(t, status);
     const result = await testProviderConnection(speech(base));
     assert.equal(result.errorCode, errorCode, String(status));
     assert.equal(result.status, status);
+    assert.equal(result.error, error, String(status));
   }
   const flaky = recordingFetch((url, init) => {
     if (init.method === "POST") throw new TypeError("fetch failed");

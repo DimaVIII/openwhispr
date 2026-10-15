@@ -20,14 +20,15 @@ export function useTypingPause({ typed, context, held }: TypingPauseInputs): num
   const [tracked, setTracked] = useState({ typed, context, held, pause: false });
   if (tracked.typed !== typed || tracked.context !== context || tracked.held !== held) {
     // A context change wins over a typed change in the same render: a tab switch shows
-    // another provider's key, which is not being typed.
+    // another provider's key, which is not being typed. So does the hold's drop: a keystroke
+    // never coincides with leaving the fields, only a value tidied and saved on blur does.
     const pause =
       tracked.context !== context
         ? false
-        : tracked.typed !== typed
-          ? true
-          : tracked.held && !held
-            ? false
+        : tracked.held && !held
+          ? false
+          : tracked.typed !== typed
+            ? true
             : tracked.pause;
     setTracked({ typed, context, held, pause });
   }
