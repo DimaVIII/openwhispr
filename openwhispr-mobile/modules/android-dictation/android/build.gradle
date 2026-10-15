@@ -4,7 +4,12 @@ group = 'com.openwhispr.dictation'
 version = '1.0.0'
 android {
   namespace 'com.openwhispr.dictation'
-  defaultConfig { versionCode 1; versionName '1.0.0' }
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+    consumerProguardFiles 'consumer-rules.pro'
+    testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+  }
 }
 def speechRuntime = layout.buildDirectory.dir('generated/speechRuntime')
 def speechBuildScript = file('../../../scripts/build-android-speech.py')
@@ -23,8 +28,14 @@ def prepareSpeechRuntime = tasks.register('prepareSpeechRuntime', Exec) {
 }
 android.sourceSets.main.jniLibs.srcDir(speechRuntime.map { it.dir('jni') })
 dependencies {
+  androidTestImplementation 'androidx.test:runner:1.6.2'
+  androidTestImplementation 'androidx.test.ext:junit:1.2.1'
   testImplementation 'junit:junit:4.13.2'
-  implementation "com.squareup.okhttp3:okhttp:4.9.2"
+  implementation "com.squareup.okhttp3:okhttp:4.12.0"
+  implementation 'androidx.appcompat:appcompat:1.6.1'
+  implementation 'com.google.android.material:material:1.10.0'
+  implementation 'androidx.work:work-runtime:2.9.1'
   implementation files(speechRuntime.map { it.file('classes.jar') }).builtBy(prepareSpeechRuntime)
+  implementation files(speechRuntime.map { it.file('moonshine.jar') }).builtBy(prepareSpeechRuntime)
 }
 tasks.named('preBuild').configure { dependsOn prepareSpeechRuntime }

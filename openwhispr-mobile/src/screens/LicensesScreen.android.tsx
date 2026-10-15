@@ -7,6 +7,13 @@ import notices from '@/android/licenses.json';
 
 const entries = [
   {
+    name: 'Moonshine Tiny / Small Streaming (English)',
+    license: 'MIT',
+    owner: 'Useful Sensors, Inc. (dba Moonshine AI)',
+    note: 'modelMoonshine',
+    url: 'https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/LICENSE',
+  },
+  {
     name: 'NVIDIA Parakeet TDT 0.6B v3',
     license: 'CC-BY-4.0',
     owner: 'NVIDIA Corporation',

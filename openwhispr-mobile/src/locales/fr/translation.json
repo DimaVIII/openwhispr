@@ -243,6 +243,9 @@
     "folderName": "Nom du dossier",
     "deleteFolder": "Supprimer le dossier",
     "deleteFolderBody": "Supprimer « {{name}} » et ses {{count}} notes ?",
-    "deleteSpaceFolderBody": "Supprimer « {{name}} » et ses {{count}} notes pour tous les membres de cet espace ?"
+    "deleteSpaceFolderBody": "Supprimer « {{name}} » et ses {{count}} notes pour tous les membres de cet espace ?",
+    "modelMoonshine": "Anglais uniquement · reconnaissance vocale en continu",
+    "moonshineEnglishOnly": "Ces modèles Moonshine prennent uniquement en charge l’anglais. Choisissez Parakeet pour les langues européennes compatibles, ou un traitement cloud/fournisseur.",
+    "moonshineAndroidVersion": "Moonshine nécessite Android 8 ou une version ultérieure."
   }
 }

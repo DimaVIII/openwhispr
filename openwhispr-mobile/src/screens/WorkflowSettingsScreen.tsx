@@ -404,10 +404,10 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
     );
   }).map((other) => WORKFLOW_LABELS[other]);
   const keyFooter = sharedWith.length
-    ? `Stays on this iPhone. Also used by ${joinNames(sharedWith)}.`
+    ? `Stays on this phone. Also used by ${joinNames(sharedWith)}.`
     : provider?.id === 'custom'
-      ? 'Stays on this iPhone. Every workflow using this server uses the same key.'
-      : `Stays on this iPhone. Every workflow set to ${keyOwner} uses the same key.`;
+      ? 'Stays on this phone. Every workflow using this server uses the same key.'
+      : `Stays on this phone. Every workflow set to ${keyOwner} uses the same key.`;
 
   // A passing check looks like finished setup, so leaving must not drop the key silently.
   const hasUnsavedChanges =
@@ -779,7 +779,7 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
                   mdIcon="Download"
                   title="Choose or download models"
                   description="Choose speech and text models for this phone."
-                  onPress={() => router.push('/android-models')}
+                  onPress={() => router.push('/(account)/ai-models')}
                 />
               </SettingsSection>
             ) : selection.mode === 'local' && speechScope ? (
@@ -865,7 +865,7 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
                 </SettingsSection>
                 {provider.id === 'custom' ? (
                   <SectionFooter>
-                    On iPhone, localhost is this iPhone. Use your server's network address.
+                    On this phone, localhost is this phone. Use your server's network address.
                   </SectionFooter>
                 ) : null}
                 <SettingsSection title="API Key">

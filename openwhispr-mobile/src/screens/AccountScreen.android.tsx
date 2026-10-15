@@ -36,7 +36,7 @@ export default function AndroidAccount() {
           icon="Cpu"
           title={t('models')}
           detail={t('processingSummary')}
-          onPress={() => router.push('/android-models')}
+          onPress={() => router.push('/(account)/ai-models')}
         />
         <Row
           icon="ShieldCheck"

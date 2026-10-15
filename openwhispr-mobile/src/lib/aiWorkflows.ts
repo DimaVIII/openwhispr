@@ -32,13 +32,13 @@ export const UNSET_UNSUPPORTED_CLEANUP_NOTE =
 
 // What Private mode means for each workflow other than dictation.
 export const ON_DEVICE_MODE_NOTES: Partial<Record<MobileInferenceScope, string>> = {
-  upload: 'Private mode keeps uploads on this iPhone.',
+  upload: 'Private mode keeps uploads on this phone.',
   notes:
-    'Private mode formats notes on this iPhone and asks before sending one to your choice here.',
+    'Private mode formats notes on this phone and asks before sending one to your choice here.',
   cleanup:
-    'In Private mode, cleanup runs on this iPhone, or sends only the transcript text to your provider with Bring Your Own Key. OpenWhispr Cloud cleanup is skipped until Private mode is off.',
+    'In Private mode, cleanup runs on this phone, or sends only the transcript text to your provider with Bring Your Own Key. OpenWhispr Cloud cleanup is skipped until Private mode is off.',
   agent:
-    'In Private mode the voice assistant is off, and note chat asks before sending a note off this iPhone.',
+    'In Private mode the voice assistant is off, and note chat asks before sending a note off this phone.',
 };
 
 // Modes Private mode never runs for a workflow, so its page can't offer them as if they would.

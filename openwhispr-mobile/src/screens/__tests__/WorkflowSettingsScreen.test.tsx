@@ -668,9 +668,7 @@ it('says which other workflows share the provider key', async () => {
     },
   };
   render(<WorkflowSettingsScreen />);
-  expect(
-    screen.getByText('Stays on this iPhone. Also used by Dictation and Uploads.'),
-  ).toBeTruthy();
+  expect(screen.getByText('Stays on this phone. Also used by Dictation and Uploads.')).toBeTruthy();
   await waitFor(() => expect(mockCredentialStatus).toHaveBeenCalled());
 });
 
@@ -689,7 +687,7 @@ it('leaves workflows that are switched off out of the shared-key note', async ()
     },
   };
   render(<WorkflowSettingsScreen />);
-  expect(screen.getByText('Stays on this iPhone. Also used by Uploads.')).toBeTruthy();
+  expect(screen.getByText('Stays on this phone. Also used by Uploads.')).toBeTruthy();
   await waitFor(() => expect(mockCredentialStatus).toHaveBeenCalled());
 });
 
@@ -697,7 +695,7 @@ it('says the key is shared before another workflow uses the provider', async () 
   render(<WorkflowSettingsScreen />);
   enableProviders();
   expect(
-    screen.getByText('Stays on this iPhone. Every workflow set to OpenAI uses the same key.'),
+    screen.getByText('Stays on this phone. Every workflow set to OpenAI uses the same key.'),
   ).toBeTruthy();
   await waitFor(() => expect(mockCredentialStatus).toHaveBeenCalled());
 });
@@ -854,7 +852,7 @@ it('explains that Private mode skips a saved Cloud cleanup choice', () => {
   expect(selectedMode()).toBe('OpenWhispr Cloud');
   expect(
     screen.getByText(
-      'In Private mode, cleanup runs on this iPhone, or sends only the transcript text to your provider with Bring Your Own Key. OpenWhispr Cloud cleanup is skipped until Private mode is off.',
+      'In Private mode, cleanup runs on this phone, or sends only the transcript text to your provider with Bring Your Own Key. OpenWhispr Cloud cleanup is skipped until Private mode is off.',
     ),
   ).toBeTruthy();
 });
@@ -862,11 +860,11 @@ it('explains that Private mode skips a saved Cloud cleanup choice', () => {
 it.each([
   [
     'agent',
-    'In Private mode the voice assistant is off, and note chat asks before sending a note off this iPhone.',
+    'In Private mode the voice assistant is off, and note chat asks before sending a note off this phone.',
   ],
   [
     'notes',
-    'Private mode formats notes on this iPhone and asks before sending one to your choice here.',
+    'Private mode formats notes on this phone and asks before sending one to your choice here.',
   ],
 ])('explains what Private mode means for %s', (scope, note) => {
   mockConfig = { defaultMode: 'private' };
@@ -889,7 +887,7 @@ it('shows On-Device for an upload choice Private mode locks, and keeps that choi
   expect(selectedMode()).toBe('On-Device');
   expect(
     screen.getByText(
-      'Private mode keeps uploads on this iPhone. Your Bring Your Own Key choice applies again when Private mode is off.',
+      'Private mode keeps uploads on this phone. Your Bring Your Own Key choice applies again when Private mode is off.',
     ),
   ).toBeTruthy();
   expect(screen.queryByLabelText('API key')).toBeNull();
@@ -910,7 +908,7 @@ it('names a locked Cloud upload choice in the note', () => {
   expect(selectedMode()).toBe('On-Device');
   expect(
     screen.getByText(
-      'Private mode keeps uploads on this iPhone. Your OpenWhispr Cloud choice applies again when Private mode is off.',
+      'Private mode keeps uploads on this phone. Your OpenWhispr Cloud choice applies again when Private mode is off.',
     ),
   ).toBeTruthy();
 });
@@ -930,7 +928,7 @@ it('keeps the plain upload note when uploads already run on this phone', () => {
   mockActiveMode = 'private';
   mockScope = 'upload';
   render(<WorkflowSettingsScreen />);
-  expect(screen.getByText('Private mode keeps uploads on this iPhone.')).toBeTruthy();
+  expect(screen.getByText('Private mode keeps uploads on this phone.')).toBeTruthy();
 });
 
 function modeDisabled(title: string): boolean {
@@ -1227,4 +1225,25 @@ describe('an iPhone that cannot run Apple Intelligence', () => {
       ),
     ).toBeTruthy();
   });
+});
+
+it('describes Android local cleanup and provider keys without Apple controls or iPhone wording', async () => {
+  const platform = require('react-native').Platform;
+  const original = platform.OS;
+  platform.OS = 'android';
+  mockScope = 'cleanup';
+  mockConfig = { inference: { cleanup: { mode: 'local' } } };
+  try {
+    render(<WorkflowSettingsScreen />);
+    await act(async () => undefined);
+    expect(screen.getByText('Runs on your downloaded text model on this phone.')).toBeTruthy();
+    expect(screen.queryByText(/Apple Intelligence|iPhone/)).toBeNull();
+    fireEvent.press(screen.getByText('Choose or download models'));
+    expect(mockPush).toHaveBeenCalledWith('/(account)/ai-models');
+    await act(async () => enableProviders());
+    expect(screen.getByText(/Stays on this phone/)).toBeTruthy();
+    expect(screen.queryByText(/Apple Intelligence|iPhone/)).toBeNull();
+  } finally {
+    platform.OS = original;
+  }
 });

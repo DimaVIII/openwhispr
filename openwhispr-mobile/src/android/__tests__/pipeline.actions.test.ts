@@ -15,6 +15,7 @@ jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
 jest.mock('@/lib/inferenceRouting', () => ({ snapshotTextInference: () => ({}) }));
 jest.mock('@/lib/transcriptionLanguage', () => ({
   getPreferredTranscriptionLanguage: () => undefined,
+  getPreferredTranscriptionLanguages: () => [],
 }));
 jest.mock('@/services/transcription/TranscriptionService', () => ({
   TranscriptionService: {

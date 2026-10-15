@@ -243,6 +243,9 @@
     "folderName": "Nome della cartella",
     "deleteFolder": "Elimina cartella",
     "deleteFolderBody": "Eliminare “{{name}}” e le sue {{count}} note?",
-    "deleteSpaceFolderBody": "Eliminare “{{name}}” e le sue {{count}} note per tutti in questo spazio?"
+    "deleteSpaceFolderBody": "Eliminare “{{name}}” e le sue {{count}} note per tutti in questo spazio?",
+    "modelMoonshine": "Solo inglese · riconoscimento vocale in streaming",
+    "moonshineEnglishOnly": "Questi modelli Moonshine supportano solo l’inglese. Scegli Parakeet per le lingue europee supportate o un flusso cloud/con provider.",
+    "moonshineAndroidVersion": "Moonshine richiede Android 8 o versioni successive."
   }
 }

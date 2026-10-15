@@ -30,12 +30,15 @@ export async function androidTextReadiness(): Promise<LocalReasoningReadiness> {
   };
 }
 export const LocalTextModel = {
-  async processText(request: ReasoningRequest): Promise<ReasoningResponse> {
+  async processText(
+    request: ReasoningRequest & { responseSchema?: object },
+  ): Promise<ReasoningResponse> {
     const model = selectedTextModel();
     return withAndroidInference(() =>
       exclusive(async () => {
         if (request.signal?.aborted) throw new Error(i18n.t('generationCancelled'));
         await AndroidDictation!.releaseParakeet();
+        await AndroidDictation!.releaseMoonshine();
         if (!(await modelReady(model))) throw new Error(i18n.t('textDownloadNeeded'));
         if (!context || loaded !== model) {
           const loadStartedAt = Date.now();
@@ -76,11 +79,24 @@ export const LocalTextModel = {
               },
               { role: 'user', content: request.text },
             ],
+            ...(request.responseSchema
+              ? {
+                  response_format: {
+                    type: 'json_schema' as const,
+                    json_schema: { strict: true, schema: request.responseSchema },
+                  },
+                }
+              : {}),
             n_predict: Math.min(request.maxTokens ?? 384, 900),
             temperature: request.temperature ?? 0,
             stop: ['<|im_end|>', '<|endoftext|>'],
           });
           if (request.signal?.aborted) throw new Error(i18n.t('generationCancelled'));
+          if (result.context_full || result.truncated) {
+            throw Object.assign(new Error('Local model context is full.'), {
+              code: 'LOCAL_CONTEXT_LIMIT',
+            });
+          }
           if (result.stopped_limit) throw new Error(i18n.t('responseTooLong'));
           if (diagnostics)
             console.info(
@@ -98,7 +114,11 @@ export const LocalTextModel = {
       }),
     ).catch((error: unknown) => {
       // Network retries cannot fix native loading or local generation failures.
-      if (error instanceof Error) Object.assign(error, { retryable: false });
+      if (error instanceof Error) {
+        Object.assign(error, { retryable: false });
+        if (error.message === 'Context is full')
+          Object.assign(error, { code: 'LOCAL_CONTEXT_LIMIT' });
+      }
       throw error;
     });
   },

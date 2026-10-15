@@ -3,8 +3,11 @@ import { AndroidDictation } from '../../modules/android-dictation/src';
 import { create } from 'zustand';
 import i18n from './strings';
 import { withAndroidInference } from './inferenceQueue';
+import { MOONSHINE_MODELS } from './moonshineModels';
+import { Platform } from 'react-native';
 
 export const ANDROID_MODELS = {
+  ...MOONSHINE_MODELS,
   'parakeet-v3': {
     title: 'Parakeet v3',
     kind: 'speech',
@@ -48,6 +51,9 @@ export const ANDROID_MODELS = {
   },
 } as const;
 export type AndroidModelId = keyof typeof ANDROID_MODELS;
+export function modelSupported(id: AndroidModelId): boolean {
+  return !id.startsWith('moonshine-') || Number(Platform.Version) >= 26;
+}
 export const useModelDownloads = create<{ progress: Partial<Record<AndroidModelId, number>> }>(
   () => ({ progress: {} }),
 );
@@ -63,8 +69,9 @@ const active = new Map<
   AndroidModelId,
   { download?: FileSystem.DownloadResumable; cancelled: boolean }
 >();
+const verifiedFiles = new Map<string, { modified: number; sha256: string }>();
 export function modelPath(id: AndroidModelId): string {
-  return `${FileSystem.documentDirectory}android-models/${id}${id === 'parakeet-v3' ? '' : '.gguf'}`;
+  return `${FileSystem.documentDirectory}android-models/${id}${ANDROID_MODELS[id].kind === 'speech' ? '' : '.gguf'}`;
 }
 function filesFor(id: AndroidModelId) {
   if (id === 'parakeet-v3')
@@ -73,13 +80,23 @@ function filesFor(id: AndroidModelId) {
       url: `https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/2bda32ec70b097a55adaa07d9a7173915b43cc78/${file.name}`,
       destination: `${modelPath(id)}/${file.name}`,
     }));
-  return [{ ...ANDROID_MODELS[id], destination: modelPath(id) }];
+  const model = ANDROID_MODELS[id];
+  if ('files' in model)
+    return model.files.map((file) => ({ ...file, destination: `${modelPath(id)}/${file.name}` }));
+  return [{ ...model, destination: modelPath(id) }];
 }
 export async function modelReady(id: AndroidModelId): Promise<boolean> {
-  if (!(id in ANDROID_MODELS)) return false;
+  if (!(id in ANDROID_MODELS) || !modelSupported(id)) return false;
   for (const file of filesFor(id)) {
     const info = await FileSystem.getInfoAsync(file.destination);
     if (!info.exists || info.isDirectory || info.size !== file.bytes) return false;
+    const cached = verifiedFiles.get(file.destination);
+    if (cached?.modified === info.modificationTime && cached?.sha256 === file.sha256) continue;
+    if ((await AndroidDictation!.sha256(file.destination)) !== file.sha256) {
+      verifiedFiles.delete(file.destination);
+      return false;
+    }
+    verifiedFiles.set(file.destination, { modified: info.modificationTime, sha256: file.sha256 });
   }
   return true;
 }
@@ -87,6 +104,7 @@ export async function downloadAndroidModel(
   id: AndroidModelId,
   onProgress?: (fraction: number) => void,
 ): Promise<void> {
+  if (!modelSupported(id)) throw new Error(i18n.t('moonshineAndroidVersion'));
   if (active.has(id)) throw new Error(i18n.t('downloadBusy'));
   const job: { download?: FileSystem.DownloadResumable; cancelled: boolean } = { cancelled: false };
   active.set(id, job);
@@ -97,9 +115,6 @@ export async function downloadAndroidModel(
   progress(0);
   let completed = 0;
   try {
-    if (await modelReady(id)) return;
-    if ((await FileSystem.getFreeDiskStorageAsync()) < ANDROID_MODELS[id].bytes * 1.15)
-      throw new Error(i18n.t('downloadStorage'));
     for (const file of filesFor(id)) {
       if (job.cancelled) throw new Error(i18n.t('downloadCancelled'));
       const existing = await FileSystem.getInfoAsync(file.destination);
@@ -113,6 +128,9 @@ export async function downloadAndroidModel(
         progress(completed / ANDROID_MODELS[id].bytes);
         continue;
       }
+      verifiedFiles.delete(file.destination);
+      if ((await FileSystem.getFreeDiskStorageAsync()) < file.bytes * 1.15)
+        throw new Error(i18n.t('downloadStorage'));
       await FileSystem.makeDirectoryAsync(
         file.destination.slice(0, file.destination.lastIndexOf('/')),
         { intermediates: true },
@@ -163,6 +181,8 @@ export async function removeAndroidModel(id: AndroidModelId): Promise<void> {
     const { LocalTextModel } = await import('./LocalTextModel');
     await LocalTextModel.release();
     await AndroidDictation!.releaseParakeet();
+    await AndroidDictation!.releaseMoonshine();
+    for (const file of filesFor(id)) verifiedFiles.delete(file.destination);
     await FileSystem.deleteAsync(modelPath(id), { idempotent: true });
   });
 }

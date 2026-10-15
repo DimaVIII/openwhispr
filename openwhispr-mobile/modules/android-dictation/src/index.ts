@@ -13,6 +13,12 @@ export interface BubbleStatus {
   batteryExempt: boolean;
   microphone: boolean;
 }
+export interface LocalSpeechResult {
+  text: string;
+  duration: number;
+  processingMs: number;
+  tokenTimings?: { token: string; startTime: number; endTime: number }[];
+}
 interface NativeDictation {
   getLocale(): string;
   getStatus(): BubbleStatus;
@@ -26,17 +32,16 @@ interface NativeDictation {
   stopRecording(cancel: boolean): Promise<Recording>;
   decodeAudio(uri: string): Promise<Recording>;
   sha256(uri: string): Promise<string>;
-  transcribeParakeet(
-    uri: string,
-    modelDirectory: string,
-  ): Promise<{
-    text: string;
-    duration: number;
-    processingMs: number;
-    tokenTimings: { token: string; startTime: number; endTime: number }[];
-  }>;
+  transcribeParakeet(uri: string, modelDirectory: string): Promise<LocalSpeechResult>;
   cancelParakeet(): void;
   releaseParakeet(): Promise<void>;
+  transcribeMoonshine(
+    uri: string,
+    modelDirectory: string,
+    model: 'moonshine-tiny' | 'moonshine-small',
+  ): Promise<LocalSpeechResult>;
+  cancelMoonshine(): void;
+  releaseMoonshine(): Promise<void>;
 }
 export const AndroidDictation =
   Platform.OS === 'android' ? requireNativeModule<NativeDictation>('AndroidDictation') : null;

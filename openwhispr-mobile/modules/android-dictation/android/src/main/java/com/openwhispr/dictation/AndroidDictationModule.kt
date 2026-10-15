@@ -15,8 +15,10 @@ class AndroidDictationModule : Module() {
   private var recorder: WavRecorder? = null
   private val providerRuntime = lazy { ProviderTransport(context) }
   private val speechRuntime = lazy { ParakeetEngine(context) }
+  private val moonshineRuntime = lazy { MoonshineEngine(context) }
   private val providers by providerRuntime
   private val parakeet by speechRuntime
+  private val moonshine by moonshineRuntime
   private val context get() = requireNotNull(appContext.reactContext)
   private fun localFile(uri: String): File {
     val file = File(Uri.parse(uri).path ?: error("Invalid file URI")).canonicalFile
@@ -42,6 +44,7 @@ class AndroidDictationModule : Module() {
       }
       if (providerRuntime.isInitialized()) providers.close()
       if (speechRuntime.isInitialized()) parakeet.close()
+      if (moonshineRuntime.isInitialized()) moonshine.close()
       recorder?.close(); DictationService.emit = null
     }
     AsyncFunction("startPCM") { sampleRate: Int, noteId: Int?, promise: Promise ->
@@ -70,8 +73,18 @@ class AndroidDictationModule : Module() {
     AsyncFunction("transcribeParakeet") { uri: String, modelDirectory: String, promise: Promise ->
       parakeet.transcribe(localFile(uri), localFile(modelDirectory), promise)
     }
-    Function("cancelParakeet") { parakeet.cancel() }
-    AsyncFunction("releaseParakeet") { promise: Promise -> parakeet.release(promise) }
+    Function("cancelParakeet") { if (speechRuntime.isInitialized()) parakeet.cancel() }
+    AsyncFunction("releaseParakeet") { promise: Promise ->
+      if (speechRuntime.isInitialized()) parakeet.release(promise) else promise.resolve(null)
+    }
+    AsyncFunction("transcribeMoonshine") { uri: String, modelDirectory: String, model: String, promise: Promise ->
+      check(android.os.Build.VERSION.SDK_INT >= 26) { "Moonshine requires Android 8 or newer." }
+      moonshine.transcribe(localFile(uri), localFile(modelDirectory), model, promise)
+    }
+    Function("cancelMoonshine") { if (moonshineRuntime.isInitialized()) moonshine.cancel() }
+    AsyncFunction("releaseMoonshine") { promise: Promise ->
+      if (moonshineRuntime.isInitialized()) moonshine.release(promise) else promise.resolve(null)
+    }
     AsyncFunction("requestProvider") { options: Map<String, Any?> -> providers.request(options) }
     Function("cancelProviderRequest") { id: String -> providers.cancel(id) }
     Function("getLocale") { context.resources.configuration.locales[0].toLanguageTag() }

@@ -14,9 +14,14 @@ import {
   cancelAndroidDownload,
   removeAndroidModel,
   useModelDownloads,
+  modelSupported,
   type AndroidModelId,
 } from './models';
 import { Button, Card, Page, Row, styles } from './ui';
+import type { AndroidSpeechModelId } from './speechSelection';
+import type { UserConfig } from '@/types';
+import { speechModelSupportsLanguages } from './speechCapabilities';
+import { getPreferredTranscriptionLanguages } from '@/lib/transcriptionLanguage';
 export function ModelsContent({ onNavigate }: { onNavigate?: () => void } = {}) {
   const { t } = useTranslation();
   const config = useConfigStore((s) => s.config);
@@ -24,8 +29,22 @@ export function ModelsContent({ onNavigate }: { onNavigate?: () => void } = {}) 
   const [requestedPrivateMode, setRequestedPrivateMode] = useState<boolean | null>(null);
   const [ready, setReady] = useState<Partial<Record<AndroidModelId, boolean>>>({});
   const [removing, setRemoving] = useState(false);
+  const [expandedModel, setExpandedModel] = useState<AndroidModelId | null>(null);
+  const [saving, setSaving] = useState(false);
   const progress = useModelDownloads((state) => state.progress);
   const activeDownloads = Object.keys(progress).sort().join(',');
+  const save = async (updates: Partial<UserConfig>) => {
+    setSaving(true);
+    try {
+      await useConfigStore.getState().updateConfig(updates);
+      const error = useConfigStore.getState().error;
+      if (error) throw new Error(error);
+    } catch (error) {
+      Alert.alert(t('errorTitle'), (error as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
   const togglePrivateMode = async (enabled: boolean) => {
     if (requestedPrivateMode !== null) return;
     setRequestedPrivateMode(enabled);
@@ -91,11 +110,9 @@ export function ModelsContent({ onNavigate }: { onNavigate?: () => void } = {}) 
           <SettingsSwitch
             accessibilityLabel={t('cleanup')}
             value={config?.cleanupEnabled !== false}
+            disabled={saving}
             onValueChange={(cleanupEnabled) => {
-              useConfigStore
-                .getState()
-                .updateConfig({ cleanupEnabled })
-                .catch((error) => Alert.alert(t('errorTitle'), error.message));
+              void save({ cleanupEnabled });
             }}
           />
         </View>
@@ -118,78 +135,96 @@ export function ModelsContent({ onNavigate }: { onNavigate?: () => void } = {}) 
           )
             .filter(([, model]) => model.kind === kind)
             .map(([id, model]) => {
+              const languageSupported =
+                kind !== 'speech' ||
+                speechModelSupportsLanguages(
+                  id as AndroidSpeechModelId,
+                  getPreferredTranscriptionLanguages(),
+                );
               const chosen =
                 kind === 'speech'
-                  ? id === 'parakeet-v3'
+                  ? (config?.androidSpeechModel ?? 'parakeet-v3') === id
                   : (config?.androidTextModel ?? 'qwen-balanced') === id;
               return (
                 <Card key={id}>
-                  <Text style={{ fontSize: 19, fontWeight: '600' }}>{model.title}</Text>
-                  <Text style={styles.caption}>
-                    {Math.round(model.bytes / 1000000)} MB ·{' '}
-                    {ready[id]
-                      ? t('downloaded')
-                      : t(
+                  <Row
+                    title={model.title}
+                    detail={`${Math.round(model.bytes / 1000000)} MB${chosen ? ` · ${t('selected')}` : ''}${ready[id] ? ` · ${t('downloaded')}` : ''}`}
+                    onPress={() => setExpandedModel(expandedModel === id ? null : id)}
+                  />
+                  {(expandedModel === id || progress[id] !== undefined) && (
+                    <>
+                      <Text style={styles.caption}>
+                        {t(
                           id === 'qwen-small'
                             ? 'modelLight'
                             : id === 'parakeet-v3'
                               ? 'modelParakeet'
-                              : 'modelBalanced',
+                              : id.startsWith('moonshine-')
+                                ? 'modelMoonshine'
+                                : 'modelBalanced',
                         )}
-                  </Text>
-                  {progress[id] !== undefined ? (
-                    <>
-                      <Text>{Math.round(progress[id]! * 100)}%</Text>
-                      <Button
-                        secondary
-                        label={t('cancel')}
-                        onPress={() => {
-                          cancelAndroidDownload(id).catch(() => undefined);
-                        }}
-                      />
+                      </Text>
+                      {!languageSupported && (
+                        <Text style={styles.body}>
+                          {t(id === 'parakeet-v3' ? 'unsupportedLanguage' : 'moonshineEnglishOnly')}
+                        </Text>
+                      )}
+                      {!modelSupported(id) ? (
+                        <Text style={styles.body}>{t('moonshineAndroidVersion')}</Text>
+                      ) : progress[id] !== undefined ? (
+                        <>
+                          <Text>{Math.round(progress[id]! * 100)}%</Text>
+                          <Button
+                            secondary
+                            label={t('cancel')}
+                            onPress={() => {
+                              cancelAndroidDownload(id).catch(() => undefined);
+                            }}
+                          />
+                        </>
+                      ) : ready[id] ? (
+                        <>
+                          <Button
+                            secondary
+                            disabled={chosen || removing || saving || !languageSupported}
+                            label={t(chosen ? 'selected' : 'choose')}
+                            onPress={() => {
+                              void save(
+                                kind === 'speech'
+                                  ? { androidSpeechModel: id as AndroidSpeechModelId }
+                                  : { androidTextModel: id as 'qwen-small' | 'qwen-balanced' },
+                              );
+                            }}
+                          />
+                          <Button
+                            secondary
+                            disabled={removing}
+                            label={t('removeModel')}
+                            onPress={() => {
+                              Alert.alert(model.title, t('removeModelConfirm'), [
+                                { text: t('cancel'), style: 'cancel' },
+                                {
+                                  text: t('removeModel'),
+                                  style: 'destructive',
+                                  onPress: () => {
+                                    void remove(id);
+                                  },
+                                },
+                              ]);
+                            }}
+                          />
+                        </>
+                      ) : (
+                        <Button
+                          disabled={removing}
+                          label={t('download')}
+                          onPress={() => {
+                            void download(id);
+                          }}
+                        />
+                      )}
                     </>
-                  ) : ready[id] ? (
-                    <>
-                      <Button
-                        secondary
-                        disabled={chosen || removing}
-                        label={t(chosen ? 'selected' : 'choose')}
-                        onPress={() => {
-                          useConfigStore
-                            .getState()
-                            .updateConfig(
-                              kind === 'speech'
-                                ? { androidSpeechModel: id as 'parakeet-v3' }
-                                : { androidTextModel: id as 'qwen-small' | 'qwen-balanced' },
-                            );
-                        }}
-                      />
-                      <Button
-                        secondary
-                        disabled={removing}
-                        label={t('removeModel')}
-                        onPress={() => {
-                          Alert.alert(model.title, t('removeModelConfirm'), [
-                            { text: t('cancel'), style: 'cancel' },
-                            {
-                              text: t('removeModel'),
-                              style: 'destructive',
-                              onPress: () => {
-                                void remove(id);
-                              },
-                            },
-                          ]);
-                        }}
-                      />
-                    </>
-                  ) : (
-                    <Button
-                      disabled={removing}
-                      label={t('download')}
-                      onPress={() => {
-                        void download(id);
-                      }}
-                    />
                   )}
                 </Card>
               );

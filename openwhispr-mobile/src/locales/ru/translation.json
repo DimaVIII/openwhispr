@@ -243,6 +243,9 @@
     "folderName": "Название папки",
     "deleteFolder": "Удалить папку",
     "deleteFolderBody": "Удалить «{{name}}» и {{count}} заметок?",
-    "deleteSpaceFolderBody": "Удалить «{{name}}» и {{count}} заметок для всех участников пространства?"
+    "deleteSpaceFolderBody": "Удалить «{{name}}» и {{count}} заметок для всех участников пространства?",
+    "modelMoonshine": "Только английский · потоковое распознавание речи",
+    "moonshineEnglishOnly": "Эти модели Moonshine поддерживают только английский. Выберите Parakeet для поддерживаемых европейских языков или облачную обработку.",
+    "moonshineAndroidVersion": "Для Moonshine требуется Android 8 или новее."
   }
 }

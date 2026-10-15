@@ -852,7 +852,7 @@ export default function NoteEditorScreen() {
         }
         Alert.alert(
           'Local AI unavailable',
-          `${getLocalReasoningUnavailableMessage(readiness)} Note Formatting is set to On-Device, so this note stays on your iPhone.`,
+          `${getLocalReasoningUnavailableMessage(readiness)} Note Formatting is set to On-Device, so this note stays on your phone.`,
         );
         return;
       }

@@ -243,6 +243,9 @@
     "folderName": "Nome da pasta",
     "deleteFolder": "Excluir pasta",
     "deleteFolderBody": "Excluir “{{name}}” e suas {{count}} notas?",
-    "deleteSpaceFolderBody": "Excluir “{{name}}” e suas {{count}} notas para todos neste espaço?"
+    "deleteSpaceFolderBody": "Excluir “{{name}}” e suas {{count}} notas para todos neste espaço?",
+    "modelMoonshine": "Apenas inglês · reconhecimento de fala em streaming",
+    "moonshineEnglishOnly": "Estes modelos Moonshine aceitam apenas inglês. Escolha Parakeet para os idiomas europeus compatíveis ou um fluxo na nuvem/com provedor.",
+    "moonshineAndroidVersion": "Moonshine requer Android 8 ou posterior."
   }
 }

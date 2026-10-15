@@ -243,6 +243,9 @@
     "folderName": "資料夾名稱",
     "deleteFolder": "刪除資料夾",
     "deleteFolderBody": "刪除「{{name}}」及其中的 {{count}} 則筆記？",
-    "deleteSpaceFolderBody": "為此空間中的所有人刪除「{{name}}」及其中的 {{count}} 則筆記？"
+    "deleteSpaceFolderBody": "為此空間中的所有人刪除「{{name}}」及其中的 {{count}} 則筆記？",
+    "modelMoonshine": "僅支援英語 · 串流語音辨識",
+    "moonshineEnglishOnly": "這些 Moonshine 模型僅支援英語。請使用 Parakeet 處理其支援的歐洲語言，或選擇雲端/服務商工作流程。",
+    "moonshineAndroidVersion": "Moonshine 需要 Android 8 或更新版本。"
   }
 }

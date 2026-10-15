@@ -21,7 +21,7 @@ export function MeetingSetup({ onStart, busy }: { onStart: () => void; busy: boo
           {t(privateMode ? 'meetingPrivateBody' : 'meetingCloudBody')}
         </Text>
         {privateMode ? (
-          <Button label={t('models')} onPress={() => router.push('/android-models')} />
+          <Button label={t('models')} onPress={() => router.push('/(account)/ai-models')} />
         ) : requiresRealAccount(user) ? (
           <Button label={t('signIn')} onPress={() => router.push('/auth')} />
         ) : (

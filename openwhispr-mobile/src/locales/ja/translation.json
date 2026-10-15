@@ -243,6 +243,9 @@
     "folderName": "フォルダ名",
     "deleteFolder": "フォルダを削除",
     "deleteFolderBody": "「{{name}}」と {{count}} 件のノートを削除しますか？",
-    "deleteSpaceFolderBody": "このスペースの全員に対して「{{name}}」と {{count}} 件のノートを削除しますか？"
+    "deleteSpaceFolderBody": "このスペースの全員に対して「{{name}}」と {{count}} 件のノートを削除しますか？",
+    "modelMoonshine": "英語のみ · ストリーミング音声認識",
+    "moonshineEnglishOnly": "これらの Moonshine モデルは英語のみに対応しています。対応するヨーロッパ言語には Parakeet を使用するか、クラウド／プロバイダーの処理を選択してください。",
+    "moonshineAndroidVersion": "Moonshine には Android 8 以降が必要です。"
   }
 }

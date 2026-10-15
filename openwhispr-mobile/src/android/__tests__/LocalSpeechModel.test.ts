@@ -2,11 +2,19 @@ jest.mock('../../../modules/android-dictation/src', () => ({
   AndroidDictation: {
     transcribeParakeet: jest.fn(),
     cancelParakeet: jest.fn(),
+    transcribeMoonshine: jest.fn(),
+    cancelMoonshine: jest.fn(),
+    releaseParakeet: jest.fn(async () => undefined),
+    releaseMoonshine: jest.fn(async () => undefined),
   },
 }));
 jest.mock('../models', () => ({
   modelReady: jest.fn(),
-  modelPath: () => 'file:///models/parakeet-v3',
+  modelPath: (id: string) => `file:///models/${id}`,
+}));
+jest.mock('../speechSelection', () => ({ selectedSpeechModel: jest.fn(() => 'parakeet-v3') }));
+jest.mock('@/lib/transcriptionLanguage', () => ({
+  getPreferredTranscriptionLanguages: jest.fn(() => []),
 }));
 jest.mock('../LocalTextModel', () => ({
   LocalTextModel: { release: jest.fn(async () => undefined) },
@@ -16,9 +24,17 @@ import { LocalSpeechModel } from '../LocalSpeechModel';
 import { LocalTextModel } from '../LocalTextModel';
 import { AndroidDictation } from '../../../modules/android-dictation/src';
 import { modelReady } from '../models';
+import { selectedSpeechModel } from '../speechSelection';
+import { withAndroidInference } from '../inferenceQueue';
+import { getPreferredTranscriptionLanguages } from '@/lib/transcriptionLanguage';
 
 beforeEach(() => {
   jest.clearAllMocks();
+  jest.mocked(getPreferredTranscriptionLanguages).mockReturnValue([]);
+  jest.mocked(selectedSpeechModel).mockReturnValue('parakeet-v3');
+  jest
+    .mocked(AndroidDictation!.transcribeMoonshine)
+    .mockResolvedValue({ text: 'Hello.', duration: 1, processingMs: 50 });
   jest.mocked(modelReady).mockResolvedValue(true);
   jest.mocked(AndroidDictation!.transcribeParakeet).mockResolvedValue({
     text: 'Hello.',
@@ -57,8 +73,69 @@ it('refuses unsupported languages instead of silently sending them elsewhere', a
 });
 it('refuses missing model weights without invoking the runtime', async () => {
   jest.mocked(modelReady).mockResolvedValue(false);
-  await expect(LocalSpeechModel.transcribe('file:///sample.wav', {})).rejects.toThrow('download');
+  await expect(LocalSpeechModel.transcribe('file:///sample.wav', {})).rejects.toThrow(/download/i);
   expect(AndroidDictation!.transcribeParakeet).not.toHaveBeenCalled();
+});
+
+it.each(['moonshine-tiny', 'moonshine-small'] as const)(
+  'routes to %s without inventing word timestamps',
+  async (model) => {
+    jest.mocked(selectedSpeechModel).mockReturnValue(model);
+    const result = await LocalSpeechModel.transcribe('file:///sample.wav', {
+      language: 'en-GB',
+      wordTimestamps: true,
+    });
+    expect(result).toMatchObject({ endpoint: model, text: 'Hello.' });
+    expect(result.segments).toBeUndefined();
+    expect(AndroidDictation!.transcribeMoonshine).toHaveBeenCalledWith(
+      'file:///sample.wav',
+      `file:///models/${model}`,
+      model,
+    );
+    expect(AndroidDictation!.releaseParakeet).toHaveBeenCalled();
+    expect(AndroidDictation!.transcribeParakeet).not.toHaveBeenCalled();
+  },
+);
+it('rejects a non-English Moonshine request without switching engines or using the network', async () => {
+  jest.mocked(selectedSpeechModel).mockReturnValue('moonshine-tiny');
+  await expect(
+    LocalSpeechModel.transcribe('file:///sample.wav', { language: 'fr' }),
+  ).rejects.toThrow('English only');
+  expect(AndroidDictation!.transcribeMoonshine).not.toHaveBeenCalled();
+  expect(AndroidDictation!.transcribeParakeet).not.toHaveBeenCalled();
+});
+it('rejects an unsupported multilingual selection even when no single-language hint is supplied', async () => {
+  jest.mocked(selectedSpeechModel).mockReturnValue('moonshine-small');
+  jest.mocked(getPreferredTranscriptionLanguages).mockReturnValue(['en', 'fr']);
+  await expect(
+    LocalSpeechModel.transcribe('file:///sample.wav', { language: 'auto' }),
+  ).rejects.toThrow('English only');
+  expect(AndroidDictation!.transcribeMoonshine).not.toHaveBeenCalled();
+});
+it('keeps the selected model while waiting for another local job', async () => {
+  let unblock!: () => void;
+  const blocker = withAndroidInference(
+    () =>
+      new Promise<void>((resolve) => {
+        unblock = resolve;
+      }),
+  );
+  await Promise.resolve();
+  jest.mocked(selectedSpeechModel).mockReturnValue('moonshine-small');
+  const pending = LocalSpeechModel.transcribe('file:///sample.wav', {});
+  jest.mocked(selectedSpeechModel).mockReturnValue('parakeet-v3');
+  unblock();
+  await blocker;
+  expect((await pending).endpoint).toBe('moonshine-small');
+});
+it('discards Moonshine results cancelled during native inference', async () => {
+  jest.mocked(selectedSpeechModel).mockReturnValue('moonshine-tiny');
+  jest.mocked(AndroidDictation!.transcribeMoonshine).mockImplementation(async () => {
+    LocalSpeechModel.cancel();
+    return { text: 'Discard me', duration: 1, processingMs: 50 };
+  });
+  await expect(LocalSpeechModel.transcribe('file:///sample.wav', {})).rejects.toThrow('cancelled');
+  expect(AndroidDictation!.cancelMoonshine).toHaveBeenCalled();
 });
 it('discards a native result when cancellation arrives during inference', async () => {
   jest.mocked(AndroidDictation!.transcribeParakeet).mockImplementation(async () => {

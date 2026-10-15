@@ -146,7 +146,7 @@ export function Page({
             cssInterop={false}
             accessibilityRole="button"
             accessibilityLabel={t('back')}
-            onPress={() => router.back()}
+            onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))}
             style={{ minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' }}
           >
             <SystemIcon name="chevron.left" mdName="ArrowLeft" size={22} color={palette.ink} />

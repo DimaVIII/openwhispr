@@ -243,6 +243,9 @@
     "folderName": "Folder name",
     "deleteFolder": "Delete folder",
     "deleteFolderBody": "Delete “{{name}}” and its {{count}} notes?",
-    "deleteSpaceFolderBody": "Delete “{{name}}” and its {{count}} notes for everyone in this space?"
+    "deleteSpaceFolderBody": "Delete “{{name}}” and its {{count}} notes for everyone in this space?",
+    "modelMoonshine": "English only · streaming speech recognition",
+    "moonshineEnglishOnly": "These Moonshine models support English only. Choose Parakeet for supported European languages, or select a cloud/provider workflow.",
+    "moonshineAndroidVersion": "Moonshine requires Android 8 or newer."
   }
 }

@@ -243,6 +243,9 @@
     "folderName": "Ordnername",
     "deleteFolder": "Ordner löschen",
     "deleteFolderBody": "„{{name}}“ und {{count}} Notizen löschen?",
-    "deleteSpaceFolderBody": "„{{name}}“ und {{count}} Notizen für alle in diesem Bereich löschen?"
+    "deleteSpaceFolderBody": "„{{name}}“ und {{count}} Notizen für alle in diesem Bereich löschen?",
+    "modelMoonshine": "Nur Englisch · Streaming-Spracherkennung",
+    "moonshineEnglishOnly": "Diese Moonshine-Modelle unterstützen nur Englisch. Wähle Parakeet für unterstützte europäische Sprachen oder einen Cloud-/Anbieter-Workflow.",
+    "moonshineAndroidVersion": "Moonshine erfordert Android 8 oder neuer."
   }
 }

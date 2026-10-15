@@ -13,7 +13,7 @@ import {
 } from './localEngine';
 
 export interface LocalEngineDescriptor {
-  engine: 'parakeet' | 'whisper';
+  engine: 'parakeet' | 'whisper' | 'moonshine';
   version?: ParakeetVersion;
   label: string;
 }
@@ -163,7 +163,13 @@ export class LocalTranscriptionService {
   static async isReadyForLanguage(): Promise<boolean> {
     if (Platform.OS === 'android') {
       const { modelReady } = await import('@/android/models');
-      return modelReady('parakeet-v3');
+      const { selectedSpeechModel } = await import('@/android/speechSelection');
+      const { speechModelSupportsLanguages } = await import('@/android/speechCapabilities');
+      const model = selectedSpeechModel();
+      return (
+        speechModelSupportsLanguages(model, getPreferredTranscriptionLanguages()) &&
+        modelReady(model)
+      );
     }
     const { choice } = await this.resolveEngine();
     return choice.engine !== 'none';
@@ -171,8 +177,18 @@ export class LocalTranscriptionService {
 
   /** Display descriptor for the engine the current selection *should* use (installed or not). */
   static preferredEngineDescriptor(): LocalEngineDescriptor {
-    if (Platform.OS === 'android')
+    if (Platform.OS === 'android') {
+      const { selectedSpeechModel } =
+        require('@/android/speechSelection') as typeof import('@/android/speechSelection');
+      const model = selectedSpeechModel();
+      if (model !== 'parakeet-v3')
+        return {
+          engine: 'moonshine',
+          label:
+            model === 'moonshine-tiny' ? 'Moonshine Tiny Streaming' : 'Moonshine Small Streaming',
+        };
       return { engine: 'parakeet', version: 'v3', label: 'Parakeet v3' };
+    }
     return descriptorFor(preferredEngineForLanguages(getPreferredTranscriptionLanguages()));
   }
 

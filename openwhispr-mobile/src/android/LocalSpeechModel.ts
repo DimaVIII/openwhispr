@@ -6,36 +6,12 @@ import { tokenTimingsToWhisperSegments } from '@/services/transcription/parakeet
 import type { TranscriptionResponse } from '@/types';
 import i18n from './strings';
 import Constants from 'expo-constants';
+import { selectedSpeechModel } from './speechSelection';
+import { speechModelSupportsLanguages } from './speechCapabilities';
+import { getPreferredTranscriptionLanguages } from '@/lib/transcriptionLanguage';
 
 const diagnostics = __DEV__ || Constants.expoConfig?.extra?.openWhispr?.isDevelopment === true;
 
-export const PARAKEET_LANGUAGES = new Set([
-  'bg',
-  'hr',
-  'cs',
-  'da',
-  'nl',
-  'en',
-  'et',
-  'fi',
-  'fr',
-  'de',
-  'el',
-  'hu',
-  'it',
-  'lv',
-  'lt',
-  'mt',
-  'pl',
-  'pt',
-  'ro',
-  'sk',
-  'sl',
-  'es',
-  'sv',
-  'ru',
-  'uk',
-]);
 let generation = 0;
 export const LocalSpeechModel = {
   async transcribe(
@@ -43,26 +19,37 @@ export const LocalSpeechModel = {
     options: { language?: string; wordTimestamps?: boolean },
   ): Promise<TranscriptionResponse> {
     const job = generation;
+    const model = selectedSpeechModel();
     return withAndroidInference(async () => {
       if (job !== generation) throw new Error(i18n.t('cancelled'));
-      const language = options.language?.toLowerCase().split(/[-_]/)[0];
-      if (language && language !== 'auto' && !PARAKEET_LANGUAGES.has(language))
-        throw new Error(i18n.t('unsupportedLanguage'));
-      if (!(await modelReady('parakeet-v3'))) throw new Error(i18n.t('speechUnavailable'));
+      const languages =
+        options.language && options.language !== 'auto'
+          ? [options.language]
+          : getPreferredTranscriptionLanguages();
+      if (!speechModelSupportsLanguages(model, languages))
+        throw new Error(
+          i18n.t(model === 'parakeet-v3' ? 'unsupportedLanguage' : 'moonshineEnglishOnly'),
+        );
+      if (!(await modelReady(model))) throw new Error(i18n.t('speechDownloadNeeded'));
       await LocalTextModel.release();
+      if (model === 'parakeet-v3') await AndroidDictation!.releaseMoonshine();
+      else await AndroidDictation!.releaseParakeet();
       if (job !== generation) throw new Error(i18n.t('cancelled'));
       // The native engine decodes compressed uploads and owns its temporary PCM file.
-      const result = await AndroidDictation!.transcribeParakeet(uri, modelPath('parakeet-v3'));
+      const result =
+        model === 'parakeet-v3'
+          ? await AndroidDictation!.transcribeParakeet(uri, modelPath(model))
+          : await AndroidDictation!.transcribeMoonshine(uri, modelPath(model), model);
       if (job !== generation) throw new Error(i18n.t('cancelled'));
       if (diagnostics)
-        console.log(`[android-speech] model=parakeet-v3 elapsedMs=${result.processingMs}`);
+        console.log(`[android-speech] model=${model} elapsedMs=${result.processingMs}`);
       return {
         text: result.text,
         duration: result.duration,
         processingMs: result.processingMs,
         provider: 'local',
-        endpoint: 'parakeet-v3',
-        ...(options.wordTimestamps
+        endpoint: model,
+        ...(options.wordTimestamps && result.tokenTimings
           ? { segments: tokenTimingsToWhisperSegments(result.tokenTimings) }
           : {}),
       };
@@ -71,5 +58,6 @@ export const LocalSpeechModel = {
   cancel() {
     generation++;
     AndroidDictation?.cancelParakeet();
+    AndroidDictation?.cancelMoonshine();
   },
 };

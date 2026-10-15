@@ -1,4 +1,4 @@
-import { Alert } from 'react-native';
+import { Alert, Platform } from 'react-native';
 import { router } from 'expo-router';
 import {
   clearLocalReasoningReadinessCache,
@@ -31,11 +31,14 @@ export function promptLocalReasoningFallback({
   destinationName,
 }: PromptLocalReasoningFallbackOptions): void {
   const message = getLocalReasoningUnavailableMessage(readiness);
-  const canEnableLocal = readiness.status === 'disabled' && onEnableLocal;
+  const canEnableLocal = Platform.OS === 'ios' && readiness.status === 'disabled' && onEnableLocal;
   // A provider takes the user's own key, so it needs no OpenWhispr account.
   const canUseCloud = (signedIn || !!destinationName) && onUseCloudOnce;
   const buttons = [
     { text: 'Cancel', style: 'cancel' as const },
+    ...(Platform.OS === 'android'
+      ? [{ text: 'Models', onPress: () => router.push('/(account)/ai-models') }]
+      : []),
     ...(canEnableLocal
       ? [
           {

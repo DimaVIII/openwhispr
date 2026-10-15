@@ -12,6 +12,7 @@ jest.mock('@/lib/inferenceRouting', () => ({
 }));
 jest.mock('@/lib/transcriptionLanguage', () => ({
   getPreferredTranscriptionLanguage: () => undefined,
+  getPreferredTranscriptionLanguages: () => [],
 }));
 jest.mock('@/services/reasoning/ReasoningService', () => ({
   ReasoningService: { processText: jest.fn() },

@@ -42,13 +42,13 @@ async function transcriptionModelReady(): Promise<ModeSwitchResult | null> {
   // Nothing to run yet: open the model list, where every on-device model can be
   // downloaded.
   if (readiness.status === 'missing') {
-    router.push(Platform.OS === 'android' ? '/android-models' : '/(account)/model-download');
+    router.push(Platform.OS === 'android' ? '/(account)/ai-models' : '/(account)/model-download');
     return 'needs-model';
   }
   return null;
 }
 
-async function appleIntelligenceReady(): Promise<boolean> {
+async function localTextModelReady(): Promise<boolean> {
   const readiness = await getLocalReasoningReadiness({ refresh: true });
   if (readiness.status === 'ready') return true;
   Alert.alert('On-Device Unavailable', getLocalReasoningUnavailableMessage(readiness));
@@ -68,7 +68,7 @@ export async function switchWorkflowMode(
   if (mode === 'local') {
     const blocked = isSpeechScope(scope)
       ? await transcriptionModelReady()
-      : (await appleIntelligenceReady())
+      : (await localTextModelReady())
         ? null
         : 'refused';
     if (blocked) return blocked;

@@ -4,7 +4,10 @@ jest.mock('@/store/useConfigStore', () => ({
   useConfigStore: { getState: () => ({ config: { androidTextModel: 'qwen-balanced' } }) },
 }));
 jest.mock('../../../modules/android-dictation/src', () => ({
-  AndroidDictation: { releaseParakeet: jest.fn(async () => undefined) },
+  AndroidDictation: {
+    releaseParakeet: jest.fn(async () => undefined),
+    releaseMoonshine: jest.fn(async () => undefined),
+  },
 }));
 
 import { initLlama } from 'llama.rn';
@@ -55,3 +58,26 @@ it('does not begin generation when cancellation happens during model loading', a
   expect(completion).not.toHaveBeenCalled();
   await LocalTextModel.release();
 });
+
+it.each(['native-error', 'context-full', 'truncated'])(
+  'reports %s as a recoverable local context limit',
+  async (kind) => {
+    const completion =
+      kind === 'native-error'
+        ? jest.fn().mockRejectedValue(new Error('Context is full'))
+        : jest.fn().mockResolvedValue({
+            text: 'partial output',
+            context_full: kind === 'context-full',
+            truncated: kind === 'truncated',
+          });
+    jest.mocked(initLlama).mockResolvedValue({ completion, release: jest.fn() } as never);
+    try {
+      await expect(LocalTextModel.processText({ text: 'Long meeting' })).rejects.toMatchObject({
+        code: 'LOCAL_CONTEXT_LIMIT',
+        retryable: false,
+      });
+    } finally {
+      await LocalTextModel.release();
+    }
+  },
+);

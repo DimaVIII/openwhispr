@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build Sherpa's Android JNI without TTS/espeak; never package upstream JNI binaries."""
+"""Build Sherpa and Moonshine against one ORT; never package upstream JNI binaries."""
 import argparse
 import hashlib
 import os
@@ -10,7 +10,16 @@ import zipfile
 
 VERSION = "1.13.8"
 ORT_VERSION = "1.28.2"
+MOONSHINE_COMMIT = "234f60faa0eb388b01cdf7e60aca232af37aefda"
 DOWNLOADS = {
+    "moonshine-source.tar.gz": (
+        f"https://codeload.github.com/moonshine-ai/moonshine/tar.gz/{MOONSHINE_COMMIT}",
+        "6bd927a48234dced3cc6f208522fe176c248686e9283273c51eddc8d7994e001",
+    ),
+    "moonshine.aar": (
+        "https://repo.maven.apache.org/maven2/ai/moonshine/moonshine-voice/0.1.5/moonshine-voice-0.1.5.aar",
+        "ee2d95c21150683c743db8f3aef66281fd5408bcefc94be3ca1d2545ada1f571",
+    ),
     "source.tar.gz": (
         f"https://github.com/k2-fsa/sherpa-onnx/archive/refs/tags/v{VERSION}.tar.gz",
         "b0374cc56dbc186d442ae73d5de743bb092470b640c4c50ce7b029044c0c4fa8",
@@ -76,6 +85,15 @@ def main():
     # Only Kotlin bindings are taken from the AAR. Its TTS-enabled JNI is excluded.
     with zipfile.ZipFile(archives["bindings.aar"]) as archive:
         (args.output / "classes.jar").write_bytes(archive.read("classes.jar"))
+    with zipfile.ZipFile(archives["moonshine.aar"]) as archive:
+        (args.output / "moonshine.jar").write_bytes(archive.read("classes.jar"))
+    moonshine = cache / f"moonshine-{MOONSHINE_COMMIT}"
+    if not moonshine.exists():
+        temporary = cache / "moonshine-extract"
+        temporary.mkdir(exist_ok=True)
+        run("tar", "-xzf", archives["moonshine-source.tar.gz"], "--strip-components=1",
+            "--exclude=*/core/third-party/onnxruntime/lib/*", "-C", temporary)
+        temporary.rename(moonshine)
     with zipfile.ZipFile(archives["onnxruntime.zip"]) as archive:
         for info in archive.infolist():
             if info.filename.startswith("headers/") or any(
@@ -108,7 +126,21 @@ def main():
         destination.mkdir(parents=True, exist_ok=True)
         shutil.copy2(library, destination)
         shutil.copy2(ort / "jni" / abi / "libonnxruntime.so", destination)
-    print(f"Speech-only Sherpa {VERSION} ready for {', '.join(abis)}")
+        # Upstream CMake assigns this path internally. Rebuild instead of mixing
+        # the AAR's ORT 1.23.2 imports with Sherpa's ORT 1.28.2 exports.
+        moonshine_abi = "arm64" if abi == "arm64-v8a" else abi
+        moonshine_ort = moonshine / "core/third-party/onnxruntime/lib/android" / moonshine_abi
+        moonshine_ort.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ort / "jni" / abi / "libonnxruntime.so", moonshine_ort)
+        moonshine_build = cache / f"moonshine-build-{MOONSHINE_COMMIT}-{abi}"
+        run(cmake, "-S", moonshine / "core", "-B", moonshine_build, "-G", "Ninja",
+            f"-DCMAKE_MAKE_PROGRAM={ninja}", f"-DCMAKE_TOOLCHAIN_FILE={toolchain}",
+            f"-DANDROID_ABI={abi}", "-DANDROID_PLATFORM=android-26", "-DANDROID_STL=c++_shared",
+            "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON", "-DCMAKE_BUILD_TYPE=Release")
+        run(cmake, "--build", moonshine_build, "--target", "moonshine-jni", "--parallel", "4")
+        shutil.copy2(moonshine_build / "libmoonshine.so", destination)
+        shutil.copy2(moonshine_build / "moonshine-jni/libmoonshine-jni.so", destination)
+    print(f"Sherpa {VERSION} and Moonshine 0.1.5 ready for {', '.join(abis)}")
 
 
 if __name__ == "__main__":

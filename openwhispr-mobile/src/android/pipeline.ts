@@ -1,12 +1,17 @@
 import { transcribeAndCleanup } from '@/lib/transcribeAndCleanup';
 import { snapshotTranscriptionJob, type TranscriptionJobRoute } from '@/lib/inferenceRouting';
-import { getPreferredTranscriptionLanguage } from '@/lib/transcriptionLanguage';
+import {
+  getPreferredTranscriptionLanguage,
+  getPreferredTranscriptionLanguages,
+} from '@/lib/transcriptionLanguage';
 import { ReasoningService } from '@/services/reasoning/ReasoningService';
 import { LocalTranscriptionService } from '@/services/transcription/LocalTranscriptionService';
 import { useConfigStore } from '@/store/useConfigStore';
 import { useTranscriptStore } from '@/store/useTranscriptStore';
 import { modelReady } from './models';
 import { selectedTextModel } from './LocalTextModel';
+import { selectedSpeechModel } from './speechSelection';
+import { speechModelSupportsLanguages } from './speechCapabilities';
 import type { Recording } from '../../modules/android-dictation/src';
 import type { KeyboardTone } from '@/types';
 import { cleanupSavedOnDevice } from '@/lib/aiWorkflows';
@@ -58,7 +63,18 @@ export function createAndroidJob(
   };
 }
 export async function ensureAndroidModels(job: AndroidJob): Promise<void> {
-  if (job.route.provider === 'local' && !(await modelReady('parakeet-v3')))
+  const speech = selectedSpeechModel();
+  if (
+    job.route.provider === 'local' &&
+    !speechModelSupportsLanguages(
+      speech,
+      job.language ? [job.language] : getPreferredTranscriptionLanguages(),
+    )
+  )
+    throw new Error(
+      i18n.t(speech === 'parakeet-v3' ? 'unsupportedLanguage' : 'moonshineEnglishOnly'),
+    );
+  if (job.route.provider === 'local' && !(await modelReady(speech)))
     throw new Error(i18n.t('speechDownloadNeeded'));
   const config = useConfigStore.getState().config;
   const cleanupRuns =

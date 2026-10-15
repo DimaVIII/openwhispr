@@ -156,6 +156,7 @@ export async function countLocalReasoningTokens(input: {
   instructions?: string;
   prompt: string;
 }): Promise<number | null> {
+  if (Platform.OS !== 'ios') return null;
   try {
     return await AppleLLM.countTokens(input);
   } catch {
@@ -214,6 +215,8 @@ export function toLocalReasoningError(error: unknown): LocalReasoningError {
   const message = error instanceof Error ? error.message : 'Local AI failed.';
 
   switch (code) {
+    case 'LOCAL_CONTEXT_LIMIT':
+    case 'LOCAL_REASONING_FAILED':
     case 'APPLE_LLM_GUARDRAIL':
     case 'APPLE_LLM_CONTEXT_LIMIT':
     case 'APPLE_LLM_RATE_LIMITED':
@@ -221,7 +224,10 @@ export function toLocalReasoningError(error: unknown): LocalReasoningError {
     case 'APPLE_LLM_FAILED':
       return new LocalReasoningError(code, message);
     default:
-      return new LocalReasoningError('APPLE_LLM_FAILED', message);
+      return new LocalReasoningError(
+        Platform.OS === 'android' ? 'LOCAL_REASONING_FAILED' : 'APPLE_LLM_FAILED',
+        message,
+      );
   }
 }
 
@@ -233,6 +239,8 @@ export function isLocalContextLimitError(error: unknown): boolean {
     typeof error === 'object' &&
     error !== null &&
     'code' in error &&
-    (error as { code?: unknown }).code === 'APPLE_LLM_CONTEXT_LIMIT'
+    ['APPLE_LLM_CONTEXT_LIMIT', 'LOCAL_CONTEXT_LIMIT'].includes(
+      String((error as { code?: unknown }).code),
+    )
   );
 }

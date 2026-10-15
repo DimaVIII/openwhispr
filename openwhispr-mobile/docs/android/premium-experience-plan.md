@@ -95,8 +95,8 @@ Subscriptions belong under Plan. Third-party/model attribution belongs under Lic
 
 ### Task 5: Local model choice and measured recommendations
 
-- [ ] Refresh exact Moonshine Android runtime/checkpoint compatibility, integrity and licenses; retain Parakeet and Qwen baseline.
-- [ ] Integrate the selected supported Moonshine Small/Tiny adapters behind the existing speech service contract; filter choices by language and actual runtime support.
+- [x] Refresh exact Moonshine Android runtime/checkpoint compatibility, integrity and licenses; retain Parakeet and Qwen baseline.
+- [x] Integrate the selected supported Moonshine Small/Tiny adapters behind the existing speech service contract; filter choices by language and actual runtime support.
 - [ ] Surface storage needs, download/verify progress, selected state and failure recovery. Use measured capability rules; do not equate RAM/file size with acceptable performance.
 - [ ] Test incompatible language, insufficient space, corrupt/interrupted download and local failure without cloud fallback. Benchmark full speech + cleanup on physical 3–4 GB, 6 GB and 8+ GB classes when available, recording latency/accuracy/memory/thermal observations.
 
@@ -132,3 +132,31 @@ The goal remains active. This checkpoint is implementation progress, not final a
 - The API currently exposes only one selected `entitlementSources.providerStore` (`app_store` or `play_store`). A dual-store customer whose selected source is App Store cannot obtain specific backend Play proof from this field: the app retains existing access and does not claim a Play restoration. Resolve/report this contract limitation before billing acceptance.
 
 Next independent implementation: Notes import flow; NoteEditor navigation/keyboard recording guards; unsupported Android voice-enrollment state; native Moonshine integration and model detail/device capability UI; actual bubble/meeting/Dictionary/Snippets/referral flows; compact/font-scale visual checks; final independent review, PR update and handoff. Existing Android review worktree is retained for this unfinished work and was not created by this session.
+
+## Implementation checkpoint — 2026-10-15, Moonshine / review build v4
+
+Moonshine Tiny/Small English streaming adapters are implemented alongside Parakeet. The app keeps Parakeet as default, uses one ORT runtime for both engines, captures model choice before queued inference, and releases speech resources before Qwen cleanup. Language/API gates apply to selection, readiness and inference. Full verified model downloads and two real ARM64 emulator smoke runs passed (including repeat Tiny after Small). Exact model accuracy caveats, licenses, native test recipe and production hosting gap are in `moonshine-runtime-research.md`; emulator timing is not a phone recommendation.
+
+Model rows now expand to reveal download/select/remove actions. Existing files receive checksum verification and corrupted same-size weights can be repaired. An independent read-only reviewer rechecked the language and integrity repairs. Native integration does not expose a new recording owner or any silent upload fallback.
+
+Remaining model work: device hardware/memory/storage presentation, a complete speech-plus-Qwen measurement flow and useful recommendations, real microphone/long-recording/physical-phone acceptance, and production download hosting. Remaining broader goal work is unchanged: Notes import and editor recording guards, Android voice-enrollment capability gate, real bubble/meeting/Dictionary/Snippets/referral validation, compact/font-scale/keyboard checks, whole-feature independent review, draft PR update and final handoff.
+
+### Android-only AI correction (2026-10-15)
+
+Josh clarified that Android must neither expose nor invoke Apple Intelligence. This is an Android product constraint; existing iOS functionality remains in its platform path.
+
+- Canonical Account → Models now resolves `AIModelsScreen.android.tsx`; the legacy Android route redirects there. Workflow and meeting entry points use that same route. Cold-link Back returns to the tabs when there is no navigation history.
+- Removed iPhone wording from shared provider-key, Private Mode and note-formatting messages. Android readiness and inference use downloaded Qwen; token budgeting does not call AppleLLM. The fallback offers Models and never changes the Apple enable setting.
+- Found and repaired an additional functional leak: automatic local meeting notes previously called the iOS structured-notes helper. Android now uses Qwen with constrained JSON output, validates the schema, and shares transcript chunking/content rules. Native context overflow triggers splitting rather than falling through to Apple or cloud. Invalid output fails explicitly. Actual Qwen meeting-quality/device acceptance remains pending; automated routing/recovery checks are not inference-quality evidence.
+- Targeted regression evidence: 15 suites / 201 tests pass, including Android meeting routing, malformed output, context recovery, Apple token-count exclusion and fallback behavior; TypeScript passes. Emulator v6 visibly shows Models & processing, Moonshine/Parakeet, and no Apple controls. Final v7 rebuild succeeded and was installed; cold-start models screen was visually checked, Parakeet selection persisted, and header Back returned to Home. Evidence is models-v7.png/xml and models-back-v7.xml under the external premium capture directory. Independent repair review cleared both findings; actual Qwen structured output remains pending.
+
+Manufacturer AI evaluation: Google ML Kit GenAI provides Gemini Nano through AICore, but inference requires the app to be the top foreground app; a foreground service is insufficient. Therefore it cannot replace the downloaded Qwen engine for cross-app bubble dictation. Treat it as a possible future optional foreground optimization after capability/download/language checks, not a requirement or an exposed unavailable toggle. Samsung's old Neural SDK is no longer provided to third-party developers; no general publicly available Galaxy AI inference SDK was verified. Some Galaxy devices support Google's APIs. Keep Qwen as the current local engine and Cloud as an explicit user choice.
+
+Primary sources checked on 2026-10-15:
+
+- https://developers.google.com/ml-kit/genai (device support, foreground restriction, quotas, local execution)
+- https://developers.google.com/ml-kit/genai/prompt/android/get-started (public beta Prompt API and availability/download flow)
+- https://developers.google.com/ml-kit/genai/rewriting/android (task and language bounds)
+- https://developer.samsung.com/neural/overview.html (third-party SDK availability notice)
+
+The native Moonshine transcript logging paths were also checked: both are guarded by `options.log_output_text`, whose default is false; this integration does not enable it.

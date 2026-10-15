@@ -13,7 +13,7 @@ export type InferenceMode = 'openwhispr' | 'local' | 'providers';
 
 export interface UserConfig {
   androidTextModel?: 'qwen-small' | 'qwen-balanced';
-  androidSpeechModel?: 'parakeet-v3';
+  androidSpeechModel?: 'parakeet-v3' | 'moonshine-tiny' | 'moonshine-small';
   androidHistoryDays?: number;
   insightsSyncEnabled?: boolean;
   androidBubbleSize?: number;
@@ -165,7 +165,8 @@ export type LocalReasoningErrorCode =
   | 'APPLE_LLM_UNAVAILABLE'
   | 'APPLE_LLM_FAILED'
   | 'LOCAL_CONTEXT_LIMIT'
-  | 'LOCAL_REASONING_UNAVAILABLE';
+  | 'LOCAL_REASONING_UNAVAILABLE'
+  | 'LOCAL_REASONING_FAILED';
 
 export interface MeetingActionItem {
   text: string;
