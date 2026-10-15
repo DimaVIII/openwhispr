@@ -42,8 +42,18 @@ jest.mock('../../../modules/app-group-storage/src', () => ({
   },
 }));
 
+let mockAppStateListener: ((state: string) => void) | undefined;
 jest.mock('react-native', () => ({
-  AppState: { addEventListener: () => ({ remove: () => {} }) },
+  AppState: {
+    addEventListener: (_type: string, listener: (state: string) => void) => {
+      mockAppStateListener = listener;
+      return {
+        remove: () => {
+          if (mockAppStateListener === listener) mockAppStateListener = undefined;
+        },
+      };
+    },
+  },
 }));
 
 jest.mock('@/services/storage/StorageService', () => ({
@@ -581,9 +591,23 @@ describe('hideKeyboardAgentHints', () => {
     expect(store.keyboard_agent_hints_hidden_until_ms).toBe(String(1_000_000 + 15 * 60_000));
   });
 
-  it('shows them again when the step is left', () => {
+  it('renews the deadline when the app comes back to the foreground', () => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
     const show = hideKeyboardAgentHints();
+    now.mockReturnValue(2_000_000);
+    mockAppStateListener?.('background');
+    expect(store.keyboard_agent_hints_hidden_until_ms).toBe(String(1_000_000 + 15 * 60_000));
+    mockAppStateListener?.('active');
+    expect(store.keyboard_agent_hints_hidden_until_ms).toBe(String(2_000_000 + 15 * 60_000));
     show();
+  });
+
+  it('shows them again when the step is left, and stops renewing', () => {
+    const show = hideKeyboardAgentHints();
+    expect(store.keyboard_agent_hints_hidden_until_ms).toBeDefined();
+    show();
+    expect(store.keyboard_agent_hints_hidden_until_ms).toBeUndefined();
+    mockAppStateListener?.('active');
     expect(store.keyboard_agent_hints_hidden_until_ms).toBeUndefined();
   });
 });
