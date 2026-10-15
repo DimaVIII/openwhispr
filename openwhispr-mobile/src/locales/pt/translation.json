@@ -189,6 +189,8 @@
     "retentionConfirm": "Ditados fora deste período serão excluídos deste celular. “Não salvar” exclui todo o histórico de ditados. As notas são mantidas separadamente.",
     "cleanupRecovery": "A correção falhou. A transcrição original está disponível na página inicial.",
     "removeModel": "Remover download",
-    "removeModelConfirm": "Remover este modelo do celular? Você pode baixá-lo novamente."
+    "removeModelConfirm": "Remover este modelo do celular? Você pode baixá-lo novamente.",
+    "privateMode": "Modo privado",
+    "privateModeDescription": "Mantenha o áudio neste telefone. Desative para escolher o processamento na nuvem."
   }
 }

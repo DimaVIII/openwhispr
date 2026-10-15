@@ -189,6 +189,8 @@
     "retentionConfirm": "超出保留期限的听写记录将从此手机删除。“不保存”会删除所有听写历史。笔记单独保存。",
     "cleanupRecovery": "文本润色失败。原始转写内容可在首页查看。",
     "removeModel": "移除下载",
-    "removeModelConfirm": "从手机移除此模型？以后可以重新下载。"
+    "removeModelConfirm": "从手机移除此模型？以后可以重新下载。",
+    "privateMode": "隐私模式",
+    "privateModeDescription": "将音频保留在此手机上。关闭后可选择云端处理。"
   }
 }

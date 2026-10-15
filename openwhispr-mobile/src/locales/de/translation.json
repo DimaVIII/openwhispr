@@ -189,6 +189,8 @@
     "retentionConfirm": "Diktate außerhalb dieses Zeitraums werden von diesem Telefon gelöscht. „Nicht speichern“ löscht den gesamten Diktatverlauf. Notizen bleiben separat erhalten.",
     "cleanupRecovery": "Die Textüberarbeitung ist fehlgeschlagen. Das ursprüngliche Transkript ist auf der Startseite verfügbar.",
     "removeModel": "Download entfernen",
-    "removeModelConfirm": "Dieses Modell vom Telefon entfernen? Du kannst es erneut herunterladen."
+    "removeModelConfirm": "Dieses Modell vom Telefon entfernen? Du kannst es erneut herunterladen.",
+    "privateMode": "Privater Modus",
+    "privateModeDescription": "Audiodaten bleiben auf diesem Telefon. Zum Auswählen der Cloud-Verarbeitung deaktivieren."
   }
 }

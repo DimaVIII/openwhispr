@@ -189,6 +189,8 @@
     "retentionConfirm": "Dictations outside this retention period will be deleted from this phone. “Don’t save” deletes all dictation history. Notes are kept separately.",
     "cleanupRecovery": "Text cleanup failed. Your original transcript is available in Home.",
     "removeModel": "Remove download",
-    "removeModelConfirm": "Remove this model from the phone? You can download it again."
+    "removeModelConfirm": "Remove this model from the phone? You can download it again.",
+    "privateMode": "Private mode",
+    "privateModeDescription": "Keep audio on this phone. Turn off to choose cloud processing."
   }
 }

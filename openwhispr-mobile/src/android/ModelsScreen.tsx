@@ -4,6 +4,9 @@ import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { useConfigStore } from '@/store/useConfigStore';
+import { useProcessingModeStore } from '@/store/useProcessingModeStore';
+import { SettingsSwitch } from '@/components/ui/SettingsSwitch';
+import { setPrivateMode } from '@/lib/workflowModeSwitch';
 import {
   ANDROID_MODELS,
   modelReady,
@@ -17,10 +20,23 @@ import { Button, Card, Page, Row, styles } from './ui';
 export function ModelsContent({ onNavigate }: { onNavigate?: () => void } = {}) {
   const { t } = useTranslation();
   const config = useConfigStore((s) => s.config);
+  const privateMode = useProcessingModeStore((s) => s.activeMode === 'private');
+  const [requestedPrivateMode, setRequestedPrivateMode] = useState<boolean | null>(null);
   const [ready, setReady] = useState<Partial<Record<AndroidModelId, boolean>>>({});
   const [removing, setRemoving] = useState(false);
   const progress = useModelDownloads((state) => state.progress);
   const activeDownloads = Object.keys(progress).sort().join(',');
+  const togglePrivateMode = async (enabled: boolean) => {
+    if (requestedPrivateMode !== null) return;
+    setRequestedPrivateMode(enabled);
+    try {
+      await setPrivateMode(enabled);
+    } catch (error) {
+      Alert.alert(t('errorTitle'), (error as Error).message);
+    } finally {
+      setRequestedPrivateMode(null);
+    }
+  };
   const refresh = async () => {
     const rows = await Promise.all(
       (Object.keys(ANDROID_MODELS) as AndroidModelId[]).map(async (id) => [
@@ -55,6 +71,20 @@ export function ModelsContent({ onNavigate }: { onNavigate?: () => void } = {}) 
   return (
     <>
       <Text style={styles.body}>{t('modelIntro')}</Text>
+      <Card>
+        <View style={styles.row}>
+          <Text style={[styles.heading, { flex: 1 }]}>{t('privateMode')}</Text>
+          <SettingsSwitch
+            accessibilityLabel={t('privateMode')}
+            value={requestedPrivateMode ?? privateMode}
+            disabled={requestedPrivateMode !== null}
+            onValueChange={(enabled) => {
+              void togglePrivateMode(enabled);
+            }}
+          />
+        </View>
+        <Text style={styles.body}>{t('privateModeDescription')}</Text>
+      </Card>
       <Row
         title={t('workflow')}
         onPress={() => {

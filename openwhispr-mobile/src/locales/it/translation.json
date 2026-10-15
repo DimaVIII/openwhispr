@@ -189,6 +189,8 @@
     "retentionConfirm": "Le dettature oltre questo periodo saranno eliminate dal telefono. «Non salvare» elimina tutta la cronologia delle dettature. Le note restano separate.",
     "cleanupRecovery": "La correzione non è riuscita. La trascrizione originale è disponibile nella Home.",
     "removeModel": "Rimuovi download",
-    "removeModelConfirm": "Rimuovere questo modello dal telefono? Potrai scaricarlo di nuovo."
+    "removeModelConfirm": "Rimuovere questo modello dal telefono? Potrai scaricarlo di nuovo.",
+    "privateMode": "Modalità privata",
+    "privateModeDescription": "Mantieni i dati audio su questo telefono. Disattiva per scegliere l’elaborazione nel cloud."
   }
 }

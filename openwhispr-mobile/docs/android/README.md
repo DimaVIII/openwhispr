@@ -33,6 +33,10 @@ Open the development client and select that server. NativeWind and CSS interop a
 
 Choose the explicit local workspace route to use local processing without signing in. Hosted processing, account sync and BYOK are separate choices. Existing account entitlements remain authoritative; the Android screen does not create rewards, purchases or trials.
 
+Open **Models & processing** and turn **Private mode** off to use OpenWhispr Cloud. The switch reuses the shared account and model checks. The retained signed-in session completed two live short-clip cloud dictations in the review pass; local processing was restored afterward.
+
+**Explore Pro** currently shows plan information only. It has no pricing, purchase or restore controls, and the review build has no `EXPO_PUBLIC_SUPERWALL_ANDROID_API_KEY`. The shared Superwall provider supports Android, but a configured provider and a connected purchase placement still need checkout and entitlement verification.
+
 Enable overlay and text insertion through Bubble & permissions and Android's normal consent screens. Enabling the bubble asks for microphone permission, and notification permission on Android 13+. Recording starts only from a user gesture. Password fields are excluded; if the original field or selection changes, the result is preserved in Home instead of writing into another field. Disable the bubble from that settings screen or its close button.
 
 For unattended testing, keep emulator host microphone input off and use **Use an audio file** with explicitly identified synthetic/prerecorded audio. File inference, silent recorder lifecycle and cross-process insertion tests are separate checks; none proves physical-phone speech quality, thermals or battery behavior.

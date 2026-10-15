@@ -189,6 +189,8 @@
     "retentionConfirm": "Les dictées dépassant cette durée seront supprimées de ce téléphone. « Ne pas enregistrer » supprime tout l’historique des dictées. Les notes sont conservées séparément.",
     "cleanupRecovery": "La correction du texte a échoué. La transcription originale est disponible dans Accueil.",
     "removeModel": "Supprimer le téléchargement",
-    "removeModelConfirm": "Supprimer ce modèle du téléphone ? Vous pourrez le télécharger à nouveau."
+    "removeModelConfirm": "Supprimer ce modèle du téléphone ? Vous pourrez le télécharger à nouveau.",
+    "privateMode": "Mode privé",
+    "privateModeDescription": "Gardez les données audio sur ce téléphone. Désactivez ce mode pour choisir le traitement dans le cloud."
   }
 }

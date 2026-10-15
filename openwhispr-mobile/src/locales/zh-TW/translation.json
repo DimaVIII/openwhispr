@@ -189,6 +189,8 @@
     "retentionConfirm": "超出保留期限的聽寫記錄將從此手機刪除。「不儲存」會刪除所有聽寫歷史。筆記另外儲存。",
     "cleanupRecovery": "文字潤飾失敗。原始轉錄內容可在首頁查看。",
     "removeModel": "移除下載",
-    "removeModelConfirm": "從手機移除此模型？之後可以重新下載。"
+    "removeModelConfirm": "從手機移除此模型？之後可以重新下載。",
+    "privateMode": "隱私模式",
+    "privateModeDescription": "將音訊保留在此手機上。關閉後可選擇雲端處理。"
   }
 }
