@@ -125,6 +125,7 @@ export function NoteActionsMenu({
   ];
 
   const handlePress = ({ nativeEvent }: { nativeEvent: { event: string } }) => {
+    if (disabled) return;
     const id = nativeEvent.event;
     safeHaptics('light');
 

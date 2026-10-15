@@ -1,3 +1,4 @@
+jest.mock('@/android/NoteRecordingControls', () => ({ NoteRecordingControls: () => null }));
 import React from 'react';
 import { Alert, Modal, Platform } from 'react-native';
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
@@ -13,6 +14,8 @@ import type { Action, Note, Segment, Speaker, SpeakerProfile } from '@/data/type
 import type { Folder, Space } from '@/data';
 import type { UserConfig } from '@/types';
 
+let mockRecordingFlags: { isStarting?: boolean; isProcessing?: boolean } = {};
+let mockMenuProcessing = false;
 const mockUpdateNote = jest.fn();
 const mockDeleteNote = jest.fn();
 const mockRetryMeetingTranscription = jest.fn();
@@ -93,6 +96,7 @@ jest.mock('react-native-safe-area-context', () => ({
 
 const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
+  useFocusEffect: jest.fn(),
   useLocalSearchParams: () => ({ id: mockRouteNoteId }),
   useRouter: () => ({
     push: mockPush,
@@ -165,6 +169,7 @@ jest.mock('@/hooks/useAudioRecording', () => ({
     currentText: '',
     startRecording: jest.fn(),
     stopRecording: jest.fn(),
+    ...mockRecordingFlags,
   }),
 }));
 
@@ -254,18 +259,21 @@ jest.mock('@/components/ui/SystemIcon', () => ({
 jest.mock('@/components/notes/NoteActionsMenu', () => ({
   NoteActionsMenu: ({
     actions,
+    processing,
     onRunAction,
     onAskNote,
     askNoteDisabled,
     onViewTranscript,
   }: {
     actions: Action[];
+    processing: boolean;
     onRunAction: (action: Action) => void;
     onAskNote?: () => void;
     askNoteDisabled?: boolean;
     onViewTranscript?: () => void;
   }) =>
     (() => {
+      mockMenuProcessing = processing;
       const { Pressable: MockPressable, Text: MockText, View: MockView } = require('react-native');
       return (
         <MockView>
@@ -521,6 +529,8 @@ const calendarContextInputForCurrentNote = (): string =>
   });
 
 beforeEach(() => {
+  mockRecordingFlags = {};
+  mockMenuProcessing = false;
   jest.clearAllMocks();
   clearLocalReasoningReadinessCache();
   mockRouteNoteId = '7';
@@ -1812,3 +1822,19 @@ describe('NoteEditorScreen voice setup', () => {
     expect(queryByTestId('thats-me-sheet')).toBeNull();
   });
 });
+
+it.each(['isStarting', 'isProcessing'] as const)(
+  'disables Android note actions during %s',
+  async (flag) => {
+    const original = Platform.OS;
+    Platform.OS = 'android';
+    mockRecordingFlags = { [flag]: true };
+    try {
+      render(<NoteEditorScreen />);
+      await act(async () => undefined);
+      expect(mockMenuProcessing).toBe(true);
+    } finally {
+      Platform.OS = original;
+    }
+  },
+);

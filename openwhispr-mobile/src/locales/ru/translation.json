@@ -246,6 +246,14 @@
     "deleteSpaceFolderBody": "Удалить «{{name}}» и {{count}} заметок для всех участников пространства?",
     "modelMoonshine": "Только английский · потоковое распознавание речи",
     "moonshineEnglishOnly": "Эти модели Moonshine поддерживают только английский. Выберите Parakeet для поддерживаемых европейских языков или облачную обработку.",
-    "moonshineAndroidVersion": "Для Moonshine требуется Android 8 или новее."
+    "moonshineAndroidVersion": "Для Moonshine требуется Android 8 или новее.",
+    "noteStart": "Начать диктовку",
+    "noteStop": "Остановить диктовку",
+    "noteFinish": "Завершить и выйти",
+    "noteDiscard": "Удалить запись",
+    "noteLeaveTitle": "Выйти из записи?",
+    "noteLeaveBody": "Завершите запись, чтобы добавить текст в заметку, или удалите эту запись.",
+    "noteFinishingTitle": "Завершение диктовки",
+    "noteFinishingBody": "Оставайтесь в заметке, пока запись запускается или завершается."
   }
 }

@@ -246,6 +246,14 @@
     "deleteSpaceFolderBody": "このスペースの全員に対して「{{name}}」と {{count}} 件のノートを削除しますか？",
     "modelMoonshine": "英語のみ · ストリーミング音声認識",
     "moonshineEnglishOnly": "これらの Moonshine モデルは英語のみに対応しています。対応するヨーロッパ言語には Parakeet を使用するか、クラウド／プロバイダーの処理を選択してください。",
-    "moonshineAndroidVersion": "Moonshine には Android 8 以降が必要です。"
+    "moonshineAndroidVersion": "Moonshine には Android 8 以降が必要です。",
+    "noteStart": "音声入力を開始",
+    "noteStop": "音声入力を停止",
+    "noteFinish": "完了して戻る",
+    "noteDiscard": "録音を破棄",
+    "noteLeaveTitle": "録音を終了しますか？",
+    "noteLeaveBody": "完了すると文字起こしがノートに追加されます。または、この録音を破棄できます。",
+    "noteFinishingTitle": "音声入力を処理中",
+    "noteFinishingBody": "録音の開始または処理が完了するまで、このノートを開いたままにしてください。"
   }
 }

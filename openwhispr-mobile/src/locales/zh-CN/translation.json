@@ -246,6 +246,14 @@
     "deleteSpaceFolderBody": "为此空间中的所有人删除“{{name}}”及其中的 {{count}} 条笔记？",
     "modelMoonshine": "仅支持英语 · 流式语音识别",
     "moonshineEnglishOnly": "这些 Moonshine 模型仅支持英语。请使用 Parakeet 处理其支持的欧洲语言，或选择云端/服务商工作流。",
-    "moonshineAndroidVersion": "Moonshine 需要 Android 8 或更高版本。"
+    "moonshineAndroidVersion": "Moonshine 需要 Android 8 或更高版本。",
+    "noteStart": "开始听写",
+    "noteStop": "停止听写",
+    "noteFinish": "完成并离开",
+    "noteDiscard": "放弃录音",
+    "noteLeaveTitle": "离开此录音？",
+    "noteLeaveBody": "完成录音以将转录添加到笔记，或放弃此录音。",
+    "noteFinishingTitle": "正在完成听写",
+    "noteFinishingBody": "录音开始或完成处理期间，请停留在此笔记。"
   }
 }

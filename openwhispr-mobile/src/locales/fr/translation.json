@@ -246,6 +246,14 @@
     "deleteSpaceFolderBody": "Supprimer « {{name}} » et ses {{count}} notes pour tous les membres de cet espace ?",
     "modelMoonshine": "Anglais uniquement · reconnaissance vocale en continu",
     "moonshineEnglishOnly": "Ces modèles Moonshine prennent uniquement en charge l’anglais. Choisissez Parakeet pour les langues européennes compatibles, ou un traitement cloud/fournisseur.",
-    "moonshineAndroidVersion": "Moonshine nécessite Android 8 ou une version ultérieure."
+    "moonshineAndroidVersion": "Moonshine nécessite Android 8 ou une version ultérieure.",
+    "noteStart": "Démarrer la dictée",
+    "noteStop": "Arrêter la dictée",
+    "noteFinish": "Terminer et quitter",
+    "noteDiscard": "Supprimer cet enregistrement",
+    "noteLeaveTitle": "Quitter cet enregistrement ?",
+    "noteLeaveBody": "Terminez pour ajouter la transcription à la note, ou supprimez cet enregistrement.",
+    "noteFinishingTitle": "Finalisation de la dictée",
+    "noteFinishingBody": "Restez sur cette note pendant le démarrage ou la finalisation."
   }
 }

@@ -1,3 +1,4 @@
+import { NoteRecordingControls } from '@/android/NoteRecordingControls';
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import {
   View,
@@ -13,7 +14,7 @@ import * as Clipboard from 'expo-clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/components/ui/Text';
 import { isMicPermissionError, showMicPermissionAlert } from '@/lib/permissions';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useNotesStore } from '@/store/useNotesStore';
 import { useActionsStore } from '@/store/useActionsStore';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -728,13 +729,29 @@ export default function NoteEditorScreen() {
     Alert.alert('Dictation failed', error.message);
   }, []);
 
-  const { isRecording, isProcessing, currentText, startRecording, stopRecording } =
-    useAudioRecording({
-      onComplete: handleDictationComplete,
-      onError: handleDictationError,
-      onLocalModelMissing: promptLocalModelFallback,
-      onUsageLimitReached: handleUsageLimitReached,
-    });
+  const editorActive = useRef(true);
+  useFocusEffect(
+    useCallback(() => {
+      editorActive.current = true;
+      return () => {
+        editorActive.current = false;
+      };
+    }, []),
+  );
+  const {
+    isStarting,
+    isRecording,
+    isProcessing,
+    currentText,
+    startRecording,
+    stopRecording,
+    cancelRecording,
+  } = useAudioRecording({
+    onComplete: handleDictationComplete,
+    onError: handleDictationError,
+    onLocalModelMissing: promptLocalModelFallback,
+    onUsageLimitReached: handleUsageLimitReached,
+  });
 
   const handleDictate = useCallback(async () => {
     safeHaptics('medium');
@@ -753,12 +770,12 @@ export default function NoteEditorScreen() {
           params: { source: 'note_editor' },
           requiresAccount: false,
           feature: () => {
-            startRecording().catch(() => {});
+            if (editorActive.current) startRecording().catch(() => {});
           },
         });
         return;
       }
-      await startRecording();
+      if (editorActive.current) await startRecording();
     } catch {
       // Hook's onError → handleDictationError already surfaced this to the user.
     }
@@ -1279,7 +1296,9 @@ export default function NoteEditorScreen() {
             actions={actions}
             hasContent={!contentEmpty}
             isRecording={isRecording}
-            processing={isEnhancingHeader}
+            processing={
+              isEnhancingHeader || (Platform.OS === 'android' && (isStarting || isProcessing))
+            }
             onRunAction={handleRunAction}
             onManageActions={handleManageActions}
             onAskNote={chatEnabled && !showAskPill ? handleAskNote : undefined}
@@ -1293,7 +1312,7 @@ export default function NoteEditorScreen() {
       />
       <KeyboardAvoidingView
         className="flex-1 bg-systemBackground"
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={0}
       >
         <ScrollView
@@ -1360,6 +1379,9 @@ export default function NoteEditorScreen() {
                     testID={`note-tab-${tab}`}
                     accessibilityRole="tab"
                     accessibilityState={{ selected: active }}
+                    disabled={
+                      Platform.OS === 'android' && (isStarting || isRecording || isProcessing)
+                    }
                     onPress={() => {
                       safeHaptics('selection');
                       setViewMode(tab);
@@ -1488,7 +1510,20 @@ export default function NoteEditorScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-      {shouldRenderPlainEditor ? (
+      {Platform.OS === 'android' &&
+      (shouldRenderPlainEditor || isStarting || isRecording || isProcessing) ? (
+        <NoteRecordingControls
+          isStarting={isStarting}
+          isRecording={isRecording}
+          isProcessing={isProcessing}
+          disabled={isEnhancing || isRecoveringUsageLimit}
+          keyboardVisible={keyboardHeight > 0}
+          onStart={handleDictate}
+          onStop={() => stopRecording().catch(() => false)}
+          onDiscard={cancelRecording}
+          onFlush={flushDraft}
+        />
+      ) : shouldRenderPlainEditor ? (
         <Pressable
           onPress={handleDictate}
           disabled={isProcessing || isEnhancing || isRecoveringUsageLimit}

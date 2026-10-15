@@ -246,6 +246,14 @@
     "deleteSpaceFolderBody": "هل تريد حذف «{{name}}» وملاحظاته البالغ عددها {{count}} لجميع أعضاء هذه المساحة؟",
     "modelMoonshine": "الإنجليزية فقط · التعرف على الكلام بالتدفق",
     "moonshineEnglishOnly": "تدعم نماذج Moonshine هذه اللغة الإنجليزية فقط. اختر Parakeet للغات الأوروبية المدعومة، أو اختر مسار معالجة سحابياً أو عبر مزود.",
-    "moonshineAndroidVersion": "يتطلب Moonshine نظام Android 8 أو أحدث."
+    "moonshineAndroidVersion": "يتطلب Moonshine نظام Android 8 أو أحدث.",
+    "noteStart": "بدء الإملاء",
+    "noteStop": "إيقاف الإملاء",
+    "noteFinish": "إنهاء ومغادرة",
+    "noteDiscard": "تجاهل التسجيل",
+    "noteLeaveTitle": "مغادرة هذا التسجيل؟",
+    "noteLeaveBody": "أنهِ التسجيل لإضافة النص إلى ملاحظتك، أو تجاهل هذا التسجيل.",
+    "noteFinishingTitle": "جارٍ إنهاء الإملاء",
+    "noteFinishingBody": "ابقَ في هذه الملاحظة أثناء بدء التسجيل أو إنهائه."
   }
 }

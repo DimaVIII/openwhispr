@@ -246,6 +246,14 @@
     "deleteSpaceFolderBody": "Excluir “{{name}}” e suas {{count}} notas para todos neste espaço?",
     "modelMoonshine": "Apenas inglês · reconhecimento de fala em streaming",
     "moonshineEnglishOnly": "Estes modelos Moonshine aceitam apenas inglês. Escolha Parakeet para os idiomas europeus compatíveis ou um fluxo na nuvem/com provedor.",
-    "moonshineAndroidVersion": "Moonshine requer Android 8 ou posterior."
+    "moonshineAndroidVersion": "Moonshine requer Android 8 ou posterior.",
+    "noteStart": "Iniciar ditado",
+    "noteStop": "Parar ditado",
+    "noteFinish": "Concluir e sair",
+    "noteDiscard": "Descartar gravação",
+    "noteLeaveTitle": "Sair desta gravação?",
+    "noteLeaveBody": "Conclua para adicionar a transcrição à nota ou descarte esta gravação.",
+    "noteFinishingTitle": "Concluindo ditado",
+    "noteFinishingBody": "Permaneça nesta nota enquanto a gravação começa ou termina."
   }
 }

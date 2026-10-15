@@ -1,16 +1,24 @@
-import { Tabs } from 'expo-router';
+import { Tabs, useSegments } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { SystemIcon } from '@/components/ui/SystemIcon';
 import { palette } from './ui';
 export default function AndroidTabs() {
   const { t } = useTranslation();
+  const segments = useSegments() as string[];
+  const detail =
+    segments.includes('(notes)') &&
+    (segments.at(-1) === '[id]' || segments.at(-1) === 'meeting-record');
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: palette.blue,
         tabBarInactiveTintColor: palette.muted,
-        tabBarStyle: { backgroundColor: palette.background, borderTopColor: palette.line },
+        tabBarStyle: {
+          backgroundColor: palette.background,
+          borderTopColor: palette.line,
+          display: detail ? 'none' : 'flex',
+        },
         tabBarLabelStyle: { fontSize: 12 },
       }}
     >

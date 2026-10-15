@@ -85,3 +85,20 @@ describe('NoteActionsMenu', () => {
     expect(queryByText('Copy Transcript')).toBeNull();
   });
 });
+
+it('ignores stale native menu events while recording is processing', () => {
+  const onDelete = jest.fn();
+  const onManageActions = jest.fn();
+  const { getByTestId } = render(
+    <NoteActionsMenu
+      {...baseProps}
+      processing
+      onDelete={onDelete}
+      onManageActions={onManageActions}
+    />,
+  );
+  fireEvent.press(getByTestId('menu-__delete'));
+  fireEvent.press(getByTestId('menu-__manage'));
+  expect(onDelete).not.toHaveBeenCalled();
+  expect(onManageActions).not.toHaveBeenCalled();
+});

@@ -246,6 +246,14 @@
     "deleteSpaceFolderBody": "„{{name}}“ und {{count}} Notizen für alle in diesem Bereich löschen?",
     "modelMoonshine": "Nur Englisch · Streaming-Spracherkennung",
     "moonshineEnglishOnly": "Diese Moonshine-Modelle unterstützen nur Englisch. Wähle Parakeet für unterstützte europäische Sprachen oder einen Cloud-/Anbieter-Workflow.",
-    "moonshineAndroidVersion": "Moonshine erfordert Android 8 oder neuer."
+    "moonshineAndroidVersion": "Moonshine erfordert Android 8 oder neuer.",
+    "noteStart": "Diktat starten",
+    "noteStop": "Diktat stoppen",
+    "noteFinish": "Beenden und verlassen",
+    "noteDiscard": "Aufnahme verwerfen",
+    "noteLeaveTitle": "Aufnahme verlassen?",
+    "noteLeaveBody": "Beende die Aufnahme, um den Text zur Notiz hinzuzufügen, oder verwirf sie.",
+    "noteFinishingTitle": "Diktat wird abgeschlossen",
+    "noteFinishingBody": "Bleibe bei dieser Notiz, während die Aufnahme startet oder abgeschlossen wird."
   }
 }
