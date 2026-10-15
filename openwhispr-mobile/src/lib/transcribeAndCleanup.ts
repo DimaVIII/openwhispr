@@ -29,6 +29,8 @@ type ProcessingStage = 'transcribing' | 'cleaning';
 
 export interface DictationProcessingLifecycle {
   signal?: AbortSignal;
+  // Voice actions process the raw speech themselves; skip cleanup, agent actions and snippets.
+  transcriptionOnly?: boolean;
   onStage?: (stage: ProcessingStage, details?: { fusedCleanup?: boolean }) => void;
   onTranscribeDone?: (result: TranscriptionResponse) => void;
   onCleanupDone?: (result: TranscriptionResponse) => void;
@@ -188,6 +190,8 @@ async function runSerialTranscribeAndCleanup(
   const originalText = transcription.text;
   lifecycle.onRawTranscript?.(originalText, transcription);
 
+  if (lifecycle.transcriptionOnly) return rawTranscriptResult(transcription);
+
   // Local/private transcripts leave the device only for the cleanup provider the
   // user saved; otherwise they are cleaned by On-Device cleanup or not at all.
   if (transcription.provider === 'local' && !cleansLocalTranscript(request)) {
@@ -302,7 +306,7 @@ async function runTranscribeAndCleanup(
   request: TranscriptionRequest,
   lifecycle: DictationProcessingLifecycle = {},
 ): Promise<DictationProcessingResult> {
-  if (await shouldAttemptFusedCloudCleanup(request)) {
+  if (!lifecycle.transcriptionOnly && (await shouldAttemptFusedCloudCleanup(request))) {
     lifecycle.onStage?.('transcribing', { fusedCleanup: true });
     try {
       const transcription = await withRetry(
@@ -418,7 +422,7 @@ async function processTranscriptionJob(
     cleanupUnavailable: pinnedRequest.cleanupUnavailable,
     agentUnavailable: pinnedRequest.agentUnavailable,
   };
-  if (!isDictationContext(request.requestContext)) return result;
+  if (lifecycle.transcriptionOnly || !isDictationContext(request.requestContext)) return result;
 
   const snippetState = useSnippetsStore.getState();
   if (!snippetState.isLoaded || snippetState.entries.length === 0) return result;

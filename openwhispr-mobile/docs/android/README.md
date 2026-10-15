@@ -39,6 +39,8 @@ For unattended testing, keep emulator host microphone input off and use **Use an
 
 Development builds log text-model loading and generation timings under `android-reasoning`, without logging the prompt or result. Native CPU thread selection uses the runtime defaults with strict affinity disabled. Final packaged-build latency still needs verification; some earlier cleanup runs timed out. Failed cleanup preserves a recoverable raw transcript in Home. The smaller text model can also miss formatting instructions.
 
+Translate, Write and Edit transcribe the speech unchanged, then run the requested text action once. They skip the ordinary dictation cleanup, agent and snippet passes, whose output those actions would discard. Dictate retains the shared cleanup behavior. Regression checks cover this distinction for local, cloud and BYOK speech; emulator timing still needs a normal device unlock.
+
 ## Checks
 
 ```sh

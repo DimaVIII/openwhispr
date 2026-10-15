@@ -95,6 +95,7 @@ export async function processAndroidAudio(
     },
     {
       signal,
+      transcriptionOnly: job.mode !== 'dictate',
       shouldCancel: () => signal.aborted,
       onStage: (value) => stage(value === 'cleaning' ? 'cleaning' : 'processing'),
     },
