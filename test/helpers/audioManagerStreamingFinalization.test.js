@@ -2104,3 +2104,176 @@ test("combined options are captured and passed through recording start", async (
   assert.equal(manager._activeStreamingConfig.orukeetPipeline, "gemma12");
   await manager.cancelStreamingRecording();
 });
+
+// Cleanup routes on the store's whole cloud predicate, so the mock mirrors
+// selectIsCloudCleanupMode: onboarding's local choice leaves cleanupCloudMode at
+// its "openwhispr" default, and that field alone must never send text to Cloud.
+const CLEANUP_ROUTING_STORE = `
+  export const getSettings = () => globalThis.__streamingFinalizationSettings;
+  export const isCloudCleanupMode = () => {
+    const s = getSettings();
+    return !!s.isSignedIn && s.cleanupMode === "openwhispr" && s.cleanupCloudMode === "openwhispr";
+  };
+  export const getEffectiveCleanupModel = () => (isCloudCleanupMode() ? "" : "qwen3.5-4b-q4_k_m");
+  export const selectResolvedLLMConfig = () =>
+    isCloudCleanupMode()
+      ? { model: "", provider: "openwhispr", mode: "openwhispr" }
+      : { model: "qwen3.5-4b-q4_k_m", provider: "qwen", mode: "local" };
+  export const isCloudDictationAgentMode = () => false;
+  export const isCloudTranslationMode = () => false;
+`;
+
+const CLEANUP_ROUTING_CASES = [
+  {
+    label: "local, cloud field left at default",
+    cleanupMode: "local",
+    cleanupCloudMode: "openwhispr",
+    cloud: false,
+  },
+  {
+    label: "local, cloud field byok",
+    cleanupMode: "local",
+    cleanupCloudMode: "byok",
+    cloud: false,
+  },
+  { label: "providers (BYOK)", cleanupMode: "providers", cleanupCloudMode: "byok", cloud: false },
+  {
+    label: "OpenWhispr Cloud",
+    cleanupMode: "openwhispr",
+    cleanupCloudMode: "openwhispr",
+    cloud: true,
+  },
+  {
+    label: "OpenWhispr Cloud, signed out",
+    cleanupMode: "openwhispr",
+    cleanupCloudMode: "openwhispr",
+    isSignedIn: false,
+    cloud: false,
+  },
+];
+
+function cleanupRoutingSettings({ cleanupMode, cleanupCloudMode, isSignedIn = true }) {
+  return { useCleanupModel: true, cleanupMode, cleanupCloudMode, isSignedIn, customPrompts: {} };
+}
+
+function countingReasoningModel(localCalls) {
+  return async (text, model) => {
+    localCalls.push([text, model]);
+    return `${text} (local)`;
+  };
+}
+
+test("streaming cleanup goes to Cloud only when the cleanup scope is OpenWhispr Cloud", async (t) => {
+  const AudioManager = await loadManagerClass(t, {
+    "/stores/settingsStore": CLEANUP_ROUTING_STORE,
+  });
+  for (const routing of CLEANUP_ROUTING_CASES) {
+    const localCalls = [];
+    const { reasonCalls, published } = await stopManagedDictation(AudioManager, {
+      final: { success: true, text: "hello there", model: "orukeet-v0.1.0" },
+      language: "en",
+      upload: async () => assert.fail("must not re-transcribe"),
+      settings: cleanupRoutingSettings(routing),
+      overrides: {
+        processWithReasoningModel: countingReasoningModel(localCalls),
+        finalizeChineseScript: async (text) => text,
+      },
+    });
+    assert.equal(reasonCalls.length, routing.cloud ? 1 : 0, routing.label);
+    assert.deepEqual(
+      localCalls.map(([, model]) => model),
+      routing.cloud ? [] : ["qwen3.5-4b-q4_k_m"],
+      routing.label
+    );
+    assert.equal(
+      published[0].text,
+      routing.cloud ? "hello there。" : "hello there (local)",
+      routing.label
+    );
+  }
+});
+
+test("streaming translation cleans up in Cloud only when the cleanup scope is OpenWhispr Cloud", async (t) => {
+  const AudioManager = await loadManagerClass(t, {
+    "/stores/settingsStore": CLEANUP_ROUTING_STORE,
+    "/config/prompts": `
+      export const resolvePrompt = () => "translation prompt";
+      export const appendScreenContextSuffix = (prompt) => prompt;
+    `,
+    "/dictationAgentInference": `
+      export const resolveDictationAgentInference = () => ({ reachable: false, config: {} });
+      export const resolveDictationAgentVisionInference = () => ({ active: false, config: {} });
+    `,
+    "/dictationTranslationInference": `
+      export const resolveDictationTranslationInference = () => ({
+        reachable: true, model: "translation-model", config: { provider: "qwen" }
+      });
+    `,
+  });
+  for (const routing of CLEANUP_ROUTING_CASES) {
+    const chainCleanups = [];
+    await stopManagedDictation(AudioManager, {
+      final: { success: true, text: "hello there", model: "orukeet-v0.1.0" },
+      language: "en",
+      upload: async () => assert.fail("must not re-transcribe"),
+      settings: {
+        ...cleanupRoutingSettings(routing),
+        translationSourceLanguage: "en",
+        translationTargetLanguage: "es",
+      },
+      overrides: {
+        translationRequested: true,
+        runTranslationChain: async ({ cleanup }) => {
+          chainCleanups.push(cleanup);
+          return { text: "hola" };
+        },
+        finalizeChineseScript: async (text) => text,
+      },
+    });
+    assert.equal(chainCleanups.length, 1, routing.label);
+    assert.equal(chainCleanups[0].mode, routing.cloud ? "cloudReason" : "model", routing.label);
+  }
+});
+
+test("batch Cloud cleanup goes to Cloud only when the cleanup scope is OpenWhispr Cloud", async (t) => {
+  const AudioManager = await loadManagerClass(t, {
+    "/stores/settingsStore": CLEANUP_ROUTING_STORE,
+  });
+  const originalNavigator = globalThis.navigator;
+  Object.defineProperty(globalThis, "navigator", { value: { onLine: true }, configurable: true });
+  t.after(() =>
+    Object.defineProperty(globalThis, "navigator", {
+      value: originalNavigator,
+      configurable: true,
+    })
+  );
+  // Signed out never re-transcribes through Cloud, so it never reaches this path.
+  for (const routing of CLEANUP_ROUTING_CASES.filter(({ isSignedIn }) => isSignedIn !== false)) {
+    const transcribeOpts = [];
+    globalThis.window.electronAPI.cloudTranscribe = async (_audio, opts) => {
+      transcribeOpts.push(opts);
+      return { success: true, text: "明日の会議", sttProvider: "openai" };
+    };
+    const localCalls = [];
+    const { reasonCalls, published } = await stopManagedDictation(AudioManager, {
+      final: JA_FINAL,
+      settings: cleanupRoutingSettings(routing),
+      overrides: {
+        isDictionaryEcho: () => false,
+        getWhisperPrompt: () => null,
+        finalizeChineseScript: async (text) => text,
+        processWithReasoningModel: countingReasoningModel(localCalls),
+      },
+    });
+    assert.equal(transcribeOpts.length, 1, routing.label);
+    assert.equal(reasonCalls.length, routing.cloud ? 1 : 0, routing.label);
+    assert.equal(localCalls.length, routing.cloud ? 0 : 1, routing.label);
+    assert.equal(
+      published[0].text,
+      routing.cloud ? "明日の会議。" : "明日の会議 (local)",
+      routing.label
+    );
+    // Only a Cloud cleanup writes the combined log, so only it suppresses the STT one.
+    assert.equal(transcribeOpts[0].sendLogs, routing.cloud ? "false" : undefined, routing.label);
+  }
+});
