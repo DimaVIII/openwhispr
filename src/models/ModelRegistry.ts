@@ -1,6 +1,6 @@
 import { registryData as modelData, subscribeRegistry } from "./registryData.js";
 import { isCloudCleanupMode, getSettings } from "../stores/settingsStore";
-import { readCachedTinfoilModels } from "./tinfoilModelCache";
+import { getCloudModelProviders, setTinfoilModelOverlay } from "./cloudModelCatalog";
 import { filterMeetingStreamingProviders } from "../helpers/meetingTranscriptionRouting";
 import type { InferenceMode } from "../types/electron";
 
@@ -145,11 +145,6 @@ function getTinfoilCloudProvider(): CloudProviderData | undefined {
   return modelRegistry.getCloudProviders().find((provider) => provider.id === "tinfoil");
 }
 
-const cachedTinfoilModels = readCachedTinfoilModels().models;
-let tinfoilOverlay: CloudModelDefinition[] | null = cachedTinfoilModels.length
-  ? cachedTinfoilModels
-  : null;
-
 class ModelRegistry {
   private static instance: ModelRegistry;
   private providers = new Map<string, ModelProvider>();
@@ -199,11 +194,7 @@ class ModelRegistry {
   }
 
   getCloudProviders(): CloudProviderData[] {
-    return modelData.cloudProviders.map((provider) =>
-      provider.id === "tinfoil" && tinfoilOverlay
-        ? { ...provider, models: tinfoilOverlay }
-        : provider
-    );
+    return getCloudModelProviders();
   }
 
   getEnterpriseProviders(): EnterpriseProviderData[] {
@@ -329,7 +320,7 @@ export function getCloudProviderDefaultModelId(providerId: string): string | und
 }
 
 export function applyTinfoilModels(models: CloudModelDefinition[]): void {
-  tinfoilOverlay = models;
+  setTinfoilModelOverlay(models);
   const reasoningProvider = REASONING_PROVIDERS.tinfoil;
   if (reasoningProvider) {
     reasoningProvider.models = models.map(toReasoningModel);

@@ -11579,10 +11579,20 @@ class IPCHandlers {
       return streaming;
     };
 
-    // What a Gemini connection authenticated with: a managed one never serves a
-    // BYOK start or the reverse, and a BYOK one is not reused after a key save.
+    // Managed tokens are constrained to the server's existing model. BYOK can
+    // select newly published compatible models, each requiring its own socket.
+    const geminiConnectionModel = (options) =>
+      options.mode === "byok" &&
+      typeof options.model === "string" &&
+      options.model.startsWith("gemini-")
+        ? options.model
+        : GEMINI_LIVE_MODEL;
+    // A warm socket cannot cross credentials, modes, or selected models.
     const geminiConnectionKey = (options) =>
-      options.mode === "byok" ? `byok:${credentialGeneration}` : "managed";
+      JSON.stringify([
+        options.mode === "byok" ? `byok:${credentialGeneration}` : "managed",
+        geminiConnectionModel(options),
+      ]);
 
     const connectGeminiStreaming = (event, options) => {
       if (geminiConnectInFlight) return geminiConnectInFlight;
@@ -11598,6 +11608,7 @@ class IPCHandlers {
         const token = await fetchRealtimeToken(event, tokenOptions);
         await streaming.connect({
           ...options,
+          model: geminiConnectionModel(options),
           token,
           refreshToken: () => fetchRealtimeToken(event, tokenOptions),
         });

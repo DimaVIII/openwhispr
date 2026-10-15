@@ -150,7 +150,8 @@ import {
   isSelectionQuestionResponse,
 } from "./selectionEditing";
 import {
-  REALTIME_MODELS,
+  isOpenAiRealtimeSelection,
+  isGeminiLiveSelection,
   defaultStreamingProviderName,
   orukeetDetectedLanguageFields,
   resolveManagedOrukeetRoute,
@@ -4525,9 +4526,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     // Gemini Live streams over its own WSS on either credential; the batch
     // Gemini model on the same provider stays on HTTP.
     if (s.cloudTranscriptionProvider === "gemini") {
-      const provider = getTranscriptionProvider("gemini");
-      const model = provider?.models.find((m) => m.id === s.cloudTranscriptionModel);
-      if (!model?.streaming) return false;
+      if (!isGeminiLiveSelection(s)) return false;
       if (s.cloudTranscriptionMode === "byok") return !!s.geminiApiKey;
       return !!(isSignedInOverride ?? s.isSignedIn);
     }
@@ -4549,7 +4548,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       return false;
     }
 
-    if (REALTIME_MODELS.has(s.cloudTranscriptionModel)) {
+    if (isOpenAiRealtimeSelection(s)) {
       // Realtime WS is OpenAI-only — other providers fall through to HTTP.
       if ((s.cloudTranscriptionProvider || "openai") !== "openai") return false;
       if (s.cloudTranscriptionMode === "byok") return !!s.openaiApiKey;

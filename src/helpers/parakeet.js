@@ -405,7 +405,9 @@ class ParakeetManager {
         });
       }
 
-      if (modelConfig.sha256) await validateModelArchive(archivePath, modelConfig.extractDir);
+      if (modelConfig.sha256)
+        await validateModelArchive(archivePath, modelConfig.extractDir, signal);
+      if (signal.aborted) throw Object.assign(new Error("Download cancelled"), { isAbort: true });
       downloadProcess.phase = "installing";
       downloadProcess.percentage = 100;
       if (progressCallback) {
@@ -467,7 +469,7 @@ class ParakeetManager {
 
       return { model: modelName, downloaded: true, path: modelPath, success: true };
     } catch (error) {
-      if (error.isAbort) {
+      if (error.isAbort || signal.aborted) {
         await fsPromises.unlink(archivePath).catch(() => {});
         throw Object.assign(new Error("Download interrupted by user"), {
           code: "DOWNLOAD_CANCELLED",

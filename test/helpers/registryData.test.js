@@ -64,6 +64,14 @@ test("one atomic update reaches CJS helpers, ESM readers and derived model lists
     );
     assert.ok(routing.REALTIME_MODELS.has("registry-realtime"));
     assert.equal(
+      routing.isOpenAiRealtimeSelection({
+        cloudTranscriptionModel: "registry-realtime",
+        cloudTranscriptionMode: "openwhispr",
+        cloudTranscriptionProvider: "openai",
+      }),
+      false
+    );
+    assert.equal(
       routing.resolveStreamingProviderName({
         settings: {
           cloudTranscriptionProvider: "openai",

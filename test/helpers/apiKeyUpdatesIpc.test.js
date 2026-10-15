@@ -405,6 +405,39 @@ test("gemini: a warm socket never crosses between managed and BYOK", async (t) =
   assert.equal(target.geminiStreaming.token, "token-Bearer account");
 });
 
+for (const inFlight of [false, true]) {
+  test(`gemini: changing the live model replaces a ${inFlight ? "connecting" : "ready"} warm socket`, async (t) => {
+    target.geminiStreaming = null;
+    invoke("save-gemini-key", "A");
+    const originalConnect = FakeStreaming.prototype.connect;
+    const entered = deferred();
+    const gate = deferred();
+    t.after(() => {
+      FakeStreaming.prototype.connect = originalConnect;
+      gate.resolve();
+    });
+    FakeStreaming.prototype.connect = async function (options) {
+      this.currentModel = options.model;
+      if (options.model === "gemini-old-live") {
+        entered.resolve();
+        if (inFlight) await gate.promise;
+      }
+      return originalConnect.call(this, options);
+    };
+    const warmup = invoke("gemini-streaming-warmup", { mode: "byok", model: "gemini-old-live" });
+    await entered.promise;
+    if (!inFlight) await warmup;
+    const start = invoke("gemini-streaming-start", { mode: "byok", model: "gemini-next-live" });
+    gate.resolve();
+    await warmup;
+    const result = await start;
+    assert.equal(result.success, true);
+    assert.equal(result.usedWarmConnection, false);
+    assert.equal(target.geminiStreaming.currentModel, "gemini-next-live");
+    await invoke("gemini-streaming-stop");
+  });
+}
+
 // Tinfoil reads the saved key whatever the transcription mode says.
 for (const [provider, saveChannel, mode] of [
   ["openai-realtime", "save-openai-key", "byok"],

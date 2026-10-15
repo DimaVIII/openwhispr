@@ -459,7 +459,9 @@ export default function ReasoningModelSelector({
   })();
 
   useEffect(() => {
-    const localProviderIds = localProviders.map((p) => p.id);
+    // Only a committed provider change resets browsing. Catalog refreshes
+    // update model cards without jumping back to the saved provider tab.
+    const localProviderIds = modelRegistry.getAllProviders().map((p) => p.id);
     if (localProviderIds.includes(localReasoningProvider)) {
       setSelectedMode("local");
       setSelectedLocalProvider(localReasoningProvider);
@@ -467,7 +469,7 @@ export default function ReasoningModelSelector({
       setSelectedMode("cloud");
       setSelectedCloudProvider(localReasoningProvider);
     }
-  }, [localProviders, localReasoningProvider]);
+  }, [localReasoningProvider]);
 
   // A selection commits only on an explicit click: the model together with
   // the provider tab it was clicked under. Tab switching is pure browsing.

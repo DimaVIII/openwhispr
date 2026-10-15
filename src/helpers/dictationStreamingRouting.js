@@ -65,7 +65,14 @@ export function isRegistryStreamingModel(providerId, modelId) {
       ?.models.some((model) => model.id === modelId && model.streaming) ?? false
   );
 }
+const MANAGED_REALTIME_MODELS = new Set(["gpt-4o-mini-transcribe", "gpt-4o-transcribe"]);
 export const REALTIME_MODELS = new Set();
+export function isOpenAiRealtimeSelection(settings) {
+  return settings.cloudTranscriptionMode === "byok"
+    ? (settings.cloudTranscriptionProvider || "openai") === "openai" &&
+        REALTIME_MODELS.has(settings.cloudTranscriptionModel)
+    : MANAGED_REALTIME_MODELS.has(settings.cloudTranscriptionModel);
+}
 function refreshRealtimeModels() {
   REALTIME_MODELS.clear();
   for (const model of modelRegistryData.transcriptionProviders.find(
@@ -81,6 +88,15 @@ subscribeRegistry(refreshRealtimeModels);
 // Gemini's live model routes on its own. Keying on the model id and not the
 // provider is required: the batch model on the same provider is HTTP-only.
 export const GEMINI_LIVE_MODEL = "gemini-3.5-transcribe-live";
+
+export function isGeminiLiveSelection(settings) {
+  return (
+    settings.cloudTranscriptionProvider === "gemini" &&
+    (settings.cloudTranscriptionMode === "byok"
+      ? isRegistryStreamingModel("gemini", settings.cloudTranscriptionModel)
+      : settings.cloudTranscriptionModel === GEMINI_LIVE_MODEL)
+  );
+}
 
 export function defaultStreamingProviderName(context) {
   return context === "notes" ? "deepgram" : "openai-realtime";
@@ -121,10 +137,7 @@ export function resolveStreamingProviderName({ settings, context, sttConfig, lan
   ) {
     return "corti";
   }
-  if (
-    settings.cloudTranscriptionProvider === "gemini" &&
-    isRegistryStreamingModel("gemini", settings.cloudTranscriptionModel)
-  ) {
+  if (isGeminiLiveSelection(settings)) {
     return "gemini";
   }
   // Realtime-only providers have no batch endpoint, so BYOK selection alone
@@ -137,10 +150,7 @@ export function resolveStreamingProviderName({ settings, context, sttConfig, lan
   ) {
     return settings.cloudTranscriptionProvider;
   }
-  if (
-    REALTIME_MODELS.has(settings.cloudTranscriptionModel) &&
-    (settings.cloudTranscriptionMode !== "byok" || settings.cloudTranscriptionProvider === "openai")
-  ) {
+  if (isOpenAiRealtimeSelection(settings)) {
     return "openai-realtime";
   }
   return sttConfig?.streamingProvider || defaultStreamingProviderName(context);
