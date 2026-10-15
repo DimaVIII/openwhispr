@@ -1073,7 +1073,6 @@ export default function TranscriptionModelPicker({
 
   const providerCredentials =
     PROVIDER_CREDENTIALS[displayedCloudProvider] ?? PROVIDER_CREDENTIALS.openai;
-  // Credential fields show what is typed; the store gets it once saved (useCredentialDraft).
   const keyDraft = useCredentialDraft();
   const credentialValues: Record<ProviderCredentialField["key"], string> = {
     openaiApiKey: keyDraft.value("openaiApiKey", openaiApiKey),
