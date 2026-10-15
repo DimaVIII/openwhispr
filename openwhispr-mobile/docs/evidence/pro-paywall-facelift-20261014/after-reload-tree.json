@@ -1044,18 +1044,18 @@
                 {
                   "id": "node:XFF_K3FCQ7_GD452iNZFM",
                   "type": "text",
-                  "name": "\u221e",
+                  "name": "∞",
                   "parentId": "node:DYjyCSx3HbcTAyyXjaMcy",
                   "index": "a1V",
                   "childCount": 0,
                   "children": [],
-                  "textContent": "\u221e",
+                  "textContent": "∞",
                   "properties": {
                     "prop:text": {
                       "type": "literal",
                       "value": {
                         "type": "property-text",
-                        "value": "\u221e",
+                        "value": "∞",
                         "rendering": {
                           "type": "literal"
                         }
@@ -1824,18 +1824,18 @@
                 {
                   "id": "node:axkkp2_gXDSl-jlYO6L5p",
                   "type": "text",
-                  "name": "\u2713",
+                  "name": "✓",
                   "parentId": "node:3PXWburSnGB9U7d4po6Co",
                   "index": "a0",
                   "childCount": 0,
                   "children": [],
-                  "textContent": "\u2713",
+                  "textContent": "✓",
                   "properties": {
                     "prop:text": {
                       "type": "literal",
                       "value": {
                         "type": "property-text",
-                        "value": "\u2713",
+                        "value": "✓",
                         "rendering": {
                           "type": "literal"
                         }
@@ -1982,18 +1982,18 @@
                 {
                   "id": "node:j3bMqs8Psn7rVn9mbS4Oc",
                   "type": "text",
-                  "name": "\u2713",
+                  "name": "✓",
                   "parentId": "node:Cmtn_VvDK7hqGgsLPF1QI",
                   "index": "a0",
                   "childCount": 0,
                   "children": [],
-                  "textContent": "\u2713",
+                  "textContent": "✓",
                   "properties": {
                     "prop:text": {
                       "type": "literal",
                       "value": {
                         "type": "property-text",
-                        "value": "\u2713",
+                        "value": "✓",
                         "rendering": {
                           "type": "literal"
                         }
@@ -2140,18 +2140,18 @@
                 {
                   "id": "node:udU_WEo5eCJFcicMoCoJb",
                   "type": "text",
-                  "name": "\u2662",
+                  "name": "♢",
                   "parentId": "node:ROyg96QGCZFBloVcx4116",
                   "index": "a0",
                   "childCount": 0,
                   "children": [],
-                  "textContent": "\u2662",
+                  "textContent": "♢",
                   "properties": {
                     "prop:text": {
                       "type": "literal",
                       "value": {
                         "type": "property-text",
-                        "value": "\u2662",
+                        "value": "♢",
                         "rendering": {
                           "type": "literal"
                         }
@@ -2340,18 +2340,18 @@
                 {
                   "id": "node:K4cjhQFiZFoySJAVuxFOe",
                   "type": "text",
-                  "name": "\u2662",
+                  "name": "♢",
                   "parentId": "node:tHcGw_rNxTyvpCNEIwkh-",
                   "index": "a0",
                   "childCount": 0,
                   "children": [],
-                  "textContent": "\u2662",
+                  "textContent": "♢",
                   "properties": {
                     "prop:text": {
                       "type": "literal",
                       "value": {
                         "type": "property-text",
-                        "value": "\u2662",
+                        "value": "♢",
                         "rendering": {
                           "type": "literal"
                         }
@@ -3796,18 +3796,18 @@
                 {
                   "id": "node:lCMCogCNPxQEAC4avnyt_",
                   "type": "text",
-                  "name": "\u2713",
+                  "name": "✓",
                   "parentId": "node:SzRzaMlFw0_WBc6C8pSZM",
                   "index": "a4",
                   "childCount": 0,
                   "children": [],
-                  "textContent": "\u2713",
+                  "textContent": "✓",
                   "properties": {
                     "prop:text": {
                       "type": "literal",
                       "value": {
                         "type": "property-text",
-                        "value": "\u2713",
+                        "value": "✓",
                         "rendering": {
                           "type": "literal"
                         }
@@ -5383,18 +5383,18 @@
                 {
                   "id": "node:907XLXHZG-qbGR8DSXozD",
                   "type": "text",
-                  "name": "\u2713",
+                  "name": "✓",
                   "parentId": "node:EsHbdoWc3qLWcugWGSGwB",
                   "index": "a5",
                   "childCount": 0,
                   "children": [],
-                  "textContent": "\u2713",
+                  "textContent": "✓",
                   "properties": {
                     "prop:text": {
                       "type": "literal",
                       "value": {
                         "type": "property-text",
-                        "value": "\u2713",
+                        "value": "✓",
                         "rendering": {
                           "type": "literal"
                         }
@@ -6482,7 +6482,7 @@
                                     "type": "literal",
                                     "value": {
                                       "type": "property-text",
-                                      "value": "Checking\u2026",
+                                      "value": "Checking…",
                                       "rendering": {
                                         "type": "literal"
                                       }
@@ -7078,13 +7078,13 @@
                   "index": "a2",
                   "childCount": 0,
                   "children": [],
-                  "textContent": "Your first valid creator code is saved to your account and can\u2019t be changed.",
+                  "textContent": "Your first valid creator code is saved to your account and can’t be changed.",
                   "properties": {
                     "prop:text": {
                       "type": "literal",
                       "value": {
                         "type": "property-text",
-                        "value": "Your first valid creator code is saved to your account and can\u2019t be changed.",
+                        "value": "Your first valid creator code is saved to your account and can’t be changed.",
                         "rendering": {
                           "type": "literal"
                         }
@@ -7533,13 +7533,13 @@
               "index": "a2",
               "childCount": 0,
               "children": [],
-              "textContent": "Checking your code\u2026",
+              "textContent": "Checking your code…",
               "properties": {
                 "prop:text": {
                   "type": "literal",
                   "value": {
                     "type": "property-text",
-                    "value": "Checking your code\u2026",
+                    "value": "Checking your code…",
                     "rendering": {
                       "type": "literal"
                     }
@@ -8509,17 +8509,28 @@
                   "index": "a0",
                   "childCount": 0,
                   "children": [],
-                  "textContent": "Couldn\u2019t verify this code.",
+                  "textContent": "Code wasn’t applied.",
                   "properties": {
                     "prop:text": {
-                      "type": "literal",
-                      "value": {
-                        "type": "property-text",
-                        "value": "Couldn\u2019t verify this code.",
-                        "rendering": {
-                          "type": "literal"
+                      "type": "conditional",
+                      "options": [
+                        {
+                          "query": {
+                            "combinator": "and",
+                            "rules": []
+                          },
+                          "value": {
+                            "type": "literal",
+                            "value": {
+                              "type": "property-text",
+                              "value": "Code wasn’t applied.",
+                              "rendering": {
+                                "type": "literal"
+                              }
+                            }
+                          }
                         }
-                      }
+                      ]
                     },
                     "css:fontSize": {
                       "type": "literal",
@@ -8870,8 +8881,8 @@
                       "type": "literal",
                       "value": {
                         "type": "css-length",
-                        "value": "auto",
-                        "unit": "none"
+                        "value": "100",
+                        "unit": "%"
                       }
                     },
                     "prop:custom-css": {
@@ -8898,13 +8909,13 @@
                   "index": "a1",
                   "childCount": 0,
                   "children": [],
-                  "textContent": "A monthly offer isn\u2019t available right now.",
+                  "textContent": "A monthly offer isn’t available right now.",
                   "properties": {
                     "prop:text": {
                       "type": "literal",
                       "value": {
                         "type": "property-text",
-                        "value": "A monthly offer isn\u2019t available right now.",
+                        "value": "A monthly offer isn’t available right now.",
                         "rendering": {
                           "type": "literal"
                         }
@@ -8989,8 +9000,8 @@
                       "type": "literal",
                       "value": {
                         "type": "css-length",
-                        "value": "auto",
-                        "unit": "none"
+                        "value": "100",
+                        "unit": "%"
                       }
                     },
                     "prop:custom-css": {
@@ -9012,7 +9023,7 @@
                 {
                   "id": "node:9GmjDdt6iqbDhlzQ9C_RL",
                   "type": "text",
-                  "name": "Text",
+                  "name": "Retired Continue without code",
                   "parentId": "node:12H0udDUnq-eSu5ILpd5S",
                   "index": "a2",
                   "childCount": 0,
@@ -9079,301 +9090,6 @@
                     "css:display": {
                       "type": "conditional",
                       "options": [
-                        {
-                          "query": {
-                            "combinator": "or",
-                            "rules": [
-                              {
-                                "combinator": "and",
-                                "rules": [
-                                  {
-                                    "id": "rule:d34cb480",
-                                    "field": "state:state.creatorPhase",
-                                    "operator": "=",
-                                    "valueSource": "value",
-                                    "value": {
-                                      "type": "variable-string",
-                                      "value": "resolved"
-                                    }
-                                  },
-                                  {
-                                    "combinator": "and",
-                                    "rules": [
-                                      {
-                                        "id": "rule:0569ce4b",
-                                        "field": "state:callbacks.creatorCodeApply.data.priceText",
-                                        "operator": "!=",
-                                        "valueSource": "value",
-                                        "value": {
-                                          "type": "variable-string",
-                                          "value": ""
-                                        }
-                                      },
-                                      {
-                                        "id": "rule:8fc457c7",
-                                        "field": "state:callbacks.creatorCodeApply.data.priceText",
-                                        "operator": "contains",
-                                        "valueSource": "value",
-                                        "value": {
-                                          "type": "variable-string",
-                                          "value": ""
-                                        }
-                                      }
-                                    ]
-                                  },
-                                  {
-                                    "combinator": "and",
-                                    "rules": [
-                                      {
-                                        "id": "rule:a2caf60f",
-                                        "field": "state:callbacks.creatorCodeApply.data.renewalText",
-                                        "operator": "!=",
-                                        "valueSource": "value",
-                                        "value": {
-                                          "type": "variable-string",
-                                          "value": ""
-                                        }
-                                      },
-                                      {
-                                        "id": "rule:61fd2f82",
-                                        "field": "state:callbacks.creatorCodeApply.data.renewalText",
-                                        "operator": "contains",
-                                        "valueSource": "value",
-                                        "value": {
-                                          "type": "variable-string",
-                                          "value": ""
-                                        }
-                                      }
-                                    ]
-                                  },
-                                  {
-                                    "combinator": "and",
-                                    "rules": [
-                                      {
-                                        "id": "rule:f78a8c7c",
-                                        "field": "state:callbacks.creatorCodeApply.data.offerToken",
-                                        "operator": "!=",
-                                        "valueSource": "value",
-                                        "value": {
-                                          "type": "variable-string",
-                                          "value": ""
-                                        }
-                                      },
-                                      {
-                                        "id": "rule:6af02859",
-                                        "field": "state:callbacks.creatorCodeApply.data.offerToken",
-                                        "operator": "contains",
-                                        "valueSource": "value",
-                                        "value": {
-                                          "type": "variable-string",
-                                          "value": ""
-                                        }
-                                      }
-                                    ]
-                                  }
-                                ]
-                              },
-                              {
-                                "combinator": "and",
-                                "rules": [
-                                  {
-                                    "combinator": "and",
-                                    "rules": [
-                                      {
-                                        "id": "rule:3105fded",
-                                        "field": "state:state.creatorPhase",
-                                        "operator": "=",
-                                        "valueSource": "value",
-                                        "value": {
-                                          "type": "variable-string",
-                                          "value": "empty"
-                                        }
-                                      },
-                                      {
-                                        "id": "rule:4525d351",
-                                        "field": "state:state.regularMonthlyChosen",
-                                        "operator": "=",
-                                        "valueSource": "value",
-                                        "value": {
-                                          "type": "variable-boolean",
-                                          "value": false
-                                        }
-                                      },
-                                      {
-                                        "id": "rule:031ddd73",
-                                        "field": "state:params.creator_offer_ready",
-                                        "operator": "=",
-                                        "valueSource": "value",
-                                        "value": {
-                                          "type": "variable-boolean",
-                                          "value": true
-                                        }
-                                      }
-                                    ]
-                                  },
-                                  {
-                                    "combinator": "and",
-                                    "rules": [
-                                      {
-                                        "id": "rule:98064c2e",
-                                        "field": "state:params.creator_offer_price",
-                                        "operator": "!=",
-                                        "valueSource": "value",
-                                        "value": {
-                                          "type": "variable-string",
-                                          "value": ""
-                                        }
-                                      },
-                                      {
-                                        "id": "rule:a9ed0f1d",
-                                        "field": "state:params.creator_offer_price",
-                                        "operator": "contains",
-                                        "valueSource": "value",
-                                        "value": {
-                                          "type": "variable-string",
-                                          "value": ""
-                                        }
-                                      }
-                                    ]
-                                  },
-                                  {
-                                    "combinator": "and",
-                                    "rules": [
-                                      {
-                                        "id": "rule:9dfc6f4f",
-                                        "field": "state:params.creator_offer_renewal",
-                                        "operator": "!=",
-                                        "valueSource": "value",
-                                        "value": {
-                                          "type": "variable-string",
-                                          "value": ""
-                                        }
-                                      },
-                                      {
-                                        "id": "rule:c579a4a7",
-                                        "field": "state:params.creator_offer_renewal",
-                                        "operator": "contains",
-                                        "valueSource": "value",
-                                        "value": {
-                                          "type": "variable-string",
-                                          "value": ""
-                                        }
-                                      }
-                                    ]
-                                  },
-                                  {
-                                    "combinator": "and",
-                                    "rules": [
-                                      {
-                                        "id": "rule:41e60b4e",
-                                        "field": "state:params.creator_offer_token",
-                                        "operator": "!=",
-                                        "valueSource": "value",
-                                        "value": {
-                                          "type": "variable-string",
-                                          "value": ""
-                                        }
-                                      },
-                                      {
-                                        "id": "rule:c7581258",
-                                        "field": "state:params.creator_offer_token",
-                                        "operator": "contains",
-                                        "valueSource": "value",
-                                        "value": {
-                                          "type": "variable-string",
-                                          "value": ""
-                                        }
-                                      }
-                                    ]
-                                  }
-                                ]
-                              }
-                            ]
-                          },
-                          "value": {
-                            "type": "literal",
-                            "value": {
-                              "type": "css-string",
-                              "value": "none",
-                              "cssEnumHint": "css-display"
-                            }
-                          }
-                        },
-                        {
-                          "query": {
-                            "combinator": "or",
-                            "rules": [
-                              {
-                                "combinator": "or",
-                                "rules": [
-                                  {
-                                    "id": "rule:60b96e3e",
-                                    "field": "state:state.creatorPhase",
-                                    "operator": "=",
-                                    "valueSource": "value",
-                                    "value": {
-                                      "type": "variable-string",
-                                      "value": "resolved"
-                                    }
-                                  },
-                                  {
-                                    "combinator": "and",
-                                    "rules": [
-                                      {
-                                        "id": "rule:f3394e87",
-                                        "field": "state:state.creatorPhase",
-                                        "operator": "=",
-                                        "valueSource": "value",
-                                        "value": {
-                                          "type": "variable-string",
-                                          "value": "empty"
-                                        }
-                                      },
-                                      {
-                                        "id": "rule:c65b2666",
-                                        "field": "state:state.regularMonthlyChosen",
-                                        "operator": "=",
-                                        "valueSource": "value",
-                                        "value": {
-                                          "type": "variable-boolean",
-                                          "value": false
-                                        }
-                                      },
-                                      {
-                                        "id": "rule:f956291c",
-                                        "field": "state:params.creator_offer_ready",
-                                        "operator": "=",
-                                        "valueSource": "value",
-                                        "value": {
-                                          "type": "variable-boolean",
-                                          "value": true
-                                        }
-                                      }
-                                    ]
-                                  }
-                                ]
-                              },
-                              {
-                                "id": "rule:1fc1ce9e",
-                                "field": "state:state.creatorPhase",
-                                "operator": "=",
-                                "valueSource": "value",
-                                "value": {
-                                  "type": "variable-string",
-                                  "value": "error"
-                                }
-                              }
-                            ]
-                          },
-                          "value": {
-                            "type": "literal",
-                            "value": {
-                              "type": "css-string",
-                              "value": "block",
-                              "cssEnumHint": "css-display"
-                            }
-                          }
-                        },
                         {
                           "query": {
                             "combinator": "and",
@@ -9842,12 +9558,12 @@
       "name": "Drawer",
       "parentId": "page:page",
       "index": "a4",
-      "childCount": 2,
+      "childCount": 3,
       "children": [
         {
           "id": "node:pDgcNxc_9Z5d3wt0IqFLe",
           "type": "stack",
-          "name": "Button",
+          "name": "Continue — default and verified offer",
           "parentId": "node:VEHCKsbpDJ99PgPaQPEYC",
           "index": "a0",
           "childCount": 1,
@@ -10611,6 +10327,403 @@
                   }
                 ]
               }
+            },
+            "css:display": {
+              "type": "conditional",
+              "options": [
+                {
+                  "query": {
+                    "combinator": "and",
+                    "rules": [
+                      {
+                        "id": "rule:41c93c81",
+                        "field": "state:products.selectedIndex",
+                        "operator": "=",
+                        "valueSource": "value",
+                        "value": {
+                          "type": "variable-number",
+                          "value": 1
+                        }
+                      },
+                      {
+                        "combinator": "or",
+                        "rules": [
+                          {
+                            "id": "rule:2caf33eb",
+                            "field": "state:state.creatorPhase",
+                            "operator": "=",
+                            "valueSource": "value",
+                            "value": {
+                              "type": "variable-string",
+                              "value": "error"
+                            }
+                          },
+                          {
+                            "id": "rule:b1206a05",
+                            "field": "state:state.creatorPhase",
+                            "operator": "=",
+                            "valueSource": "value",
+                            "value": {
+                              "type": "variable-string",
+                              "value": "unavailable"
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "value": {
+                    "type": "literal",
+                    "value": {
+                      "type": "css-string",
+                      "value": "none",
+                      "cssEnumHint": "css-display"
+                    }
+                  }
+                },
+                {
+                  "query": {
+                    "combinator": "and",
+                    "rules": []
+                  },
+                  "value": {
+                    "type": "literal",
+                    "value": {
+                      "type": "css-string",
+                      "value": "flex",
+                      "cssEnumHint": "css-display"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "node:hy2GAo37DPNF8HcA42BDN",
+          "type": "stack",
+          "name": "Continue — failed code, regular price",
+          "parentId": "node:VEHCKsbpDJ99PgPaQPEYC",
+          "index": "a0V",
+          "childCount": 1,
+          "children": [
+            {
+              "id": "node:DqQPOVr4fy3xHapxjX6H8",
+              "type": "text",
+              "name": "Text Copy",
+              "parentId": "node:hy2GAo37DPNF8HcA42BDN",
+              "index": "a1",
+              "childCount": 0,
+              "children": [],
+              "textContent": "Continue to payment",
+              "properties": {
+                "prop:text": {
+                  "type": "literal",
+                  "value": {
+                    "type": "property-text",
+                    "value": "Continue to payment",
+                    "rendering": {
+                      "type": "literal"
+                    }
+                  }
+                },
+                "css:textAlign": {
+                  "type": "literal",
+                  "value": {
+                    "type": "css-string",
+                    "value": "left"
+                  }
+                },
+                "css:fontSize": {
+                  "type": "literal",
+                  "value": {
+                    "type": "css-length",
+                    "value": "17",
+                    "unit": "px"
+                  }
+                },
+                "css:color": {
+                  "type": "conditional",
+                  "options": [
+                    {
+                      "query": {
+                        "combinator": "and",
+                        "rules": [],
+                        "id": "9a1ac533-2959-45a5-af28-07a35b6d8e34"
+                      },
+                      "value": {
+                        "type": "literal",
+                        "value": {
+                          "type": "css-color",
+                          "value": "#ffffffff"
+                        }
+                      }
+                    }
+                  ]
+                },
+                "css:font": {
+                  "type": "literal",
+                  "value": {
+                    "type": "css-font",
+                    "value": "Space Grotesk",
+                    "style": "normal",
+                    "variant": "600",
+                    "kind": "google",
+                    "url": "https://fonts.gstatic.com/s/spacegrotesk/v22/V8mQoQDjQSkFtoMM3T6r8E7mF71Q-gOoraIAEj42VksjNsFjTDJK.ttf",
+                    "weight": "600"
+                  }
+                },
+                "css:lineHeight": {
+                  "type": "literal",
+                  "value": {
+                    "type": "css-length",
+                    "value": "22",
+                    "unit": "px"
+                  }
+                }
+              }
+            }
+          ],
+          "properties": {
+            "prop:stack": {
+              "type": "literal",
+              "value": {
+                "type": "property-stack",
+                "axis": "y",
+                "reverse": false,
+                "crossAxisAlignment": "center",
+                "mainAxisDistribution": "center",
+                "wrap": "nowrap",
+                "gap": "8px"
+              }
+            },
+            "css:height": {
+              "type": "literal",
+              "value": {
+                "type": "css-length",
+                "value": "50",
+                "unit": "px"
+              }
+            },
+            "css:borderTopLeftRadius;borderTopRightRadius;borderBottomRightRadius;borderBottomLeftRadius": {
+              "type": "literal",
+              "value": {
+                "type": "css-length",
+                "value": "100",
+                "unit": "px"
+              }
+            },
+            "css:backgroundColor": {
+              "type": "literal",
+              "value": {
+                "type": "css-color",
+                "value": "#154bd4"
+              }
+            },
+            "prop:click-behavior": {
+              "type": "literal",
+              "value": {
+                "type": "property-click-behavior",
+                "animation": "scale-in-out",
+                "clickActions": [
+                  {
+                    "type": "action-execution",
+                    "id": "action:1d615a7b",
+                    "action": {
+                      "type": "purchase",
+                      "reference": {
+                        "type": "by-selected"
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "css:marginTop": {
+              "type": "literal",
+              "value": {
+                "type": "css-length",
+                "value": "0",
+                "unit": "px"
+              }
+            },
+            "css:width": {
+              "type": "literal",
+              "value": {
+                "type": "css-length",
+                "value": "100",
+                "unit": "%"
+              }
+            },
+            "css:opacity": {
+              "type": "literal",
+              "value": {
+                "type": "css-percentage",
+                "value": "100",
+                "unit": "%"
+              }
+            },
+            "css:backgroundImage": {
+              "type": "literal",
+              "value": {
+                "type": "css-background-image",
+                "functions": [
+                  {
+                    "type": "linearGradient",
+                    "angle": {
+                      "type": "css-number-unit",
+                      "value": "180",
+                      "unit": "deg"
+                    },
+                    "stops": [
+                      {
+                        "color": {
+                          "type": "css-color",
+                          "value": "#5588f0"
+                        },
+                        "position": {
+                          "type": "css-number-unit",
+                          "value": "0",
+                          "unit": "%"
+                        }
+                      },
+                      {
+                        "color": {
+                          "type": "css-color",
+                          "value": "#3466e2"
+                        },
+                        "position": {
+                          "type": "css-number-unit",
+                          "value": "100",
+                          "unit": "%"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            "css:boxShadow": {
+              "type": "literal",
+              "value": {
+                "type": "css-box-shadow",
+                "xOffset": {
+                  "type": "css-number-unit",
+                  "value": "0",
+                  "unit": "px"
+                },
+                "yOffset": {
+                  "type": "css-number-unit",
+                  "value": "1",
+                  "unit": "px"
+                },
+                "blurRadius": {
+                  "type": "css-number-unit",
+                  "value": "1",
+                  "unit": "px"
+                },
+                "spreadRadius": {
+                  "type": "css-number-unit",
+                  "value": "0",
+                  "unit": "px"
+                },
+                "color": {
+                  "type": "css-color",
+                  "value": "#ffffff66"
+                },
+                "inset": true
+              }
+            },
+            "css:minHeight": {
+              "type": "literal",
+              "value": {
+                "type": "css-length",
+                "value": "50",
+                "unit": "px"
+              }
+            },
+            "prop:custom-css": {
+              "type": "literal",
+              "value": {
+                "type": "property-custom-css",
+                "properties": [
+                  {
+                    "type": "custom-css-property",
+                    "id": "ccp-0",
+                    "property": "flex-shrink",
+                    "value": "0"
+                  }
+                ]
+              }
+            },
+            "css:display": {
+              "type": "conditional",
+              "options": [
+                {
+                  "query": {
+                    "combinator": "and",
+                    "rules": [
+                      {
+                        "id": "rule:5dff9cd8",
+                        "field": "state:products.selectedIndex",
+                        "operator": "=",
+                        "valueSource": "value",
+                        "value": {
+                          "type": "variable-number",
+                          "value": 1
+                        }
+                      },
+                      {
+                        "combinator": "or",
+                        "rules": [
+                          {
+                            "id": "rule:5cde631f",
+                            "field": "state:state.creatorPhase",
+                            "operator": "=",
+                            "valueSource": "value",
+                            "value": {
+                              "type": "variable-string",
+                              "value": "error"
+                            }
+                          },
+                          {
+                            "id": "rule:1d449579",
+                            "field": "state:state.creatorPhase",
+                            "operator": "=",
+                            "valueSource": "value",
+                            "value": {
+                              "type": "variable-string",
+                              "value": "unavailable"
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "value": {
+                    "type": "literal",
+                    "value": {
+                      "type": "css-string",
+                      "value": "flex",
+                      "cssEnumHint": "css-display"
+                    }
+                  }
+                },
+                {
+                  "query": {
+                    "combinator": "and",
+                    "rules": []
+                  },
+                  "value": {
+                    "type": "literal",
+                    "value": {
+                      "type": "css-string",
+                      "value": "none",
+                      "cssEnumHint": "css-display"
+                    }
+                  }
+                }
+              ]
             }
           }
         },
@@ -10710,13 +10823,13 @@
               "index": "a1V",
               "childCount": 0,
               "children": [],
-              "textContent": "\u00b7",
+              "textContent": "·",
               "properties": {
                 "prop:text": {
                   "type": "literal",
                   "value": {
                     "type": "property-text",
-                    "value": "\u00b7",
+                    "value": "·",
                     "rendering": {
                       "type": "literal"
                     }

@@ -1,5 +1,5 @@
 PASS all original nodes retained
-PASS all original actions byte-identical except visible-form recovery
+PASS all original actions byte-identical except retained hidden recovery
 PASS verified monthly price binding unchanged
 PASS verified renewal bindings unchanged
 PASS product identities, order and default unchanged
@@ -8,15 +8,20 @@ PASS CTA empty
 PASS CTA unchecked
 PASS CTA checking
 PASS CTA error with entered code
+PASS CTA unavailable with entered code
 PASS CTA resolved missing fields
 PASS CTA seed missing fields
 PASS CTA verified callback
 PASS CTA verified seed
 PASS CTA annual
 PASS empty apply and duplicate checking apply are blocked
-PASS recovery clears input and keeps new entries guarded
+PASS regular-price fallback uses the unchanged selected-product purchase action
+PASS failed-state CTA retains the original visible label and dimensions
 PASS readonly applied field uses original complete-offer condition
 PASS blue design asset and transparent panels are present
-KNOWN BASELINE GAP: error + manually empty input permits ordinary purchase; no transaction executed.
-KNOWN BASELINE GAP: unavailable + manually empty input permits ordinary purchase; no transaction executed.
-19 contract checks passed; 2 pre-existing guard gaps remain. This is exported-configuration evidence, not native/storefront acceptance.
+PASS error + cleared code uses catalog price even with stale offer data
+PASS error + retained code uses catalog price even with stale offer data
+PASS unavailable + cleared code uses catalog price even with stale offer data
+PASS unavailable + retained code uses catalog price even with stale offer data
+PASS one visible CTA across both plans and all creator phases
+26 contract checks passed. Approved UI fallback policy verified; native purchase implementation is unchanged.
