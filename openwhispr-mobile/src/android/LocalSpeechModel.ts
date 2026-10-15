@@ -4,6 +4,7 @@ import { LocalTextModel } from './LocalTextModel';
 import { withAndroidInference } from './inferenceQueue';
 import { tokenTimingsToWhisperSegments } from '@/services/transcription/parakeetSegments';
 import type { TranscriptionResponse } from '@/types';
+import i18n from './strings';
 
 export const PARAKEET_LANGUAGES = new Set([
   'bg',
@@ -40,18 +41,16 @@ export const LocalSpeechModel = {
   ): Promise<TranscriptionResponse> {
     const job = generation;
     return withAndroidInference(async () => {
-      if (job !== generation) throw new Error('Dictation cancelled.');
+      if (job !== generation) throw new Error(i18n.t('cancelled'));
       const language = options.language?.toLowerCase().split(/[-_]/)[0];
       if (language && language !== 'auto' && !PARAKEET_LANGUAGES.has(language))
-        throw new Error(
-          'Parakeet supports 25 European languages. Choose a supported language or a cloud/provider workflow for this language.',
-        );
-      if (!(await modelReady('parakeet-v3')))
-        throw new Error('Parakeet model is not available. Please download it first from Models.');
+        throw new Error(i18n.t('unsupportedLanguage'));
+      if (!(await modelReady('parakeet-v3'))) throw new Error(i18n.t('speechUnavailable'));
       await LocalTextModel.release();
-      if (job !== generation) throw new Error('Dictation cancelled.');
+      if (job !== generation) throw new Error(i18n.t('cancelled'));
+      // The native engine decodes compressed uploads and owns its temporary PCM file.
       const result = await AndroidDictation!.transcribeParakeet(uri, modelPath('parakeet-v3'));
-      if (job !== generation) throw new Error('Dictation cancelled.');
+      if (job !== generation) throw new Error(i18n.t('cancelled'));
       if (__DEV__)
         console.log(`[android-speech] model=parakeet-v3 elapsedMs=${result.processingMs}`);
       return {

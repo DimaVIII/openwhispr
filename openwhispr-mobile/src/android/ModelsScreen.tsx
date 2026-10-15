@@ -9,6 +9,7 @@ import {
   modelReady,
   downloadAndroidModel,
   cancelAndroidDownload,
+  removeAndroidModel,
   useModelDownloads,
   type AndroidModelId,
 } from './models';
@@ -17,6 +18,7 @@ export function ModelsContent({ onNavigate }: { onNavigate?: () => void } = {}) 
   const { t } = useTranslation();
   const config = useConfigStore((s) => s.config);
   const [ready, setReady] = useState<Partial<Record<AndroidModelId, boolean>>>({});
+  const [removing, setRemoving] = useState(false);
   const progress = useModelDownloads((state) => state.progress);
   const activeDownloads = Object.keys(progress).sort().join(',');
   const refresh = async () => {
@@ -37,6 +39,17 @@ export function ModelsContent({ onNavigate }: { onNavigate?: () => void } = {}) 
       await refresh();
     } catch (error) {
       Alert.alert(t('errorTitle'), (error as Error).message);
+    }
+  };
+  const remove = async (id: AndroidModelId) => {
+    setRemoving(true);
+    try {
+      await removeAndroidModel(id);
+      await refresh();
+    } catch (error) {
+      Alert.alert(t('errorTitle'), (error as Error).message);
+    } finally {
+      setRemoving(false);
     }
   };
   return (
@@ -91,22 +104,42 @@ export function ModelsContent({ onNavigate }: { onNavigate?: () => void } = {}) 
                       />
                     </>
                   ) : ready[id] ? (
-                    <Button
-                      secondary
-                      disabled={chosen}
-                      label={t(chosen ? 'selected' : 'choose')}
-                      onPress={() => {
-                        useConfigStore
-                          .getState()
-                          .updateConfig(
-                            kind === 'speech'
-                              ? { androidSpeechModel: id as 'parakeet-v3' }
-                              : { androidTextModel: id as 'qwen-small' | 'qwen-balanced' },
-                          );
-                      }}
-                    />
+                    <>
+                      <Button
+                        secondary
+                        disabled={chosen || removing}
+                        label={t(chosen ? 'selected' : 'choose')}
+                        onPress={() => {
+                          useConfigStore
+                            .getState()
+                            .updateConfig(
+                              kind === 'speech'
+                                ? { androidSpeechModel: id as 'parakeet-v3' }
+                                : { androidTextModel: id as 'qwen-small' | 'qwen-balanced' },
+                            );
+                        }}
+                      />
+                      <Button
+                        secondary
+                        disabled={removing}
+                        label={t('removeModel')}
+                        onPress={() => {
+                          Alert.alert(model.title, t('removeModelConfirm'), [
+                            { text: t('cancel'), style: 'cancel' },
+                            {
+                              text: t('removeModel'),
+                              style: 'destructive',
+                              onPress: () => {
+                                void remove(id);
+                              },
+                            },
+                          ]);
+                        }}
+                      />
+                    </>
                   ) : (
                     <Button
+                      disabled={removing}
                       label={t('download')}
                       onPress={() => {
                         void download(id);

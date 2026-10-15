@@ -16,6 +16,8 @@ adb install -r android/app/build/outputs/apk/release/app-release.apk
 
 The script prebuilds the development application ID (`com.gizmolabs.openwhispr.dev`), disables production OTA updates and builds an ARM64 APK with its JavaScript bundled. No Metro connection should be required. This is a development signing configuration, not a Play release. Keep the resulting APK outside generated build directories before cleaning them.
 
+The Android bundle-input plugin explicitly tracks `src/android` and `src/locales`: React Native's default input tree excludes directories named `android` and omits JSON. Keep this plugin enabled so incremental APK builds include current Android code and translations.
+
 Gradle compiles the speech-only Sherpa JNI from pinned source on its first run. Downloads and compilation are cached in the Gradle user directory; the APK does not contain model weights. Models download inside the app and activate only after exact size and SHA-256 verification. Download Parakeet v3 and Qwen2.5 1.5B (Balanced) for the tested local pairing. The light text model is available but did not translate the tutorial reliably in the initial check.
 
 For development with Fast Refresh:
@@ -34,6 +36,8 @@ Choose the explicit local workspace route to use local processing without signin
 Enable overlay and text insertion through Bubble & permissions and Android's normal consent screens. Enabling the bubble asks for microphone permission, and notification permission on Android 13+. Recording starts only from a user gesture. Password fields are excluded; if the original field or selection changes, the result is preserved in Home instead of writing into another field. Disable the bubble from that settings screen or its close button.
 
 For unattended testing, keep emulator host microphone input off and use **Use an audio file** with explicitly identified synthetic/prerecorded audio. File inference, silent recorder lifecycle and cross-process insertion tests are separate checks; none proves physical-phone speech quality, thermals or battery behavior.
+
+Development builds log text-model loading and generation timings under `android-reasoning`, without logging the prompt or result. Native CPU thread selection uses the runtime defaults with strict affinity disabled. Final packaged-build latency still needs verification; some earlier cleanup runs timed out. Failed cleanup preserves a recoverable raw transcript in Home. The smaller text model can also miss formatting instructions.
 
 ## Checks
 

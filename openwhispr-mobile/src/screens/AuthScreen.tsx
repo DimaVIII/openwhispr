@@ -248,7 +248,7 @@ export default function AuthScreen({
           {onClose ? (
             <Pressable
               onPress={onClose}
-              style={styles.closeButton}
+              style={[styles.closeButton, Platform.OS === 'android' && { top: insets.top + 18 }]}
               accessibilityRole="button"
               accessibilityLabel="Close sign in"
               hitSlop={8}

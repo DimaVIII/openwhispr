@@ -14,6 +14,7 @@ export interface BubbleStatus {
   microphone: boolean;
 }
 interface NativeDictation {
+  getLocale(): string;
   getStatus(): BubbleStatus;
   openSettings(kind: 'overlay' | 'accessibility' | 'battery' | 'app'): void;
   setEnabled(enabled: boolean, size: number): void;

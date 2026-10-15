@@ -5,12 +5,13 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { useConfigStore } from '@/store/useConfigStore';
 import { useSyncStore } from '@/sync/useSyncStore';
 import { requestSync } from '@/sync/syncEngine';
+import { requiresRealAccount } from '@/lib/accountAccess';
 import { Page, Card, Button, styles } from '@/android/ui';
 
 export default function PrivacyDataScreen() {
   const { t } = useTranslation();
   const config = useConfigStore((state) => state.config);
-  const signedIn = useAuthStore((state) => Boolean(state.user && !state.isGuest));
+  const signedIn = useAuthStore((state) => !requiresRealAccount(state.user));
   const sync = useSyncStore();
   const update = async (change: {
     cloudBackupEnabled?: boolean;

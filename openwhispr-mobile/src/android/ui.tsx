@@ -117,11 +117,13 @@ export function Page({
   title,
   children,
   back = false,
+  showAccount = true,
   footer,
 }: {
   title: string;
   children: React.ReactNode;
   back?: boolean;
+  showAccount?: boolean;
   footer?: React.ReactNode;
 }) {
   const { t } = useTranslation();
@@ -141,7 +143,7 @@ export function Page({
           <OpenWhisprMark size={30} color={palette.blue} />
         )}
         <Text style={{ fontSize: 17, fontWeight: '600', flex: 1 }}>{title}</Text>
-        {!back && (
+        {!back && showAccount && (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={t('account')}

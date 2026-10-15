@@ -74,6 +74,7 @@ it('does not report cleanup failure as a successful practice result', async () =
     transcription: { cleanupWarning: 'Local cleanup failed.' },
   } as never);
   await expect(run()).rejects.toThrow('Local cleanup failed.');
+  await expect(run()).rejects.toMatchObject({ transcript: 'original words' });
   expect(history.addTranscript).not.toHaveBeenCalled();
 });
 it('discards cancellation before history and any translation call', async () => {

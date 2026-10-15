@@ -43,7 +43,7 @@ export default function AndroidAccount() {
               key={days}
               accessibilityRole="button"
               onPress={() => {
-                Alert.alert(t('retention'), t('retentionHint'), [
+                Alert.alert(t('retention'), t(days < 0 ? 'retentionHint' : 'retentionConfirm'), [
                   { text: t('cancel'), style: 'cancel' },
                   {
                     text: t('save'),

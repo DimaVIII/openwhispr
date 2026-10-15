@@ -3,7 +3,12 @@ import { useBubbleResult } from './bubbleResult';
 import { useEffect } from 'react';
 import * as FileSystem from 'expo-file-system/legacy';
 import { AndroidDictation, dictationEvents } from '../../modules/android-dictation/src';
-import { createAndroidJob, processAndroidAudio, type AndroidJob } from './pipeline';
+import {
+  AndroidCleanupError,
+  createAndroidJob,
+  processAndroidAudio,
+  type AndroidJob,
+} from './pipeline';
 import { useConfigStore } from '@/store/useConfigStore';
 import { useTranslation } from 'react-i18next';
 import { router } from 'expo-router';
@@ -65,7 +70,14 @@ export function useBubblePipeline() {
         void native.setStatus(inserted ? 'success' : 'error');
       } catch (error) {
         if (!current.signal.aborted) {
-          useBubbleResult.getState().setResult('', (error as Error).message);
+          useBubbleResult
+            .getState()
+            .setResult(
+              error instanceof AndroidCleanupError ? error.transcript : '',
+              error instanceof AndroidCleanupError
+                ? i18n.t('cleanupRecovery')
+                : (error as Error).message,
+            );
           void native.setStatus('error');
         }
       } finally {

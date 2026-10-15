@@ -40,6 +40,7 @@ class AndroidDictationModule : Module() {
     AsyncFunction("releaseParakeet") { promise: Promise -> parakeet.release(promise) }
     AsyncFunction("requestProvider") { options: Map<String, Any?> -> providers.request(options) }
     Function("cancelProviderRequest") { id: String -> providers.cancel(id) }
+    Function("getLocale") { context.resources.configuration.locales[0].toLanguageTag() }
     Function("getStatus") {
       mapOf("overlay" to Settings.canDrawOverlays(context), "accessibility" to (InsertionService.instance != null),
         "enabled" to (DictationService.instance != null),
@@ -53,7 +54,8 @@ class AndroidDictationModule : Module() {
         "battery" -> Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
         else -> Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))
       }
-      context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+      // Settings may already have another page above the requested activity.
+      context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP))
     }
     Function("setEnabled") { enabled: Boolean, size: Int ->
       if (enabled) {

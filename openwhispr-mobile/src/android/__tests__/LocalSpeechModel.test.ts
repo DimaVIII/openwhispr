@@ -48,6 +48,7 @@ it('uses Parakeet with shared word timings and frees the text runtime first', as
     jest.mocked(AndroidDictation!.transcribeParakeet).mock.invocationCallOrder[0],
   );
 });
+
 it('refuses unsupported languages instead of silently sending them elsewhere', async () => {
   await expect(
     LocalSpeechModel.transcribe('file:///sample.wav', { language: 'ja' }),

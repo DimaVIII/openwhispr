@@ -1,0 +1,8 @@
+<resources>
+  <string name="ow_insertion_label">OpenWhispr · 插入文字</string>
+  <string name="ow_insertion_description">無障礙功能允許 OpenWhispr 在聽寫時讀取目前欄位並插入結果。它不會傳送訊息或讀取密碼欄位。</string>
+  <string name="ow_bubble_ready">OpenWhispr 已就緒</string>
+  <string name="ow_bubble_recording">OpenWhispr · 正在聆聽…</string>
+  <string name="ow_bubble_notice">點按開啟。在「帳戶」中關閉浮動按鈕。</string>
+  <string name="ow_bubble_channel">顯示浮動按鈕</string>
+</resources>

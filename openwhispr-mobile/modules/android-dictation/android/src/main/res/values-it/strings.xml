@@ -1,0 +1,8 @@
+<resources>
+  <string name="ow_insertion_label">OpenWhispr · Inserisci il testo</string>
+  <string name="ow_insertion_description">L’accessibilità permette a OpenWhispr di leggere il campo selezionato quando detti e inserire il risultato. Non invia mai messaggi e non legge campi password.</string>
+  <string name="ow_bubble_ready">OpenWhispr è pronto</string>
+  <string name="ow_bubble_recording">OpenWhispr · In ascolto…</string>
+  <string name="ow_bubble_notice">Tocca per aprire. Disattiva il pulsante mobile in Account.</string>
+  <string name="ow_bubble_channel">Mostra pulsante mobile</string>
+</resources>

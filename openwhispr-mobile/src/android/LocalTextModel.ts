@@ -1,13 +1,17 @@
 import { initLlama, type LlamaContext } from 'llama.rn';
+import Constants from 'expo-constants';
 import { modelPath, modelReady, type AndroidModelId } from './models';
 import type { ReasoningRequest, ReasoningResponse, LocalReasoningReadiness } from '@/types';
 import { useConfigStore } from '@/store/useConfigStore';
 import { AndroidDictation } from '../../modules/android-dictation/src';
 import { withAndroidInference } from './inferenceQueue';
+import i18n from './strings';
+import { buildLocalReasoningInstructions } from './localPrompt';
 
 let context: LlamaContext | null = null;
 let loaded: string | null = null;
 let queue: Promise<unknown> = Promise.resolve();
+const diagnostics = __DEV__ || Constants.expoConfig?.extra?.openWhispr?.isDevelopment === true;
 function exclusive<T>(work: () => Promise<T>): Promise<T> {
   const result = queue.then(work, work);
   queue = result.catch(() => undefined);
@@ -30,22 +34,25 @@ export const LocalTextModel = {
     const model = selectedTextModel();
     return withAndroidInference(() =>
       exclusive(async () => {
-        if (request.signal?.aborted) throw new Error('Generation cancelled.');
+        if (request.signal?.aborted) throw new Error(i18n.t('generationCancelled'));
         await AndroidDictation!.releaseParakeet();
-        if (!(await modelReady(model)))
-          throw new Error('Download the local text model in Account → Models first.');
+        if (!(await modelReady(model))) throw new Error(i18n.t('textDownloadNeeded'));
         if (!context || loaded !== model) {
+          const loadStartedAt = Date.now();
+          if (diagnostics) console.info('[android-reasoning] loading', model);
           if (context) await context.release();
           context = null;
           loaded = null;
           context = await initLlama({
             model: modelPath(model),
             n_ctx: 4096,
-            n_threads: 4,
+            cpu_strict: false,
             n_gpu_layers: 0,
             use_mlock: false,
           });
           loaded = model;
+          if (diagnostics)
+            console.info('[android-reasoning] loaded', model, Date.now() - loadStartedAt);
         }
         const engine = context;
         const stop = () => {
@@ -56,13 +63,16 @@ export const LocalTextModel = {
         };
         request.signal?.addEventListener('abort', stop, { once: true });
         try {
+          // Cancellation can arrive while native model initialization is pending.
+          if (request.signal?.aborted) throw new Error(i18n.t('generationCancelled'));
           const startedAt = Date.now();
           const result = await engine.completion({
             messages: [
               {
                 role: 'system',
                 content:
-                  request.systemPrompt || 'Follow the instruction. Return only the requested text.',
+                  buildLocalReasoningInstructions(request) ||
+                  'Follow the instruction. Return only the requested text.',
               },
               { role: 'user', content: request.text },
             ],
@@ -70,19 +80,27 @@ export const LocalTextModel = {
             temperature: request.temperature ?? 0,
             stop: ['<|im_end|>', '<|endoftext|>'],
           });
-          if (request.signal?.aborted) throw new Error('Generation cancelled.');
-          if (result.stopped_limit)
-            throw new Error('The local response was too long. Try a shorter request.');
-          if (__DEV__)
-            console.log(`[android-reasoning] model=${model} elapsedMs=${Date.now() - startedAt}`);
+          if (request.signal?.aborted) throw new Error(i18n.t('generationCancelled'));
+          if (result.stopped_limit) throw new Error(i18n.t('responseTooLong'));
+          if (diagnostics)
+            console.info(
+              '[android-reasoning] complete',
+              model,
+              Date.now() - startedAt,
+              JSON.stringify(result.timings),
+            );
           const text = result.text.trim();
-          if (!text) throw new Error('The local model returned no text. Try again.');
+          if (!text) throw new Error(i18n.t('emptyResponse'));
           return { text, model };
         } finally {
           request.signal?.removeEventListener('abort', stop);
         }
       }),
-    );
+    ).catch((error: unknown) => {
+      // Network retries cannot fix native loading or local generation failures.
+      if (error instanceof Error) Object.assign(error, { retryable: false });
+      throw error;
+    });
   },
   async release(): Promise<void> {
     return exclusive(async () => {

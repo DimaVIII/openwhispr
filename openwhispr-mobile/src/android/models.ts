@@ -1,6 +1,8 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { AndroidDictation } from '../../modules/android-dictation/src';
 import { create } from 'zustand';
+import i18n from './strings';
+import { withAndroidInference } from './inferenceQueue';
 
 export const ANDROID_MODELS = {
   'parakeet-v3': {
@@ -31,14 +33,14 @@ export const ANDROID_MODELS = {
     ],
   },
   'qwen-small': {
-    title: 'Qwen 0.5B · Light',
+    title: 'Qwen 0.5B',
     kind: 'text',
     bytes: 491400032,
     sha256: '74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db',
     url: 'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/9217f5db79a29953eb74d5343926648285ec7e67/qwen2.5-0.5b-instruct-q4_k_m.gguf',
   },
   'qwen-balanced': {
-    title: 'Qwen 1.5B · Balanced',
+    title: 'Qwen 1.5B',
     kind: 'text',
     bytes: 1117320736,
     sha256: '6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e',
@@ -85,7 +87,7 @@ export async function downloadAndroidModel(
   id: AndroidModelId,
   onProgress?: (fraction: number) => void,
 ): Promise<void> {
-  if (active.has(id)) throw new Error('This model is already downloading.');
+  if (active.has(id)) throw new Error(i18n.t('downloadBusy'));
   const job: { download?: FileSystem.DownloadResumable; cancelled: boolean } = { cancelled: false };
   active.set(id, job);
   const progress = (fraction: number) => {
@@ -97,9 +99,9 @@ export async function downloadAndroidModel(
   try {
     if (await modelReady(id)) return;
     if ((await FileSystem.getFreeDiskStorageAsync()) < ANDROID_MODELS[id].bytes * 1.15)
-      throw new Error('Free some storage before downloading this model.');
+      throw new Error(i18n.t('downloadStorage'));
     for (const file of filesFor(id)) {
-      if (job.cancelled) throw new Error('Download cancelled.');
+      if (job.cancelled) throw new Error(i18n.t('downloadCancelled'));
       const existing = await FileSystem.getInfoAsync(file.destination);
       if (
         existing.exists &&
@@ -123,9 +125,9 @@ export async function downloadAndroidModel(
           ),
         );
         const response = await job.download.downloadAsync();
-        if (job.cancelled || !response) throw new Error('Download cancelled.');
+        if (job.cancelled || !response) throw new Error(i18n.t('downloadCancelled'));
         if (response.status !== 200)
-          throw new Error(`Download failed (${response.status}). Try again.`);
+          throw new Error(i18n.t('downloadFailed', { status: response.status }));
         const info = await FileSystem.getInfoAsync(temporary);
         if (
           !info.exists ||
@@ -133,8 +135,8 @@ export async function downloadAndroidModel(
           info.size !== file.bytes ||
           (await AndroidDictation!.sha256(temporary)) !== file.sha256
         )
-          throw new Error('Model verification failed. Please retry the download.');
-        if (job.cancelled) throw new Error('Download cancelled.');
+          throw new Error(i18n.t('downloadVerification'));
+        if (job.cancelled) throw new Error(i18n.t('downloadCancelled'));
         await FileSystem.moveAsync({ from: temporary, to: file.destination });
         completed += file.bytes;
         progress(completed / ANDROID_MODELS[id].bytes);
@@ -153,4 +155,14 @@ export async function cancelAndroidDownload(id: AndroidModelId): Promise<void> {
   if (!job) return;
   job.cancelled = true;
   await job.download?.pauseAsync();
+}
+
+export async function removeAndroidModel(id: AndroidModelId): Promise<void> {
+  if (active.has(id)) throw new Error(i18n.t('downloadBusy'));
+  await withAndroidInference(async () => {
+    const { LocalTextModel } = await import('./LocalTextModel');
+    await LocalTextModel.release();
+    await AndroidDictation!.releaseParakeet();
+    await FileSystem.deleteAsync(modelPath(id), { idempotent: true });
+  });
 }

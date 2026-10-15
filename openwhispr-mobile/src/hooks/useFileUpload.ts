@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { Platform } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { AudioTools } from '../../modules/audio-tools/src';
@@ -85,6 +86,10 @@ const toFriendlyUploadError = (error: unknown): Error => {
 export function useFileUpload(options: UseFileUploadOptions = {}) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentText, setCurrentText] = useState('');
+  const [stage, setStage] = useState<'transcribing' | 'cleaning'>('transcribing');
+  const active = useRef<{ controller: AbortController; provider: TranscriptionProvider } | null>(
+    null,
+  );
   const addTranscript = useTranscriptStore((state) => state.addTranscript);
   const addFailedTranscript = useTranscriptStore((state) => state.addFailedTranscript);
 
@@ -144,15 +149,20 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
         await assertProviderAcceptsFile(file, extension);
       }
 
-      // On-device Opus decoding isn't supported yet; the cloud transcriber
-      // decodes Opus, so route private-mode Opus uploads there instead.
-      if (transcriptionProvider === 'local' && isOggOpus(file.name, file.mimeType, file.uri)) {
+      // iOS's decoder cannot read Opus. Android uses MediaCodec in its local
+      // transcription adapter and must not inherit this iPhone-only restriction.
+      if (
+        Platform.OS !== 'android' &&
+        transcriptionProvider === 'local' &&
+        isOggOpus(file.name, file.mimeType, file.uri)
+      ) {
         throw new Error(
           "Opus audio can't be transcribed on this iPhone yet. In Account → AI Models, turn off Private Mode or set Uploads to OpenWhispr Cloud, then try again.",
         );
       }
 
       setCurrentText('');
+      setStage('transcribing');
       const transcriptId = createTranscriptId();
       const clientTranscriptionId = `file-${randomUUID()}`;
       const retainedAudioUrl = await retainTranscriptAudio(file.uri, {
@@ -162,7 +172,7 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
       });
 
       const addFailedUpload = async (provider: TranscriptionProvider, error: unknown) => {
-        if (isNoSpeechError(error)) {
+        if (isNoSpeechError(error) || (error as Error)?.name === 'AbortError') {
           await deleteManagedTranscriptAudio(retainedAudioUrl);
           return;
         }
@@ -189,9 +199,11 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
         }
       };
 
-      // whisper.rn only reads 16kHz mono WAV, so compressed uploads must be
-      // transcoded before local transcription. Cloud sends the original file.
+      // iOS local engines need 16kHz mono WAV. Android converts at its local
+      // transcription boundary; hosted routes send the original file.
       const runTranscription = async (provider: TranscriptionProvider) => {
+        const controller = new AbortController();
+        active.current = { controller, provider };
         let audioUri = retainedAudioUrl;
         const tempUris: string[] = [];
         try {
@@ -219,9 +231,17 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
               clientTranscriptionId,
             },
             {
+              signal: controller.signal,
+              shouldCancel: () => controller.signal.aborted,
               onRawTranscript: (text) => setCurrentText(text),
+              onStage: setStage,
             },
           );
+          if (controller.signal.aborted) {
+            const cancelled = new Error('Upload cancelled');
+            cancelled.name = 'AbortError';
+            throw cancelled;
+          }
           const finalText = processedResult.text;
 
           await addTranscript({
@@ -245,7 +265,11 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
 
           setCurrentText(finalText);
           options.onComplete?.(finalText);
+        } catch (error) {
+          if (controller.signal.aborted && error instanceof Error) error.name = 'AbortError';
+          throw error;
         } finally {
+          active.current = null;
           await AudioTools.cleanup(tempUris);
         }
       };
@@ -256,6 +280,7 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
           jobRoute = { provider: 'cloud', ...snapshotTextInference('cloud') };
           await runTranscription('cloud');
         } catch (retryError) {
+          if ((retryError as Error)?.name === 'AbortError') return;
           if (isUsageLimitError(retryError) && options.onUsageLimitReached) {
             await options.onUsageLimitReached(retryError, retryWithCloud);
             return;
@@ -293,6 +318,7 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
         throw error;
       }
     } catch (error) {
+      if ((error as Error)?.name === 'AbortError') return;
       const friendly = toFriendlyUploadError(error);
       options.onError?.(friendly);
       throw friendly;
@@ -301,9 +327,21 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
     }
   };
 
+  const cancel = () => {
+    const job = active.current;
+    job?.controller.abort();
+    if (job?.provider === 'local') {
+      import('../services/transcription/LocalTranscriptionService')
+        .then(({ LocalTranscriptionService }) => LocalTranscriptionService.cancelTranscription())
+        .catch(() => undefined);
+    }
+  };
+
   return {
     isProcessing,
     currentText,
+    stage,
+    cancel,
     pickAndTranscribeFile,
   };
 }

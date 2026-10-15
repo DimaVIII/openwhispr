@@ -7,6 +7,7 @@ const mockTranscribeAndCleanup = jest.fn();
 const mockRetainTranscriptAudio = jest.fn();
 const mockAddTranscript = jest.fn();
 const mockAddFailedTranscript = jest.fn();
+const mockDeleteManagedTranscriptAudio = jest.fn();
 
 jest.mock('expo-document-picker', () => ({
   getDocumentAsync: (...args: unknown[]): unknown => mockGetDocumentAsync(...args),
@@ -39,7 +40,8 @@ jest.mock('../../lib/transcriptionLanguage', () => ({
 jest.mock('../../lib/permissions', () => ({ isNoSpeechError: () => false }));
 jest.mock('../../lib/transcriptAudio', () => ({
   retainTranscriptAudio: (...args: unknown[]): unknown => mockRetainTranscriptAudio(...args),
-  deleteManagedTranscriptAudio: jest.fn(async () => undefined),
+  deleteManagedTranscriptAudio: (...args: unknown[]): unknown =>
+    mockDeleteManagedTranscriptAudio(...args),
 }));
 
 import { useFileUpload } from '../useFileUpload';
@@ -89,6 +91,40 @@ beforeEach(() => {
 });
 
 describe('provider uploads that the provider would reject', () => {
+  it('discards a result and its retained audio when the upload is cancelled', async () => {
+    pick({ name: 'voice.m4a', size: MB });
+    let finish!: () => void;
+    const processing = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    mockTranscribeAndCleanup.mockImplementationOnce(async () => {
+      await processing;
+      return {
+        text: 'Discard this',
+        originalText: 'Discard this',
+        transcription: { provider: 'byok' },
+      };
+    });
+    const onError = jest.fn();
+    const { result } = renderHook(() => useFileUpload({ onError }));
+    let uploadJob!: Promise<void>;
+    await act(async () => {
+      uploadJob = result.current.pickAndTranscribeFile();
+    });
+    expect(mockTranscribeAndCleanup).toHaveBeenCalled();
+    await act(async () => {
+      result.current.cancel();
+      finish();
+      await uploadJob;
+    });
+    expect(mockAddTranscript).not.toHaveBeenCalled();
+    expect(mockAddFailedTranscript).not.toHaveBeenCalled();
+    expect(mockDeleteManagedTranscriptAudio).toHaveBeenCalledWith(
+      'file://docs/transcript-audio/upload-1.m4a',
+    );
+    expect(onError).not.toHaveBeenCalled();
+    expect(result.current.isProcessing).toBe(false);
+  });
   it.each(['voice.aac', 'voice.opus'])('refuses %s before creating a job', async (name) => {
     pick({ name, size: 1 * MB });
     const { error } = await upload();

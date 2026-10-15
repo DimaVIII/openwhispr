@@ -13,6 +13,15 @@ import { cleanupSavedOnDevice } from '@/lib/aiWorkflows';
 import i18n from './strings';
 
 export type DictationMode = 'dictate' | 'translate' | 'write' | 'edit';
+export class AndroidCleanupError extends Error {
+  constructor(
+    message: string,
+    readonly transcript: string,
+  ) {
+    super(message);
+    this.name = 'AndroidCleanupError';
+  }
+}
 export interface AndroidJob {
   route: TranscriptionJobRoute;
   mode: DictationMode;
@@ -91,7 +100,8 @@ export async function processAndroidAudio(
     },
   ).finally(() => signal.removeEventListener('abort', cancelSpeech));
   if (signal.aborted) throw new Error(i18n.t('cancelled'));
-  if (output.transcription.cleanupWarning) throw new Error(output.transcription.cleanupWarning);
+  if (output.transcription.cleanupWarning)
+    throw new AndroidCleanupError(output.transcription.cleanupWarning, output.originalText);
   let text = output.text;
   if (job.mode !== 'dictate') {
     if (job.route.cleanupUnavailable) throw new Error(job.route.cleanupUnavailable);

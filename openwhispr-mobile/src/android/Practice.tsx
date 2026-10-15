@@ -14,6 +14,7 @@ import { Text } from '@/components/ui/Text';
 import { OpenWhisprMark } from '@/components/ui/OpenWhisprMark';
 import { AndroidDictation, type Recording } from '../../modules/android-dictation/src';
 import {
+  AndroidCleanupError,
   createAndroidJob,
   processAndroidAudio,
   ensureAndroidModels,
@@ -22,6 +23,7 @@ import {
 } from './pipeline';
 import { Button, Card, styles, palette } from './ui';
 import { LanguageSheet } from './LanguageSheet';
+import { useBubbleResult } from './bubbleResult';
 
 export function Practice({
   initialMode = 'dictate',
@@ -32,7 +34,7 @@ export function Practice({
 }) {
   const { t } = useTranslation();
   const [mode, setMode] = useState<DictationMode>(initialMode);
-  const [text, setText] = useState(initialMode === 'edit' ? 'Apples, bread and milk.' : '');
+  const [text, setText] = useState(initialMode === 'edit' ? t('editSeed') : '');
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
   const [recording, setRecording] = useState(false);
@@ -51,9 +53,9 @@ export function Practice({
   const selection = useRef({ start: 0, end: 0 });
   useEffect(() => {
     setMode(initialMode);
-    setText(initialMode === 'edit' ? 'Apples, bread and milk.' : '');
+    setText(initialMode === 'edit' ? t('editSeed') : '');
     setStatus('');
-  }, [initialMode]);
+  }, [initialMode, t]);
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -85,7 +87,10 @@ export function Practice({
       onSuccess?.();
     } catch (failure) {
       if (!abort.signal.aborted && mounted.current) {
-        setError((failure as Error).message);
+        if (failure instanceof AndroidCleanupError) {
+          useBubbleResult.getState().setResult(failure.transcript, t('cleanupRecovery'));
+          setError(t('cleanupRecovery'));
+        } else setError((failure as Error).message);
         setStatus('');
       }
     } finally {
