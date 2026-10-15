@@ -10,11 +10,15 @@ jest.mock('@/store/useOnboardingStore', () => ({
     selector({ selectedMode: mockSelectedMode }),
 }));
 jest.mock('@/lib/onboardingMode', () => ({ chooseOnboardingMode: jest.fn() }));
+let mockSavedCleanup: { mode: string } | undefined;
+jest.mock('@/store/useConfigStore', () => ({
+  useConfigStore: (selector: (state: unknown) => unknown) =>
+    selector({ config: { inference: { cleanup: mockSavedCleanup } } }),
+}));
 let mockReadiness: { status: string } = { status: 'ready' };
 jest.mock('@/lib/localReasoning', () => ({
+  ...jest.requireActual('@/lib/localReasoning'),
   getLocalReasoningReadiness: async () => mockReadiness,
-  canRunLocalReasoning: (readiness?: { status: string }) =>
-    ['ready', 'appleIntelligenceOff', 'modelNotReady'].includes(readiness?.status ?? ''),
 }));
 const mockCancelActiveDownloads = jest.fn();
 jest.mock('@/store/useModelDownloadStore', () => ({
@@ -43,6 +47,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockSelectedMode = null;
   mockReadiness = { status: 'ready' };
+  mockSavedCleanup = undefined;
   jest.mocked(chooseOnboardingMode).mockResolvedValue(undefined);
   mockCancelActiveDownloads.mockResolvedValue(undefined);
 });
@@ -90,7 +95,7 @@ describe('cleanup line', () => {
     const screen = await renderStep();
     expect(screen.getByText('Cleanup with Apple Intelligence')).toBeTruthy();
     expect(
-      screen.getByText('Starts once it’s on in Settings → Apple Intelligence & Siri'),
+      screen.getByText('Starts once it’s on in Settings → Apple Intelligence & Siri.'),
     ).toBeTruthy();
   });
 
@@ -121,6 +126,26 @@ describe('cleanup line', () => {
     expect(screen.getByText('No automatic cleanup')).toBeTruthy();
     expect(screen.getByText('You’ll get the raw transcription.')).toBeTruthy();
     expect(screen.queryByText(/Apple Intelligence|iPhone/)).toBeNull();
+  });
+
+  // A provider saved for cleanup keeps cleaning in Private mode, on any phone.
+  it.each(['ios', 'android'] as const)('names a saved cleanup provider (%s)', async (os) => {
+    Platform.OS = os;
+    mockReadiness = { status: 'unsupportedDevice' };
+    mockSavedCleanup = { mode: 'providers' };
+    const screen = await renderStep();
+    expect(screen.getByText('Cleanup with your saved provider')).toBeTruthy();
+    expect(
+      screen.getByText('Your transcription is sent to the provider you chose in AI Models.'),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Apple Intelligence|raw transcription/)).toBeNull();
+  });
+
+  // Private mode never runs it, so the line is the one for this phone.
+  it('ignores a saved Cloud cleanup', async () => {
+    mockSavedCleanup = { mode: 'openwhispr' };
+    const screen = await renderStep();
+    expect(screen.getByText('Cleanup with Apple Intelligence')).toBeTruthy();
   });
 
   // Neither says whether this iPhone can run it, so the card makes no claim.

@@ -24,6 +24,7 @@ jest.mock('@/store/useConfigStore', () => ({
 }));
 
 import {
+  canRunLocalReasoning,
   clearLocalReasoningReadinessCache,
   getLocalReasoningReadiness,
   getLocalReasoningUnavailableMessage,
@@ -125,6 +126,19 @@ it.each(['ready', 'disabled', 'appleIntelligenceOff', 'modelNotReady', 'unavaila
     expect(isLocalReasoningUnsupported({ status, tokenCounting: false })).toBe(false);
   },
 );
+
+// Off in iOS Settings or still preparing its model, the iPhone still runs Apple Intelligence.
+it.each([
+  ['ready', true],
+  ['appleIntelligenceOff', true],
+  ['modelNotReady', true],
+  ['disabled', false],
+  ['unavailable', false],
+  ['unsupportedDevice', false],
+  ['unsupportedOS', false],
+] as const)('reports whether this iPhone runs Apple Intelligence when %s', (status, runs) => {
+  expect(canRunLocalReasoning({ status, tokenCounting: false })).toBe(runs);
+});
 
 it.each([
   [

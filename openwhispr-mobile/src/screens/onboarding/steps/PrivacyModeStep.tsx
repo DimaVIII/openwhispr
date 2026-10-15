@@ -8,17 +8,29 @@ import { BRAND } from '@/config/colors';
 import { useOnboardingStep } from '@/hooks/useOnboardingStep';
 import { canRunLocalReasoning, getLocalReasoningReadiness } from '@/lib/localReasoning';
 import { chooseOnboardingMode } from '@/lib/onboardingMode';
+import { useConfigStore } from '@/store/useConfigStore';
 import { useModelDownloadStore } from '@/store/useModelDownloadStore';
 import { useOnboardingStore } from '@/store/useOnboardingStore';
-import type { LocalReasoningReadiness } from '@/types';
+import type { InferenceMode, LocalReasoningReadiness } from '@/types';
 
 type ModeChoice = 'cloud' | 'private';
 
 type CleanupLine = { included: boolean; text: string; hint?: string };
 
 // What Private Mode's cleanup does on this phone, matching what choosing it saves
-// (chooseOnboardingMode). Nothing is shown until the check answers, rather than a guess.
-function privateCleanupLine(readiness: LocalReasoningReadiness | null): CleanupLine | null {
+// (chooseOnboardingMode): a cleanup provider saved earlier keeps cleaning, and otherwise it's
+// Apple Intelligence or nothing. On an iPhone nothing is shown until the check answers.
+function privateCleanupLine(
+  readiness: LocalReasoningReadiness | null,
+  savedCleanup: InferenceMode | undefined,
+): CleanupLine | null {
+  if (savedCleanup === 'providers') {
+    return {
+      included: true,
+      text: 'Cleanup with your saved provider',
+      hint: 'Your transcription is sent to the provider you chose in AI Models.',
+    };
+  }
   if (Platform.OS !== 'ios') {
     return {
       included: false,
@@ -32,7 +44,7 @@ function privateCleanupLine(readiness: LocalReasoningReadiness | null): CleanupL
       text: 'Cleanup with Apple Intelligence',
       hint:
         readiness?.status === 'appleIntelligenceOff'
-          ? 'Starts once it’s on in Settings → Apple Intelligence & Siri'
+          ? 'Starts once it’s on in Settings → Apple Intelligence & Siri.'
           : undefined,
     };
   }
@@ -71,7 +83,8 @@ export function PrivacyModeStep(): ReactElement {
       cancelled = true;
     };
   }, []);
-  const cleanupLine = privateCleanupLine(readiness);
+  const savedCleanup = useConfigStore((state) => state.config?.inference?.cleanup?.mode);
+  const cleanupLine = privateCleanupLine(readiness, savedCleanup);
 
   const handleContinue = async (): Promise<void> => {
     if (choice === 'private') {

@@ -121,7 +121,7 @@ export function PrivateDownloadStep() {
       <OnboardingShell
         progress={stepProgress}
         onBack={goBack}
-        title="Private mode needs the full app"
+        title="Private Mode needs the full app"
         subtitle={getPrivateModeUnavailableMessage()}
         ctaLabel="Use Cloud instead"
         onCta={switchToCloud}

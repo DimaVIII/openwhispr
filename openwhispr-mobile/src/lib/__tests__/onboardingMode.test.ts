@@ -37,9 +37,8 @@ jest.mock('@/store/useOnboardingStore', () => ({
 }));
 const mockGetReadiness = jest.fn();
 jest.mock('@/lib/localReasoning', () => ({
+  ...jest.requireActual('@/lib/localReasoning'),
   getLocalReasoningReadiness: (...args: unknown[]) => mockGetReadiness(...args),
-  canRunLocalReasoning: (readiness?: { status: string }) =>
-    ['ready', 'appleIntelligenceOff', 'modelNotReady'].includes(readiness?.status ?? ''),
 }));
 let mockAccountHistory = false;
 jest.mock('@/sync/syncIdentity', () => ({
@@ -259,6 +258,37 @@ describe('cleanup', () => {
     );
   });
 
+  it('keeps a pending cleanup marked if progress cannot be saved', async () => {
+    mockConfig = { defaultMode: 'private', onDeviceCleanupPending: true };
+    mockChooseMode.mockRejectedValueOnce(new Error('Keychain unavailable'));
+    await expect(chooseOnboardingMode('private', 'privacy-mode')).rejects.toThrow('Keychain');
+    expect(mockUpdateConfig.mock.calls[0][0]).toHaveProperty('onDeviceCleanupPending', undefined);
+    expect(mockUpdateConfig.mock.calls.at(-1)?.[0]).toHaveProperty('onDeviceCleanupPending', true);
+  });
+
+  // Private mode never runs Cloud cleanup, so a saved one gives way as if nothing were saved.
+  it('saves On-Device cleanup over a saved Cloud cleanup', async () => {
+    mockConfig = { defaultMode: 'cloud', inference: { cleanup: { mode: 'openwhispr' } } };
+    await chooseOnboardingMode('private', 'privacy-mode');
+    expect(mockUpdateConfig).toHaveBeenCalledWith({
+      defaultMode: 'private',
+      inference: { dictation: { mode: 'local' }, cleanup: { mode: 'local' } },
+    });
+  });
+
+  it.each(['unsupportedDevice', 'unsupportedOS'])(
+    'keeps a saved Cloud cleanup, with nothing pending, when readiness is %s',
+    async (status) => {
+      mockReadiness = { status };
+      mockConfig = { defaultMode: 'cloud', inference: { cleanup: { mode: 'openwhispr' } } };
+      await chooseOnboardingMode('private', 'privacy-mode');
+      expect(mockUpdateConfig).toHaveBeenCalledWith({
+        defaultMode: 'private',
+        inference: { dictation: { mode: 'local' }, cleanup: { mode: 'openwhispr' } },
+      });
+    },
+  );
+
   it('keeps a cleanup selection already saved', async () => {
     const provider = { mode: 'providers', providerId: 'groq', modelId: 'llama' };
     mockConfig = { defaultMode: 'cloud', inference: { cleanup: provider } };
@@ -322,7 +352,7 @@ describe('applyPendingOnDeviceCleanup', () => {
     });
   });
 
-  it.each(['unsupportedOS', 'unsupportedDevice', 'disabled', 'unavailable'])(
+  it.each(['unsupportedOS', 'disabled', 'unavailable'])(
     'keeps waiting while readiness is %s',
     async (status) => {
       mockReadiness = { status };
@@ -330,6 +360,14 @@ describe('applyPendingOnDeviceCleanup', () => {
       expect(mockUpdateConfig).not.toHaveBeenCalled();
     },
   );
+
+  // An older iOS can't tell an iPhone that will never run Apple Intelligence; once updated it can.
+  it('stops waiting once this iPhone turns out never to run Apple Intelligence', async () => {
+    mockReadiness = { status: 'unsupportedDevice' };
+    await applyPendingOnDeviceCleanup();
+    expect(mockUpdateConfig).toHaveBeenCalledTimes(1);
+    expect(mockUpdateConfig).toHaveBeenCalledWith({ onDeviceCleanupPending: undefined });
+  });
 
   it('does nothing without a pending cleanup', async () => {
     mockConfig = { defaultMode: 'private' };

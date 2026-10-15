@@ -6,6 +6,7 @@ import { useProcessingModeStore } from '@/store/useProcessingModeStore';
 import { hasRealAccountHistory } from '@/sync/syncIdentity';
 import type { LocalReasoningReadiness, UserConfig } from '@/types';
 import type { InferenceSelection } from './mobileProviders';
+import { PRIVATE_MODE_LOCKED } from './aiWorkflows';
 import { dictationModeConfig } from './inferenceModes';
 import { canRunLocalReasoning, getLocalReasoningReadiness } from './localReasoning';
 import { OnboardingError } from './onboardingErrors';
@@ -21,9 +22,10 @@ export async function saveOnboardingConfig(updates: Partial<UserConfig>): Promis
 // Private mode skips cleanup until it has a selection of its own, and nobody choosing Private mode
 // in setup would know to go save one. So setup saves On-Device cleanup on an iPhone that runs
 // Apple Intelligence, even while it's off or still preparing. Where it can't tell yet (an older
-// iOS, which an update may fix), it marks cleanup pending for applyPendingOnDeviceCleanup. An
-// iPhone that can never run it, or Android, keeps cleanup unset (skipped). A selection already
-// saved is left alone.
+// iOS, which an update may fix, Apple Intelligence turned off in AI Models, or readiness it can't
+// read), it marks cleanup pending for applyPendingOnDeviceCleanup. An iPhone that can never run
+// it, or Android, keeps cleanup unset (skipped). A selection already saved is left alone, unless
+// it is Cloud, which Private mode never runs.
 function onboardingCleanup(
   config: UserConfig | null,
   mode: 'cloud' | 'private',
@@ -31,10 +33,13 @@ function onboardingCleanup(
 ): { cleanup?: InferenceSelection; pending: boolean } {
   const saved = config?.inference?.cleanup;
   if (mode === 'private') {
-    if (saved) return { cleanup: saved, pending: false };
+    if (saved && !PRIVATE_MODE_LOCKED.cleanup?.includes(saved.mode)) {
+      return { cleanup: saved, pending: false };
+    }
     if (canRunLocalReasoning(readiness)) return { cleanup: { mode: 'local' }, pending: false };
     return {
-      pending: Platform.OS === 'ios' && readiness?.status !== 'unsupportedDevice',
+      cleanup: saved,
+      pending: !saved && Platform.OS === 'ios' && readiness?.status !== 'unsupportedDevice',
     };
   }
   // Back to Cloud after choosing Private mode earlier in setup drops the On-Device cleanup that
@@ -59,6 +64,11 @@ export async function applyPendingOnDeviceCleanup(): Promise<void> {
   if (config.defaultMode !== 'private') return;
   // A fresh read: the last one may predate an iOS update.
   const readiness = await getLocalReasoningReadiness({ refresh: true });
+  // Updated, and it turns out this iPhone can never run it: nothing is left to wait for.
+  if (readiness.status === 'unsupportedDevice') {
+    await updateConfig({ onDeviceCleanupPending: undefined });
+    return;
+  }
   if (!canRunLocalReasoning(readiness)) return;
   const latest = useConfigStore.getState().config;
   if (!latest?.onDeviceCleanupPending || latest.defaultMode !== 'private') return;
