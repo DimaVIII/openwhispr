@@ -15,6 +15,9 @@ export const LOCAL_TOKEN_CHAR_RATIO = 3.5;
 let cachedReadiness: Promise<LocalReasoningReadiness> | null = null;
 
 export class LocalReasoningError extends Error {
+  // On-device failures are refusals, limits, unavailability or a cancellation:
+  // a retry gets the same answer, and a timed-out run would time out again.
+  readonly retryable = false;
   code: LocalReasoningErrorCode;
   readiness?: LocalReasoningReadiness;
 
@@ -65,6 +68,10 @@ export async function getLocalReasoningReadiness(options?: {
             contextSize: availability.contextSize,
             tokenCounting: availability.tokenCounting === true,
           };
+        case 'deviceNotEligible':
+          return { status: 'unsupportedDevice', tokenCounting: false };
+        case 'unsupportedOS':
+          return { status: 'unsupportedOS', tokenCounting: false };
         default:
           return {
             status: 'unavailable',
@@ -171,8 +178,27 @@ export async function fitsLocalReasoningBudget(input: {
   return count < budget;
 }
 
+// This iPhone runs Apple Intelligence, even if it is turned off in Settings or still preparing
+// its model. Disabled in AI Models or unavailable says nothing about the device either way.
+export function canRunLocalReasoning(readiness?: LocalReasoningReadiness | null): boolean {
+  return (
+    readiness?.status === 'ready' ||
+    readiness?.status === 'appleIntelligenceOff' ||
+    readiness?.status === 'modelNotReady'
+  );
+}
+
+// Unlike Apple Intelligence being off or still downloading, nothing in Settings fixes these.
+export function isLocalReasoningUnsupported(readiness?: LocalReasoningReadiness | null): boolean {
+  return readiness?.status === 'unsupportedDevice' || readiness?.status === 'unsupportedOS';
+}
+
 export function getLocalReasoningUnavailableMessage(readiness?: LocalReasoningReadiness): string {
   switch (readiness?.status) {
+    case 'unsupportedDevice':
+      return 'On-Device AI needs an iPhone with Apple Intelligence (iPhone 15 Pro or later).';
+    case 'unsupportedOS':
+      return 'On-Device AI needs iOS 26 or later on an iPhone with Apple Intelligence.';
     case 'disabled':
       return 'Local Apple Intelligence is turned off in AI Models.';
     case 'appleIntelligenceOff':
@@ -192,6 +218,9 @@ export function toLocalReasoningError(error: unknown): LocalReasoningError {
       ? String((error as { code?: unknown }).code)
       : undefined;
   const message = error instanceof Error ? error.message : 'Local AI failed.';
+  if (error instanceof Error && error.name === 'AbortError') {
+    return new LocalReasoningError('APPLE_LLM_CANCELLED', message);
+  }
 
   switch (code) {
     case 'APPLE_LLM_GUARDRAIL':
@@ -199,6 +228,7 @@ export function toLocalReasoningError(error: unknown): LocalReasoningError {
     case 'APPLE_LLM_RATE_LIMITED':
     case 'APPLE_LLM_UNAVAILABLE':
     case 'APPLE_LLM_FAILED':
+    case 'APPLE_LLM_CANCELLED':
       return new LocalReasoningError(code, message);
     default:
       return new LocalReasoningError('APPLE_LLM_FAILED', message);

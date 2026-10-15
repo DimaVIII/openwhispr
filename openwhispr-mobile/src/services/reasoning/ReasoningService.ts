@@ -137,8 +137,9 @@ export class ReasoningService {
     const usesProviders = selection?.mode === 'providers';
     const localSelected = selection?.mode === 'local';
     const allowCloudFallback = routing?.allowCloudFallback === true;
-    let privateContent = routing?.isPrivateNote === true;
-    if (usesProviders || localSelected) {
+    const chosenProvider = usesProviders && routing?.sendToChosenProvider === true;
+    let privateContent = !chosenProvider && routing?.isPrivateNote === true;
+    if ((usesProviders && !chosenProvider) || localSelected) {
       const { useProcessingModeStore } =
         require('@/store/useProcessingModeStore') as typeof import('@/store/useProcessingModeStore');
       privateContent ||= useProcessingModeStore.getState().activeMode === 'private';
@@ -180,7 +181,8 @@ export class ReasoningService {
             try {
               return await LocalReasoningService.processText(localRequest);
             } catch (error) {
-              if (!allowCloudFallback) throw error;
+              // A cancelled or timed-out request is over; it must not start again in the cloud.
+              if (!allowCloudFallback || signal?.aborted) throw error;
             }
           }
         } else if (!allowCloudFallback) {
@@ -205,7 +207,7 @@ export class ReasoningService {
         scope,
         selection,
         privateContent,
-        allowCloudFallback,
+        allowCloudFallback || chosenProvider,
       );
       const { processProviderText } =
         require('@/services/providers/ProviderExecution') as typeof import('@/services/providers/ProviderExecution');

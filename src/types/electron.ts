@@ -1,4 +1,5 @@
 import type { ModelDefinition } from "../models/ModelRegistry";
+import type { ReasoningConfig } from "../services/BaseReasoningService";
 import type { PermissionGuideState, PermissionGuideAction } from "./permissionGuide";
 import type { TinfoilCatalogModel } from "../models/tinfoilModels";
 import type { UsageResponse } from "../lib/usageStore";
@@ -95,6 +96,13 @@ export interface NoteRecordingProvider {
 // main process defaults a missing value to "openai-realtime" for pre-1.8.4
 // renderers (#1624).
 export interface DictationRealtimeSessionOptions {
+  pipelineOptions?: {
+    agentName?: string;
+    customDictionary?: string[];
+    customPrompt?: string;
+    language?: string;
+    locale?: string;
+  };
   provider: string;
   baseUrl?: string;
   model?: string;
@@ -110,6 +118,8 @@ export interface DictationRealtimeSessionOptions {
 export interface DictationLanguageMetadata {
   language: string | null;
   languageConfidence: number | null;
+  // Sum of detector scores for Orukeet's 25 languages, not a calibrated probability.
+  languageSupportedScore?: number;
   languageAudioSeconds?: number;
 }
 
@@ -142,6 +152,7 @@ export type TranscriptionErrorCode =
   | "PROVIDER_UNREACHABLE"
   | "PROVIDER_NO_RESPONSE"
   | "PROVIDER_ERROR"
+  | "CRASH_RECOVERY"
   | null;
 
 export type MeetingPromptVariant = "detected" | "starting" | "underway";
@@ -154,6 +165,52 @@ export interface MeetingNotificationData {
   variant: MeetingPromptVariant;
   joinUrl: string | null;
 }
+
+export interface MeetingFolderRef {
+  folderId: number;
+  spaceId: number;
+}
+export interface MeetingExistingNote {
+  noteId: number;
+  spaceId: number;
+  folderId: number | null;
+  spaceName: string;
+  folderName: string | null;
+  shared: boolean;
+}
+export interface MeetingDestinationContext {
+  folders: FolderItem[];
+  spaces: SpaceItem[];
+  defaultDestination: MeetingFolderRef | null;
+  selectedDestination: MeetingFolderRef | null;
+  recentDestinations: MeetingFolderRef[];
+  existingNote: MeetingExistingNote | null;
+}
+
+export interface MeetingSurfaceState {
+  revision: number;
+  mode: "closed" | "list" | "form";
+  contentHeight: number;
+  regions: { x: number; y: number; width: number; height: number }[];
+  focus: "request" | "release" | "keep";
+}
+
+export type MeetingError =
+  | "STALE_NOTIFICATION"
+  | "INVALID_REQUEST"
+  | "FOLDERS_UNAVAILABLE"
+  | "FOLDER_UNAVAILABLE"
+  | "SPACE_UNAVAILABLE"
+  | "FOLDER_NAME_REQUIRED"
+  | "FOLDER_NAME_TAKEN"
+  | "CREATE_FAILED"
+  | "LINKED_NOTE_CHANGED"
+  | "NOTE_UNAVAILABLE"
+  | "START_FAILED";
+
+export type MeetingResult<T> =
+  | { success: true; value: T }
+  | { success: false; code: MeetingError; context?: MeetingDestinationContext };
 
 /** Why auto-end concluded the meeting is over. */
 export type MeetingAutoEndReason = "mic-released" | "silence" | "process-exit";
@@ -383,6 +440,14 @@ export interface NoteItem {
   // Server updated_at this device last acked (push response or pull); echoed
   // as base_updated_at on the next PATCH. Null = pre-guard row, pushes LWW.
   cloud_updated_at?: string | null;
+  cloud_revision?: number | null;
+  cloud_create_rejected?: number;
+  cloud_create_pending?: string | null;
+  content_sync_operation?: "set" | "clear" | null;
+  enhanced_content_sync_operation?: "set" | "clear" | null;
+  // Local-only counters distinguish later edits/Undo from an in-flight snapshot.
+  content_edit_generation?: number;
+  enhanced_content_edit_generation?: number;
   created_at: string;
   updated_at: string;
   client_note_id: string;
@@ -423,6 +488,11 @@ export type NotePushSnapshot = Pick<
   | "sync_status"
   | "deleted_at"
   | "cloud_updated_at"
+  | "cloud_revision"
+  | "content_sync_operation"
+  | "enhanced_content_sync_operation"
+  | "content_edit_generation"
+  | "enhanced_content_edit_generation"
   | "left_team"
 >;
 
@@ -431,13 +501,54 @@ export type NoteUpdateSnapshot = NotePushSnapshot;
 
 export interface NoteCreateAckResult {
   success: boolean;
-  outcome: "synced" | "pending" | "already-linked" | "orphaned" | "unresolved";
+  outcome:
+    | "synced"
+    | "pending"
+    | "already-linked"
+    | "orphaned"
+    | "unresolved"
+    | "awaiting-cloud"
+    | "conflict";
+  note?: NoteItem;
+}
+
+export interface NoteCreateAckWriteOptions {
+  settleIfUnchanged?: boolean;
+  cloudRevision?: number | null;
+  // The server refused the create without writing it (write_applied: false).
+  writeRejected?: boolean;
+  cloudNote?: NoteCloudText;
+  requiresReconciliation?: boolean;
+  reconcilePending?: boolean;
+  localFolderId?: number | null;
+  localSpaceId?: number;
+}
+
+// A cloud note row's text fields, as a pull or a write response carries them.
+export interface NoteCloudText {
+  content?: string | null;
+  enhanced_content?: string | null;
+  enhancement_prompt?: string | null;
+  enhanced_at_content_hash?: string | null;
+  enhancement_template_id?: string | null;
+  content_state?: "set" | "clear" | null;
+  enhanced_content_state?: "set" | "clear" | null;
+}
+
+export interface NoteCloudBaseOptions {
+  // The user chose Keep on the conflict banner.
+  keepLocal?: boolean;
+  // The conflicting cloud copy Keep merges against: fields this device never
+  // edited take its values.
+  cloudNote?: NoteCloudText;
 }
 
 export interface NoteUpdateAckResult {
   success: boolean;
   outcome: "synced" | "pending" | "identity-changed";
   changes: number;
+  // Present when the ack took the server's copy of a text field.
+  note?: NoteItem;
 }
 
 export type ShareVisibility = "private" | "link" | "domain" | "invited";
@@ -905,6 +1016,36 @@ export interface ScreenRecordingAccessResult {
 export type CloudReasonPurpose = "cleanup" | "assistant" | "translation" | "noteFormatting";
 
 // Orukeet's audio language estimate, reported for the backend's per-user gate.
+export interface OrukeetLanguageRoutingTelemetry {
+  version: 1;
+  mode: "shadow" | "supported-0.30" | "supported-0.10";
+  auto: boolean;
+  eligible: boolean;
+  analyzedSeconds: number | null;
+  topLanguage: string | null;
+  topScore: number | null;
+  supportedScore: number | null;
+  legacyFallback: boolean;
+  top05Fallback: boolean;
+  candidate030: boolean | null;
+  candidate010: boolean | null;
+  selectedFallback: boolean;
+  fallbackAvailable: boolean;
+}
+export interface OrukeetCleanupTelemetry {
+  status: "complete" | "fallback" | "skipped";
+  model?: "gemma-4-12b";
+  processingMs?: number;
+  queueMs?: number;
+  firstTextMs?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+}
+export interface OrukeetTelemetry {
+  orukeetLanguageRouting?: OrukeetLanguageRoutingTelemetry;
+  orukeetCleanup?: OrukeetCleanupTelemetry;
+}
+
 export interface SttDetectedLanguageFields {
   sttDetectedLanguage?: string;
   sttDetectedLanguageConfidence?: number;
@@ -1053,6 +1194,7 @@ export interface PasteToolsResult {
   hasUinput?: boolean;
   hasWtype?: boolean;
   isWlroots?: boolean;
+  isCosmic?: boolean;
   tools?: string[];
   recommendedInstall?: string;
 }
@@ -1341,6 +1483,8 @@ declare global {
             dictation?: { mode: string };
             notes?: { mode: string };
             streamingProvider?: string;
+            orukeetPipeline?: "gemma12";
+            orukeetLanguageRouting?: "off" | "shadow" | "supported-0.30" | "supported-0.10";
           } & PolicyFailureMetadata)
         | null
       >;
@@ -1548,6 +1692,7 @@ declare global {
       updateNote: (
         id: number,
         updates: {
+          clear_fields?: Array<"content" | "enhanced_content">;
           title?: string;
           content?: string;
           enhanced_content?: string | null;
@@ -1567,8 +1712,15 @@ declare global {
           owner_user_id?: string | null;
           updated_by_user_id?: string | null;
           left_team?: number;
-        }
+        },
+        options?: { undoable: true; expected: NoteItem; turn?: string }
       ) => Promise<{ success: boolean; note?: NoteItem; error?: string }>;
+      getNoteUndos: () => Promise<Array<{ token: string; noteId: number; title: string }>>;
+      claimNoteUndo: (token: string) => Promise<boolean>;
+      undoNoteUpdate: (
+        token: string
+      ) => Promise<{ success: boolean; note?: NoteItem; error?: string }>;
+      discardNoteUndo: (id: number, token?: string) => Promise<void>;
       deleteNote: (id: number) => Promise<{ success: boolean }>;
       exportNote: (
         noteId: number,
@@ -1622,6 +1774,11 @@ declare global {
         accountId: string | null,
         expectedAuthGeneration?: number
       ) => Promise<{ success: boolean; code?: string; error?: string }>;
+      closeActivationStream?: () => Promise<void>;
+      beginActivationCapture?: () => Promise<string | null>;
+      stopActivationCapture?: (id: string) => Promise<void>;
+      finishActivationCapture?: (id: string, words: number) => Promise<void>;
+      cancelActivationCapture?: (id: string) => Promise<void>;
       getActiveAccountScope?: () => Promise<ActiveAccountScope | null>;
       onActiveAccountScopeChanged?: (
         callback: (scope: ActiveAccountScope | null) => void
@@ -1966,7 +2123,7 @@ declare global {
         text: string,
         modelId: string,
         agentName: string | null,
-        config: any
+        config: ReasoningConfig
       ) => Promise<{
         success: boolean;
         text?: string;
@@ -2167,6 +2324,7 @@ declare global {
         isNixOS: boolean;
         isKde: boolean;
         isWlroots: boolean;
+        isCosmic: boolean;
         hasXclip: boolean;
         hasXsel: boolean;
       }>;
@@ -2182,6 +2340,7 @@ declare global {
       onHotkeyRegistrationFailed?: (
         callback: (data: { hotkey: string; error: string; suggestions: string[] }) => void
       ) => () => void;
+      onApiKeyUpdated?: (callback: (storeKey: string) => void) => () => void;
       onSettingUpdated?: (callback: (data: { key: string; value: unknown }) => void) => () => void;
       onDictationKeyActive?: (callback: (key: string) => void) => () => void;
       onLinuxPttPermissionDenied?: (callback: () => void) => () => void;
@@ -2469,7 +2628,8 @@ declare global {
           analyticsOccurredAt?: string;
           // Why a managed-streaming user's dictation went batch (rollout metric).
           streamingFallbackReason?: string;
-        } & SttDetectedLanguageFields
+        } & SttDetectedLanguageFields &
+          OrukeetTelemetry
       ) => Promise<
         {
           success: boolean;
@@ -2497,7 +2657,8 @@ declare global {
           language?: string;
           locale?: string;
           streamingFallbackReason?: string;
-        } & SttDetectedLanguageFields
+        } & SttDetectedLanguageFields &
+          OrukeetTelemetry
       ) => Promise<{
         success: boolean;
         text?: string;
@@ -2527,7 +2688,8 @@ declare global {
           analyticsOccurredAt?: string;
           analyticsWordCount?: number;
           analyticsCounterVersion?: number;
-        } & SttDetectedLanguageFields
+        } & SttDetectedLanguageFields &
+          OrukeetTelemetry
       ) => Promise<{
         success: boolean;
         wordsUsed?: number;
@@ -2943,6 +3105,7 @@ declare global {
           systemPrompt?: string;
           tools?: Array<{ name: string; description: string; parameters: Record<string, unknown> }>;
           screenContext?: { data: string; mediaType: string };
+          noteChat?: boolean;
         }
       ) => void;
       cancelAgentStream?: (requestId: string) => void;
@@ -3357,17 +3520,47 @@ declare global {
       onMeetingAutoEndRequested?: (
         callback: (request: MeetingAutoEndRequest) => void
       ) => () => void;
+      getMeetingNotificationDestination: () => Promise<MeetingResult<MeetingDestinationContext>>;
+      selectMeetingNotificationFolder: (
+        folder: MeetingFolderRef
+      ) => Promise<MeetingResult<MeetingDestinationContext>>;
+      createMeetingNotificationFolder: (request: {
+        requestId: string;
+        name: string;
+        spaceId: number;
+      }) => Promise<MeetingResult<MeetingDestinationContext & { createdFolder: MeetingFolderRef }>>;
+      onMeetingNotificationFolderCreated: (
+        callback: (hint: { folderId: number }) => void
+      ) => () => void;
+      setMeetingNotificationSurface: (
+        state: MeetingSurfaceState
+      ) => Promise<MeetingResult<{ width: number; height: number; maxHeight: number }>>;
+      onMeetingNotificationSurfaceClosed: (
+        callback: (data: { revision: number }) => void
+      ) => () => void;
+      onMeetingNotificationSurfaceResized: (
+        callback: (data: { revision: number }) => void
+      ) => () => void;
       getMeetingNotificationData?: () => Promise<MeetingNotificationData | null>;
       meetingNotificationReady?: () => Promise<void>;
       meetingNotificationRespond?: (
         detectionId: string,
-        action: string
-      ) => Promise<{ success: boolean }>;
+        action: string,
+        options?: {
+          existingNote?: Pick<MeetingExistingNote, "noteId" | "spaceId" | "folderId">;
+        }
+      ) => Promise<MeetingResult<null>>;
+      confirmMeetingNoteNavigation: (
+        navigationId: string,
+        status?: "ready" | "cancel"
+      ) => Promise<MeetingResult<NoteItem>>;
       joinCalendarMeeting?: (eventId: string) => Promise<{ success: boolean }>;
       startManualMeeting?: () => Promise<void>;
       getPendingMeetingNoteNavigation?: () => Promise<{
+        navigationId?: string;
+        spaceId?: number;
         noteId: number;
-        folderId: number;
+        folderId: number | null;
         event: any;
         trigger?: "hotkey" | "manual" | "calendar-join";
       } | null>;
@@ -3406,25 +3599,33 @@ declare global {
         cloudNote: Record<string, unknown>,
         localFolderId: number | null,
         localSpaceId?: number | null
-      ) => Promise<NoteItem>;
+      ) => Promise<NoteItem | null>;
       acknowledgeNoteCreate?: (
         id: number,
         snapshot: NoteCreateSnapshot,
         cloudId: string,
         cloudUpdatedAt?: string | null,
         ownerUserId?: string | null,
-        settleIfUnchanged?: boolean
+        options?: NoteCreateAckWriteOptions
       ) => Promise<NoteCreateAckResult>;
       markNoteSyncedIfUnchanged?: (
         id: number,
         snapshot: NoteUpdateSnapshot,
         expectedCloudId: string,
         cloudUpdatedAt?: string | null,
-        ownerUserId?: string | null
+        ownerUserId?: string | null,
+        cloudRevision?: number | null,
+        cloudNote?: NoteCloudText | null
       ) => Promise<NoteUpdateAckResult>;
-      setNoteCloudBase?: (id: number, cloudUpdatedAt: string | null) => Promise<void>;
+      setNoteCloudBase?: (
+        id: number,
+        cloudUpdatedAt: string | null,
+        cloudRevision?: number | null,
+        options?: NoteCloudBaseOptions
+      ) => Promise<{ success: boolean; note?: NoteItem }>;
       setNoteOwnerFromCloud?: (id: number, ownerUserId: string) => Promise<void>;
       countTeamNotesMissingOwner?: () => Promise<number>;
+      countNotesMissingRevision?: (spaceKind?: "private" | "team") => Promise<number>;
       markNoteSyncError?: (id: number) => Promise<void>;
       restoreNoteAfterDeniedDelete?: (id: number) => Promise<{ success: boolean; id: number }>;
       hardDeleteNote?: (id: number) => Promise<void>;

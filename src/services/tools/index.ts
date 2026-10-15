@@ -33,6 +33,8 @@ interface ToolRegistrySettings {
   vocabulary?: DictionaryActions & SnippetActions;
   /** Present only when connectors are available (signed in, paid, policy allows). */
   connectors?: ConnectorToolSettings;
+  /** Leaves out update_note, for a turn that must not change any note. */
+  keepNotesUnchanged?: boolean;
 }
 
 export function createToolRegistry(settings: ToolRegistrySettings): ToolRegistry {
@@ -44,7 +46,7 @@ export function createToolRegistry(settings: ToolRegistrySettings): ToolRegistry
   registry.register(createSearchNotesTool({ useCloudSearch, fixedScope: settings.searchScope }));
   registry.register(getNoteTool);
   registry.register(createNoteTool);
-  registry.register(updateNoteTool);
+  if (!settings.keepNotesUnchanged) registry.register(updateNoteTool);
   registry.register(listFoldersTool);
   registry.register(clipboardTool);
 

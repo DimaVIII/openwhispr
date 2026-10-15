@@ -66,7 +66,13 @@ const originalLoad = Module._load;
 // The held-modifier wait spawns the fast-paste binary ahead of every Linux paste.
 // Tests that pin the paste chain's spawn sequence see it as already released;
 // the wait itself is covered by tests that load with `realModifierWait`.
-function loadClipboardManager({ spawn, accessibility = true, realModifierWait = false } = {}) {
+function loadClipboardManager({
+  spawn,
+  spawnSync,
+  cosmicAppId,
+  accessibility = true,
+  realModifierWait = false,
+} = {}) {
   delete require.cache[clipboardModulePath];
 
   Module._load = function loadWithMocks(request, parent, isMain) {
@@ -78,8 +84,11 @@ function loadClipboardManager({ spawn, accessibility = true, realModifierWait = 
         },
       };
     }
-    if (request === "child_process" && spawn) {
-      return { ...childProcess, spawn };
+    if (request === "./cosmicToplevel" && cosmicAppId !== undefined) {
+      return { getCosmicActiveAppId: async () => cosmicAppId };
+    }
+    if (request === "child_process" && (spawn || spawnSync)) {
+      return { ...childProcess, ...(spawn && { spawn }), ...(spawnSync && { spawnSync }) };
     }
     return originalLoad.call(this, request, parent, isMain);
   };
@@ -226,6 +235,92 @@ test("restore is skipped when another clipboard write wins the race", async () =
   );
 
   assert.equal(fakeClipboard.text, "user copied something else");
+});
+
+// XWayland can't read a native Wayland app's clipboard while a Wayland window is
+// focused, and restoring that empty read wiped the user's clipboard (#2055).
+// wl-paste exits 1 for an empty or non-text clipboard, and a read killed by the
+// timeout (status null) may have written only part of the text.
+for (const { when, status, stdout, saved } of [
+  {
+    when: "wl-paste exits 0",
+    status: 0,
+    stdout: "copied in a Wayland app",
+    saved: "copied in a Wayland app",
+  },
+  { when: "wl-paste exits 1", status: 1, stdout: "", saved: "" },
+  { when: "wl-paste times out mid-read", status: null, stdout: "copied in a Way", saved: "" },
+]) {
+  test(`an unreadable Wayland clipboard is saved as "${saved}" when ${when}`, async (t) => {
+    const platform = Object.getOwnPropertyDescriptor(process, "platform");
+    Object.defineProperty(process, "platform", { value: "linux" });
+    t.after(() => Object.defineProperty(process, "platform", platform));
+    resetClipboard({ formats: [] });
+    const spawnSyncCalls = [];
+    const Manager = loadClipboardManager({
+      spawnSync: (command, args) => {
+        spawnSyncCalls.push({ command, args });
+        return { status, stdout: Buffer.from(stdout) };
+      },
+    });
+    const manager = new Manager();
+    manager.commandExists = (command) => command === "wl-paste";
+
+    const snapshot = await withWaylandEnvironment("KDE", () => manager._saveClipboard());
+
+    assert.deepEqual(snapshot, { type: "text", data: saved });
+    assert.deepEqual(spawnSyncCalls, [
+      { command: "wl-paste", args: ["--no-newline", "--type", "text"] },
+    ]);
+  });
+}
+
+test("a clipboard XWayland can read is saved without asking wl-paste", async (t) => {
+  const platform = Object.getOwnPropertyDescriptor(process, "platform");
+  Object.defineProperty(process, "platform", { value: "linux" });
+  t.after(() => Object.defineProperty(process, "platform", platform));
+  resetClipboard({ text: "readable over X11" });
+  const spawnSyncCalls = [];
+  const Manager = loadClipboardManager({
+    spawnSync: (command, args) => {
+      spawnSyncCalls.push({ command, args });
+      return { status: 0, stdout: Buffer.from("Wayland side") };
+    },
+  });
+  const manager = new Manager();
+  manager.commandExists = (command) => command === "wl-paste";
+
+  const snapshot = await withWaylandEnvironment("KDE", () => manager._saveClipboard());
+
+  assert.deepEqual(snapshot, { type: "text", data: "readable over X11" });
+  assert.deepEqual(spawnSyncCalls, []);
+});
+
+test("an empty clipboard on X11 is saved without asking wl-paste", async (t) => {
+  const platform = Object.getOwnPropertyDescriptor(process, "platform");
+  Object.defineProperty(process, "platform", { value: "linux" });
+  const { XDG_SESSION_TYPE, WAYLAND_DISPLAY } = process.env;
+  process.env.XDG_SESSION_TYPE = "x11";
+  delete process.env.WAYLAND_DISPLAY;
+  t.after(() => {
+    Object.defineProperty(process, "platform", platform);
+    if (XDG_SESSION_TYPE === undefined) delete process.env.XDG_SESSION_TYPE;
+    else process.env.XDG_SESSION_TYPE = XDG_SESSION_TYPE;
+    if (WAYLAND_DISPLAY !== undefined) process.env.WAYLAND_DISPLAY = WAYLAND_DISPLAY;
+  });
+  resetClipboard({ formats: [] });
+  const spawnSyncCalls = [];
+  const Manager = loadClipboardManager({
+    spawnSync: (command, args) => {
+      spawnSyncCalls.push({ command, args });
+      return { status: 0, stdout: Buffer.from("Wayland side") };
+    },
+  });
+  const manager = new Manager();
+  manager.commandExists = (command) => command === "wl-paste";
+
+  assert.deepEqual(manager._saveClipboard(), { type: "text", data: "" });
+  assert.deepEqual(spawnSyncCalls, []);
 });
 
 test("pasteText waits for prior clipboard restoration before starting the next paste", async () => {
@@ -415,6 +510,83 @@ test("failed wtype continues to native Shift+Insert uinput", async () => {
     ["wtype", "/tmp/linux-fast-paste"]
   );
   assert.deepEqual(spawnCalls[1].args, ["--uinput", "--shift-insert"]);
+});
+
+// Warp binds paste to Ctrl+Shift+V only, and COSMIC's own app ids must not read as the
+// "st" terminal ("system76").
+for (const [appId, expected] of [
+  [
+    "dev.warp.warp",
+    {
+      command: "wtype",
+      args: ["-M", "ctrl", "-M", "shift", "-k", "v", "-m", "shift", "-m", "ctrl"],
+    },
+  ],
+  [
+    "com.system76.cosmicedit",
+    { command: "/tmp/linux-fast-paste", args: ["--uinput", "--shift-insert"] },
+  ],
+  [null, { command: "/tmp/linux-fast-paste", args: ["--uinput", "--shift-insert"] }],
+]) {
+  test(`COSMIC pastes into ${appId ?? "an undetected window"} with ${expected.command}`, async () => {
+    const spawnCalls = [];
+    const TestClipboardManager = loadClipboardManager({
+      spawn: createSuccessfulSpawn(spawnCalls),
+      cosmicAppId: appId,
+    });
+    const manager = new TestClipboardManager();
+    manager.commandExists = (command) => command === "wtype";
+    manager.resolveLinuxFastPasteBinary = () => "/tmp/linux-fast-paste";
+
+    await withWaylandEnvironment("COSMIC", () => manager.pasteLinux(null));
+
+    assert.deepEqual(spawnCalls, [expected]);
+  });
+}
+
+// COSMIC's XWayland keeps naming the last X11 window while a native Wayland window has
+// focus, and COSMIC gives no PID to spot an Electron app hosting a TUI.
+test("COSMIC ignores xdotool and keeps Shift+Insert for a window that is not a terminal", async () => {
+  const spawnCalls = [];
+  const TestClipboardManager = loadClipboardManager({
+    spawn: createSpawn(spawnCalls, [1, 0]),
+    spawnSync: () => ({ status: 0, stdout: Buffer.from("4194322\n") }),
+    cosmicAppId: "code",
+  });
+  const manager = new TestClipboardManager();
+  manager.commandExists = (command) => command === "xdotool";
+  manager.resolveLinuxFastPasteBinary = () => "/tmp/linux-fast-paste";
+
+  await withWaylandEnvironment("COSMIC", async () => {
+    process.env.DISPLAY = ":0";
+    await manager.pasteLinux(null);
+  });
+
+  assert.deepEqual(
+    spawnCalls.map((call) => call.args),
+    [["--uinput", "--shift-insert"], ["--shift-insert"]]
+  );
+});
+
+// On COSMIC wtype only pastes into terminals, so it is reported for the guidance
+// without becoming the paste method.
+test("COSMIC reports wtype without making it the paste method", async (t) => {
+  const platform = Object.getOwnPropertyDescriptor(process, "platform");
+  Object.defineProperty(process, "platform", { value: "linux" });
+  t.after(() => Object.defineProperty(process, "platform", platform));
+  const TestClipboardManager = loadClipboardManager();
+  const manager = new TestClipboardManager();
+  manager.resolveLinuxFastPasteBinary = () => "/tmp/linux-fast-paste";
+  manager._canAccessUinput = () => true;
+
+  for (const hasWtype of [true, false]) {
+    manager.commandExists = (command) => hasWtype && command === "wtype";
+    const status = await withWaylandEnvironment("COSMIC", () => manager.checkPasteTools());
+    assert.equal(status.isCosmic, true);
+    assert.equal(status.hasWtype, hasWtype);
+    assert.equal(status.method, "uinput");
+    assert.deepEqual(status.tools, []);
+  }
 });
 
 test("GNOME tries uinput before a tokenless portal", async () => {
@@ -608,6 +780,82 @@ test("KDE tries portal before uinput", async () => {
       ["--portal", "--shift-insert"],
       ["--uinput", "--shift-insert"],
     ]
+  );
+});
+
+// On a non-Latin layout KWin can't map XK_v, so the Ctrl+V (or Ctrl+Shift+V) a
+// detected window would get reaches it as Ctrl alone (#2055).
+for (const windowClass of ["chromium", "kitty"]) {
+  test(`KDE portal sends Shift+Insert to a detected ${windowClass} window`, async () => {
+    const spawnCalls = [];
+    const TestClipboardManager = loadClipboardManager({
+      spawn: createSpawn(spawnCalls, [0]),
+    });
+    const manager = new TestClipboardManager();
+    manager.commandExists = () => false;
+    manager.resolveLinuxFastPasteBinary = () => "/tmp/linux-fast-paste";
+    manager._readPortalToken = () => null;
+    manager._detectKdeWindowClass = () => windowClass;
+
+    await withWaylandEnvironment("KDE", () => manager.pasteLinux(null));
+
+    assert.deepEqual(
+      spawnCalls.map((call) => call.args),
+      [["--portal", "--shift-insert"]]
+    );
+  });
+}
+
+// Warp binds paste to Ctrl+Shift+V only, so it keeps that chord on KDE.
+test("KDE portal sends Ctrl+Shift+V to a detected Warp window", async () => {
+  const spawnCalls = [];
+  const TestClipboardManager = loadClipboardManager({
+    spawn: createSpawn(spawnCalls, [0]),
+  });
+  const manager = new TestClipboardManager();
+  manager.commandExists = () => false;
+  manager.resolveLinuxFastPasteBinary = () => "/tmp/linux-fast-paste";
+  manager._readPortalToken = () => null;
+  manager._detectKdeWindowClass = () => "dev.warp.warp";
+
+  await withWaylandEnvironment("KDE", () => manager.pasteLinux(null));
+
+  assert.deepEqual(
+    spawnCalls.map((call) => call.args),
+    [["--portal", "--terminal"]]
+  );
+});
+
+// The Shift+Insert switch for #2055 is KWin-specific: a detected GNOME window
+// keeps Ctrl+V through the portal.
+test("GNOME portal sends Ctrl+V to a detected window", async () => {
+  const spawnCalls = [];
+  const TestClipboardManager = loadClipboardManager({
+    spawn: createSpawn(spawnCalls, [0]),
+    spawnSync: (command, args) => {
+      if (command === "xdotool" && args.includes("getwindowclassname")) {
+        return { status: 0, stdout: Buffer.from("firefox\n") };
+      }
+      if (command === "xdotool" && args.length === 1) {
+        return { status: 0, stdout: Buffer.from("42\n") };
+      }
+      return { status: 1, stdout: Buffer.from("") };
+    },
+  });
+  const manager = new TestClipboardManager();
+  manager.commandExists = (command) => command === "xdotool";
+  manager.resolveLinuxFastPasteBinary = () => "/tmp/linux-fast-paste";
+  manager._readPortalToken = () => "restore-token";
+  manager._savePortalToken = () => {};
+
+  await withWaylandEnvironment("GNOME", () => {
+    process.env.DISPLAY = ":0";
+    return manager.pasteLinux(null);
+  });
+
+  assert.deepEqual(
+    spawnCalls.map((call) => call.args),
+    [["--portal", "--restore-token", "restore-token"]]
   );
 });
 
