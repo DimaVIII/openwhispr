@@ -175,6 +175,117 @@ private final class KeyboardRowsStack: UIStackView {
   }
 }
 
+/// The system keyboard's touch rules, free of UIKit so they can be tested. Every
+/// finger is tracked on its own, and a key that types on lift types as soon as
+/// another finger lands (rollover), so fast overlapping typing keeps press order
+/// and two fingers on one key type it twice.
+private struct KeyTouchTracker<TouchID: Hashable, Key: Hashable> {
+  enum Effect: Equatable {
+    case activate(Key)
+    case highlight(Key, Bool)
+  }
+
+  private struct ActiveTouch {
+    /// Nil while the finger is outside every key.
+    var key: Key?
+    var committed = false
+    var highlighted = false
+  }
+
+  /// Keys that act as the finger lands rather than on lift (shift, delete).
+  private let activatesOnTouchDown: (Key) -> Bool
+  private var touches: [TouchID: ActiveTouch] = [:]
+  private var pressOrder: [TouchID] = []
+  private var highlightCounts: [Key: Int] = [:]
+
+  init(activatesOnTouchDown: @escaping (Key) -> Bool) {
+    self.activatesOnTouchDown = activatesOnTouchDown
+  }
+
+  var activeTouchCount: Int { touches.count }
+
+  mutating func began(_ id: TouchID, on key: Key) -> [Effect] {
+    // UIKit can reuse a touch whose end never arrived; drop it untyped.
+    var effects = cancelled(id)
+    effects += rollOver()
+    var touch = ActiveTouch(key: key)
+    effects += setHighlighted(&touch, true)
+    if activatesOnTouchDown(key) {
+      touch.committed = true
+      effects.append(.activate(key))
+    }
+    touches[id] = touch
+    pressOrder.append(id)
+    return effects
+  }
+
+  /// `key` is nil when the finger is outside every key.
+  mutating func moved(_ id: TouchID, to key: Key?) -> [Effect] {
+    guard var touch = touches[id], !touch.committed, touch.key != key else { return [] }
+    if let key, activatesOnTouchDown(key) { return [] }
+    var effects = setHighlighted(&touch, false)
+    touch.key = key
+    effects += setHighlighted(&touch, true)
+    touches[id] = touch
+    return effects
+  }
+
+  mutating func ended(_ id: TouchID) -> [Effect] {
+    guard var touch = remove(id) else { return [] }
+    var effects: [Effect] = []
+    if !touch.committed, let key = touch.key {
+      effects.append(.activate(key))
+    }
+    effects += setHighlighted(&touch, false)
+    return effects
+  }
+
+  mutating func cancelled(_ id: TouchID) -> [Effect] {
+    guard var touch = remove(id) else { return [] }
+    return setHighlighted(&touch, false)
+  }
+
+  mutating func cancelAll() -> [Effect] {
+    var effects: [Effect] = []
+    for id in pressOrder {
+      effects += cancelled(id)
+    }
+    return effects
+  }
+
+  /// Types every key still waiting for its lift, oldest finger first. A finger
+  /// outside every key is passed over and stays keyless.
+  private mutating func rollOver() -> [Effect] {
+    var effects: [Effect] = []
+    for id in pressOrder {
+      guard var touch = touches[id], !touch.committed else { continue }
+      touch.committed = true
+      if let key = touch.key {
+        effects.append(.activate(key))
+      }
+      effects += setHighlighted(&touch, false)
+      touches[id] = touch
+    }
+    return effects
+  }
+
+  private mutating func remove(_ id: TouchID) -> ActiveTouch? {
+    pressOrder.removeAll { $0 == id }
+    return touches.removeValue(forKey: id)
+  }
+
+  /// A key lights with its first finger and dims with its last. A keyless
+  /// finger is never lit.
+  private mutating func setHighlighted(_ touch: inout ActiveTouch, _ highlighted: Bool) -> [Effect] {
+    guard touch.highlighted != highlighted, let key = touch.key else { return [] }
+    touch.highlighted = highlighted
+    let count = (highlightCounts[key] ?? 0) + (highlighted ? 1 : -1)
+    highlightCounts[key] = count > 0 ? count : nil
+    let changed = highlighted ? count == 1 : count == 0
+    return changed ? [.highlight(key, highlighted)] : []
+  }
+}
+
 private extension UIColor {
   func brightened(by amount: CGFloat) -> UIColor {
     var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0

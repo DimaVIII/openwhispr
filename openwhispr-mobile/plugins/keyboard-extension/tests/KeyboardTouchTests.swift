@@ -80,6 +80,7 @@ private enum KeyboardTouchTests {
     checkWindowTouchDelays(&checks)
     checkPollCadence(&checks)
     checkFieldKeysRefreshOnlyOnChange(&checks)
+    checkTouchTracker(&checks)
     for width: CGFloat in [360, 393, 430, 852] {
       checkProductionLayout(width: width, numbers: false, globe: false, &checks)
       checkProductionLayout(width: width, numbers: true, globe: false, &checks)
@@ -376,5 +377,109 @@ private enum KeyboardTouchTests {
     returnKey.setImage(nil, for: .normal)
     controller.touchTestRefreshFieldKeys()
     checks.check("an unchanged field leaves the return key alone", returnKey.image(for: .normal) == nil)
+  }
+
+  /// Apple-keyboard touch rules, without UIKit: rollover keeps press order and two
+  /// fingers on one key type it twice.
+  @MainActor
+  static func checkTouchTracker(_ checks: inout TouchChecks) {
+    typealias Tracker = KeyTouchTracker<Int, String>
+    func makeTracker() -> Tracker { Tracker(activatesOnTouchDown: { $0 == "⌫" || $0 == "⇧" }) }
+    func typed(_ effects: [Tracker.Effect]) -> [String] {
+      effects.compactMap { effect in
+        if case .activate(let key) = effect { return key }
+        return nil
+      }
+    }
+    func lit(_ effects: [Tracker.Effect]) -> [String: Bool] {
+      var state = [String: Bool]()
+      for case .highlight(let key, let on) in effects { state[key] = on }
+      return state
+    }
+
+    var tracker = makeTracker()
+    checks.check("tracker: a tap lights its key as the finger lands", tracker.began(1, on: "a") == [.highlight("a", true)])
+    checks.check("tracker: a tap types on lift", tracker.ended(1) == [.activate("a"), .highlight("a", false)])
+    checks.check("tracker: an unknown lift does nothing", tracker.ended(9).isEmpty)
+
+    tracker = makeTracker()
+    var effects = tracker.began(1, on: "a") + tracker.began(2, on: "b") + tracker.ended(2) + tracker.ended(1)
+    checks.check("tracker: overlapping keys type in press order", typed(effects) == ["a", "b"])
+
+    tracker = makeTracker()
+    effects = tracker.began(1, on: "a") + tracker.began(2, on: "b") + tracker.ended(1) + tracker.ended(2)
+    checks.check("tracker: overlapping keys lifted in order type once each", typed(effects) == ["a", "b"])
+
+    tracker = makeTracker()
+    effects = tracker.began(1, on: "a") + tracker.began(2, on: "b") + tracker.began(3, on: "c")
+      + tracker.ended(3) + tracker.ended(2) + tracker.ended(1)
+    checks.check("tracker: three fingers lifted in reverse keep press order", typed(effects) == ["a", "b", "c"])
+
+    tracker = makeTracker()
+    effects = tracker.began(1, on: "l") + tracker.began(2, on: "l") + tracker.ended(1)
+    checks.check("tracker: a key stays lit while a second finger holds it", lit(effects)["l"] == true)
+    effects += tracker.ended(2)
+    checks.check("tracker: two fingers on one key type it twice", typed(effects) == ["l", "l"])
+    checks.check("tracker: the key dims when the last finger lifts", lit(effects)["l"] == false)
+
+    tracker = makeTracker()
+    checks.check(
+      "tracker: delete acts as the finger lands",
+      tracker.began(1, on: "⌫") == [.highlight("⌫", true), .activate("⌫")]
+    )
+    checks.check("tracker: delete does not act again on lift", tracker.ended(1) == [.highlight("⌫", false)])
+
+    tracker = makeTracker()
+    effects = tracker.began(1, on: "a") + tracker.began(2, on: "⌫")
+    checks.check("tracker: a pending letter types before delete removes it", typed(effects) == ["a", "⌫"])
+
+    tracker = makeTracker()
+    effects = tracker.began(1, on: "a") + tracker.cancelled(1)
+    checks.check("tracker: a cancelled touch types nothing", typed(effects).isEmpty && lit(effects)["a"] == false)
+
+    tracker = makeTracker()
+    _ = tracker.began(1, on: "a")
+    checks.check(
+      "tracker: sliding moves the highlight",
+      tracker.moved(1, to: "s") == [.highlight("a", false), .highlight("s", true)]
+    )
+    checks.check("tracker: the key under the lift types", typed(tracker.ended(1)) == ["s"])
+
+    tracker = makeTracker()
+    _ = tracker.began(1, on: "a")
+    checks.check("tracker: sliding onto shift is ignored", tracker.moved(1, to: "⇧").isEmpty)
+    checks.check("tracker: the original key still types", typed(tracker.ended(1)) == ["a"])
+
+    tracker = makeTracker()
+    _ = tracker.began(1, on: "a")
+    _ = tracker.began(2, on: "b")
+    checks.check("tracker: a rolled-over key no longer slides", tracker.moved(1, to: "c").isEmpty)
+    checks.check("tracker: a rolled-over key types nothing more on lift", typed(tracker.ended(1)).isEmpty)
+
+    tracker = makeTracker()
+    effects = tracker.began(1, on: "a") + tracker.began(2, on: "b")
+    effects += tracker.cancelAll()
+    checks.check("tracker: cancelling all touches dims every key", lit(effects) == ["a": false, "b": false])
+    checks.check("tracker: cancelling all touches forgets them", tracker.activeTouchCount == 0 && tracker.ended(2).isEmpty)
+
+    tracker = makeTracker()
+    _ = tracker.began(1, on: "a")
+    effects = tracker.began(1, on: "b")
+    checks.check("tracker: a reused touch never types its stale key", typed(effects).isEmpty)
+    checks.check("tracker: a reused touch types its new key", typed(tracker.ended(1)) == ["b"])
+
+    tracker = makeTracker()
+    _ = tracker.began(1, on: "a")
+    checks.check("tracker: sliding off every key dims it", tracker.moved(1, to: nil) == [.highlight("a", false)])
+    checks.check("tracker: lifting outside every key types nothing", typed(tracker.ended(1)).isEmpty)
+
+    tracker = makeTracker()
+    effects = tracker.began(1, on: "a") + tracker.moved(1, to: nil) + tracker.moved(1, to: "b") + tracker.ended(1)
+    checks.check("tracker: sliding back onto a key types that key", typed(effects) == ["b"])
+
+    tracker = makeTracker()
+    effects = tracker.began(1, on: "a") + tracker.moved(1, to: nil) + tracker.began(2, on: "b")
+      + tracker.moved(1, to: "c") + tracker.ended(1) + tracker.ended(2)
+    checks.check("tracker: rollover passes over a finger outside the keys", typed(effects) == ["b"])
   }
 }
