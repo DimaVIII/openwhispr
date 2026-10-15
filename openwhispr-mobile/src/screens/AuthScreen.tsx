@@ -285,7 +285,7 @@ export default function AuthScreen({
           <View>
             {!authMode && (
               <View style={styles.formGroup}>
-                {isAppleAvailable ? (
+                {isAppleAvailable || Platform.OS === 'android' ? (
                   <ProviderButton
                     provider="apple"
                     label="Continue with Apple"

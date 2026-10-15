@@ -434,7 +434,11 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
   useEffect(() => {
     let cancelled = false;
     setConfigured(false);
-    if (Platform.OS === 'ios' && selection.mode === 'providers' && providerId) {
+    if (
+      (Platform.OS === 'ios' || Platform.OS === 'android') &&
+      selection.mode === 'providers' &&
+      providerId
+    ) {
       getProviderCredentialReference(providerId, selection.endpoint)
         .then((reference) =>
           // An unreadable saved key still exists, so offer to remove it.
@@ -768,7 +772,17 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
               unavailable={modeUnavailable}
             />
             {modeNote ? <SectionFooter>{modeNote}</SectionFooter> : null}
-            {selection.mode === 'local' && speechScope ? (
+            {selection.mode === 'local' && Platform.OS === 'android' ? (
+              <SettingsSection title="On-device models">
+                <SettingsRow
+                  icon="arrow.down.circle"
+                  mdIcon="Download"
+                  title="Choose or download models"
+                  description="Choose speech and text models for this phone."
+                  onPress={() => router.push('/android-models')}
+                />
+              </SettingsSection>
+            ) : selection.mode === 'local' && speechScope ? (
               <OnDeviceModelSection
                 scope={speechScope}
                 picked={
@@ -778,7 +792,11 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
               />
             ) : null}
             {shownMode === 'local' && !speechScope ? (
-              <SectionFooter>Runs on Apple Intelligence on this iPhone.</SectionFooter>
+              <SectionFooter>
+                {Platform.OS === 'android'
+                  ? 'Runs on your downloaded text model on this phone.'
+                  : 'Runs on Apple Intelligence on this iPhone.'}
+              </SectionFooter>
             ) : null}
             {selection.mode === 'providers' && provider ? (
               <>

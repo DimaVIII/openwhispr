@@ -8,9 +8,17 @@ import type {
 export type ProcessingMode = 'cloud' | 'private' | 'providers';
 export type TranscriptionProvider = 'local' | 'cloud' | 'byok';
 export type KeyboardTone = 'default' | 'formal' | 'casual' | 'very_casual' | 'excited';
+export type AndroidStyleContext = 'personal' | 'work' | 'email' | 'notes';
 export type InferenceMode = 'openwhispr' | 'local' | 'providers';
 
 export interface UserConfig {
+  androidTextModel?: 'qwen-small' | 'qwen-balanced';
+  androidSpeechModel?: 'parakeet-v3';
+  androidHistoryDays?: number;
+  androidBubbleSize?: number;
+  androidTranslationTarget?: { code: string; label: string };
+  androidStyleContext?: AndroidStyleContext;
+  androidStyleTones?: Partial<Record<AndroidStyleContext, KeyboardTone>>;
   inference?: Partial<Record<InferenceScope, InferenceSelection>>;
   rememberedInference?: Partial<Record<InferenceScope, Record<string, InferenceSelection>>>;
   // Workflows held on the previous mode when dictation moved to Bring Your Own Key,

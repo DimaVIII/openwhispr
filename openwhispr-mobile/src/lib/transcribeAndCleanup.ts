@@ -28,6 +28,7 @@ import type { KeyboardTone, TranscriptionRequest, TranscriptionResponse } from '
 type ProcessingStage = 'transcribing' | 'cleaning';
 
 export interface DictationProcessingLifecycle {
+  signal?: AbortSignal;
   onStage?: (stage: ProcessingStage, details?: { fusedCleanup?: boolean }) => void;
   onTranscribeDone?: (result: TranscriptionResponse) => void;
   onCleanupDone?: (result: TranscriptionResponse) => void;
@@ -204,6 +205,7 @@ async function runSerialTranscribeAndCleanup(
   // Tone applies only to keyboard dictation; snippet triggers to dictation
   // contexts (recording/keyboard) — never to file uploads.
   const finalText = await cleanupTranscript(originalText, {
+    signal: lifecycle.signal,
     inferenceRoute: request.cleanupRoute,
     agentRoute: request.agentRoute,
     cleanupUnavailable: request.cleanupUnavailable,
@@ -347,6 +349,7 @@ async function runTranscribeAndCleanup(
       lifecycle.onStage?.('cleaning', { fusedCleanup: false });
       let cleanupWarning: string | undefined;
       const finalText = await cleanupTranscript(originalText, {
+        signal: lifecycle.signal,
         onSkipped: (reason): void => {
           cleanupWarning = reason;
         },

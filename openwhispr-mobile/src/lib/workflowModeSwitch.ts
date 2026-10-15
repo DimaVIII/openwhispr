@@ -1,4 +1,4 @@
-import { Alert } from 'react-native';
+import { Alert, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useConfigStore } from '@/store/useConfigStore';
@@ -42,7 +42,7 @@ async function transcriptionModelReady(): Promise<ModeSwitchResult | null> {
   // Nothing to run yet: open the model list, where every on-device model can be
   // downloaded.
   if (readiness.status === 'missing') {
-    router.push('/(account)/model-download');
+    router.push(Platform.OS === 'android' ? '/android-models' : '/(account)/model-download');
     return 'needs-model';
   }
   return null;

@@ -258,9 +258,13 @@ describe('getInferenceModes', () => {
     expect(getInferenceModes('text').map((mode) => mode.mode)).toContain('providers');
   });
 
-  it('never offers Bring Your Own Key on Android', () => {
+  it('offers Bring Your Own Key on Android with its native transport', () => {
     Platform.OS = 'android';
-    expect(getInferenceModes('speech').map((mode) => mode.mode)).toEqual(['openwhispr', 'local']);
+    expect(getInferenceModes('speech').map((mode) => mode.mode)).toEqual([
+      'openwhispr',
+      'local',
+      'providers',
+    ]);
   });
 });
 

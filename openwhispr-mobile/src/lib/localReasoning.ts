@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { AppleLLM } from '@/lib/appleLLM';
 import type {
   LocalReasoningErrorCode,
@@ -37,6 +38,10 @@ export function clearLocalReasoningReadinessCache(): void {
 export async function getLocalReasoningReadiness(options?: {
   refresh?: boolean;
 }): Promise<LocalReasoningReadiness> {
+  if (Platform.OS === 'android') {
+    const { androidTextReadiness } = await import('@/android/LocalTextModel');
+    return androidTextReadiness();
+  }
   if (!isAppleLocalIntelligenceEnabled()) {
     return { status: 'disabled', tokenCounting: false };
   }
@@ -181,6 +186,8 @@ export function isLocalReasoningUnsupported(readiness?: LocalReasoningReadiness 
 }
 
 export function getLocalReasoningUnavailableMessage(readiness?: LocalReasoningReadiness): string {
+  if (Platform.OS === 'android')
+    return 'Download a local text model in Account → Models to use on-device AI.';
   switch (readiness?.status) {
     case 'unsupportedDevice':
       return 'On-Device AI needs an iPhone with Apple Intelligence (iPhone 15 Pro or later).';

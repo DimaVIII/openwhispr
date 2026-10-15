@@ -68,13 +68,24 @@ export const useAuthStore = create<AuthStore>((set) => ({
     set({ isLoading: true });
     await anonymousSignInInFlight?.catch(() => undefined);
     try {
+      const isGuest = (await SecureStore.getItemAsync(GUEST_SESSION_KEY)) === 'true';
+      if (isGuest && !(await getStoredSession())) {
+        useUsageStore.getState().reset();
+        set({
+          user: null,
+          sessionCookie: null,
+          isGuest: true,
+          isInitialized: true,
+          isLoading: false,
+        });
+        return;
+      }
       const user = await getSession();
       if (user) {
         await claimNoteShares(user);
         const sessionCookie = await getStoredSession();
         set({ user, sessionCookie, isGuest: false, isInitialized: true, isLoading: false });
       } else {
-        const isGuest = (await SecureStore.getItemAsync(GUEST_SESSION_KEY)) === 'true';
         useUsageStore.getState().reset();
         set({ user: null, sessionCookie: null, isGuest, isInitialized: true, isLoading: false });
       }

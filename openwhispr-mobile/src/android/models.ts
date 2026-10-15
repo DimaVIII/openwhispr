@@ -1,0 +1,156 @@
+import * as FileSystem from 'expo-file-system/legacy';
+import { AndroidDictation } from '../../modules/android-dictation/src';
+import { create } from 'zustand';
+
+export const ANDROID_MODELS = {
+  'parakeet-v3': {
+    title: 'Parakeet v3',
+    kind: 'speech',
+    bytes: 670478772,
+    files: [
+      {
+        name: 'encoder.int8.onnx',
+        bytes: 652184281,
+        sha256: 'acfc2b4456377e15d04f0243af540b7fe7c992f8d898d751cf134c3a55fd2247',
+      },
+      {
+        name: 'decoder.int8.onnx',
+        bytes: 11845275,
+        sha256: '179e50c43d1a9de79c8a24149a2f9bac6eb5981823f2a2ed88d655b24248db4e',
+      },
+      {
+        name: 'joiner.int8.onnx',
+        bytes: 6355277,
+        sha256: '3164c13fc2821009440d20fcb5fdc78bff28b4db2f8d0f0b329101719c0948b3',
+      },
+      {
+        name: 'tokens.txt',
+        bytes: 93939,
+        sha256: 'd58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d',
+      },
+    ],
+  },
+  'qwen-small': {
+    title: 'Qwen 0.5B · Light',
+    kind: 'text',
+    bytes: 491400032,
+    sha256: '74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db',
+    url: 'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/9217f5db79a29953eb74d5343926648285ec7e67/qwen2.5-0.5b-instruct-q4_k_m.gguf',
+  },
+  'qwen-balanced': {
+    title: 'Qwen 1.5B · Balanced',
+    kind: 'text',
+    bytes: 1117320736,
+    sha256: '6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e',
+    url: 'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/91cad51170dc346986eccefdc2dd33a9da36ead9/qwen2.5-1.5b-instruct-q4_k_m.gguf',
+  },
+} as const;
+export type AndroidModelId = keyof typeof ANDROID_MODELS;
+export const useModelDownloads = create<{ progress: Partial<Record<AndroidModelId, number>> }>(
+  () => ({ progress: {} }),
+);
+function publishProgress(id: AndroidModelId, fraction?: number) {
+  useModelDownloads.setState((state) => {
+    const progress = { ...state.progress };
+    if (fraction === undefined) delete progress[id];
+    else progress[id] = fraction;
+    return { progress };
+  });
+}
+const active = new Map<
+  AndroidModelId,
+  { download?: FileSystem.DownloadResumable; cancelled: boolean }
+>();
+export function modelPath(id: AndroidModelId): string {
+  return `${FileSystem.documentDirectory}android-models/${id}${id === 'parakeet-v3' ? '' : '.gguf'}`;
+}
+function filesFor(id: AndroidModelId) {
+  if (id === 'parakeet-v3')
+    return ANDROID_MODELS[id].files.map((file) => ({
+      ...file,
+      url: `https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/2bda32ec70b097a55adaa07d9a7173915b43cc78/${file.name}`,
+      destination: `${modelPath(id)}/${file.name}`,
+    }));
+  return [{ ...ANDROID_MODELS[id], destination: modelPath(id) }];
+}
+export async function modelReady(id: AndroidModelId): Promise<boolean> {
+  if (!(id in ANDROID_MODELS)) return false;
+  for (const file of filesFor(id)) {
+    const info = await FileSystem.getInfoAsync(file.destination);
+    if (!info.exists || info.isDirectory || info.size !== file.bytes) return false;
+  }
+  return true;
+}
+export async function downloadAndroidModel(
+  id: AndroidModelId,
+  onProgress?: (fraction: number) => void,
+): Promise<void> {
+  if (active.has(id)) throw new Error('This model is already downloading.');
+  const job: { download?: FileSystem.DownloadResumable; cancelled: boolean } = { cancelled: false };
+  active.set(id, job);
+  const progress = (fraction: number) => {
+    publishProgress(id, fraction);
+    onProgress?.(fraction);
+  };
+  progress(0);
+  let completed = 0;
+  try {
+    if (await modelReady(id)) return;
+    if ((await FileSystem.getFreeDiskStorageAsync()) < ANDROID_MODELS[id].bytes * 1.15)
+      throw new Error('Free some storage before downloading this model.');
+    for (const file of filesFor(id)) {
+      if (job.cancelled) throw new Error('Download cancelled.');
+      const existing = await FileSystem.getInfoAsync(file.destination);
+      if (
+        existing.exists &&
+        !existing.isDirectory &&
+        existing.size === file.bytes &&
+        (await AndroidDictation!.sha256(file.destination)) === file.sha256
+      ) {
+        completed += file.bytes;
+        progress(completed / ANDROID_MODELS[id].bytes);
+        continue;
+      }
+      await FileSystem.makeDirectoryAsync(
+        file.destination.slice(0, file.destination.lastIndexOf('/')),
+        { intermediates: true },
+      );
+      const temporary = `${file.destination}.part`;
+      try {
+        job.download = FileSystem.createDownloadResumable(file.url, temporary, {}, (event) =>
+          progress(
+            Math.min(0.98, (completed + event.totalBytesWritten) / ANDROID_MODELS[id].bytes),
+          ),
+        );
+        const response = await job.download.downloadAsync();
+        if (job.cancelled || !response) throw new Error('Download cancelled.');
+        if (response.status !== 200)
+          throw new Error(`Download failed (${response.status}). Try again.`);
+        const info = await FileSystem.getInfoAsync(temporary);
+        if (
+          !info.exists ||
+          info.isDirectory ||
+          info.size !== file.bytes ||
+          (await AndroidDictation!.sha256(temporary)) !== file.sha256
+        )
+          throw new Error('Model verification failed. Please retry the download.');
+        if (job.cancelled) throw new Error('Download cancelled.');
+        await FileSystem.moveAsync({ from: temporary, to: file.destination });
+        completed += file.bytes;
+        progress(completed / ANDROID_MODELS[id].bytes);
+      } finally {
+        job.download = undefined;
+        await FileSystem.deleteAsync(temporary, { idempotent: true });
+      }
+    }
+  } finally {
+    active.delete(id);
+    publishProgress(id);
+  }
+}
+export async function cancelAndroidDownload(id: AndroidModelId): Promise<void> {
+  const job = active.get(id);
+  if (!job) return;
+  job.cancelled = true;
+  await job.download?.pauseAsync();
+}

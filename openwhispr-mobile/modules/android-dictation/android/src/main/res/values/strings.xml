@@ -1,0 +1,8 @@
+<resources>
+  <string name="ow_insertion_label">OpenWhispr text insertion</string>
+  <string name="ow_insertion_description">Inserts your dictation into the field you focused. Only the selected field is read when you activate dictation. Password fields are excluded. OpenWhispr does not send messages, tap buttons, or monitor your screen.</string>
+  <string name="ow_bubble_ready">OpenWhispr is ready</string>
+  <string name="ow_bubble_recording">OpenWhispr is recording</string>
+  <string name="ow_bubble_notice">Tap to open. Turn off the bubble in Account.</string>
+  <string name="ow_bubble_channel">Dictation bubble</string>
+</resources>

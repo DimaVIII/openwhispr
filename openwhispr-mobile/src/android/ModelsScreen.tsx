@@ -1,0 +1,149 @@
+import { useEffect, useState } from 'react';
+import { View, Alert } from 'react-native';
+import { router } from 'expo-router';
+import { useTranslation } from 'react-i18next';
+import { Text } from '@/components/ui/Text';
+import { useConfigStore } from '@/store/useConfigStore';
+import {
+  ANDROID_MODELS,
+  modelReady,
+  downloadAndroidModel,
+  cancelAndroidDownload,
+  useModelDownloads,
+  type AndroidModelId,
+} from './models';
+import { Button, Card, Page, Row, styles } from './ui';
+export function ModelsContent({ onNavigate }: { onNavigate?: () => void } = {}) {
+  const { t } = useTranslation();
+  const config = useConfigStore((s) => s.config);
+  const [ready, setReady] = useState<Partial<Record<AndroidModelId, boolean>>>({});
+  const progress = useModelDownloads((state) => state.progress);
+  const activeDownloads = Object.keys(progress).sort().join(',');
+  const refresh = async () => {
+    const rows = await Promise.all(
+      (Object.keys(ANDROID_MODELS) as AndroidModelId[]).map(async (id) => [
+        id,
+        await modelReady(id),
+      ]),
+    );
+    setReady(Object.fromEntries(rows));
+  };
+  useEffect(() => {
+    refresh().catch(() => undefined);
+  }, [activeDownloads]);
+  const download = async (id: AndroidModelId) => {
+    try {
+      await downloadAndroidModel(id);
+      await refresh();
+    } catch (error) {
+      Alert.alert(t('errorTitle'), (error as Error).message);
+    }
+  };
+  return (
+    <>
+      <Text style={styles.body}>{t('modelIntro')}</Text>
+      <Row
+        title={t('workflow')}
+        onPress={() => {
+          onNavigate?.();
+          router.push({ pathname: '/(account)/ai-workflow', params: { scope: 'dictation' } });
+        }}
+      />
+      {(['speech', 'text'] as const).map((kind) => (
+        <View key={kind} style={{ gap: 12 }}>
+          <Text style={styles.heading}>{t(kind === 'speech' ? 'speechModels' : 'textModels')}</Text>
+          {(
+            Object.entries(ANDROID_MODELS) as [
+              AndroidModelId,
+              (typeof ANDROID_MODELS)[AndroidModelId],
+            ][]
+          )
+            .filter(([, model]) => model.kind === kind)
+            .map(([id, model]) => {
+              const chosen =
+                kind === 'speech'
+                  ? id === 'parakeet-v3'
+                  : (config?.androidTextModel ?? 'qwen-balanced') === id;
+              return (
+                <Card key={id}>
+                  <Text style={{ fontSize: 19, fontWeight: '600' }}>{model.title}</Text>
+                  <Text style={styles.caption}>
+                    {Math.round(model.bytes / 1000000)} MB ·{' '}
+                    {ready[id]
+                      ? t('downloaded')
+                      : t(
+                          id === 'qwen-small'
+                            ? 'modelLight'
+                            : id === 'parakeet-v3'
+                              ? 'modelParakeet'
+                              : 'modelBalanced',
+                        )}
+                  </Text>
+                  {progress[id] !== undefined ? (
+                    <>
+                      <Text>{Math.round(progress[id]! * 100)}%</Text>
+                      <Button
+                        secondary
+                        label={t('cancel')}
+                        onPress={() => {
+                          cancelAndroidDownload(id).catch(() => undefined);
+                        }}
+                      />
+                    </>
+                  ) : ready[id] ? (
+                    <Button
+                      secondary
+                      disabled={chosen}
+                      label={t(chosen ? 'selected' : 'choose')}
+                      onPress={() => {
+                        useConfigStore
+                          .getState()
+                          .updateConfig(
+                            kind === 'speech'
+                              ? { androidSpeechModel: id as 'parakeet-v3' }
+                              : { androidTextModel: id as 'qwen-small' | 'qwen-balanced' },
+                          );
+                      }}
+                    />
+                  ) : (
+                    <Button
+                      label={t('download')}
+                      onPress={() => {
+                        void download(id);
+                      }}
+                    />
+                  )}
+                </Card>
+              );
+            })}
+        </View>
+      ))}
+    </>
+  );
+}
+export default function ModelsScreen() {
+  const { t } = useTranslation();
+  return (
+    <Page title={t('models')} back>
+      <ModelsContent />
+      <Card>
+        <Text style={styles.heading}>{t('workflow')}</Text>
+        {(['dictation', 'upload', 'cleanup', 'notes', 'agent'] as const).map((scope) => (
+          <Row
+            key={scope}
+            title={t(
+              scope === 'dictation'
+                ? 'dictate'
+                : scope === 'notes'
+                  ? 'formatting'
+                  : scope === 'agent'
+                    ? 'assistant'
+                    : scope,
+            )}
+            onPress={() => router.push({ pathname: '/(account)/ai-workflow', params: { scope } })}
+          />
+        ))}
+      </Card>
+    </Page>
+  );
+}

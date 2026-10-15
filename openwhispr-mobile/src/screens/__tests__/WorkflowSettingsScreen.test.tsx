@@ -305,15 +305,16 @@ it('restores a provider model saved in an earlier settings session', async () =>
   expect(screen.getByText('Whisper')).toBeTruthy();
 });
 
-it('offers Cloud and On-Device on Android, without Bring Your Own Key', () => {
+it('offers Cloud, On-Device and Bring Your Own Key on Android', async () => {
   const platform = require('react-native').Platform;
   const original = platform.OS;
   platform.OS = 'android';
   try {
     render(<WorkflowSettingsScreen />);
+    await act(async () => undefined);
     expect(screen.getByText('OpenWhispr Cloud')).toBeTruthy();
     expect(screen.getByText('On-Device')).toBeTruthy();
-    expect(screen.queryByText('Bring Your Own Key')).toBeNull();
+    expect(screen.getByText('Bring Your Own Key')).toBeTruthy();
   } finally {
     platform.OS = original;
   }

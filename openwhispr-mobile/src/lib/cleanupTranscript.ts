@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { resolveMobileInferenceRoute } from '@/lib/mobileProviders';
 import { ReasoningService } from '@/services/reasoning/ReasoningService';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -29,6 +30,7 @@ interface CleanupOptions extends TextInferenceSnapshot {
   inferenceRoute?: ReasoningRequest['inferenceRoute'];
   requireProvider?: boolean;
   onSkipped?: (reason: string) => void;
+  signal?: AbortSignal;
   tone?: KeyboardTone;
   includeSnippetTriggers?: boolean;
   context?: CleanupContext;
@@ -39,12 +41,21 @@ export const AGENT_ACTION_TIMEOUT_MS = 30_000;
 export const CLEANUP_MAX_RETRIES = 1;
 export const CLEANUP_INITIAL_RETRY_DELAY_MS = 750;
 
-function createTimeoutSignal(timeoutMs: number): { signal: AbortSignal; cancel: () => void } {
+function createTimeoutSignal(
+  timeoutMs: number,
+  parent?: AbortSignal,
+): { signal: AbortSignal; cancel: () => void } {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const abort = () => controller.abort();
+  if (parent?.aborted) abort();
+  else parent?.addEventListener('abort', abort, { once: true });
+  const timeout = setTimeout(abort, timeoutMs);
   return {
     signal: controller.signal,
-    cancel: () => clearTimeout(timeout),
+    cancel: () => {
+      clearTimeout(timeout);
+      parent?.removeEventListener('abort', abort);
+    },
   };
 }
 
@@ -106,7 +117,7 @@ export async function cleanupTranscript(
   // Bump timeout only when the mention is detected — ordinary dictation shouldn't
   // wait longer on a slow network just because the feature is on.
   const mentionDetected = agentName !== undefined && detectAgentMention(rawText, agentName);
-  const timeoutMs = mentionDetected ? AGENT_ACTION_TIMEOUT_MS : CLEANUP_TIMEOUT_MS;
+
   const scope = mentionDetected ? 'agent' : 'cleanup';
   const snapshottedRoute = mentionDetected
     ? options.agentRoute
@@ -143,6 +154,14 @@ export async function cleanupTranscript(
     return rawText;
   }
   const inferenceRoute = resolved.route;
+  // First-use CPU model loading and prefill are slower than a hosted request.
+  // Keep the existing network timeout; local work remains user-cancellable.
+  const timeoutMs =
+    Platform.OS === 'android' && inferenceRoute.mode === 'local'
+      ? 120_000
+      : mentionDetected
+        ? AGENT_ACTION_TIMEOUT_MS
+        : CLEANUP_TIMEOUT_MS;
   // Say why an on-device pass can't run, rather than retrying into a generic failure.
   if (inferenceRoute.mode === 'local') {
     const skipReason = await localSkipReason(rawText, scope);
@@ -177,7 +196,7 @@ export async function cleanupTranscript(
     let retryCount = 0;
     const result = await withRetry(
       async () => {
-        const { signal, cancel } = createTimeoutSignal(timeoutMs);
+        const { signal, cancel } = createTimeoutSignal(timeoutMs, options.signal);
         try {
           return await ReasoningService.processText({
             text: rawText,

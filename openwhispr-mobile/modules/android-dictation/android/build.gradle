@@ -1,0 +1,30 @@
+apply plugin: 'com.android.library'
+apply plugin: 'expo-module-gradle-plugin'
+group = 'com.openwhispr.dictation'
+version = '1.0.0'
+android {
+  namespace 'com.openwhispr.dictation'
+  defaultConfig { versionCode 1; versionName '1.0.0' }
+}
+def speechRuntime = layout.buildDirectory.dir('generated/speechRuntime')
+def speechBuildScript = file('../../../scripts/build-android-speech.py')
+def speechAbis = (findProperty('reactNativeArchitectures') ?: 'arm64-v8a').toString()
+def prepareSpeechRuntime = tasks.register('prepareSpeechRuntime', Exec) {
+  inputs.file(speechBuildScript)
+  inputs.property('abis', speechAbis)
+  inputs.property('ndk', rootProject.ext.ndkVersion)
+  outputs.dir(speechRuntime)
+  commandLine 'python3', speechBuildScript,
+    '--sdk', android.sdkDirectory,
+    '--ndk', new File(android.sdkDirectory, "ndk/${rootProject.ext.ndkVersion}"),
+    '--cache', new File(gradle.gradleUserHomeDir, 'caches/openwhispr/sherpa-speech-only'),
+    '--output', speechRuntime.get().asFile,
+    '--abis', speechAbis
+}
+android.sourceSets.main.jniLibs.srcDir(speechRuntime.map { it.dir('jni') })
+dependencies {
+  testImplementation 'junit:junit:4.13.2'
+  implementation "com.squareup.okhttp3:okhttp:4.9.2"
+  implementation files(speechRuntime.map { it.file('classes.jar') }).builtBy(prepareSpeechRuntime)
+}
+tasks.named('preBuild').configure { dependsOn prepareSpeechRuntime }
