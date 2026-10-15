@@ -81,6 +81,7 @@ private enum KeyboardTouchTests {
     checkPollCadence(&checks)
     checkFieldKeysRefreshOnlyOnChange(&checks)
     checkTouchTracker(&checks)
+    checkTouchCoordinator(&checks)
     for width: CGFloat in [360, 393, 430, 852] {
       checkProductionLayout(width: width, numbers: false, globe: false, &checks)
       checkProductionLayout(width: width, numbers: true, globe: false, &checks)
@@ -481,5 +482,111 @@ private enum KeyboardTouchTests {
     effects = tracker.began(1, on: "a") + tracker.moved(1, to: nil) + tracker.began(2, on: "b")
       + tracker.moved(1, to: "c") + tracker.ended(1) + tracker.ended(2)
     checks.check("tracker: rollover passes over a finger outside the keys", typed(effects) == ["b"])
+  }
+
+  /// The coordinator drives real keys: highlight, rollover, where a finger lifts,
+  /// delete repeat, the cancel-everything path and VoiceOver activation.
+  @MainActor
+  static func checkTouchCoordinator(_ checks: inout TouchChecks) {
+    let coordinator = KeyTouchCoordinator()
+    var typed = [String]()
+    var repeating = false
+    var repeatStarts = 0
+    coordinator.onActivate = { typed.append($0.title(for: .normal) ?? "?") }
+    coordinator.onRepeatBegan = {
+      repeating = true
+      repeatStarts += 1
+    }
+    coordinator.onRepeatEnded = { repeating = false }
+    coordinator.repeatDelay = 0.05
+
+    func makeKey(_ title: String, _ action: KeyAction) -> KeyButton {
+      let key = KeyButton(type: .custom)
+      key.setTitle(title, for: .normal)
+      key.keyAction = action
+      key.touchCoordinator = coordinator
+      return key
+    }
+    func wait() { RunLoop.main.run(until: Date().addingTimeInterval(0.2)) }
+
+    let a = makeKey("a", .character)
+    let b = makeKey("b", .character)
+    let delete = makeKey("⌫", .backspace)
+    // Kept alive so their identifiers stay distinct.
+    let fingers = (0..<3).map { _ in NSObject() }
+    let ids = fingers.map(ObjectIdentifier.init)
+
+    checks.check("coordinated keys accept a second finger", a.isMultipleTouchEnabled)
+    coordinator.began(ids[0], on: a)
+    checks.check("coordinator lights a pressed key", a.isHighlighted)
+    coordinator.began(ids[1], on: b)
+    coordinator.ended(ids[1], on: b)
+    coordinator.ended(ids[0], on: a)
+    checks.check("coordinator types overlapping keys in press order", typed == ["a", "b"])
+    checks.check("coordinator dims keys after lift", !a.isHighlighted && !b.isHighlighted)
+
+    typed.removeAll()
+    coordinator.began(ids[0], on: a)
+    coordinator.ended(ids[0], on: b)
+    checks.check("the key under a lift types even with no move before it", typed == ["b"])
+
+    typed.removeAll()
+    coordinator.began(ids[0], on: a)
+    coordinator.ended(ids[0], on: nil)
+    checks.check("lifting outside every key types nothing", typed.isEmpty && !a.isHighlighted)
+
+    typed.removeAll()
+    coordinator.began(ids[2], on: delete)
+    checks.check("delete acts as the finger lands", typed == ["⌫"])
+    wait()
+    checks.check("holding delete starts repeating", repeating)
+    coordinator.ended(ids[2], on: delete)
+    checks.check("lifting delete stops repeating", !repeating)
+
+    coordinator.began(ids[2], on: delete)
+    coordinator.ended(ids[2], on: delete)
+    wait()
+    checks.check("a quick delete tap never starts repeating", !repeating)
+
+    typed.removeAll()
+    coordinator.began(ids[2], on: delete)
+    coordinator.moved(ids[2], to: a)
+    wait()
+    checks.check("sliding off delete before the hold cancels the repeat", !repeating)
+    coordinator.ended(ids[2], on: a)
+    checks.check("a slide off delete types nothing more on lift", typed == ["⌫"])
+
+    coordinator.began(ids[2], on: delete)
+    wait()
+    coordinator.moved(ids[2], to: a)
+    checks.check("once repeating, sliding off delete keeps deleting", repeating)
+    coordinator.ended(ids[2], on: a)
+    checks.check("lifting the slid finger stops repeating", !repeating)
+
+    repeatStarts = 0
+    coordinator.began(ids[0], on: delete)
+    wait()
+    coordinator.began(ids[1], on: delete)
+    wait()
+    coordinator.ended(ids[1], on: delete)
+    checks.check("delete keeps repeating while another finger holds it", repeating)
+    coordinator.ended(ids[0], on: delete)
+    checks.check("delete stops repeating when the last finger lifts", !repeating)
+    checks.check("two fingers on delete start one repeat", repeatStarts == 1)
+
+    coordinator.began(ids[0], on: a)
+    coordinator.began(ids[2], on: delete)
+    wait()
+    typed.removeAll()
+    coordinator.cancelAll()
+    checks.check("cancelling all touches stops a held delete", !repeating)
+    checks.check("cancelling all touches dims every key", !a.isHighlighted && !delete.isHighlighted)
+    coordinator.ended(ids[2], on: delete)
+    coordinator.ended(ids[0], on: a)
+    checks.check("cancelled touches type nothing when they lift", typed.isEmpty)
+
+    checks.check("VoiceOver types a coordinated key", b.accessibilityActivate() && typed == ["b"])
+    let plain = KeyButton(type: .custom)
+    checks.check("an uncoordinated key keeps single-touch UIControl behaviour", !plain.isMultipleTouchEnabled)
   }
 }

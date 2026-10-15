@@ -23,8 +23,32 @@ private enum KeyboardLog {
   }
 }
 
+/// What a key does. Keys with an action route their touches through
+/// KeyTouchCoordinator; keys without one (the globe) stay plain UIControls.
+private enum KeyAction: Equatable {
+  case character
+  case space
+  case returnKey
+  case fieldShortcut
+  case backspace
+  case shift
+  case layoutMode
+
+  /// The system keyboard acts on these as the finger lands rather than on lift.
+  var activatesOnTouchDown: Bool { self == .backspace || self == .shift }
+  var repeatsWhileHeld: Bool { self == .backspace }
+}
+
 private final class KeyButton: UIButton {
   var hitTestOutsets = UIEdgeInsets(top: 6, left: 3, bottom: 6, right: 3)
+  var keyAction: KeyAction? {
+    didSet { isMultipleTouchEnabled = keyAction != nil }
+  }
+  weak var touchCoordinator: KeyTouchCoordinator?
+
+  private var coordinator: KeyTouchCoordinator? {
+    keyAction == nil ? nil : touchCoordinator
+  }
 
   var normalBackground: UIColor = .clear {
     didSet { if !isHighlighted { backgroundColor = normalBackground } }
@@ -102,6 +126,33 @@ private final class KeyButton: UIButton {
     super.cancelTracking(with: event)
   }
 
+  override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+    guard let coordinator else { return super.touchesBegan(touches, with: event) }
+    coordinator.began(touches, on: self)
+  }
+
+  override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+    guard let coordinator else { return super.touchesMoved(touches, with: event) }
+    coordinator.moved(touches)
+  }
+
+  override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+    guard let coordinator else { return super.touchesEnded(touches, with: event) }
+    coordinator.ended(touches)
+  }
+
+  override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+    guard let coordinator else { return super.touchesCancelled(touches, with: event) }
+    coordinator.cancelled(touches)
+  }
+
+  // VoiceOver's double-tap has no touch to track and no target to fire.
+  override func accessibilityActivate() -> Bool {
+    guard let coordinator else { return super.accessibilityActivate() }
+    coordinator.activate(self)
+    return true
+  }
+
   override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
     let expanded = bounds.inset(
       by: UIEdgeInsets(
@@ -136,9 +187,9 @@ private final class KeyboardRowsStack: UIStackView {
     return expanded.contains(point)
   }
 
-  override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-    guard let defaultTarget = super.hitTest(point, with: event) else { return nil }
-
+  /// The key a touch at `point` belongs to: the visible key under it, else the key
+  /// whose enlarged target edge is nearest. Nil when no enabled key claims it.
+  func key(at point: CGPoint, with event: UIEvent?) -> KeyButton? {
     var nearest: KeyButton?
     var nearestDistance = CGFloat.infinity
     var nearestCenterDistance = CGFloat.infinity
@@ -171,7 +222,12 @@ private final class KeyboardRowsStack: UIStackView {
     }
 
     subviews.forEach(visit)
-    return nearest ?? defaultTarget
+    return nearest
+  }
+
+  override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+    guard let defaultTarget = super.hitTest(point, with: event) else { return nil }
+    return key(at: point, with: event) ?? defaultTarget
   }
 }
 
@@ -283,6 +339,137 @@ private struct KeyTouchTracker<TouchID: Hashable, Key: Hashable> {
     highlightCounts[key] = count > 0 ? count : nil
     let changed = highlighted ? count == 1 : count == 0
     return changed ? [.highlight(key, highlighted)] : []
+  }
+}
+
+/// Runs every key touch through one KeyTouchTracker, so the keyboard sees all
+/// fingers at once the way the system keyboard does. Keys forward their raw
+/// touches here instead of acting as UIControls.
+private final class KeyTouchCoordinator {
+  weak var rows: KeyboardRowsStack?
+  var onActivate: (KeyButton) -> Void = { _ in }
+  var onRepeatBegan: () -> Void = {}
+  var onRepeatEnded: () -> Void = {}
+  /// Hold time before delete repeats; matches the long press it replaces.
+  var repeatDelay: TimeInterval = 0.35
+
+  private var tracker = KeyTouchTracker<ObjectIdentifier, KeyButton>(
+    activatesOnTouchDown: { $0.keyAction?.activatesOnTouchDown == true }
+  )
+  /// Delete touches still inside their hold delay, with the key each landed on.
+  private var pendingRepeats: [ObjectIdentifier: (key: KeyButton, timer: Timer)] = [:]
+  /// Delete touches past the hold delay. Delete repeats while any is down.
+  private var repeatingTouches: Set<ObjectIdentifier> = []
+
+  func began(_ touches: Set<UITouch>, on key: KeyButton) {
+    touches.forEach { began(ObjectIdentifier($0), on: key) }
+  }
+
+  /// A sliding finger takes the key now under it, like the system keyboard.
+  func moved(_ touches: Set<UITouch>) {
+    touches.forEach { moved(ObjectIdentifier($0), to: typingKey(under: $0)) }
+  }
+
+  /// UIKit does not always send a move before the lift, so the key under the
+  /// lift is resolved again here.
+  func ended(_ touches: Set<UITouch>) {
+    touches.forEach { ended(ObjectIdentifier($0), on: typingKey(under: $0)) }
+  }
+
+  func cancelled(_ touches: Set<UITouch>) {
+    touches.forEach { cancelled(ObjectIdentifier($0)) }
+  }
+
+  func began(_ id: ObjectIdentifier, on key: KeyButton) {
+    KeyboardLog.signposter.emitEvent("keyDown")
+    stopRepeat(id)
+    apply(tracker.began(id, on: key))
+    if key.keyAction?.repeatsWhileHeld == true {
+      scheduleRepeat(id, on: key)
+    }
+  }
+
+  /// `key` is nil when the finger is outside every typing key.
+  func moved(_ id: ObjectIdentifier, to key: KeyButton?) {
+    // Sliding off delete before the hold delay cancels the repeat, as the long
+    // press it replaces failed on movement. Once repeating, it runs until lift.
+    if let pending = pendingRepeats[id], pending.key !== key {
+      cancelPendingRepeat(id)
+    }
+    apply(tracker.moved(id, to: key))
+  }
+
+  /// `key` is the typing key under the lift, nil outside every typing key.
+  func ended(_ id: ObjectIdentifier, on key: KeyButton?) {
+    moved(id, to: key)
+    stopRepeat(id)
+    apply(tracker.ended(id))
+  }
+
+  func cancelled(_ id: ObjectIdentifier) {
+    KeyboardLog.signposter.emitEvent("keyCancel")
+    stopRepeat(id)
+    apply(tracker.cancelled(id))
+  }
+
+  /// For a keyboard that hides or rebuilds mid-touch: those touches may never end.
+  func cancelAll() {
+    pendingRepeats.values.forEach { $0.timer.invalidate() }
+    pendingRepeats.removeAll()
+    if !repeatingTouches.isEmpty {
+      repeatingTouches.removeAll()
+      onRepeatEnded()
+    }
+    apply(tracker.cancelAll())
+  }
+
+  /// Assistive activation (VoiceOver), which has no touch to track.
+  func activate(_ key: KeyButton) {
+    onActivate(key)
+  }
+
+  /// The typing key under a touch; nil outside every key or over the globe.
+  private func typingKey(under touch: UITouch) -> KeyButton? {
+    guard let rows,
+          let key = rows.key(at: touch.location(in: rows), with: nil),
+          key.keyAction != nil else { return nil }
+    return key
+  }
+
+  private func apply(_ effects: [KeyTouchTracker<ObjectIdentifier, KeyButton>.Effect]) {
+    for effect in effects {
+      switch effect {
+      case .activate(let key):
+        onActivate(key)
+      case .highlight(let key, let highlighted):
+        key.isHighlighted = highlighted
+      }
+    }
+  }
+
+  private func scheduleRepeat(_ id: ObjectIdentifier, on key: KeyButton) {
+    let timer = Timer(timeInterval: repeatDelay, repeats: false) { [weak self] _ in
+      guard let self else { return }
+      self.pendingRepeats[id] = nil
+      let wasRepeating = !self.repeatingTouches.isEmpty
+      self.repeatingTouches.insert(id)
+      if !wasRepeating {
+        self.onRepeatBegan()
+      }
+    }
+    RunLoop.main.add(timer, forMode: .common)
+    pendingRepeats[id] = (key, timer)
+  }
+
+  private func cancelPendingRepeat(_ id: ObjectIdentifier) {
+    pendingRepeats.removeValue(forKey: id)?.timer.invalidate()
+  }
+
+  /// Repeating ends only when the last finger holding delete lifts.
+  private func stopRepeat(_ id: ObjectIdentifier) {
+    cancelPendingRepeat(id)
+    guard repeatingTouches.remove(id) != nil, repeatingTouches.isEmpty else { return }
+    onRepeatEnded()
   }
 }
 
