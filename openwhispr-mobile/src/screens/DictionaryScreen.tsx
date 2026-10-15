@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { View, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { View, Pressable, ScrollView, StyleSheet, Platform } from 'react-native';
+import { useTranslation } from 'react-i18next';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
+import { AccountButton } from '@/android/ui';
 import { Text } from '@/components/ui/Text';
 import { SystemIcon } from '@/components/ui/SystemIcon';
 import { TabScreenHeader } from '@/components/ui/TabScreenHeader';
@@ -181,6 +184,20 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
 }
 
 function ModeToggle({ mode, onChange }: { mode: Mode; onChange: (mode: Mode) => void }) {
+  const { t } = useTranslation();
+  if (Platform.OS === 'android')
+    return (
+      <View style={{ marginHorizontal: 20, marginTop: 16, marginBottom: 8 }}>
+        <SegmentedControl
+          value={mode}
+          onChange={onChange}
+          options={[
+            { value: 'words', label: t('dictionaryWords') },
+            { value: 'snippets', label: t('dictionarySnippets') },
+          ]}
+        />
+      </View>
+    );
   const segments: { key: Mode; label: string }[] = [
     { key: 'words', label: 'Words' },
     { key: 'snippets', label: 'Snippets' },
@@ -278,7 +295,10 @@ export default function DictionaryScreen() {
 
   return (
     <View className="flex-1 bg-systemBackground">
-      <TabScreenHeader title="Dictionary" />
+      <TabScreenHeader
+        title="Dictionary"
+        right={Platform.OS === 'android' ? <AccountButton /> : undefined}
+      />
 
       <ModeToggle mode={mode} onChange={setMode} />
 

@@ -9,11 +9,19 @@ import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.Future
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.abs
 
-class WavRecorder(private val context: Context) {
+class WavRecorder(
+  private val context: Context,
+  private val sampleRate: Int = 16000,
+  private val destinationFile: File? = null,
+  private val maximumSeconds: Int = 300,
+  private val onFrame: ((ByteArray, Long) -> Unit)? = null,
+  private val onFailure: ((Exception) -> Unit)? = null,
+) {
   companion object { private val microphoneInUse = AtomicBoolean(false) }
   private var ownsMicrophone = false
   private val executor = Executors.newSingleThreadExecutor()
@@ -29,31 +37,51 @@ class WavRecorder(private val context: Context) {
     check(microphoneInUse.compareAndSet(false, true)) { "Finish your current recording first." }
     ownsMicrophone = true
     try {
-    val size = maxOf(4096, AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT))
-    val audio = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, 16000,
+    val size = maxOf(4096, AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT))
+    val audio = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, sampleRate,
       AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, size)
     check(audio.state == AudioRecord.STATE_INITIALIZED) { audio.release(); "Microphone could not start." }
-    val destination = File(context.cacheDir, "dictation-${System.nanoTime()}.wav")
+    val destination = destinationFile ?: File(context.cacheDir, "dictation-${System.nanoTime()}.wav")
+    check(!destination.exists()) { "Recording file already exists." }
     file = destination; recorder = audio; peak = 0; samples = 0
-    audio.startRecording(); recording = true
+    audio.startRecording()
+    check(audio.recordingState == AudioRecord.RECORDSTATE_RECORDING) { "Microphone could not start." }
+    recording = true
     task = executor.submit {
-      RandomAccessFile(destination, "rw").use { out ->
-        out.write(ByteArray(44))
-        val buffer = ShortArray(size / 2)
-        while (recording && samples < 16000L * 300) {
-          val count = audio.read(buffer, 0, buffer.size)
-          if (count < 0 && !recording) break
-          check(count >= 0) { "Microphone interrupted ($count)." }
-          val bytes = ByteBuffer.allocate(count * 2).order(ByteOrder.LITTLE_ENDIAN)
-          for (i in 0 until count) { bytes.putShort(buffer[i]); peak = maxOf(peak, abs(buffer[i].toInt())) }
-          out.write(bytes.array()); samples += count
+      try {
+        RandomAccessFile(destination, "rw").use { out ->
+          fun updateHeader() {
+            val dataSize = (samples * 2).toInt()
+            val header = ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN)
+            header.put("RIFF".toByteArray()).putInt(dataSize + 36).put("WAVEfmt ".toByteArray())
+            header.putInt(16).putShort(1).putShort(1).putInt(sampleRate).putInt(sampleRate * 2).putShort(2).putShort(16)
+            header.put("data".toByteArray()).putInt(dataSize)
+            out.seek(0); out.write(header.array()); out.seek(44L + dataSize)
+          }
+          updateHeader()
+          val buffer = ShortArray(size / 2)
+          try {
+            while (recording && samples < sampleRate.toLong() * maximumSeconds) {
+              val count = audio.read(buffer, 0, buffer.size)
+              if (count < 0 && !recording) break
+              check(count >= 0) { "Microphone interrupted ($count)." }
+              if (count == 0) continue
+              val bytes = ByteBuffer.allocate(count * 2).order(ByteOrder.LITTLE_ENDIAN)
+              for (i in 0 until count) { bytes.putShort(buffer[i]); peak = maxOf(peak, abs(buffer[i].toInt())) }
+              val data = bytes.array()
+              out.write(data)
+              val startedAt = samples * 1000 / sampleRate
+              samples += count
+              // Keep the WAV playable after process death, not just after Stop.
+              if (destinationFile != null) updateHeader()
+              onFrame?.invoke(data, startedAt)
+            }
+          } finally { updateHeader() }
+          if (recording && onFailure != null) throw IllegalStateException("Recording reached its time limit.")
         }
-        val dataSize = (samples * 2).toInt()
-        val header = ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN)
-        header.put("RIFF".toByteArray()).putInt(dataSize + 36).put("WAVEfmt ".toByteArray())
-        header.putInt(16).putShort(1).putShort(1).putInt(16000).putInt(32000).putShort(2).putShort(16)
-        header.put("data".toByteArray()).putInt(dataSize)
-        out.seek(0); out.write(header.array())
+      } catch (error: Exception) {
+        onFailure?.invoke(error)
+        throw error
       }
     }
     } catch (error: Exception) { close(); throw error }
@@ -63,12 +91,12 @@ class WavRecorder(private val context: Context) {
     check(recorder != null) { "No recording is active." }
     recording = false
     try {
-      recorder?.stop(); task?.get()
-      val result = mapOf("uri" to "file://${file!!.absolutePath}", "durationMs" to samples * 1000 / 16000,
+      recorder?.stop(); task?.get(5, TimeUnit.SECONDS)
+      val result = mapOf("uri" to "file://${file!!.absolutePath}", "durationMs" to samples * 1000 / sampleRate,
         "noSpeech" to (samples < 4000 || peak < 180))
       if (cancel) file?.delete()
       return result
-    } catch (error: Exception) { file?.delete(); throw error }
+    } catch (error: Exception) { if (destinationFile == null) file?.delete(); throw error }
     finally { recorder?.release(); recorder = null; task = null; file = null; freeMicrophone() }
   }
 

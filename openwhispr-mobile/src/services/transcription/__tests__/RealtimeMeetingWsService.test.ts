@@ -413,3 +413,67 @@ describe('startRealtimeMeetingWs — bounded outage buffer', () => {
     expect(bytes).toBeLessThanOrEqual(4000);
   });
 });
+
+describe('meeting final transcript drain', () => {
+  it('waits past an earlier VAD commit for the final explicit commit and transcript', async () => {
+    const { session, leg1 } = await boot();
+    const done = jest.fn();
+    const finishing = session.finish!().then(done);
+    await flushMicro();
+    leg1.emit({ type: 'input_audio_buffer.committed', item_id: 'earlier' });
+    leg1.emit(completed('earlier', 'Earlier sentence'));
+    expect(done).not.toHaveBeenCalled();
+    leg1.emit({ type: 'transcription_session.updated', session: { turn_detection: null } });
+    expect(leg1.didCommit()).toBe(true);
+    leg1.emit({ type: 'input_audio_buffer.committed', item_id: 'last' });
+    await flushMicro();
+    expect(done).not.toHaveBeenCalled();
+    leg1.emit(completed('last', 'Final sentence'));
+    await finishing;
+    expect(session.utterances().map((part) => part.text)).toEqual([
+      'Earlier sentence',
+      'Final sentence',
+    ]);
+    expect(leg1.closed).toBe(true);
+  });
+
+  it('rejects failed final transcription instead of completing with missing speech', async () => {
+    const { session, leg1 } = await boot();
+    const finishing = session.finish!();
+    const check = expect(finishing).rejects.toThrow('could not be transcribed');
+    await flushMicro();
+    leg1.emit({ type: 'transcription_session.updated', session: { turn_detection: null } });
+    leg1.emit({ type: 'input_audio_buffer.committed', item_id: 'last' });
+    leg1.emit({ type: 'conversation.item.input_audio_transcription.failed', item_id: 'last' });
+    await check;
+    expect(leg1.closed).toBe(true);
+  });
+
+  it('shares one finish promise and times out with recoverable audio', async () => {
+    const { session, leg1 } = await boot();
+    const first = session.finish!();
+    expect(session.finish!()).toBe(first);
+    const check = expect(first).rejects.toThrow('timed out');
+    await jest.advanceTimersByTimeAsync(15001);
+    await check;
+    expect(leg1.closed).toBe(true);
+  });
+
+  it('never starts the microphone after cancellation during token fetch', async () => {
+    let resolve!: (value: unknown) => void;
+    (api.post as jest.Mock).mockImplementation(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    const controller = new AbortController();
+    const pending = startRealtimeMeetingWs({ signal: controller.signal }, {}, { wsFactory });
+    const check = expect(pending).rejects.toThrow('cancelled');
+    controller.abort();
+    resolve({ clientSecret: 'late' });
+    await check;
+    expect(LivePCMStreaming.start).not.toHaveBeenCalled();
+    expect(FakeWebSocket.instances).toHaveLength(0);
+  });
+});

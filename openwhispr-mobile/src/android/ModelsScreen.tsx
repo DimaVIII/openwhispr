@@ -85,6 +85,21 @@ export function ModelsContent({ onNavigate }: { onNavigate?: () => void } = {}) 
         </View>
         <Text style={styles.body}>{t('privateModeDescription')}</Text>
       </Card>
+      <Card>
+        <View style={styles.row}>
+          <Text style={[styles.heading, { flex: 1 }]}>{t('cleanup')}</Text>
+          <SettingsSwitch
+            accessibilityLabel={t('cleanup')}
+            value={config?.cleanupEnabled !== false}
+            onValueChange={(cleanupEnabled) => {
+              useConfigStore
+                .getState()
+                .updateConfig({ cleanupEnabled })
+                .catch((error) => Alert.alert(t('errorTitle'), error.message));
+            }}
+          />
+        </View>
+      </Card>
       <Row
         title={t('workflow')}
         onPress={() => {

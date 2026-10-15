@@ -13,22 +13,8 @@ import { ModelsContent } from './ModelsScreen';
 import { PermissionsContent } from './PermissionsScreen';
 import { Practice } from './Practice';
 
-export function ProContent() {
-  const { t } = useTranslation();
-  return (
-    <>
-      <Text style={styles.title}>{t('proTitle')}</Text>
-      <Text style={styles.body}>{t('proBody')}</Text>
-      <Card>
-        <Text style={styles.heading}>OpenWhispr Pro</Text>
-        <Text style={styles.body}>
-          {t('cloud')} · {t('notes')} · {t('assistant')}
-        </Text>
-      </Card>
-      <Text style={styles.caption}>{t('proNote')}</Text>
-    </>
-  );
-}
+export { PlanContent as ProContent } from './PlanContent';
+import { PlanContent as ProContent } from './PlanContent';
 export function Onboarding({ onFinish }: { onFinish: () => void }) {
   const { t } = useTranslation();
   const [step, setStep] = useState(Number(localStorage.getItem('android-onboarding-step') || 0));
@@ -118,6 +104,7 @@ export function Onboarding({ onFinish }: { onFinish: () => void }) {
             <Text style={styles.heading}>{t('practiceTitle')}</Text>
             <Text style={styles.caption}>{t('practiceBody')}</Text>
             <Practice
+              visible={!models && !language}
               key={step}
               initialMode={(['dictate', 'translate', 'write', 'edit'] as const)[step - 3]}
               onSuccess={() => setPassed(true)}

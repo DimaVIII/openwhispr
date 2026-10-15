@@ -1,3 +1,8 @@
+jest.mock('../insights', () => ({
+  insightsScope: () => 'device',
+  recordInsight: jest.fn(),
+  countSpokenWords: (text: string) => text.trim().split(/\s+/).length,
+}));
 import { processAndroidAudio, type DictationMode } from '../pipeline';
 import { transcribeAndCleanup } from '@/lib/transcribeAndCleanup';
 import { cleanupTranscript } from '@/lib/cleanupTranscript';
@@ -113,7 +118,16 @@ describe.each(['local', 'cloud', 'byok'] as const)('%s speech for Android action
       const signal = new AbortController().signal;
       const result = await processAndroidAudio(
         audio,
-        { route, mode, target: 'Spanish', selection: 'Apples and milk.' },
+        {
+          route,
+          mode,
+          target: 'Spanish',
+          selection: 'Apples and milk.',
+          eventId: 'test-event',
+          accountScope: 'device',
+          startedAt: '2026-10-15T10:00:00Z',
+          localDate: '2026-10-15',
+        },
         signal,
         jest.fn(),
       );

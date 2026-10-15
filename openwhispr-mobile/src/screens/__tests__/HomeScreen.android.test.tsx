@@ -1,8 +1,17 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react-native';
 
-jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
+jest.mock('expo-router', () => ({ router: { push: jest.fn() }, useFocusEffect: jest.fn() }));
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn() }));
+jest.mock('@/android/insights', () => ({
+  refreshInsights: jest.fn(),
+  useInsights: () => ({
+    scope: 'device',
+    ledger: { events: [{ word_count: 42 }], acknowledged: [] },
+    status: 'idle',
+  }),
+}));
+jest.mock('@/store/useConfigStore', () => ({ useConfigStore: () => false }));
 jest.mock('@/android/bubbleResult', () => ({ useBubbleResult: () => ({}) }));
 jest.mock('@/android/Practice', () => ({ Practice: () => null }));
 jest.mock('@/android/pipeline', () => ({ applyHistoryRetention: jest.fn(async () => {}) }));
@@ -44,10 +53,10 @@ jest.mock('@/android/ui', () => {
 
 import AndroidHome from '../HomeScreen.android';
 
-it('counts completed and legacy dictations while retaining failed audio for retry', () => {
+it('uses durable dictation statistics rather than retained transcripts and keeps failed audio retryable', () => {
   render(<AndroidHome />);
-  expect(screen.getByText('2')).toBeTruthy();
-  expect(screen.getByText('5')).toBeTruthy();
+  expect(screen.getByText('1')).toBeTruthy();
+  expect(screen.getByText('42')).toBeTruthy();
   expect(screen.getByText('Unreadable audio')).toBeTruthy();
   expect(screen.getByText('retry')).toBeTruthy();
 });

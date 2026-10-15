@@ -6,4 +6,7 @@
   <string name="ow_bubble_notice">Нажмите, чтобы открыть. Отключить плавающую кнопку можно в разделе «Аккаунт».</string>
   <string name="ow_bubble_channel">Показывать плавающую кнопку</string>
   <string name="ow_audio_unreadable">Не удалось прочитать аудиофайл. Попробуйте корректный файл WAV, MP3 или M4A.</string>
+  <string name="ow_meeting_notice">Идёт запись звука встречи.</string>
+  <string name="ow_meeting_stop">Остановить</string>
+  <string name="ow_meeting_stopped">Запись остановлена. Аудио сохранено.</string>
 </resources>

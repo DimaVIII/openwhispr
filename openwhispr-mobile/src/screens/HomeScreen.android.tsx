@@ -1,14 +1,17 @@
+import { AppState } from 'react-native';
 import { useBubbleResult } from '@/android/bubbleResult';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Modal, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { useTranscriptStore } from '@/store/useTranscriptStore';
 import { useAppInit } from '@/hooks/useAppInit';
 import { Page, Card, Button, Row, styles } from '@/android/ui';
+import { useConfigStore } from '@/store/useConfigStore';
+import { useInsights, refreshInsights } from '@/android/insights';
 import { Practice } from '@/android/Practice';
 import { applyHistoryRetention } from '@/android/pipeline';
 import { useFileUpload } from '@/hooks/useFileUpload';
@@ -24,6 +27,9 @@ export default function AndroidHome() {
   const { t } = useTranslation();
   const [practice, setPractice] = useState(false);
   const pending = useBubbleResult();
+  const insights = useInsights();
+  const syncInsights = useConfigStore((s) => s.config?.insightsSyncEnabled === true);
+  const historyEnabled = useConfigStore((s) => s.config?.androidHistoryDays !== 0);
   const history = useTranscriptStore((s) => s.transcripts);
   const user = useAuthStore((s) => s.user);
   const usage = useUsageStore((s) => s.usage);
@@ -86,25 +92,34 @@ export default function AndroidHome() {
   useEffect(() => {
     applyHistoryRetention().catch(() => undefined);
   }, []);
-  const completed = history.filter((item) => (item.status ?? 'completed') === 'completed');
-  const words = completed.reduce(
-    (total, item) => total + item.text.trim().split(/\s+/).filter(Boolean).length,
-    0,
+  useFocusEffect(
+    useCallback(() => {
+      void refreshInsights();
+    }, [user?.id, syncInsights, historyEnabled]),
   );
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void refreshInsights();
+    });
+    return () => subscription.remove();
+  }, []);
+  const expectedScope = user && !user.isAnonymous ? `account:${user.id}` : 'device';
+  const ledger =
+    insights.scope === expectedScope ? insights.ledger : { events: [], summary: undefined };
+  const accountSummary = syncInsights && historyEnabled ? ledger.summary : undefined;
+  const words =
+    accountSummary?.totalWords ?? ledger.events.reduce((total, item) => total + item.word_count, 0);
+  const dictations = accountSummary?.totalDictations ?? ledger.events.length;
   return (
-    <Page
-      title="OpenWhispr"
-      footer={<Button disabled={working} label={t('dictate')} onPress={() => setPractice(true)} />}
-    >
+    <Page title="OpenWhispr">
       <Text style={styles.title}>{t('greeting')}</Text>
-      <Button
-        secondary
-        busy={working}
-        label={t('upload')}
-        onPress={() => {
-          void upload();
-        }}
-      />
+      <Card>
+        <Text accessibilityRole="header" style={styles.heading}>
+          {t('acrossTitle')}
+        </Text>
+        <Text style={styles.body}>{t('acrossBody')}</Text>
+        <Button disabled={working} label={t('practiceTitle')} onPress={() => setPractice(true)} />
+      </Card>
       {isProcessing && (
         <Card>
           <Text>{t(stage === 'cleaning' ? 'cleanup' : 'processing')}</Text>
@@ -132,20 +147,31 @@ export default function AndroidHome() {
       <View style={styles.row}>
         <Card style={{ flex: 1 }}>
           <Text style={styles.heading}>{words}</Text>
-          <Text style={styles.caption}>{t('words')}</Text>
+          <Text style={styles.caption}>{t('wordsDictated')}</Text>
         </Card>
         <Card style={{ flex: 1 }}>
-          <Text style={styles.heading}>{completed.length}</Text>
+          <Text style={styles.heading}>{dictations}</Text>
           <Text style={styles.caption}>{t('recordings')}</Text>
         </Card>
       </View>
-      <Card>
-        <Row title={t('models')} onPress={() => router.push('/android-models')} />
-        <Row title={t('permissions')} onPress={() => router.push('/android-permissions')} />
-        <Row title={t('assistant')} onPress={() => router.push('/android-assistant')} />
-        <Row title={t('referrals')} onPress={() => router.push('/(tabs)/(referral)')} />
-      </Card>
-      <Text style={styles.heading}>{t('recent')}</Text>
+      <Text style={styles.caption}>{t(accountSummary ? 'accountStats' : 'deviceStats')}</Text>
+      {insights.status === 'offline' || insights.status === 'blocked' ? (
+        <Row
+          title={t(insights.status === 'blocked' ? 'syncPolicy' : 'retry')}
+          onPress={() => {
+            void refreshInsights();
+          }}
+        />
+      ) : null}
+      <Text accessibilityRole="header" style={styles.heading}>
+        {t('recent')}
+      </Text>
+      <Row
+        title={t('upload')}
+        onPress={() => {
+          void upload();
+        }}
+      />
       {!history.length && (
         <Card>
           <Text style={styles.heading}>{t('emptyHistory')}</Text>
@@ -198,7 +224,7 @@ export default function AndroidHome() {
             showAccount={false}
             footer={<Button secondary label={t('close')} onPress={() => setPractice(false)} />}
           >
-            <Practice />
+            {practice && <Practice />}
           </Page>
         </SafeAreaView>
       </Modal>

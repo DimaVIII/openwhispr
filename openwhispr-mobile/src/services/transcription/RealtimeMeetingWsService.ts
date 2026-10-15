@@ -18,6 +18,8 @@ import { withRetry, createApiRetryStrategy } from '@/lib/retry';
 import {
   LivePCMStreaming,
   addPcmFrameListener,
+  addPcmErrorListener,
+  addPcmStopListener,
   DEFAULT_SAMPLE_RATE,
   type PcmFrame,
 } from '../../../modules/live-pcm-streaming/src';
@@ -68,7 +70,13 @@ const defaultWsFactory = (url: string, protocols: string[]): WebSocketLike =>
   new WebSocket(url, protocols) as unknown as WebSocketLike;
 
 export async function startRealtimeMeetingWs(
-  opts: { language?: string; model?: string; sampleRate?: number } = {},
+  opts: {
+    language?: string;
+    model?: string;
+    sampleRate?: number;
+    noteId?: number;
+    signal?: AbortSignal;
+  } = {},
   callbacks: RealtimeCallbacks = {},
   deps: RealtimeMeetingDeps = {},
 ): Promise<RealtimeSession> {
@@ -102,6 +110,21 @@ export async function startRealtimeMeetingWs(
   let flushTimer: ReturnType<typeof setInterval> | null = null;
   let rotationTimer: ReturnType<typeof setTimeout> | null = null;
   let frameSub: { remove(): void } | null = null;
+  let stopSub: { remove(): void } | null = null;
+  let errorSub: { remove(): void } | null = null;
+  let terminalError: Error | null = null;
+  let finishing = false;
+  let finishPromise: Promise<void> | null = null;
+  let drainComplete: (() => void) | null = null;
+  let drainFailed: ((error: Error) => void) | null = null;
+  let commitAcknowledged = false;
+  let commitSent = false;
+  let legacyProtocol = true;
+  let coverageIncomplete = false;
+  const pendingItems = new Set<string>();
+  const checkDrain = () => {
+    if (commitAcknowledged && pendingItems.size === 0) drainComplete?.();
+  };
 
   let legIndex = 0;
   let cumulativeOffsetMs = 0; // summed wall-clock duration of all prior legs
@@ -156,8 +179,13 @@ export async function startRealtimeMeetingWs(
 
   // Mic + timers only, never the socket — a reconnectable close must not stop capture.
   const teardownCapture = (): void => {
+    opts.signal?.removeEventListener('abort', abort);
     frameSub?.remove();
     frameSub = null;
+    stopSub?.remove();
+    stopSub = null;
+    errorSub?.remove();
+    errorSub = null;
     LivePCMStreaming.stop().catch(() => {});
     if (flushTimer) {
       clearInterval(flushTimer);
@@ -181,8 +209,36 @@ export async function startRealtimeMeetingWs(
     } catch {
       return;
     }
-    const evt = parsed as { type?: string; error?: { code?: string } };
+    const evt = parsed as {
+      type?: string;
+      item_id?: string;
+      error?: { code?: string };
+      session?: { turn_detection?: unknown; audio?: { input?: { turn_detection?: unknown } } };
+    };
+    if (evt.type === 'session.created') legacyProtocol = false;
+    if (
+      finishing &&
+      !commitSent &&
+      ws === currentWs &&
+      (evt.type === 'transcription_session.updated' || evt.type === 'session.updated') &&
+      (legacyProtocol
+        ? evt.session?.turn_detection === null
+        : evt.session?.audio?.input?.turn_detection === null)
+    ) {
+      commitSent = true;
+      commitAcknowledged = false;
+      try {
+        ws.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
+      } catch (error) {
+        drainFailed?.(error instanceof Error ? error : new Error(String(error)));
+      }
+      return;
+    }
     if (evt.type === 'error' && evt.error?.code === 'input_audio_buffer_commit_empty') {
+      if (finishing && commitSent) {
+        commitAcknowledged = true;
+        checkDrain();
+      }
       return; // benign: our commit hit an already-drained buffer
     }
     const meta = legMeta.get(ws) ?? { legIndex: 0, offsetMs: 0 };
@@ -190,7 +246,31 @@ export async function startRealtimeMeetingWs(
     if (typeof rewritten.item_id === 'string') {
       rewritten.item_id = namespaceItemId(meta.legIndex, rewritten.item_id);
     }
+    const itemId = rewritten.item_id;
+    if (typeof itemId === 'string') {
+      if (
+        evt.type === 'input_audio_buffer.speech_started' ||
+        evt.type === 'input_audio_buffer.committed'
+      )
+        pendingItems.add(itemId);
+      if (
+        evt.type === 'conversation.item.input_audio_transcription.completed' ||
+        evt.type === 'conversation.item.input_audio_transcription.failed'
+      )
+        pendingItems.delete(itemId);
+    }
+    if (evt.type === 'conversation.item.input_audio_transcription.failed') {
+      goTerminal(
+        new Error('Part of the meeting could not be transcribed. Retry from the saved recording.'),
+      );
+      return;
+    }
+    if (finishing && commitSent && evt.type === 'input_audio_buffer.committed')
+      commitAcknowledged = true;
     reducer.handleEvent(rewritten);
+    if (finishing && evt.type === 'error')
+      drainFailed?.(new Error('Meeting finalization failed. The recording is saved.'));
+    checkDrain();
   };
 
   // Opens one leg; resolves on open, rejects on pre-open close/error/timeout. Does NOT
@@ -278,6 +358,7 @@ export async function startRealtimeMeetingWs(
     callbacks.onPartial?.('', '');
     flush();
     if (previous && previous !== ws) {
+      coverageIncomplete = true;
       closeWs(previous, { commit: true });
     }
     scheduleRotation();
@@ -285,7 +366,10 @@ export async function startRealtimeMeetingWs(
 
   const goTerminal = (error: unknown): void => {
     if (terminated) return;
+    terminalError = error instanceof Error ? error : new Error(String(error));
+    drainFailed?.(terminalError);
     terminated = true;
+    closeWs(currentWs);
     teardownCapture();
     currentWs = null;
     const message = error instanceof Error ? error.message : 'Realtime session ended';
@@ -297,14 +381,15 @@ export async function startRealtimeMeetingWs(
   // cumulativeOffsetMs unchanged: the new session's restarted clock rewinds this leg's
   // ms labels, but display order is by sortOrder (utterance index), not startMs.
   const attemptReconnect = (): void => {
-    if (terminated || reconnecting || rotating) return;
+    if (terminated || finishing || reconnecting || rotating) return;
     reconnecting = true;
     callbacks.onReconnecting?.();
     withRetry(
       async () => {
         // Bail once stopped so a stop() mid-backoff can't keep opening sockets / fetching
         // tokens; a 4xx-shaped status makes the strategy give up immediately.
-        if (terminated) throw Object.assign(new Error('session stopped'), { status: 499 });
+        if (terminated || finishing)
+          throw Object.assign(new Error('session stopped'), { status: 499 });
         const state = await Network.getNetworkStateAsync();
         // Status-less error → retryable, so the loop waits for connectivity to return.
         if (state.isConnected === false) throw new Error('offline');
@@ -320,7 +405,7 @@ export async function startRealtimeMeetingWs(
     )
       .then((ws) => {
         reconnecting = false;
-        if (terminated) {
+        if (terminated || finishing) {
           closeWs(ws); // resolved after stop() — abandon it
           return;
         }
@@ -335,7 +420,7 @@ export async function startRealtimeMeetingWs(
   };
 
   const rollLeg = async (): Promise<void> => {
-    if (terminated || reconnecting || rotating) return;
+    if (terminated || finishing || reconnecting || rotating) return;
     rotating = true;
     // Advance the offset by the old leg's duration BEFORE opening the new leg so its
     // fresh-clock messages stamp continuously.
@@ -344,7 +429,7 @@ export async function startRealtimeMeetingWs(
       const clientSecret = await fetchClientSecret();
       const newWs = await openLeg(clientSecret);
       rotating = false;
-      if (terminated) {
+      if (terminated || finishing) {
         closeWs(newWs);
         return;
       }
@@ -358,7 +443,15 @@ export async function startRealtimeMeetingWs(
   };
 
   const handleLegClosed = async (ws: WebSocketLike, code: number | undefined): Promise<void> => {
+    if (ws !== currentWs || terminated) return;
+    if (finishing) {
+      drainFailed?.(
+        new Error('Connection closed before the final transcript. The recording is saved.'),
+      );
+      return;
+    }
     if (ws !== currentWs || terminated || rotating || reconnecting) return;
+    coverageIncomplete = true;
     const sessionAgeMs = Date.now() - sessionStartedAt;
     let isConnected = true;
     try {
@@ -380,6 +473,7 @@ export async function startRealtimeMeetingWs(
 
   const stop = (): void => {
     if (terminated) return;
+    drainFailed?.(new Error('Meeting interrupted.'));
     terminated = true;
     const ws = currentWs;
     flush();
@@ -388,7 +482,77 @@ export async function startRealtimeMeetingWs(
     teardownCapture();
   };
 
+  const finish = (): Promise<void> => {
+    if (finishPromise) return finishPromise;
+    if (terminated) return terminalError ? Promise.reject(terminalError) : Promise.resolve();
+    finishing = true;
+    if (rotationTimer) clearTimeout(rotationTimer);
+    finishPromise = (async () => {
+      try {
+        await LivePCMStreaming.stop();
+        frameSub?.remove();
+        frameSub = null;
+        if (flushTimer) clearInterval(flushTimer);
+        flush();
+        if (coverageIncomplete)
+          throw new Error(
+            'Connection was interrupted. Retry from the saved recording for a complete transcript.',
+          );
+        const ws = currentWs;
+        if (!ws || ws.readyState !== WS_OPEN)
+          throw new Error('Connection unavailable. The recording is saved.');
+        await new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(
+            () => reject(new Error('Final transcript timed out. The recording is saved.')),
+            15000,
+          );
+          drainComplete = () => {
+            clearTimeout(timer);
+            resolve();
+          };
+          drainFailed = (error) => {
+            clearTimeout(timer);
+            reject(error);
+          };
+          try {
+            // The acknowledgement is an ordering barrier: prior VAD commits cannot
+            // satisfy the final manual commit after turn detection has been disabled.
+            ws.send(
+              JSON.stringify(
+                legacyProtocol
+                  ? { type: 'transcription_session.update', session: { turn_detection: null } }
+                  : {
+                      type: 'session.update',
+                      session: {
+                        type: 'transcription',
+                        audio: { input: { turn_detection: null } },
+                      },
+                    },
+              ),
+            );
+          } catch (error) {
+            drainFailed(error instanceof Error ? error : new Error(String(error)));
+          }
+        });
+      } finally {
+        drainComplete = null;
+        drainFailed = null;
+        terminated = true;
+        closeWs(currentWs);
+        currentWs = null;
+        teardownCapture();
+      }
+    })();
+    return finishPromise;
+  };
+
+  const abort = () => {
+    goTerminal(new Error('Meeting cancelled.'));
+  };
+  if (opts.signal?.aborted) throw new Error('Meeting cancelled.');
   const firstSecret = await fetchClientSecret();
+  if (opts.signal?.aborted) throw new Error('Meeting cancelled.');
+  opts.signal?.addEventListener('abort', abort, { once: true });
 
   // Start capture before opening the socket so speech during connect is buffered and
   // flushed on open. If the mic fails, abort before any socket exists.
@@ -396,10 +560,21 @@ export async function startRealtimeMeetingWs(
     enqueuePcm(Buffer.from(frame.audio, 'base64'));
   });
   try {
-    await LivePCMStreaming.start(sampleRate);
+    stopSub = addPcmStopListener?.(() => callbacks.onStopRequested?.()) ?? null;
+    errorSub = addPcmErrorListener?.(({ message }) => goTerminal(new Error(message))) ?? null;
+    await LivePCMStreaming.start(sampleRate, opts.noteId, opts.signal);
+    if (terminated || opts.signal?.aborted) {
+      await LivePCMStreaming.stop();
+      throw new Error('Meeting cancelled.');
+    }
   } catch (error) {
+    opts.signal?.removeEventListener('abort', abort);
     frameSub?.remove();
     frameSub = null;
+    stopSub?.remove();
+    stopSub = null;
+    errorSub?.remove();
+    errorSub = null;
     throw error;
   }
 
@@ -417,5 +592,5 @@ export async function startRealtimeMeetingWs(
   flush(); // drain the cold-start buffer
   scheduleRotation();
 
-  return { stop, utterances: reducer.utterances };
+  return { stop, finish, utterances: reducer.utterances };
 }

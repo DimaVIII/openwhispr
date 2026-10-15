@@ -380,11 +380,15 @@ describe('transitionStatus (guarded boundary)', () => {
 });
 
 describe('finalizeCloudMeeting', () => {
+  beforeEach(() => {
+    let status = 'recording';
+    (notesRepository.getTranscriptionStatus as jest.Mock).mockImplementation(() => status);
+    (notesRepository.setTranscriptionStatus as jest.Mock).mockImplementation((_id, next) => {
+      status = next;
+    });
+  });
   it('generates notes without exposing an unknown speaker label', async () => {
     mockAuthState.user = signedInUser;
-    (notesRepository.getTranscriptionStatus as jest.Mock)
-      .mockReturnValueOnce('recording')
-      .mockReturnValueOnce('transcribing');
     (notesRepository.getNoteById as jest.Mock).mockReturnValue({
       id: 7,
       title: 'Planning Sync',
@@ -447,17 +451,12 @@ describe('finalizeCloudMeeting', () => {
   });
 
   it('does not log an empty cloud meeting transcription', async () => {
-    (notesRepository.getTranscriptionStatus as jest.Mock)
-      .mockReturnValueOnce('recording')
-      .mockReturnValueOnce('transcribing');
-
     await useNotesStore.getState().finalizeCloudMeeting(7, [], 0);
 
     expect(mockLogTranscriptionCompleted).not.toHaveBeenCalled();
   });
 
   it('does not log when cloud meeting persistence fails', async () => {
-    (notesRepository.getTranscriptionStatus as jest.Mock).mockReturnValueOnce('recording');
     (notesRepository.replaceSegments as jest.Mock).mockImplementationOnce(() => {
       throw new Error('database unavailable');
     });
@@ -473,6 +472,12 @@ describe('finalizeCloudMeeting', () => {
     ).rejects.toThrow('database unavailable');
 
     expect(mockLogTranscriptionCompleted).not.toHaveBeenCalled();
+  });
+  it('finishes a recovered recording that is already transcribing', async () => {
+    (notesRepository.getTranscriptionStatus as jest.Mock).mockReturnValue('transcribing');
+    await useNotesStore.getState().finalizeCloudMeeting(7, [], 0);
+    expect(notesRepository.setTranscriptionStatus).toHaveBeenCalledTimes(1);
+    expect(notesRepository.setTranscriptionStatus).toHaveBeenCalledWith(7, 'done');
   });
 });
 

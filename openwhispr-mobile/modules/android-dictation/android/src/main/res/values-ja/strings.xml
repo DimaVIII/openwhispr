@@ -6,4 +6,7 @@
   <string name="ow_bubble_notice">タップして開きます。アカウントでフローティングボタンをオフにできます。</string>
   <string name="ow_bubble_channel">フローティングボタンを表示</string>
   <string name="ow_audio_unreadable">この音声ファイルを読み込めませんでした。有効な WAV、MP3、M4A ファイルをお試しください。</string>
+  <string name="ow_meeting_notice">会議の音声を録音しています。</string>
+  <string name="ow_meeting_stop">停止</string>
+  <string name="ow_meeting_stopped">録音を停止しました。音声は保存されています。</string>
 </resources>

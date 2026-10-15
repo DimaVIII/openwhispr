@@ -11,6 +11,8 @@ import type { Recording } from '../../modules/android-dictation/src';
 import type { KeyboardTone } from '@/types';
 import { cleanupSavedOnDevice } from '@/lib/aiWorkflows';
 import i18n from './strings';
+import * as Crypto from 'expo-crypto';
+import { insightsScope, countSpokenWords, recordInsight } from './insights';
 
 export type DictationMode = 'dictate' | 'translate' | 'write' | 'edit';
 export class AndroidCleanupError extends Error {
@@ -23,6 +25,10 @@ export class AndroidCleanupError extends Error {
   }
 }
 export interface AndroidJob {
+  eventId: string;
+  startedAt: string;
+  localDate: string;
+  accountScope: string;
   route: TranscriptionJobRoute;
   mode: DictationMode;
   target: string;
@@ -36,7 +42,12 @@ export function createAndroidJob(
   selection = '',
 ): AndroidJob {
   const config = useConfigStore.getState().config;
+  const now = new Date();
   return {
+    eventId: Crypto.randomUUID(),
+    startedAt: now.toISOString(),
+    localDate: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`,
+    accountScope: insightsScope(),
     route: snapshotTranscriptionJob('dictation'),
     mode,
     target,
@@ -88,6 +99,8 @@ export async function processAndroidAudio(
     {
       ...job.route,
       audioUri: recording.uri,
+      jobId: job.eventId,
+      clientTranscriptionId: job.eventId,
       language: job.language ?? 'auto',
       mimeType: 'audio/wav',
       requestContext: 'keyboard',
@@ -132,16 +145,38 @@ export async function processAndroidAudio(
   }
   if (signal.aborted) throw new Error(i18n.t('cancelled'));
   if (!text.trim()) throw new Error(i18n.t('noSpeech'));
+  // Count spoken input, never the expanded snippet or generated response.
+  if (job.mode === 'dictate') {
+    try {
+      recordInsight(job.accountScope, {
+        event_id: job.eventId,
+        occurred_at: job.startedAt,
+        local_date: job.localDate,
+        word_count: countSpokenWords(output.originalText),
+        spoken_duration_ms: recording.durationMs > 0 ? Math.round(recording.durationMs) : null,
+        mode: job.route.provider === 'cloud' ? 'openwhispr_cloud' : job.route.provider,
+        provider: job.route.provider,
+        model: null,
+        counter_version: 2,
+      });
+    } catch {
+      /* Statistics must never prevent insertion. */
+    }
+  }
   const days = useConfigStore.getState().config?.androidHistoryDays ?? -1;
   if (days !== 0) {
-    await useTranscriptStore.getState().addTranscript({
-      text,
-      originalText: output.originalText,
-      duration: recording.durationMs / 1000,
-      requestContext: 'keyboard',
-      ...job.route,
-    });
-    await applyHistoryRetention();
+    try {
+      await useTranscriptStore.getState().addTranscript({
+        text,
+        originalText: output.originalText,
+        duration: recording.durationMs / 1000,
+        requestContext: 'keyboard',
+        ...job.route,
+      });
+      await applyHistoryRetention();
+    } catch (error) {
+      console.warn('[dictation] history could not be saved', error);
+    }
   }
   return text;
 }

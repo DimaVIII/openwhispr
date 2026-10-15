@@ -1,5 +1,6 @@
 import { isManagedMeetingAudioUri } from '@/lib/transcriptAudio';
 import { create } from 'zustand';
+import { Platform } from 'react-native';
 import * as Sentry from '@sentry/react-native';
 import { notesRepository, spacesRepository } from '@/data';
 import type { Note, Folder, NoteUpdate, Space } from '@/data';
@@ -805,12 +806,55 @@ export const useNotesStore = create<NotesStore>((set, get) => ({
     if (!note.sourceFile || !isManagedMeetingAudioUri(noteId, note.sourceFile)) {
       throw new Error('Original audio is no longer available for this note.');
     }
+    if (Platform.OS === 'android') {
+      const user = useAuthStore.getState().user;
+      if (note.isPrivate || useProcessingModeStore.getState().activeMode === 'private')
+        throw new Error(
+          'On-device meeting transcription is not available on Android. Your recording stays on this device.',
+        );
+      if (!user || user.isAnonymous) throw new Error('Sign in to retry this meeting with Cloud.');
+      get().transitionStatus(noteId, 'transcribing');
+      try {
+        const { TranscriptionService } = await import(
+          '@/services/transcription/TranscriptionService'
+        );
+        const result = await TranscriptionService.transcribe({
+          audioUri: note.sourceFile,
+          provider: 'cloud',
+          requestContext: 'file',
+          fileName: `meeting-${noteId}.wav`,
+          mimeType: 'audio/wav',
+          language: getPreferredTranscriptionLanguage(),
+        });
+        if (useAuthStore.getState().user?.id !== user.id)
+          throw new Error('Account changed. Retry after signing in again.');
+        if (!result.text.trim()) throw new Error('No speech found in the recording.');
+        await get().finalizeCloudMeeting(
+          noteId,
+          [
+            {
+              itemId: `recovered-${noteId}`,
+              text: result.text,
+              startMs: 0,
+              endMs: Math.max(0, result.duration * 1000),
+            },
+          ],
+          result.duration,
+        );
+      } catch (error) {
+        if (notesRepository.getTranscriptionStatus(noteId) === 'transcribing')
+          get().transitionStatus(noteId, 'failed');
+        throw error;
+      }
+      return;
+    }
     await get().runMeetingPipeline(noteId, note.sourceFile, note.expectedSpeakerCount ?? undefined);
   },
 
   finalizeCloudMeeting: async (noteId, utterances, elapsedSeconds) => {
     try {
-      get().transitionStatus(noteId, 'transcribing'); // recording -> transcribing
+      if (notesRepository.getTranscriptionStatus(noteId) !== 'transcribing')
+        get().transitionStatus(noteId, 'transcribing');
       const segments = mapUtterancesToSegments(utterances, elapsedSeconds).map((segment) => ({
         ...segment,
         noteId,

@@ -16,6 +16,8 @@ class DictationService : Service() {
   companion object {
     var instance: DictationService? = null; private set
     var emit: ((String, Map<String, Any>) -> Unit)? = null
+    var appVisible = true
+    var practiceVisible = false
   }
   private val handler = Handler(Looper.getMainLooper())
   private lateinit var windows: WindowManager
@@ -26,6 +28,7 @@ class DictationService : Service() {
   private var collapsedWidth = 0
   private val preferences by lazy { getSharedPreferences("bubble", MODE_PRIVATE) }
   private var mode = "dictate"
+  private var modeBeforePractice: String? = null
   private var recorder: WavRecorder? = null
   private var capturing = false
   private var processing = false
@@ -57,8 +60,33 @@ class DictationService : Service() {
     if (intent?.action == "stop") { stopSelf(); return START_NOT_STICKY }
     val size = intent?.getIntExtra("size", 64) ?: 64
     if (panel == null) showBubble(size) else resize(size)
+    updateVisibility()
     emit?.invoke("onStatusChange", emptyMap())
     return START_NOT_STICKY
+  }
+  fun updateVisibility() {
+    val visible = !appVisible || practiceVisible
+    if (!visible) {
+      if (capturing) finish(true)
+      if (processing) { emit?.invoke("onCancel", emptyMap()); status("ready") }
+      showActions(false)
+    }
+    panel?.visibility = if (visible) View.VISIBLE else View.GONE
+  }
+  fun setPracticeMode(value: String) {
+    if (capturing || processing) return
+    if (value in listOf("dictate", "translate", "write", "edit")) {
+      if (modeBeforePractice == null) modeBeforePractice = mode
+      mode = value
+      refreshOptions()
+    }
+  }
+  fun leavePractice() {
+    if (capturing) finish(true)
+    if (processing) { emit?.invoke("onCancel", emptyMap()); status("ready") }
+    mode = modeBeforePractice ?: mode
+    modeBeforePractice = null
+    refreshOptions()
   }
   private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
   private fun resize(size: Int) {

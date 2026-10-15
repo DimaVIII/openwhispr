@@ -1,4 +1,3 @@
-import './strings';
 import React from 'react';
 import {
   View,
@@ -6,6 +5,7 @@ import {
   ScrollView,
   StyleSheet,
   ActivityIndicator,
+  KeyboardAvoidingView,
   type ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -13,29 +13,37 @@ import { Text } from '@/components/ui/Text';
 import { OpenWhisprMark } from '@/components/ui/OpenWhisprMark';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { SystemIcon, type LucideIconName } from '@/components/ui/SystemIcon';
 
 export const palette = {
   background: '#F8F6F5',
   ink: '#21212B',
   muted: '#66636E',
   blue: '#2457C5',
-  soft: '#EAE8FA',
+  soft: '#EEF2FC',
   line: '#E6E1DE',
   white: '#FFFFFF',
 };
 export const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: palette.background },
-  content: { padding: 24, gap: 20, paddingBottom: 32 },
+  content: {
+    padding: 20,
+    gap: 24,
+    paddingBottom: 36,
+    width: '100%',
+    maxWidth: 680,
+    alignSelf: 'center',
+  },
   title: {
-    fontSize: 36,
-    lineHeight: 42,
+    fontSize: 32,
+    lineHeight: 39,
     fontWeight: '600',
     color: palette.ink,
-    letterSpacing: -1.2,
+    letterSpacing: -0.8,
   },
   heading: {
-    fontSize: 23,
-    lineHeight: 29,
+    fontSize: 21,
+    lineHeight: 28,
     fontWeight: '600',
     color: palette.ink,
     letterSpacing: -0.5,
@@ -45,7 +53,7 @@ export const styles = StyleSheet.create({
   card: {
     backgroundColor: palette.white,
     padding: 20,
-    borderRadius: 24,
+    borderRadius: 20,
     gap: 12,
     borderWidth: 1,
     borderColor: palette.line,
@@ -95,14 +103,17 @@ export function Button({
 }) {
   return (
     <Pressable
+      cssInterop={false}
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ disabled: Boolean(disabled || busy), busy: Boolean(busy) }}
       disabled={disabled || busy}
       onPress={onPress}
-      style={[
+      style={({ pressed }) => [
         styles.button,
         secondary && { backgroundColor: palette.soft },
         (disabled || busy) && { opacity: 0.5 },
+        pressed && { opacity: 0.75 },
       ]}
     >
       {busy ? (
@@ -129,43 +140,81 @@ export function Page({
   const { t } = useTranslation();
   return (
     <SafeAreaView style={styles.page} edges={['top', 'left', 'right']}>
-      <View style={[styles.row, { paddingHorizontal: 24, paddingTop: 10, paddingBottom: 16 }]}>
+      <View style={[styles.row, { paddingHorizontal: 20, paddingTop: 4, paddingBottom: 8 }]}>
         {back ? (
           <Pressable
+            cssInterop={false}
             accessibilityRole="button"
             accessibilityLabel={t('back')}
             onPress={() => router.back()}
-            style={{ padding: 10 }}
+            style={{ minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' }}
           >
-            <Text style={{ fontSize: 26 }}>‹</Text>
+            <SystemIcon name="chevron.left" mdName="ArrowLeft" size={22} color={palette.ink} />
           </Pressable>
         ) : (
           <OpenWhisprMark size={30} color={palette.blue} />
         )}
-        <Text style={{ fontSize: 17, fontWeight: '600', flex: 1 }}>{title}</Text>
-        {!back && showAccount && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('account')}
-            onPress={() => router.push('/(account)')}
-            style={{ borderRadius: 22, backgroundColor: palette.soft, padding: 12 }}
-          >
-            <Text style={{ color: palette.blue }}>◉</Text>
-          </Pressable>
-        )}
-      </View>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        {children}
-      </ScrollView>
-      {footer && (
-        <SafeAreaView
-          edges={['bottom']}
-          style={{ paddingHorizontal: 24, paddingTop: 12, backgroundColor: palette.background }}
+        <Text
+          accessibilityRole="header"
+          style={{ fontSize: 18, fontWeight: '600', flex: 1, color: palette.ink }}
         >
-          {footer}
-        </SafeAreaView>
-      )}
+          {title}
+        </Text>
+        {!back && showAccount && <AccountButton />}
+      </View>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="height">
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
+          {children}
+        </ScrollView>
+        {footer && (
+          <SafeAreaView
+            edges={['bottom']}
+            style={{ paddingHorizontal: 24, paddingTop: 12, backgroundColor: palette.background }}
+          >
+            {footer}
+          </SafeAreaView>
+        )}
+      </KeyboardAvoidingView>
     </SafeAreaView>
+  );
+}
+export function AccountButton() {
+  const { t } = useTranslation();
+  return (
+    <Pressable
+      cssInterop={false}
+      accessibilityRole="button"
+      accessibilityLabel={t('account')}
+      onPress={() => router.push('/(account)')}
+      style={({ pressed }) => ({
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: palette.soft,
+        alignItems: 'center',
+        justifyContent: 'center',
+        opacity: pressed ? 0.7 : 1,
+      })}
+    >
+      <SystemIcon name="person.crop.circle" mdName="UserRound" size={21} color={palette.blue} />
+    </Pressable>
+  );
+}
+export function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <View style={{ gap: 8 }}>
+      <Text
+        accessibilityRole="header"
+        style={[styles.caption, { paddingHorizontal: 4, fontWeight: '600' }]}
+      >
+        {title}
+      </Text>
+      <Card style={{ gap: 0, paddingVertical: 4 }}>{children}</Card>
+    </View>
   );
 }
 export function Card({ children, style }: { children: React.ReactNode; style?: ViewStyle }) {
@@ -175,22 +224,42 @@ export function Row({
   title,
   detail,
   onPress,
+  icon,
 }: {
   title: string;
   detail?: string;
   onPress: () => void;
+  icon?: LucideIconName;
 }) {
   return (
     <Pressable
+      cssInterop={false}
       accessibilityRole="button"
       onPress={onPress}
-      style={[styles.row, { minHeight: 58, paddingVertical: 10 }]}
+      style={({ pressed }) => [
+        styles.row,
+        { minHeight: 60, paddingVertical: 12, opacity: pressed ? 0.6 : 1 },
+      ]}
     >
+      {icon && (
+        <View
+          style={{
+            width: 34,
+            height: 34,
+            borderRadius: 10,
+            backgroundColor: palette.soft,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <SystemIcon name="circle" mdName={icon} size={18} color={palette.blue} />
+        </View>
+      )}
       <View style={{ flex: 1, gap: 3 }}>
         <Text style={{ fontSize: 17, color: palette.ink }}>{title}</Text>
         {detail && <Text style={styles.caption}>{detail}</Text>}
       </View>
-      <Text style={{ fontSize: 24, color: palette.muted }}>›</Text>
+      <SystemIcon name="chevron.right" mdName="ChevronRight" size={17} color={palette.muted} />
     </Pressable>
   );
 }

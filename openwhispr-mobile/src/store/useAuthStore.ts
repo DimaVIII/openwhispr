@@ -203,6 +203,12 @@ export const useAuthStore = create<AuthStore>((set) => ({
     try {
       await deleteAccountApi();
       const deletedUserId = useAuthStore.getState().user?.id;
+      if (deletedUserId) {
+        const { eraseAccountInsights } = await import('@/android/insights');
+        await Promise.resolve()
+          .then(() => eraseAccountInsights(deletedUserId))
+          .catch((error) => Sentry.captureException(error));
+      }
       if (deletedUserId) await tolerateCacheFailure('clear', clearNoteShareTokens(deletedUserId));
       // Keys survive sign-out by design, but not account deletion. They are erased only
       // once the account is gone, so a failed delete keeps them. A failed erase leaves

@@ -25,6 +25,8 @@ import { View, ActivityIndicator } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { Button, styles, palette } from './ui';
 import { OpenWhisprMark } from '@/components/ui/OpenWhisprMark';
+import { useRevenueCatIdentity } from '@/hooks/useRevenueCatIdentity';
+import { observeAndroidPurchaseUpdates } from './billing';
 import { useBubblePipeline } from './useBubblePipeline';
 
 export default function AndroidRoot() {
@@ -39,6 +41,8 @@ export default function AndroidRoot() {
     SpaceGrotesk_700Bold,
   });
   useBubblePipeline();
+  useRevenueCatIdentity();
+  useEffect(() => observeAndroidPurchaseUpdates(), []);
   useEffect(() => {
     async function initialize() {
       await useConfigStore.getState().loadConfig();

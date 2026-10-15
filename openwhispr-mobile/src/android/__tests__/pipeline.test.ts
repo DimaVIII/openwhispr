@@ -1,3 +1,8 @@
+jest.mock('../insights', () => ({
+  insightsScope: () => 'device',
+  recordInsight: jest.fn(),
+  countSpokenWords: (text: string) => text.trim().split(/\s+/).length,
+}));
 jest.mock('@/lib/transcribeAndCleanup', () => ({ transcribeAndCleanup: jest.fn() }));
 jest.mock('@/lib/inferenceRouting', () => ({
   snapshotTranscriptionJob: jest.fn(() => ({

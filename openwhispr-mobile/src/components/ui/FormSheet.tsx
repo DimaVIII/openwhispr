@@ -1,5 +1,5 @@
 import { type ReactNode } from 'react';
-import { Modal, Pressable, ScrollView, View, type ViewStyle } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, View, type ViewStyle } from 'react-native';
 import { GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -62,7 +62,11 @@ export function FormSheet({
   const { dragGesture, sheetStyle } = useSheetDragToDismiss(visible, onClose);
 
   const bottomPad =
-    keyboardHeight > 0 ? keyboardHeight + BUTTON_KEYBOARD_GAP : Math.max(insets.bottom, 16);
+    keyboardHeight > 0
+      ? Platform.OS === 'android'
+        ? BUTTON_KEYBOARD_GAP
+        : keyboardHeight + BUTTON_KEYBOARD_GAP
+      : Math.max(insets.bottom, 16);
 
   return (
     <Modal
@@ -126,11 +130,10 @@ export function FormSheet({
             <Pressable
               onPress={onSubmit}
               disabled={!canSubmit}
-              style={({ pressed }) => [
-                canSubmit ? SUBMIT_SHADOW : null,
-                { borderCurve: 'continuous', opacity: pressed && canSubmit ? 0.9 : 1 },
-              ]}
-              className={`relative h-[52px] items-center justify-center rounded-full ${
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !canSubmit }}
+              style={[canSubmit ? SUBMIT_SHADOW : null, { borderCurve: 'continuous' }]}
+              className={`active:opacity-90 relative min-h-[52px] py-3 items-center justify-center rounded-full ${
                 canSubmit ? 'bg-link' : 'bg-quaternarySystemFill'
               }`}
             >
@@ -147,8 +150,7 @@ export function FormSheet({
             {destructiveAction ? (
               <Pressable
                 onPress={destructiveAction.onPress}
-                style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
-                className="mt-2.5 h-11 items-center justify-center"
+                className="active:opacity-60 mt-2.5 min-h-12 items-center justify-center"
               >
                 <Text className="text-[16px] font-semibold text-systemRed">
                   {destructiveAction.label}

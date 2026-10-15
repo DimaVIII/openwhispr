@@ -1,5 +1,7 @@
+import { useTranslation } from 'react-i18next';
+import { AccountButton } from '@/android/ui';
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, ScrollView, Alert, ActionSheetIOS, RefreshControl } from 'react-native';
+import { View, ScrollView, Alert, ActionSheetIOS, RefreshControl, Platform } from 'react-native';
 import { Text } from '@/components/ui/Text';
 
 const SCROLL_PADDING = 16;
@@ -28,6 +30,7 @@ const FAB_ACTIONS: FabAction[] = [
 ];
 
 export default function FoldersScreen() {
+  const { t } = useTranslation('android');
   const {
     folders,
     folderCounts,
@@ -45,6 +48,7 @@ export default function FoldersScreen() {
   } = useNotesStore();
   const [searchValue, setSearchValue] = useState('');
   const [newFolderVisible, setNewFolderVisible] = useState(false);
+  const [renamingFolder, setRenamingFolder] = useState<{ id: number; name: string } | null>(null);
 
   const trimmedQuery = searchValue.trim();
   const isSearching = trimmedQuery.length > 0;
@@ -130,6 +134,26 @@ export default function FoldersScreen() {
         return;
       }
       safeHaptics('medium');
+      if (Platform.OS === 'android') {
+        Alert.alert(folderName, undefined, [
+          {
+            text: t('renameFolder'),
+            onPress: () => setRenamingFolder({ id: folderId, name: folderName }),
+          },
+          {
+            text: t('deleteFolder'),
+            style: 'destructive',
+            onPress: () =>
+              confirmDestructive(
+                t('deleteFolder'),
+                t('deleteFolderBody', { name: folderName, count: folderCounts[folderId] ?? 0 }),
+                () => deleteFolderSafe(folderId),
+              ),
+          },
+          { text: t('cancel'), style: 'cancel' },
+        ]);
+        return;
+      }
       ActionSheetIOS.showActionSheetWithOptions(
         {
           options: ['Rename', 'Delete', 'Cancel'],
@@ -155,7 +179,7 @@ export default function FoldersScreen() {
         },
       );
     },
-    [renameFolder, deleteFolderSafe, folderCounts],
+    [renameFolder, deleteFolderSafe, folderCounts, t],
   );
 
   const handleFabAction = useCallback(
@@ -174,6 +198,7 @@ export default function FoldersScreen() {
   return (
     <View className="flex-1 bg-systemBackground">
       <NotesTopBar
+        rightSlots={Platform.OS === 'android' ? <AccountButton /> : undefined}
         title={isSearching ? 'Search' : 'Folders'}
         searchValue={searchValue}
         onSearchChange={setSearchValue}
@@ -253,10 +278,31 @@ export default function FoldersScreen() {
         icon="plus"
         mdIcon="Plus"
         accessibilityLabel="Create"
-        actions={FAB_ACTIONS}
+        actions={
+          Platform.OS === 'android'
+            ? FAB_ACTIONS.map((action) => ({
+                ...action,
+                label: t(
+                  action.id === 'note'
+                    ? 'newNote'
+                    : action.id === 'meeting'
+                      ? 'meetingSetupTitle'
+                      : 'newFolder',
+                ),
+              }))
+            : FAB_ACTIONS
+        }
         onActionPress={handleFabAction}
       />
 
+      <NewFolderSheet
+        visible={renamingFolder != null}
+        initialName={renamingFolder?.name}
+        onClose={() => setRenamingFolder(null)}
+        onCreate={(name) => {
+          if (renamingFolder) renameFolder(renamingFolder.id, name);
+        }}
+      />
       <NewFolderSheet
         visible={newFolderVisible}
         onClose={() => setNewFolderVisible(false)}

@@ -1,5 +1,15 @@
+import { useTranslation } from 'react-i18next';
+import { AccountButton } from '@/android/ui';
 import { useEffect, useCallback, useMemo, useState } from 'react';
-import { View, ScrollView, Pressable, RefreshControl, Alert, ActionSheetIOS } from 'react-native';
+import {
+  View,
+  ScrollView,
+  Pressable,
+  RefreshControl,
+  Alert,
+  ActionSheetIOS,
+  Platform,
+} from 'react-native';
 import { Text } from '@/components/ui/Text';
 
 const SCROLL_PADDING = 16;
@@ -22,6 +32,7 @@ import { useManualSyncRefresh } from '@/hooks/useManualSyncRefresh';
 import { useMoveNote } from '@/hooks/useMoveNote';
 
 export default function NotesListScreen() {
+  const { t } = useTranslation('android');
   const params = useLocalSearchParams<{ folderId?: string; spaceId?: string }>();
   const folderId = params.folderId ? Number(params.folderId) : null;
   const spaceId = params.spaceId ? Number(params.spaceId) : null;
@@ -50,6 +61,7 @@ export default function NotesListScreen() {
   } = useNotesStore();
 
   const [newFolderVisible, setNewFolderVisible] = useState(false);
+  const [renamingFolder, setRenamingFolder] = useState<{ id: number; name: string } | null>(null);
 
   useEffect(() => {
     if (!isInitialized) initialize();
@@ -177,6 +189,33 @@ export default function NotesListScreen() {
       safeHaptics('medium');
       // The server refuses to delete a default folder outright, so never offer it.
       const canDelete = canDeleteSpaceFolders && !isDefault;
+      if (Platform.OS === 'android') {
+        Alert.alert(folderName, undefined, [
+          {
+            text: t('renameFolder'),
+            onPress: () => setRenamingFolder({ id: targetFolderId, name: folderName }),
+          },
+          ...(canDelete
+            ? [
+                {
+                  text: t('deleteFolder'),
+                  style: 'destructive' as const,
+                  onPress: () =>
+                    confirmDestructive(
+                      t('deleteFolder'),
+                      t('deleteSpaceFolderBody', {
+                        name: folderName,
+                        count: folderCounts[targetFolderId] ?? 0,
+                      }),
+                      () => deleteFolderSafe(targetFolderId),
+                    ),
+                },
+              ]
+            : []),
+          { text: t('cancel'), style: 'cancel' },
+        ]);
+        return;
+      }
       const options = canDelete ? ['Rename', 'Delete', 'Cancel'] : ['Rename', 'Cancel'];
       ActionSheetIOS.showActionSheetWithOptions(
         {
@@ -203,7 +242,7 @@ export default function NotesListScreen() {
         },
       );
     },
-    [canDeleteSpaceFolders, renameFolder, deleteFolderSafe, folderCounts],
+    [canDeleteSpaceFolders, renameFolder, deleteFolderSafe, folderCounts, t],
   );
 
   const handleFabAction = useCallback(
@@ -232,6 +271,7 @@ export default function NotesListScreen() {
   return (
     <View className="flex-1 bg-systemBackground">
       <NotesTopBar
+        rightSlots={Platform.OS === 'android' ? <AccountButton /> : undefined}
         showBack
         title={screenTitle}
         searchValue={searchQuery}
@@ -375,10 +415,31 @@ export default function NotesListScreen() {
         icon="plus"
         mdIcon="Plus"
         accessibilityLabel="Create"
-        actions={fabActions}
+        actions={
+          Platform.OS === 'android'
+            ? fabActions.map((action) => ({
+                ...action,
+                label: t(
+                  action.id === 'note'
+                    ? 'newNote'
+                    : action.id === 'meeting'
+                      ? 'meetingSetupTitle'
+                      : 'newFolder',
+                ),
+              }))
+            : fabActions
+        }
         onActionPress={handleFabAction}
       />
 
+      <NewFolderSheet
+        visible={renamingFolder != null}
+        initialName={renamingFolder?.name}
+        onClose={() => setRenamingFolder(null)}
+        onCreate={(name) => {
+          if (renamingFolder) renameFolder(renamingFolder.id, name);
+        }}
+      />
       <NewFolderSheet
         visible={newFolderVisible}
         onClose={() => setNewFolderVisible(false)}

@@ -14,6 +14,8 @@ export interface RealtimeUtterance {
 }
 
 export interface RealtimeCallbacks {
+  /** The user stopped Android capture from its foreground notification. */
+  onStopRequested?: () => void;
   /** Current in-progress caption text for the active utterance (streaming deltas). */
   onPartial?: (text: string, itemId: string) => void;
   /** A finalized utterance (one VAD turn) with its transcript + timing. */
@@ -30,6 +32,8 @@ export interface RealtimeCallbacks {
 
 export interface RealtimeSession {
   stop: () => void;
+  /** Stops capture and waits for final server text before closing. */
+  finish?: () => Promise<void>;
   /** Ordered finalized utterances captured so far. */
   utterances: () => RealtimeUtterance[];
 }

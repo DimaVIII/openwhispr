@@ -15,6 +15,7 @@ export interface UserConfig {
   androidTextModel?: 'qwen-small' | 'qwen-balanced';
   androidSpeechModel?: 'parakeet-v3';
   androidHistoryDays?: number;
+  insightsSyncEnabled?: boolean;
   androidBubbleSize?: number;
   androidTranslationTarget?: { code: string; label: string };
   androidStyleContext?: AndroidStyleContext;

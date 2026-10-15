@@ -25,14 +25,48 @@ class AndroidDictationModule : Module() {
   }
   override fun definition() = ModuleDefinition {
     Name("AndroidDictation")
-    Events("onStart", "onRecording", "onError", "onCancel", "onOpenResult", "onStatusChange")
+    Events("onStart", "onRecording", "onError", "onCancel", "onOpenResult", "onStatusChange", "pcm-frame", "pcm-error", "pcm-stopped")
     OnCreate { DictationService.emit = { event, data -> sendEvent(event, data) } }
+    OnActivityEntersForeground {
+      DictationService.appVisible = true
+      DictationService.instance?.updateVisibility()
+    }
+    OnActivityEntersBackground {
+      DictationService.appVisible = false
+      DictationService.instance?.updateVisibility()
+    }
     OnDestroy {
-      appContext.reactContext?.let { it.stopService(Intent(it, DictationService::class.java)) }
+      appContext.reactContext?.let {
+        it.stopService(Intent(it, DictationService::class.java))
+        it.stopService(Intent(it, MeetingCaptureService::class.java))
+      }
       if (providerRuntime.isInitialized()) providers.close()
       if (speechRuntime.isInitialized()) parakeet.close()
       recorder?.close(); DictationService.emit = null
     }
+    AsyncFunction("startPCM") { sampleRate: Int, noteId: Int?, promise: Promise ->
+      check(MeetingCaptureService.instance == null && MeetingCaptureService.pendingStart == null) { "A meeting is already recording." }
+      MeetingCaptureService.pendingStart = { error ->
+        if (error == null) promise.resolve(null) else promise.reject("MICROPHONE", error.message, error)
+      }
+      try {
+        context.startForegroundService(Intent(context, MeetingCaptureService::class.java).putExtra("sampleRate", sampleRate).putExtra("noteId", noteId ?: 0))
+      } catch (error: Exception) { MeetingCaptureService.pendingStart = null; promise.reject("MICROPHONE", error.message, error) }
+    }.runOnQueue(Queues.MAIN)
+    AsyncFunction("stopPCM") { promise: Promise ->
+      MeetingCaptureService.pendingStart?.invoke(IllegalStateException("Recording cancelled."))
+      MeetingCaptureService.pendingStart = null
+      val service = MeetingCaptureService.instance
+      Thread {
+        try {
+          service?.stopCapture()
+          service?.stopSelf()
+          promise.resolve(null)
+        } catch (error: Exception) { promise.reject("MICROPHONE", error.message, error) }
+      }.start()
+    }.runOnQueue(Queues.MAIN)
+    Function("isPCMRecording") { MeetingCaptureService.instance != null }
+    Function("getPCMRecordingUri") { MeetingCaptureService.lastUri ?: context.getSharedPreferences("meeting-capture", android.content.Context.MODE_PRIVATE).getString("lastUri", null) }
     AsyncFunction("transcribeParakeet") { uri: String, modelDirectory: String, promise: Promise ->
       parakeet.transcribe(localFile(uri), localFile(modelDirectory), promise)
     }
@@ -64,6 +98,13 @@ class AndroidDictationModule : Module() {
         context.startForegroundService(Intent(context, DictationService::class.java).putExtra("size", size))
       } else context.stopService(Intent(context, DictationService::class.java))
     }
+    AsyncFunction("setPractice") { visible: Boolean, mode: String ->
+      DictationService.practiceVisible = visible
+      DictationService.instance?.let { service ->
+        if (visible) service.setPracticeMode(mode) else service.leavePractice()
+        service.updateVisibility()
+      }
+    }.runOnQueue(Queues.MAIN)
     AsyncFunction("setStatus") { value: String -> DictationService.instance?.status(value) }.runOnQueue(Queues.MAIN)
     AsyncFunction("setBubbleOptions") { options: Map<String, String> ->
       val editor = context.getSharedPreferences("bubble", android.content.Context.MODE_PRIVATE).edit()

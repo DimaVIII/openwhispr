@@ -1,7 +1,9 @@
+import { useTranslation } from 'react-i18next';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type React from 'react';
-import { Alert, TextInput, View } from 'react-native';
+import { Alert, TextInput, View, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { usePreventRemove } from '@react-navigation/native';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -11,6 +13,7 @@ import { ProcessingWaveform } from '@/components/features/WaveformVisualizer';
 import { CalendarEventPicker } from '@/components/notes/CalendarEventPicker';
 import { SpeakerCountPrompt } from '@/components/notes/SpeakerCountPrompt';
 import { BRAND, iosColor } from '@/config/colors';
+import { notesRepository } from '@/data';
 import { calendarRepository } from '@/data/calendarRepository';
 import type { Note } from '@/data/types';
 import type { GoogleCalendarEvent } from '@/data/calendarTypes';
@@ -29,6 +32,7 @@ import { useCloudMeeting } from '@/hooks/useCloudMeeting';
 import { useMeetingLiveActivity, type MeetingActivityPhase } from '@/hooks/useMeetingLiveActivity';
 import { CloudMeetingRecording } from '@/components/notes/CloudMeetingRecording';
 import { canTransition } from '@/lib/diarization/transcriptionStatus';
+import { MeetingSetup } from '@/android/MeetingSetup';
 import { Sentry } from '@/lib/sentry';
 import { SUPERWALL_PLACEMENTS } from '@/lib/superwall';
 import type { TranscriptionStatus } from '@/types';
@@ -39,6 +43,7 @@ type Phase =
   | 'needs-model'
   | 'downloading'
   | 'recording'
+  | 'cloud-finalizing'
   | 'cloud-recording'
   | 'processing';
 
@@ -46,6 +51,10 @@ const formatClock = (seconds: number): string =>
   `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
 
 export const MeetingRecordScreen = (): React.JSX.Element => {
+  const { t } = useTranslation('android');
+  const [exitToNote, setExitToNote] = useState<number | null>(null);
+  const finishingRef = useRef(false);
+  const [starting, setStarting] = useState(false);
   const [phase, setPhase] = useState<Phase>('prompt');
   const [noteId, setNoteId] = useState<number | null>(null);
   const [count, setCount] = useState<number | undefined>(undefined);
@@ -86,7 +95,8 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
     onError: () => setPhase('prompt'),
   });
   const cloudMeeting = useCloudMeeting({
-    enabled: phase === 'cloud-recording',
+    enabled: phase === 'cloud-recording' || phase === 'cloud-finalizing',
+    noteId: noteId ?? undefined,
     language: getPreferredTranscriptionLanguage(),
   });
 
@@ -175,12 +185,15 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
 
   // Mark an in-flight note failed when we abandon a recording (guarded: skip if already terminal,
   // since processMeeting may have set 'failed' directly).
-  const markNoteFailed = (id: number): void => {
-    const status = useNotesStore.getState().notes.find((n) => n.id === id)?.transcriptionStatus;
-    if (status != null && canTransition(status as TranscriptionStatus, 'failed')) {
-      transitionStatus(id, 'failed');
-    }
-  };
+  const markNoteFailed = useCallback(
+    (id: number): void => {
+      const status = useNotesStore.getState().notes.find((n) => n.id === id)?.transcriptionStatus;
+      if (status != null && canTransition(status as TranscriptionStatus, 'failed')) {
+        transitionStatus(id, 'failed');
+      }
+    },
+    [transitionStatus],
+  );
 
   // Create the note only AFTER recording actually starts, so a denied mic permission / recorder
   // failure doesn't leave an orphan "recording" note behind (startRecording re-throws on failure).
@@ -233,7 +246,14 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
     // Cloud realtime path (signed in + not private): stream live captions instead of the
     // on-device whisper + diarizer pipeline, skipping the on-device model gates below.
     if (isCloudMeeting()) {
-      startCloudMeeting(expected);
+      await registerSuperwallGate({
+        placement: SUPERWALL_PLACEMENTS.meetingRecordStart,
+        params: { expectedSpeakerCount: expected ?? 0 },
+        requiresAccount: false, // Account was checked above; the token endpoint enforces access.
+        feature: () => {
+          startCloudMeeting(expected);
+        },
+      });
       return;
     }
     // Don't walk the user through record → transcribe only to fail: gate on platform support and a
@@ -330,13 +350,32 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
     lastSavedRawNotesRef.current = note.content;
     setNoteId(note.id);
     setMeetingStartedAt(Date.now());
+    if (Platform.OS === 'android')
+      notesRepository.updateNoteMeta(note.id, {
+        sourceFile: `${FileSystem.documentDirectory}meeting-${note.id}.wav`,
+      });
+    finishingRef.current = false;
     setPhase('cloud-recording');
   };
 
-  const finishCloud = async (): Promise<void> => {
-    const utterances = cloudMeeting.stop();
-    const elapsed = cloudMeeting.elapsedSeconds;
-    const hadError = cloudMeeting.status === 'error';
+  const { stop: stopCloud, elapsedSeconds: cloudElapsed, status: cloudStatus } = cloudMeeting;
+  const finishCloud = useCallback(async (): Promise<void> => {
+    if (finishingRef.current) return;
+    finishingRef.current = true;
+    setPhase('cloud-finalizing');
+    saveRawNotesNow();
+    let utterances;
+    try {
+      utterances = await stopCloud();
+    } catch (error) {
+      if (noteId != null) markNoteFailed(noteId);
+      Alert.alert(t('meetingInterrupted'), (error as Error).message);
+      setPhase('prompt');
+      setExitToNote(noteId);
+      return;
+    }
+    const elapsed = cloudElapsed;
+    const hadError = cloudStatus === 'error';
     setPhase('processing');
     if (noteId == null) {
       setPhase('prompt');
@@ -351,18 +390,60 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
     }
     try {
       await finalizeCloudMeeting(noteId, utterances, elapsed);
-      router.replace(`/(tabs)/(notes)/${noteId}`);
+      setPhase('prompt');
+      setExitToNote(noteId);
     } catch (error) {
       markNoteFailed(noteId);
       Sentry.captureException(error);
       setPhase('prompt');
     }
-  };
+  }, [
+    stopCloud,
+    cloudElapsed,
+    cloudStatus,
+    finalizeCloudMeeting,
+    markNoteFailed,
+    noteId,
+    saveRawNotesNow,
+    t,
+  ]);
+
+  useEffect(() => {
+    if (cloudMeeting.stopRequested && phase === 'cloud-recording') void finishCloud();
+  }, [cloudMeeting.stopRequested, phase, finishCloud]);
+  useEffect(() => {
+    if (exitToNote != null && phase === 'prompt') router.replace(`/(tabs)/(notes)/${exitToNote}`);
+  }, [exitToNote, phase]);
+  usePreventRemove(
+    Platform.OS === 'android' && (phase === 'cloud-recording' || phase === 'cloud-finalizing'),
+    () => {
+      if (phase === 'cloud-finalizing') return;
+      Alert.alert(t('meetingLeaveTitle'), t('meetingLeaveBody'), [
+        { text: t('meetingKeepRecording'), style: 'cancel' },
+        {
+          text: t('meetingStopSave'),
+          onPress: () => {
+            void finishCloud();
+          },
+        },
+        {
+          text: t('cancel'),
+          onPress: () => {
+            cloudMeeting.cancel();
+            saveRawNotesNow();
+            if (noteId != null) markNoteFailed(noteId);
+            setPhase('prompt');
+            setExitToNote(noteId);
+          },
+        },
+      ]);
+    },
+  );
 
   const meetingActivityPhase: MeetingActivityPhase =
     phase === 'recording' || phase === 'cloud-recording'
       ? 'recording'
-      : phase === 'processing'
+      : phase === 'processing' || phase === 'cloud-finalizing'
         ? 'processing'
         : 'idle';
   useMeetingLiveActivity({
@@ -370,11 +451,26 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
     title: selectedMeetingContext?.title ?? null,
     startedAt: meetingStartedAt,
     onEndRequested: () => {
+      if (phase !== 'recording' && phase !== 'cloud-recording') return;
       const stop = phase === 'cloud-recording' ? finishCloud : finish;
       stop().catch(Sentry.captureException);
     },
   });
 
+  if (phase === 'prompt' && Platform.OS === 'android') {
+    return (
+      <MeetingSetup
+        busy={starting}
+        onStart={() => {
+          if (starting) return;
+          setStarting(true);
+          begin(undefined)
+            .catch((error) => Alert.alert('Meeting', error.message))
+            .finally(() => setStarting(false));
+        }}
+      />
+    );
+  }
   if (phase === 'prompt') {
     return (
       <SpeakerCountPrompt
@@ -528,12 +624,18 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
       <ProcessingWaveform color={BRAND} size={48} />
       <View className="items-center gap-1.5">
         <Text className="text-lg font-semibold text-label">
-          {phase === 'downloading' ? 'Downloading model…' : 'Preparing meeting notes…'}
+          {phase === 'cloud-finalizing'
+            ? t('meetingFinishing')
+            : phase === 'downloading'
+              ? 'Downloading model…'
+              : 'Preparing meeting notes…'}
         </Text>
         <Text className="text-[13px] text-tertiaryLabel">
-          {phase === 'downloading'
-            ? 'One-time ~100 MB · then fully on-device'
-            : 'Transcribing · separating voices · finalizing note'}
+          {phase === 'cloud-finalizing'
+            ? t('meetingFinishingBody')
+            : phase === 'downloading'
+              ? 'One-time ~100 MB · then fully on-device'
+              : 'Transcribing · separating voices · finalizing note'}
         </Text>
       </View>
     </View>

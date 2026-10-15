@@ -499,6 +499,7 @@ export class TranscriptionService {
     }
     if (options.requestContext) {
       parameters.requestContext = options.requestContext;
+      if (options.requestContext === 'file') parameters.source = 'file_upload';
     }
     if (options.requestContext === 'keyboard') {
       parameters.normalizeAudio = '1';

@@ -18,6 +18,7 @@ interface NativeDictation {
   getStatus(): BubbleStatus;
   openSettings(kind: 'overlay' | 'accessibility' | 'battery' | 'app'): void;
   setEnabled(enabled: boolean, size: number): void;
+  setPractice(visible: boolean, mode: string): Promise<void>;
   setStatus(status: string): Promise<void>;
   setBubbleOptions(options: Record<string, string>): Promise<void>;
   insert(text: string): Promise<boolean>;

@@ -12,6 +12,7 @@ import {
 import { useConfigStore } from '@/store/useConfigStore';
 import { useTranslation } from 'react-i18next';
 import { router } from 'expo-router';
+import { usePracticeSession } from './practiceSession';
 
 export function useBubblePipeline() {
   const { t } = useTranslation();
@@ -67,6 +68,10 @@ export function useBubblePipeline() {
         const inserted = await native.insert(text);
         if (current.signal.aborted) return;
         if (!inserted) useBubbleResult.getState().setResult(text, i18n.t('insertionFailed'));
+        else {
+          useBubbleResult.setState({ error: '' });
+          usePracticeSession.getState().complete(job.mode);
+        }
         void native.setStatus(inserted ? 'success' : 'error');
       } catch (error) {
         if (!current.signal.aborted) {
