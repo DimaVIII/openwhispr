@@ -61,13 +61,18 @@ test("a key is checked with the panel's model, or alone under a browsed tab", as
   });
 });
 
-test("a hidden picker sends nothing until it is shown", async (t) => {
+test("a hidden picker sends nothing until it is shown, then asks again", async (t) => {
   const panel = await mount(t, { secrets: { groqApiKey: "gsk-saved" }, visible: false });
   await panel.wait(5000);
   assert.equal(panel.requests().length, 0);
   await panel.setVisible(true);
   await panel.wait(0);
   assert.equal(panel.requests().length, 1);
+  await panel.answer({ success: true });
+  await panel.setVisible(false);
+  await panel.setVisible(true);
+  await panel.wait(0);
+  assert.equal(panel.requests().length, 2, "a shown panel asks again");
 });
 
 test("a key saves trimmed as it changes", async (t) => {

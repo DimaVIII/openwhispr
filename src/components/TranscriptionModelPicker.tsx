@@ -47,8 +47,8 @@ import { ConnectionCheckAnnouncer } from "./ui/ConnectionCheckAnnouncer";
 import { ProviderCheckField } from "./ui/ProviderCheckField";
 import { usePanelVisible } from "./ui/usePanelVisible";
 import { useFocusHold } from "../hooks/useFocusHold";
+import { useTypingPause } from "../hooks/useTypingPause";
 import {
-  CONNECTION_CHECK_DELAY_MS,
   useConnectionAutoCheck,
   type ProviderConnectionConfig,
 } from "../hooks/useConnectionAutoCheck";
@@ -1102,7 +1102,6 @@ export default function TranscriptionModelPicker({
   };
 
   const endpointHold = useFocusHold();
-  // Typing keeps the pause; showing the panel, a tab, a model or a region checks at once.
   const editing = useFocusHold();
   const visible = usePanelVisible();
   // A tab that is only being browsed has no model of this panel's: the key alone is checked.
@@ -1110,7 +1109,14 @@ export default function TranscriptionModelPicker({
   const isCustom = displayedCloudProvider === "custom";
   const isCorti = displayedCloudProvider === "corti";
   const providerKey = credentialValues[providerCredentials.fields[0].key];
-  const connection: { config: ProviderConnectionConfig; ready: boolean } = isCustom
+  // `typed` is what this provider's fields save as they are typed (a speech server's address
+  // and model name included); `context` is what is chosen instead.
+  const connection: {
+    config: ProviderConnectionConfig;
+    ready: boolean;
+    typed: string;
+    context: unknown[];
+  } = isCustom
     ? {
         config: {
           scope: "transcription",
@@ -1120,6 +1126,8 @@ export default function TranscriptionModelPicker({
           model: panelModel,
         },
         ready: Boolean(cloudTranscriptionBaseUrl.trim() && panelModel.trim()),
+        typed: `${cloudTranscriptionBaseUrl}\n${customTranscriptionApiKey}\n${panelModel}`,
+        context: [],
       }
     : isCorti
       ? {
@@ -1132,6 +1140,8 @@ export default function TranscriptionModelPicker({
             tenant: cortiTenant,
           },
           ready: Boolean(cortiClientId.trim() && cortiClientSecret.trim()),
+          typed: `${cortiClientId}\n${cortiClientSecret}`,
+          context: [cortiEnvironment, cortiTenant],
         }
       : {
           config: {
@@ -1141,13 +1151,28 @@ export default function TranscriptionModelPicker({
             model: panelModel,
           },
           ready: Boolean(providerKey.trim()),
+          typed: providerKey,
+          context: [panelModel],
         };
+  const delayMs = useTypingPause({
+    typed: connection.typed,
+    context: JSON.stringify([
+      displayedCloudProvider,
+      visible,
+      effectiveLocal,
+      ...connection.context,
+    ]),
+    held: editing.held,
+  });
   const check = useConnectionAutoCheck({
     config: connection.config,
-    ready: !effectiveLocal && providerAllowed(displayedCloudProvider) && connection.ready,
+    // A hidden panel is not ready to ask; a shown one asks again, and the main process answers
+    // a check it remembers at once.
+    ready:
+      !effectiveLocal && providerAllowed(displayedCloudProvider) && connection.ready && visible,
     // A half-typed address may belong to someone else: nothing is sent while it is edited.
-    hold: !visible || (isCustom && endpointHold.held),
-    delayMs: editing.held ? CONNECTION_CHECK_DELAY_MS : 0,
+    hold: isCustom && endpointHold.held,
+    delayMs,
   });
   // The field that completes the connection carries the status.
   const checkedCredential = isCorti ? "cortiClientSecret" : providerCredentials.fields[0].key;

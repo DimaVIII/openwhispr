@@ -55,6 +55,17 @@ test("an incomplete or hidden self-hosted panel sends nothing", async (t) => {
   }
 });
 
+test("a self-hosted panel asks again each time it is shown", async (t) => {
+  const panel = await mount(t, { overrides: { url: SERVER, model: "whisper-large-v3" } });
+  await panel.wait(0);
+  await panel.answer({ success: true });
+  await panel.setVisible(false);
+  assert.equal(panel.phase(), "idle", "nothing is shown while hidden");
+  await panel.setVisible(true);
+  await panel.wait(0);
+  assert.equal(panel.requests().length, 2, "a shown panel asks again");
+});
+
 test("a self-hosted server for the streaming Orukeet model is left unchecked", async (t) => {
   const panel = await mount(t, { overrides: { url: SERVER, model: "orukeet-v0.1.0" } });
   await panel.wait(5000);

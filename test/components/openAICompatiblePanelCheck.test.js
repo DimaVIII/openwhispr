@@ -36,12 +36,26 @@ test("an applied address is checked at once; its field holds the status", async 
   const panel = await mount(t);
   await panel.wait(0);
   assert.deepEqual(panel.requests(), [
-    { scope: "reasoning", provider: "custom", baseUrl: BASE, apiKey: "" },
+    { scope: "reasoning", provider: "custom", baseUrl: BASE, apiKey: "", model: "" },
   ]);
   assert.ok(panel.field(ENDPOINT).props.check);
   assert.equal(panel.field(OPTIONAL_KEY).props.check, undefined);
   await panel.answer({ success: true });
   assert.equal(panel.field(ENDPOINT).props.check.phase, "connected");
+});
+
+test("the panel's model is part of the check, and a new model checks at once", async (t) => {
+  const panel = await mount(t, { overrides: { model: "llama-test" } });
+  await panel.wait(0);
+  assert.equal(panel.requests().at(-1).model, "llama-test");
+  await panel.answer({ success: true });
+  await panel.setProps({ model: "llama-other" });
+  assert.equal(panel.field(ENDPOINT).props.check.phase, "waiting");
+  await panel.wait(0); // a model pick is not typing, so nothing waits
+  assert.deepEqual(
+    panel.requests().map((config) => config.model),
+    ["llama-test", "llama-other"]
+  );
 });
 
 test("a new address waits until the field is left; a window switch applies nothing", async (t) => {
@@ -117,13 +131,54 @@ test("OpenRouter checks its key, which holds the status", async (t) => {
   assert.equal(panel.field("common.apiKey").props.invalidOn, "credentialsRejected");
 });
 
-test("a hidden server panel sends nothing until it is shown", async (t) => {
+test("a hidden server panel sends nothing until it is shown, then asks again", async (t) => {
   const panel = await mount(t, { visible: false });
   await panel.wait(5000);
   assert.equal(panel.requests().length, 0);
   await panel.setVisible(true);
   await panel.wait(0);
   assert.equal(panel.requests().length, 1);
+  await panel.answer({ success: true });
+  await panel.setVisible(false);
+  await panel.setVisible(true);
+  await panel.wait(0);
+  assert.equal(panel.requests().length, 2, "a shown panel asks again");
+});
+
+test("a key typed into a failed list waits for its check to settle", async (t) => {
+  const saved = [];
+  const panel = await mount(t, {
+    fetch: respond(401),
+    overrides: { setApiKey: (value) => saved.push(value) },
+  });
+  await panel.wait(0); // the list fails without a key; the check goes out
+  assert.equal(globalThis.fetch.mock.calls.length, 1);
+  await panel.answer(KEYLESS_REFUSAL);
+  for (const key of ["s", "sk"]) {
+    await panel.type(OPTIONAL_KEY, key);
+    await panel.setProps({ apiKey: key });
+  }
+  assert.deepEqual(saved, ["s", "sk"]);
+  await panel.wait(499);
+  assert.equal(globalThis.fetch.mock.calls.length, 1, "the list never sees a half-typed key");
+  assert.equal(panel.requests().length, 1, "nor does the check");
+  await panel.wait(1);
+  assert.equal(panel.requests().at(-1).apiKey, "sk");
+  assert.equal(globalThis.fetch.mock.calls.length, 1, "the list waits for the check's answer");
+  await panel.answer({ success: true });
+  assert.equal(globalThis.fetch.mock.calls.length, 2, "a settled key retries the failed list");
+  const [, init] = globalThis.fetch.mock.calls[1].arguments;
+  assert.equal(init.headers.Authorization, "Bearer sk");
+});
+
+test("a hidden panel's failed list stays quiet when its key changes elsewhere", async (t) => {
+  const panel = await mount(t, { fetch: respond(401), visible: false });
+  await panel.wait(0);
+  assert.equal(globalThis.fetch.mock.calls.length, 1, "the list loads once at mount");
+  await panel.setProps({ apiKey: "sk-elsewhere" });
+  await panel.wait(5000);
+  assert.equal(globalThis.fetch.mock.calls.length, 1);
+  assert.equal(panel.requests().length, 0);
 });
 
 test("a server key saves trimmed as it changes, and the address is checked again", async (t) => {

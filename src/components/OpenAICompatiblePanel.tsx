@@ -18,7 +18,8 @@ import { ConnectionCheckAnnouncer } from "./ui/ConnectionCheckAnnouncer";
 import { ProviderCheckField } from "./ui/ProviderCheckField";
 import { usePanelVisible } from "./ui/usePanelVisible";
 import { isWindowSwitchBlur, useFocusHold } from "../hooks/useFocusHold";
-import { CONNECTION_CHECK_DELAY_MS, useConnectionAutoCheck } from "../hooks/useConnectionAutoCheck";
+import { useConnectionAutoCheck } from "../hooks/useConnectionAutoCheck";
+import { useTypingPause } from "../hooks/useTypingPause";
 
 interface ModelOption {
   value: string;
@@ -68,8 +69,15 @@ export default function OpenAICompatiblePanel({
   const [modelsError, setModelsError] = useState<string | null>(null);
   const isMountedRef = useRef(true);
   const lastLoadedBaseRef = useRef<string | null>(null);
+  // The trimmed key the last list load was sent with.
+  const lastLoadedKeyRef = useRef<string | null>(null);
   const pendingBaseRef = useRef<string | null>(null);
   const latestBaseRef = useRef<string>(normalizeBaseUrl(baseUrl));
+  // The list reads the key through a ref, so a key change alone reloads nothing.
+  const apiKeyRef = useRef(apiKey);
+  useEffect(() => {
+    apiKeyRef.current = apiKey;
+  }, [apiKey]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -84,16 +92,24 @@ export default function OpenAICompatiblePanel({
 
   const normalizedBase = useMemo(() => normalizeBaseUrl(baseUrl), [baseUrl]);
   const visible = usePanelVisible();
-  // Typing keeps the pause; showing the panel or leaving its fields checks at once.
   const editing = useFocusHold();
   // An address with no http:// or https:// is left to the model list, which says so.
   const checkReady =
     provider === "openrouter" ? Boolean(apiKey.trim()) : normalizedBase.includes("://");
+  // The address applies when its field is left, so it is never half-typed here.
+  const delayMs = useTypingPause({
+    typed: apiKey,
+    context: JSON.stringify([provider, normalizedBase, model, visible]),
+    held: editing.held,
+  });
   const check = useConnectionAutoCheck({
-    config: { scope: "reasoning", provider, baseUrl: normalizedBase, apiKey },
-    ready: checkReady,
-    hold: !visible,
-    delayMs: editing.held ? CONNECTION_CHECK_DELAY_MS : 0,
+    // The model is this panel's own (or "" under a tab that is only browsed), so a saved model
+    // the server no longer lists fails as modelNotFound.
+    config: { scope: "reasoning", provider, baseUrl: normalizedBase, apiKey, model },
+    // A hidden panel is not ready to ask; a shown one asks again, and the main process answers
+    // a check it remembers at once.
+    ready: checkReady && visible,
+    delayMs,
   });
 
   useEffect(() => {
@@ -145,8 +161,9 @@ export default function OpenAICompatiblePanel({
         setModelsError(null);
       }
 
-      const trimmedKey = apiKey?.trim();
-      const effectiveKey = trimmedKey && trimmedKey.length > 0 ? trimmedKey : undefined;
+      const trimmedKey = apiKeyRef.current.trim();
+      const effectiveKey = trimmedKey.length > 0 ? trimmedKey : undefined;
+      lastLoadedKeyRef.current = effectiveKey ?? "";
       let activeBase = normalized;
 
       try {
@@ -265,7 +282,7 @@ export default function OpenAICompatiblePanel({
         }
       }
     },
-    [baseUrl, apiKey, lockedBaseUrl, setBaseUrl, t]
+    [baseUrl, lockedBaseUrl, setBaseUrl, t]
   );
 
   useEffect(() => {
@@ -281,6 +298,18 @@ export default function OpenAICompatiblePanel({
     if (lastLoadedBaseRef.current === normalizedBase) return;
     loadRemoteModels();
   }, [hasBase, normalizedBase, loadRemoteModels]);
+
+  // A key change retries a failed list load once the check for that key has settled, so the
+  // list never gets a half-typed key, and a hidden panel asks nothing: its check is not ready,
+  // so it never settles.
+  useEffect(() => {
+    if (check.phase !== "connected" && check.phase !== "failed") return;
+    if (!hasBase) return;
+    if (lastLoadedBaseRef.current === normalizedBase) return;
+    if (pendingBaseRef.current === normalizedBase) return;
+    if (apiKey.trim() === lastLoadedKeyRef.current) return;
+    loadRemoteModels();
+  }, [check.phase, apiKey, hasBase, normalizedBase, loadRemoteModels]);
 
   const applyBase = useCallback(() => {
     const normalized = trimmedDraft ? normalizeBaseUrl(trimmedDraft) : trimmedDraft;

@@ -26,8 +26,9 @@ import { GetApiKeyLink } from "./ui/GetApiKeyLink";
 import { ConnectionCheckAnnouncer } from "./ui/ConnectionCheckAnnouncer";
 import { ProviderCheckField } from "./ui/ProviderCheckField";
 import { usePanelVisible } from "./ui/usePanelVisible";
-import { CONNECTION_CHECK_DELAY_MS, useConnectionAutoCheck } from "../hooks/useConnectionAutoCheck";
+import { useConnectionAutoCheck } from "../hooks/useConnectionAutoCheck";
 import { useFocusHold } from "../hooks/useFocusHold";
+import { useTypingPause } from "../hooks/useTypingPause";
 import { getCachedPlatform } from "../utils/platform";
 import { useSettingsStore } from "../stores/settingsStore";
 import {
@@ -445,22 +446,29 @@ export default function ReasoningModelSelector({
   };
   const hostedKey = hostedKeys[displayedCloudProvider];
   const visible = usePanelVisible();
-  // Typing keeps the pause; showing the panel, a tab or a model checks at once.
   const editing = useFocusHold();
+  // A tab that is only being browsed has no model of this panel's: the key alone is checked.
+  const checkedModel = localReasoningProvider === displayedCloudProvider ? reasoningModel : "";
+  const delayMs = useTypingPause({
+    typed: hostedKey?.value ?? "",
+    context: JSON.stringify([displayedCloudProvider, effectiveMode, visible, checkedModel]),
+    held: editing.held,
+  });
   const check = useConnectionAutoCheck({
     config: {
       scope: "reasoning",
       provider: displayedCloudProvider,
       apiKey: hostedKey?.value ?? "",
-      // A tab that is only being browsed has no model of this panel's: the key alone is checked.
-      model: localReasoningProvider === displayedCloudProvider ? reasoningModel : "",
+      model: checkedModel,
     },
+    // A hidden panel is not ready to ask; a shown one asks again, and the main process answers
+    // a check it remembers at once.
     ready:
       effectiveMode === "cloud" &&
       providerAllowed(displayedCloudProvider) &&
-      Boolean(hostedKey?.value.trim()),
-    hold: !visible,
-    delayMs: editing.held ? CONNECTION_CHECK_DELAY_MS : 0,
+      Boolean(hostedKey?.value.trim()) &&
+      visible,
+    delayMs,
   });
 
   const localProviders = useMemo<LocalProvider[]>(() => {

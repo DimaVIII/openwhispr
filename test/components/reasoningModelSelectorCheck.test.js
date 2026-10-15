@@ -41,7 +41,7 @@ test("a provider tab that is only browsed checks its key alone", async (t) => {
   ]);
 });
 
-test("a hidden panel waits until it is shown, and keeps its answer when hidden", async (t) => {
+test("a hidden panel waits until it is shown, and asks again each time it is shown", async (t) => {
   const panel = await mount(t, { secrets: { openaiApiKey: "sk-saved" }, visible: false });
   await panel.wait(5000);
   assert.equal(panel.requests().length, 0);
@@ -49,11 +49,17 @@ test("a hidden panel waits until it is shown, and keeps its answer when hidden",
   await panel.setVisible(true);
   assert.equal(panel.phase(), "waiting");
   await panel.wait(0);
-  await panel.answer({ success: true });
-  await panel.setVisible(false);
-  await panel.setVisible(true);
-  await panel.wait(5000);
   assert.equal(panel.requests().length, 1);
+  await panel.answer({ success: true });
+  assert.equal(panel.phase(), "connected");
+  await panel.setVisible(false);
+  assert.equal(panel.phase(), "idle", "nothing is shown while hidden");
+  await panel.setVisible(true);
+  assert.equal(panel.phase(), "waiting");
+  await panel.wait(0);
+  // The main process answers a check it remembers at once, without asking the provider.
+  assert.equal(panel.requests().length, 2, "a shown panel asks again");
+  await panel.answer({ success: true });
   assert.equal(panel.phase(), "connected");
 });
 
@@ -93,6 +99,29 @@ test("typing keeps the 0.5 s pause, and leaving the field sends at once", async 
   assert.deepEqual(
     panel.requests().map((config) => config.apiKey),
     ["sk-first", "sk-second"]
+  );
+});
+
+test("a key typed in another shown panel still waits for the pause", async (t) => {
+  const panel = await mount(t, { secrets: { anthropicApiKey: "sk-ant-saved" } });
+  // The hosted key is shared: another shown panel types it, so no field here has focus.
+  await panel.setStore({ openaiApiKey: "s" });
+  assert.equal(panel.phase(), "waiting");
+  await panel.wait(499);
+  assert.equal(panel.requests().length, 0, "a half-typed key is not sent");
+  await panel.setStore({ openaiApiKey: "sk" });
+  await panel.wait(499);
+  assert.equal(panel.requests().length, 0, "each change starts the pause over");
+  await panel.wait(1);
+  assert.deepEqual(
+    panel.requests().map((config) => config.apiKey),
+    ["sk"]
+  );
+  await panel.selectTab("anthropic");
+  await panel.wait(0); // a tab switch checks at once, though it shows another key
+  assert.deepEqual(
+    panel.requests().map((config) => config.apiKey),
+    ["sk", "sk-ant-saved"]
   );
 });
 

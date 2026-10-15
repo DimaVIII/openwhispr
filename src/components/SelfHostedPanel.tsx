@@ -1,7 +1,8 @@
 import { useTranslation } from "react-i18next";
 import { ORUKEET_MODEL } from "../helpers/dictationStreamingRouting";
-import { CONNECTION_CHECK_DELAY_MS, useConnectionAutoCheck } from "../hooks/useConnectionAutoCheck";
+import { useConnectionAutoCheck } from "../hooks/useConnectionAutoCheck";
 import { useFocusHold } from "../hooks/useFocusHold";
+import { useTypingPause } from "../hooks/useTypingPause";
 import { ConnectionCheckAnnouncer } from "./ui/ConnectionCheckAnnouncer";
 import { ProviderCheckField } from "./ui/ProviderCheckField";
 import { usePanelVisible } from "./ui/usePanelVisible";
@@ -23,20 +24,28 @@ export default function SelfHostedPanel({
 }: SelfHostedPanelProps) {
   const { t } = useTranslation();
   const urlHold = useFocusHold();
-  // Typing keeps the pause; showing the panel or leaving its fields checks at once.
   const editing = useFocusHold();
   const visible = usePanelVisible();
   const trimmedModel = (model ?? "").trim();
+  // The address and model save as they are typed.
+  const delayMs = useTypingPause({
+    typed: `${url}\n${model ?? ""}`,
+    context: JSON.stringify([service, visible]),
+    held: editing.held,
+  });
   const check = useConnectionAutoCheck({
     config: { scope: service, provider: "custom", baseUrl: url, model },
     ready:
       Boolean(onModelChange && url.trim() && trimmedModel) &&
       // The app sends this model's server a key this panel has no field for, so a check
       // could only ask without it.
-      trimmedModel !== ORUKEET_MODEL,
+      trimmedModel !== ORUKEET_MODEL &&
+      // A hidden panel is not ready to ask; a shown one asks again, and the main process
+      // answers a check it remembers at once.
+      visible,
     // A half-typed address may belong to someone else: nothing is sent while it is edited.
-    hold: !visible || urlHold.held,
-    delayMs: editing.held ? CONNECTION_CHECK_DELAY_MS : 0,
+    hold: urlHold.held,
+    delayMs,
   });
 
   const placeholderUrl =
