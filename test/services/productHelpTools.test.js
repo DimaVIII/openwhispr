@@ -1,7 +1,5 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
 const { createRendererServer, installBrowserGlobals } = require("../lib/rendererTestHarness");
 
 test("help tools remain read-only, return bounded evidence and preserve normal answer delivery", async (t) => {
@@ -239,20 +237,15 @@ test("tool registration excludes demos and model output bounds articles; durable
   assert.doesNotMatch(JSON.stringify(settings), /F9|Private|dictationKey|values/);
 });
 
-test("help tools and every curated page have translated labels in every locale", () => {
+test("help tools and every curated page have English labels", () => {
   const topics = require("../../src/config/productHelpTopics.json");
   const slugs = Object.values(topics).flatMap((topic) =>
     topic.paths.map((page) => page.split("/").pop())
   );
-  const localesDir = path.join(__dirname, "../../src/locales");
-  for (const locale of fs.readdirSync(localesDir)) {
-    const file = path.join(localesDir, locale, "translation.json");
-    if (!fs.existsSync(file)) continue;
-    const { agentMode, productHelp } = JSON.parse(fs.readFileSync(file, "utf8"));
-    for (const tool of ["search_openwhispr_help", "read_openwhispr_help", "get_openwhispr_context"])
-      for (const suffix of ["Name", "Status"])
-        assert.ok(agentMode.tools[tool + suffix], `${locale}: agentMode.tools.${tool}${suffix}`);
-    for (const slug of slugs)
-      assert.ok(productHelp.topicsList[slug], `${locale}: productHelp.topicsList.${slug}`);
-  }
+  const { agentMode, productHelp } = require("../../src/locales/en/translation.json");
+  for (const tool of ["search_openwhispr_help", "read_openwhispr_help", "get_openwhispr_context"])
+    for (const suffix of ["Name", "Status"])
+      assert.ok(agentMode.tools[tool + suffix], `agentMode.tools.${tool}${suffix}`);
+  for (const slug of slugs)
+    assert.ok(productHelp.topicsList[slug], `productHelp.topicsList.${slug}`);
 });

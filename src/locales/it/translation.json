@@ -4827,7 +4827,7 @@
   "productHelp": {
     "sources": "Documentazione ufficiale",
     "settings": "Impostazioni attuali",
-    "guidance": "Documentazione e impostazioni usate per questa risposta.",
+    "guidance": "Informazioni usate per questa risposta.",
     "settingsNote": "Scelte e autorizzazioni note lette per questa risposta, senza modificarle; i dispositivi non vengono testati.",
     "readAt": "Letto il {{time}}",
     "sourceStatus": {

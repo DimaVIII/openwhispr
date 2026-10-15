@@ -68,8 +68,8 @@ Contacted when the assistant retrieves official help and both privacy settings
 and organization policy permit online documentation lookup. The assistant must be
 enabled (`agentEnabled`); the existing web-search policy (`webSearchEnabled`) also
 controls documentation lookups. Signed-out and fully-local configurations use
-bundled reference material without contacting this host. Only fixed public product-topic
-queries and article paths are sent; settings and conversation content are not
+bundled reference material without contacting this host. Only the MCP handshake and reads
+of curated documentation page paths are sent; settings and conversation content are not
 sent to this host. Bundled essentials remain available without this connection.
 
 | Host                  | Protocol | Port | Purpose                                     |

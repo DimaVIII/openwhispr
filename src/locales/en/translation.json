@@ -4827,7 +4827,7 @@
   "productHelp": {
     "sources": "Official documentation",
     "settings": "Current app settings",
-    "guidance": "Documentation and settings used for this reply.",
+    "guidance": "Information used for this reply.",
     "settingsNote": "Read-only choices and known permissions captured for this reply; this does not test your devices.",
     "readAt": "Read at {{time}}",
     "sourceStatus": {

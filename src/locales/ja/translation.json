@@ -4827,7 +4827,7 @@
   "productHelp": {
     "sources": "公式ドキュメント",
     "settings": "現在のアプリ設定",
-    "guidance": "この回答で使用したドキュメントと設定。",
+    "guidance": "この回答で使用した情報。",
     "settingsNote": "この回答のために読み取った設定と既知の権限です。設定の変更やデバイスのテストは行いません。",
     "readAt": "取得日時：{{time}}",
     "sourceStatus": {
