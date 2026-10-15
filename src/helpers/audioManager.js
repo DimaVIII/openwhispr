@@ -5020,6 +5020,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       // Start fallback recorder in case streaming produces no results.
       this._streamingFallbackSegments = [];
       this._recordingSpool = this._startRecordingSpool();
+      this.recordingStartTime = Date.now();
       this.startStreamingFallbackRecorder(stream);
 
       // 2. Set up audio pipeline so frames flow the instant WebSocket is ready.
@@ -5150,7 +5151,6 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
         return false;
       }
       this.isRecording = !this.stopRequestedDuringStreamingStart;
-      this.recordingStartTime = this._streamingCaptureStoppedAt ?? Date.now();
       this.onStateChange?.({
         isRecording: this.isRecording,
         isProcessing: this.stopRequestedDuringStreamingStart,
@@ -5359,7 +5359,9 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
             PREVIEW_FLUSH_WATCHDOG_MS
           );
         })
-      : Promise.resolve(true);
+      : // Stop during setup may retain fallback audio before any PCM pipeline
+        // exists. That capture needs batch transcription, not an empty commit.
+        Promise.resolve(!this.stopRequestedDuringStreamingStart);
 
     // Keep admitting already queued PCM and the partial worklet buffer until
     // its FIFO sentinel arrives, while cutting off new microphone input now.
@@ -5587,6 +5589,12 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     if (this._streamingMicSwapPromise) await this._streamingMicSwapPromise;
     const captureFlushed = await captureStopped;
     if (wasCancelled()) return abandonFinalization();
+    const captureError = captureFlushed
+      ? null
+      : Object.assign(new Error("Streaming audio capture did not finish"), {
+          code: "AUDIO_CAPTURE_INCOMPLETE",
+          messageKey: "hooks.audioRecording.partialTranscription.description",
+        });
 
     let finalText = this.streamingFinalText || "";
     const provider = this.getStreamingProvider(providerName);
@@ -5595,7 +5603,8 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     let orukeetFinal = null;
     if (!captureFlushed) {
       // Never commit a truncated stream if the worklet failed to acknowledge.
-      acknowledgedFinal = Promise.resolve({ success: false, error: "Audio worklet did not flush" });
+      this.cleanupStreamingListeners(sessionId);
+      acknowledgedFinal = Promise.resolve({ success: false, error: captureError.message });
     } else if (provider.finalizeAcknowledged) {
       acknowledgedFinal = provider.finalize().catch((error) => ({
         success: false,
@@ -5659,15 +5668,16 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     });
     const tTerminate = performance.now();
 
-    finalText =
-      (provider.preferStopTranscript && stopResult?.text) || this.streamingFinalText || "";
+    finalText = captureFlushed
+      ? (provider.preferStopTranscript && stopResult?.text) || this.streamingFinalText || ""
+      : "";
 
-    if (!finalText && this.streamingPartialText) {
+    if (captureFlushed && !finalText && this.streamingPartialText) {
       finalText = this.streamingPartialText;
       logger.debug("Using partial text as fallback", { textLength: finalText.length }, "streaming");
     }
 
-    if (!finalText && stopResult?.text) {
+    if (captureFlushed && !finalText && stopResult?.text) {
       finalText = stopResult.text;
       logger.debug(
         "Using disconnect result text as fallback",
@@ -5935,19 +5945,21 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     // No stream will transcribe a failed-over recording, so it uploads at any
     // length, unless it was the silence the batch speech gate skips.
     const failoverSilent =
+      captureFlushed &&
       Boolean(failoverReason) &&
       getLocalSpeechGateDecision(this._streamingSpeechGateState).reason === "silence";
     if (failoverSilent) {
       logger.info("Speech gate skipped the failed-over upload", { failoverReason }, "streaming");
     }
-    // A failed-over recording has no other transcript, so a failure to
-    // transcribe it ends as a batch recording's would. A stream that produced
-    // no text still ends quietly on a real failure, but keeps a recording that
-    // reads as silence for a retry, as batch does.
+    // A failed-over or incomplete recording has no trustworthy transcript, so
+    // a failure to transcribe it ends as a batch recording's would. A complete
+    // stream with no text still ends quietly on a real failure, but keeps a
+    // recording that reads as silence for a retry, as batch does.
     const failBatchFallback = (error) => {
       const outcome = transcriptionFailureOutcome(error);
-      if (!failoverReason && outcome.report) return;
-      failureReport = outcome.report;
+      if (captureFlushed && !failoverReason && outcome.report) return;
+      failureReport =
+        outcome.report || (captureError ? transcriptionFailureOutcome(captureError).report : null);
       if (outcome.keepAudio) {
         delivery.resultHandled = this.saveFailedTranscription(error.message, error.code || null, {
           durationSeconds,
@@ -5955,9 +5967,13 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
         });
       }
     };
+    if (captureError && !fallbackBlob?.size) {
+      failureReport = transcriptionFailureOutcome(captureError).report;
+    }
     if (
       !finalText &&
-      (failoverReason ? !failoverSilent : !finalAcknowledged && durationSeconds > 2) &&
+      (!captureFlushed ||
+        (failoverReason ? !failoverSilent : !finalAcknowledged && durationSeconds > 2)) &&
       fallbackBlob?.size > 0
     ) {
       const target = resolveStreamingFallbackTarget(getSettings());
@@ -6001,6 +6017,8 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
             batchFallbackResult = batchResult;
             batchWarning = batchResult.warning || null;
             logger.info("Batch fallback succeeded", { textLength: finalText.length }, "streaming");
+          } else if (captureError) {
+            failBatchFallback(captureError);
           }
         } catch (fallbackErr) {
           // The cancelled upload's rejection is the expected outcome.

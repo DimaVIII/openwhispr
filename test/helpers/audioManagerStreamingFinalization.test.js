@@ -1922,6 +1922,11 @@ test("a startup Stop flush timeout rejects late PCM and never commits a partial 
     providerName: "orukeet",
     provider,
   });
+  manager.processWithOpenWhisprCloud = async (blob, metadata) => {
+    uploads.push({ audio: await blob.text(), reason: metadata.streamingFallbackReason });
+    return { text: "opening words complete", rawText: "opening words complete" };
+  };
+  globalThis.window.dispatchEvent = () => {};
   const started = manager.startStreamingRecording();
   await entered.promise;
   const port = manager.streamingProcessor.port;
@@ -1941,3 +1946,123 @@ test("a startup Stop flush timeout rejects late PCM and never commits a partial 
   assert.deepEqual(errors, []);
   assert.equal(manager.streamingStream, null);
 });
+
+for (const captureMs of [100, 3000]) {
+  test(`Stop during worklet loading preserves ${captureMs}ms of fallback capture`, async (t) => {
+    const AudioManager = await loadManagerClass(t);
+    useManagedOrukeetSettings();
+    installCapture(t);
+    const gate = Promise.withResolvers();
+    const entered = Promise.withResolvers();
+    let commits = 0;
+    const provider = startingOrukeetProvider({
+      finalize: async () => {
+        commits++;
+        return { success: true, text: "" };
+      },
+    });
+    const { manager, uploads, completions, errors } = createStartingManager(AudioManager, {
+      providerName: "orukeet",
+      provider,
+    });
+    const context = await manager.getOrCreateAudioContext();
+    context.audioWorklet.addModule = async () => {
+      entered.resolve();
+      await gate.promise;
+    };
+    manager.getOrCreateAudioContext = async () => context;
+    manager.processWithOpenWhisprCloud = async (blob, metadata) => {
+      uploads.push({ audio: await blob.text(), duration: metadata.durationSeconds });
+      return { text: "opening words complete", rawText: "opening words complete" };
+    };
+    globalThis.window.dispatchEvent = () => {};
+    t.mock.timers.enable({ apis: ["Date"], now: Date.now() });
+    const started = manager.startStreamingRecording();
+    await entered.promise;
+    t.mock.timers.tick(captureMs);
+    await manager.stopStreamingRecording();
+    t.mock.timers.tick(5000);
+    gate.resolve();
+    await started;
+    assert.deepEqual(
+      uploads,
+      [{ audio: "opening words", duration: captureMs / 1000 }],
+      "capture before worklet readiness must survive Stop regardless of recording length"
+    );
+    assert.equal(commits, 0, "a stream with no PCM pipeline must not commit truncated capture");
+    assert.equal(completions.length, 1);
+    assert.equal(completions[0].text, "opening words complete");
+    assert.deepEqual(errors, []);
+    assert.equal(
+      manager.lastAudioMetadata.durationMs,
+      captureMs,
+      "exclude delayed setup settlement"
+    );
+  });
+}
+
+for (const acknowledged of [false, true]) {
+  for (const fallbackOutcome of ["success", "failure", "missing audio", "empty result"]) {
+    const fallbackFails = fallbackOutcome !== "success";
+    test(`missing flush with a partial prefix uses complete audio (${acknowledged ? "ack" : "non-ack"}, fallback ${fallbackOutcome})`, async (t) => {
+      const AudioManager = await loadManagerClass(t);
+      useManagedOrukeetSettings();
+      installCapture(t);
+      let commits = 0;
+      const provider = startingOrukeetProvider({
+        finalizeAcknowledged: acknowledged,
+        awaitsFinalTranscript: true,
+        stop: async () => ({ success: true, text: "late truncated prefix" }),
+        finalize: async () => {
+          commits++;
+          return { success: true, text: "truncated prefix" };
+        },
+      });
+      const { manager, uploads, completions, errors } = createStartingManager(AudioManager, {
+        providerName: acknowledged ? "orukeet" : "deepgram",
+        provider,
+      });
+      if (fallbackOutcome === "missing audio") manager.mergeRecordedSegments = async () => null;
+      const savedFailures = [];
+      manager.saveFailedTranscription = (message) => {
+        savedFailures.push(message);
+        return true;
+      };
+      manager.finalizeChineseScript = async (text) => text;
+      manager.processWithOpenWhisprCloud = async (blob) => {
+        uploads.push(await blob.text());
+        if (fallbackOutcome === "failure") throw new Error("complete capture unavailable");
+        if (fallbackOutcome === "empty result") return { text: "" };
+        return { text: "opening words complete", rawText: "opening words complete" };
+      };
+      globalThis.window.dispatchEvent = () => {};
+      await manager.startStreamingRecording();
+      manager.recordingStartTime = Date.now() - 100;
+      manager.streamingPartialText = "truncated prefix";
+      manager.streamingProcessor.port.postMessage = () => {};
+      t.mock.timers.enable({ apis: ["setTimeout"] });
+      const stopped = manager.stopStreamingRecording();
+      t.mock.timers.tick(5000);
+      await new Promise(setImmediate);
+      t.mock.timers.tick(120);
+      await new Promise(setImmediate);
+      t.mock.timers.tick(300);
+      await stopped;
+      assert.equal(commits, 0, "incomplete worklet PCM must never be committed");
+      assert.deepEqual(
+        uploads,
+        fallbackOutcome === "missing audio" ? [] : ["opening words"],
+        "partial text cannot suppress retained audio recovery"
+      );
+      assert.ok(completions.every((result) => !result.text?.includes("truncated prefix")));
+      if (fallbackFails) {
+        assert.ok(errors.length > 0 || savedFailures.length > 0, "surface a recoverable failure");
+        assert.equal(completions.filter((result) => result.success && result.text).length, 0);
+      } else {
+        assert.equal(completions.length, 1);
+        assert.equal(completions[0].text, "opening words complete");
+        assert.deepEqual(errors, []);
+      }
+    });
+  }
+}
