@@ -1978,6 +1978,7 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
     shiftButton = nil
     modeButton = nil
     returnButton = nil
+    appliedFieldTraits = nil
     rowHeightConstraints.removeAll(keepingCapacity: true)
 
     lettersRowsStack.arrangedSubviews.forEach { view in
@@ -2064,7 +2065,22 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
     refreshFieldAwareKeys()
   }
 
+  private struct FieldTraits: Equatable {
+    let returnKeyType: UIReturnKeyType
+    let keyboardType: UIKeyboardType
+  }
+
+  // textDidChange fires on every keystroke; re-applying the return key's image
+  // and the shortcut's constraints each time costs a layout pass for nothing.
+  private var appliedFieldTraits: FieldTraits?
+
   private func refreshFieldAwareKeys() {
+    let traits = FieldTraits(
+      returnKeyType: textDocumentProxy.returnKeyType ?? .default,
+      keyboardType: textDocumentProxy.keyboardType ?? .default
+    )
+    guard traits != appliedFieldTraits else { return }
+    appliedFieldTraits = traits
     refreshReturnKey()
     refreshFieldShortcuts()
   }

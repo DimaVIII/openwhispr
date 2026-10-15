@@ -47,6 +47,9 @@ private extension KeyboardViewController {
   static func touchTestShouldPoll(tick: Int, isLive: Bool) -> Bool {
     shouldPollSharedState(tick: tick, isLive: isLive)
   }
+
+  func touchTestRefreshFieldKeys() { refreshFieldAwareKeys() }
+  var touchTestReturnKey: KeyButton? { returnButton }
 }
 
 private struct TouchChecks {
@@ -76,6 +79,7 @@ private enum KeyboardTouchTests {
     checkOtherControls(&checks)
     checkWindowTouchDelays(&checks)
     checkPollCadence(&checks)
+    checkFieldKeysRefreshOnlyOnChange(&checks)
     for width: CGFloat in [360, 393, 430, 852] {
       checkProductionLayout(width: width, numbers: false, globe: false, &checks)
       checkProductionLayout(width: width, numbers: true, globe: false, &checks)
@@ -355,5 +359,22 @@ private enum KeyboardTouchTests {
       "an idle keyboard reads shared state every fourth tick",
       ticks.filter { KeyboardViewController.touchTestShouldPoll(tick: $0, isLive: false) } == [4, 8]
     )
+  }
+
+  /// textDidChange runs on every keystroke; an unchanged field must not touch the
+  /// return key. The test clears the key's image between refreshes: a skipped
+  /// refresh leaves it cleared, a repeated one puts it back.
+  @MainActor
+  static func checkFieldKeysRefreshOnlyOnChange(_ checks: inout TouchChecks) {
+    let controller = KeyboardViewController.makeLaidOutKeyboard(width: 393, numbers: false, globe: false)
+    controller.touchTestRefreshFieldKeys()
+    guard let returnKey = controller.touchTestReturnKey else {
+      checks.check("return key exists", false)
+      return
+    }
+    checks.check("return key shows its icon", returnKey.image(for: .normal) != nil)
+    returnKey.setImage(nil, for: .normal)
+    controller.touchTestRefreshFieldKeys()
+    checks.check("an unchanged field leaves the return key alone", returnKey.image(for: .normal) == nil)
   }
 }
