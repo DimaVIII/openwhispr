@@ -53,6 +53,9 @@ private extension KeyboardViewController {
   var touchTestCoordinator: KeyTouchCoordinator { keyTouches }
   var touchTestIsNumbers: Bool { layoutMode == .numbers }
   var touchTestShiftEnabled: Bool { isShiftEnabled }
+  var touchTestDeleteRepeating: Bool { deleteRepeatTimer != nil }
+  func touchTestRebuild() { rebuildKeyboard() }
+  func touchTestWillDisappear() { viewWillDisappear(false) }
 }
 
 private struct TouchChecks {
@@ -94,6 +97,7 @@ private enum KeyboardTouchTests {
       checkKeyWiring(width: width, numbers: false, globe: true, &checks)
     }
     checkKeyDispatch(&checks)
+    checkMidTouchTeardown(&checks)
 
     print("Keyboard touch routing: \(checks.count - checks.failures.count)/\(checks.count) passed")
     if !checks.failures.isEmpty {
@@ -658,5 +662,31 @@ private enum KeyboardTouchTests {
     coordinator.ended(id, on: mode)
     checks.check("123 switches to numbers on lift", controller.touchTestIsNumbers)
     checks.check("VoiceOver switches back to letters", mode.accessibilityActivate() && !controller.touchTestIsNumbers)
+  }
+
+  /// A keyboard rebuilt (rotation, width change) or hidden mid-touch must stop a
+  /// held delete and leave no key lit: those touches may never end.
+  @MainActor
+  static func checkMidTouchTeardown(_ checks: inout TouchChecks) {
+    let teardowns: [(String, (KeyboardViewController) -> Void)] = [
+      ("rebuild", { $0.touchTestRebuild() }),
+      ("dismiss", { $0.touchTestWillDisappear() }),
+    ]
+    for (label, teardown) in teardowns {
+      let controller = KeyboardViewController.makeLaidOutKeyboard(width: 393, numbers: false, globe: false)
+      guard let delete = visibleKeys(in: controller.touchTestRows).first(where: { $0.keyAction == .backspace }) else {
+        checks.check("\(label): delete key exists", false)
+        continue
+      }
+      let finger = NSObject()
+      let coordinator = controller.touchTestCoordinator
+      coordinator.repeatDelay = 0.05
+      coordinator.began(ObjectIdentifier(finger), on: delete)
+      RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+      checks.check("\(label): a held delete repeats before teardown", controller.touchTestDeleteRepeating)
+      teardown(controller)
+      checks.check("\(label) mid-touch stops a held delete", !controller.touchTestDeleteRepeating)
+      checks.check("\(label) mid-touch leaves delete unlit", !delete.isHighlighted)
+    }
   }
 }
