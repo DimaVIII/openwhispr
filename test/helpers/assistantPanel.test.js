@@ -36,6 +36,7 @@ async function setupAssistantPanel(
     delete globalThis.__assistantPanelApprovals;
     delete globalThis.__assistantPanelStreamingOptions;
     delete globalThis.__assistantPanelCopyText;
+    delete globalThis.__assistantPanelCopyFeedbackText;
   });
 
   const vite = await createRendererServer(t, {
@@ -79,8 +80,16 @@ async function setupAssistantPanel(
       `,
       "/hooks/useCopyFeedback": `
         export function useCopyFeedback(text) {
-          globalThis.__assistantPanelCopyText = text;
-          return { copied: false, async copy() {}, async copyText() { return true; }, confirmCopied() {} };
+          globalThis.__assistantPanelCopyFeedbackText = text;
+          return {
+            copied: false,
+            async copy() {},
+            async copyText(copied) {
+              globalThis.__assistantPanelCopyText = copied;
+              return true;
+            },
+            confirmCopied() {},
+          };
         }
       `,
       "/stores/settingsStore": `
@@ -999,10 +1008,17 @@ for (const scenario of [
   { topic: "assistant", source: "bundled", unknown: true },
 ]) {
   test(`voice help renders ${scenario.topic}/${scenario.source} and copies readable evidence`, async (t) => {
+    let root = null;
+    t.after(async () => {
+      if (root) await React.act(async () => root.unmount());
+    });
     const topic = require("../../src/config/productHelpTopics.json")[scenario.topic];
-    const translation = require("../../src/locales/en/translation.json");
-    const content = scenario.unknown ? translation.productHelp.unknownAnswer : topic.text;
-    const markup = await renderAssistantPanel(
+    const content = scenario.unknown
+      ? "I can't confirm that control from the built-in guidance. Check the official documentation."
+      : topic.text;
+    installBrowserGlobals(t);
+    const container = installInteractiveDom(t);
+    const { AssistantPanel, props } = await setupAssistantPanel(
       t,
       [
         {
@@ -1036,6 +1052,7 @@ for (const scenario of [
       ],
       { realMarkdown: true }
     );
+    const markup = renderToStaticMarkup(React.createElement(AssistantPanel, props));
     if (scenario.list) {
       assert.match(markup, new RegExp(`<${scenario.list}\\b`));
       assert.match(markup, /<strong\b/);
@@ -1046,6 +1063,18 @@ for (const scenario of [
     assert.match(markup, /System Default/);
     assert.ok(markup.includes(`href="https://docs.openwhispr.com${topic.path}"`));
     assert.match(markup, scenario.source === "live" ? /Article retrieved/ : /Built-in fallback/);
+    // Auto-copy confirms the raw answer, so the Copied state must be keyed by it.
+    assert.equal(globalThis.__assistantPanelCopyFeedbackText, content);
+    const { createRoot } = require("react-dom/client");
+    root = createRoot(container);
+    await React.act(async () =>
+      root.render(React.createElement(AssistantPanel, { ...props, footerPhase: "actions" }))
+    );
+    const copyButton = findElement(
+      container,
+      (element) => element.tagName === "BUTTON" && element.textContent.includes("Copy to clipboard")
+    );
+    await React.act(async () => copyButton.dispatchEvent({ type: "click", bubbles: true }));
     const copy = globalThis.__assistantPanelCopyText;
     assert.doesNotMatch(copy, /\*\*/);
     assert.match(copy, /Input Device: System Default/);

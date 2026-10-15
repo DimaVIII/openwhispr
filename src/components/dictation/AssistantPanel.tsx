@@ -153,17 +153,20 @@ export function AssistantPanel({
     .find((message) => message.role === "assistant");
   const responseContent = latestAssistantMessage?.content ?? "";
   const helpEvidence = extractHelpEvidence(latestAssistantMessage?.toolCalls);
-  const {
-    copied,
-    copy: handleCopy,
-    copyText,
-    confirmCopied,
-  } = useCopyFeedback(
-    helpAnswerPlainText(responseContent, helpEvidence, t, i18n?.resolvedLanguage),
-    {
-      resetMs: MANUAL_COPY_FEEDBACK_MS,
-    }
+  const responseCopyText = helpAnswerPlainText(
+    responseContent,
+    helpEvidence,
+    t,
+    i18n?.resolvedLanguage
   );
+  // Keyed by the answer itself, which is what auto-copy confirms; explicit
+  // Copy adds the help sources to what it writes.
+  const { copied, copyText, confirmCopied } = useCopyFeedback(responseContent, {
+    resetMs: MANUAL_COPY_FEEDBACK_MS,
+  });
+  const handleCopy = useCallback(async () => {
+    if (await copyText(responseCopyText.trim())) confirmCopied(responseContent);
+  }, [copyText, confirmCopied, responseCopyText, responseContent]);
 
   useEffect(() => {
     onConversationIdChange(persistence.conversationId);

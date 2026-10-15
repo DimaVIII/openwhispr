@@ -3837,7 +3837,10 @@
       "invalidArgs": "{{name}} 的工具参数无效",
       "search_openwhispr_helpName": "搜索 OpenWhispr 帮助",
       "read_openwhispr_helpName": "阅读 OpenWhispr 帮助",
-      "get_openwhispr_contextName": "读取 OpenWhispr 设置"
+      "get_openwhispr_contextName": "读取 OpenWhispr 设置",
+      "search_openwhispr_helpStatus": "正在搜索 OpenWhispr 帮助...",
+      "read_openwhispr_helpStatus": "正在阅读 OpenWhispr 帮助...",
+      "get_openwhispr_contextStatus": "正在读取 OpenWhispr 设置..."
     }
   },
   "assistant": {
@@ -4823,7 +4826,6 @@
   },
   "productHelp": {
     "sources": "官方文档",
-    "loading": "正在查询官方文档…",
     "settings": "当前应用设置",
     "guidance": "此回复使用的文档和设置。",
     "settingsNote": "为本次回复读取的设置和已知权限；不会更改设置或测试设备。",
@@ -4836,12 +4838,9 @@
       "policy": "您组织的策略限制了在线文档查询。",
       "rateLimit": "在线文档查询已达到上限。现显示内置指南。",
       "unavailable": "无法核实当前文档。现显示内置指南。",
-      "privacy": "您的隐私设置将文档查询限制为离线内容。"
+      "privacy": "未登录或仅使用本地处理时，在线文档查询处于关闭状态。现显示内置指南。"
     },
     "openFailed": "无法打开文章。您可以复制链接并在浏览器中打开。",
-    "unknownAnswer": "我无法根据 OpenWhispr 内置指南核实该功能或控件。我没有更改任何设置。请查阅官方文档，或描述您看到的设置。",
-    "mixedAnswer": "我可以在此提供只读的 OpenWhispr 帮助。请将产品帮助问题与其他操作分开提出；我没有执行该操作。",
-    "unavailableAnswer": "OpenWhispr 帮助暂时不可用。请重试或打开官方文档。",
     "topicsList": {
       "hotkeys": "快捷键",
       "microphone": "麦克风",
@@ -4850,11 +4849,19 @@
       "calendar": "日历",
       "language": "语言",
       "backup": "备份",
-      "assistant": "助手"
+      "assistant": "助手",
+      "hold-or-tap": "按住或点按",
+      "choose-your-microphone": "选择麦克风",
+      "microphone-not-working": "麦克风无法使用",
+      "local-models": "本地模型",
+      "chat-agent": "聊天助手",
+      "record-a-meeting": "录制会议",
+      "connect-google-calendar": "连接 Google 日历",
+      "languages": "用其他语言听写",
+      "sync-across-devices": "在设备间同步笔记"
     },
     "appVersion": "应用版本",
     "platform": "平台",
-    "osVersion": "操作系统版本",
     "processing": "处理方式",
     "engine": "引擎",
     "policy": "策略允许使用助手",

@@ -1,5 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const { createRendererServer, installBrowserGlobals } = require("../lib/rendererTestHarness");
 
 test("help tools remain read-only, return bounded evidence and preserve normal answer delivery", async (t) => {
@@ -190,6 +192,12 @@ test("tool registration excludes demos and model output bounds articles; durable
               url: "https://docs.openwhispr.com/help/dictation/hotkeys",
               text: "private article".repeat(1000),
             },
+            {
+              title: "Hold or tap",
+              path: "/help/dictation/hold-or-tap",
+              url: "https://docs.openwhispr.com/help/dictation/hold-or-tap",
+              text: "second page",
+            },
           ],
         }),
         cancelProductHelp: () => {},
@@ -209,9 +217,13 @@ test("tool registration excludes demos and model output bounds articles; durable
   );
   const tool = createToolRegistry({}).get("search_openwhispr_help");
   const data = (await tool.execute({ topic: "hotkeys" })).data;
+  // The main page takes the whole budget before later pages, which keep their link.
   assert.equal(data.articles[0].text.length, 4000);
   assert.equal(data.articles[0].excerpt, true);
   assert.equal(data.articles[0].untrusted, true);
+  assert.equal(data.articles[1].text, "");
+  assert.equal(data.articles[1].excerpt, true);
+  assert.equal(data.articles[1].url, "https://docs.openwhispr.com/help/dictation/hold-or-tap");
   assert.doesNotMatch(
     JSON.stringify(productHelpMetadata(tool.name, data)),
     /private article|"text"/
@@ -222,4 +234,22 @@ test("tool registration excludes demos and model output bounds articles; durable
   });
   assert.equal(settings.settingsRead, true);
   assert.doesNotMatch(JSON.stringify(settings), /F9|Private|dictationKey|values/);
+});
+
+test("help tools and every curated page have translated labels in every locale", () => {
+  const topics = require("../../src/config/productHelpTopics.json");
+  const slugs = Object.values(topics).flatMap((topic) =>
+    topic.paths.map((page) => page.split("/").pop())
+  );
+  const localesDir = path.join(__dirname, "../../src/locales");
+  for (const locale of fs.readdirSync(localesDir)) {
+    const file = path.join(localesDir, locale, "translation.json");
+    if (!fs.existsSync(file)) continue;
+    const { agentMode, productHelp } = JSON.parse(fs.readFileSync(file, "utf8"));
+    for (const tool of ["search_openwhispr_help", "read_openwhispr_help", "get_openwhispr_context"])
+      for (const suffix of ["Name", "Status"])
+        assert.ok(agentMode.tools[tool + suffix], `${locale}: agentMode.tools.${tool}${suffix}`);
+    for (const slug of slugs)
+      assert.ok(productHelp.topicsList[slug], `${locale}: productHelp.topicsList.${slug}`);
+  }
 });

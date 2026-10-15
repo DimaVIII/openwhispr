@@ -12,7 +12,10 @@ export function projectHelpSettings(
     values[key] =
       typeof value === "boolean"
         ? value
-        : typeof value === "string" && value.length <= 100 && !/[\r\n/@\\]|https?:|sk-/i.test(value)
+        : typeof value === "string" &&
+            value.length <= 100 &&
+            // A lone "/", "\" or "@" is a hotkey's key; inside a longer token it's a path or address.
+            !/[\r\n]|https?:|sk-|[^+,][/@\\]|[/@\\][^+,]/i.test(value)
           ? value || null
           : null;
   };

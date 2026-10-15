@@ -361,6 +361,12 @@ test("context reads current stable values without labels or private device names
   state.activationMode = "tap";
   assert.equal(project("hotkeys").dictationKey, "Control+Alt+K");
   assert.equal(project("hotkeys").activationMode, "tap");
+  for (const key of ["Control+/", "CommandOrControl+\\", "Shift+@"]) {
+    state.activeDictationKey = key;
+    assert.equal(project("hotkeys").dictationKey, key);
+  }
+  state.activeDictationKey = "/private/home";
+  assert.equal(project("hotkeys").dictationKey, null);
   assert.equal(project("microphone").microphoneSelectionMode, "specific");
   assert.equal(project("microphone").selectedMicDeviceLabel, undefined);
 });

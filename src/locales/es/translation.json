@@ -3890,7 +3890,10 @@
       "invalidArgs": "Argumentos de herramienta no válidos para {{name}}",
       "search_openwhispr_helpName": "Buscar ayuda de OpenWhispr",
       "read_openwhispr_helpName": "Leer ayuda de OpenWhispr",
-      "get_openwhispr_contextName": "Leer ajustes de OpenWhispr"
+      "get_openwhispr_contextName": "Leer ajustes de OpenWhispr",
+      "search_openwhispr_helpStatus": "Buscando en la ayuda de OpenWhispr...",
+      "read_openwhispr_helpStatus": "Leyendo la ayuda de OpenWhispr...",
+      "get_openwhispr_contextStatus": "Leyendo los ajustes de OpenWhispr..."
     }
   },
   "assistant": {
@@ -4823,7 +4826,6 @@
   },
   "productHelp": {
     "sources": "Documentación oficial",
-    "loading": "Buscando documentación oficial…",
     "settings": "Ajustes actuales",
     "guidance": "Documentación y ajustes usados para esta respuesta.",
     "settingsNote": "Opciones y permisos conocidos consultados para esta respuesta, sin modificarlos; no se prueban los dispositivos.",
@@ -4836,12 +4838,9 @@
       "policy": "La política de tu organización limita la consulta de documentación en línea.",
       "rateLimit": "Se alcanzó el límite de consultas de documentación en línea. Se muestra la guía integrada.",
       "unavailable": "No se pudo comprobar la documentación actual. Se muestra la guía integrada.",
-      "privacy": "Tus ajustes de privacidad mantienen la consulta de documentación sin conexión."
+      "privacy": "La consulta de documentación en línea está desactivada mientras no hayas iniciado sesión o uses solo procesamiento local. Se muestra la guía integrada."
     },
     "openFailed": "No se pudo abrir el artículo. Puedes copiar el enlace y abrirlo en tu navegador.",
-    "unknownAnswer": "No puedo verificar esa función o control con la guía integrada de OpenWhispr. No he cambiado ninguna configuración. Consulta la documentación oficial o describe el ajuste que ves.",
-    "mixedAnswer": "Puedo mostrar ayuda de OpenWhispr sin realizar cambios. Haz la pregunta de ayuda por separado de la otra acción; no he realizado esa acción.",
-    "unavailableAnswer": "La ayuda de OpenWhispr no está disponible temporalmente. Inténtalo de nuevo o abre la documentación oficial.",
     "topicsList": {
       "hotkeys": "Atajos",
       "microphone": "Micrófono",
@@ -4850,11 +4849,19 @@
       "calendar": "Calendarios",
       "language": "Idiomas",
       "backup": "Copia de seguridad",
-      "assistant": "Asistente"
+      "assistant": "Asistente",
+      "hold-or-tap": "Mantener o pulsar",
+      "choose-your-microphone": "Elegir el micrófono",
+      "microphone-not-working": "El micrófono no funciona",
+      "local-models": "Modelos locales",
+      "chat-agent": "Asistente de chat",
+      "record-a-meeting": "Grabar una reunión",
+      "connect-google-calendar": "Conectar Google Calendar",
+      "languages": "Dictar en otros idiomas",
+      "sync-across-devices": "Sincronizar notas entre dispositivos"
     },
     "appVersion": "Versión de la aplicación",
     "platform": "Plataforma",
-    "osVersion": "Versión del sistema operativo",
     "processing": "Procesamiento",
     "engine": "Motor",
     "policy": "Asistente permitido por la política",

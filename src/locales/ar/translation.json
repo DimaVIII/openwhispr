@@ -1756,7 +1756,10 @@
       "invalidArgs": "وسيطات غير صالحة للأداة {{name}}",
       "search_openwhispr_helpName": "البحث في مساعدة OpenWhispr",
       "read_openwhispr_helpName": "قراءة مساعدة OpenWhispr",
-      "get_openwhispr_contextName": "قراءة إعدادات OpenWhispr"
+      "get_openwhispr_contextName": "قراءة إعدادات OpenWhispr",
+      "search_openwhispr_helpStatus": "جاري البحث في مساعدة OpenWhispr...",
+      "read_openwhispr_helpStatus": "جاري قراءة مساعدة OpenWhispr...",
+      "get_openwhispr_contextStatus": "جاري قراءة إعدادات OpenWhispr..."
     }
   },
   "noteEditor": {
@@ -4945,7 +4948,6 @@
   },
   "productHelp": {
     "sources": "الوثائق الرسمية",
-    "loading": "جارٍ البحث في الوثائق الرسمية…",
     "settings": "إعدادات التطبيق الحالية",
     "guidance": "الوثائق والإعدادات المستخدمة في هذا الرد.",
     "settingsNote": "خيارات وأذونات معروفة تمت قراءتها لهذا الرد دون تعديلها؛ لا يتم اختبار أجهزتك.",
@@ -4958,12 +4960,9 @@
       "policy": "تحدّ سياسة مؤسستك من البحث في الوثائق عبر الإنترنت.",
       "rateLimit": "تم بلوغ حد البحث في الوثائق عبر الإنترنت. تُعرض الإرشادات المدمجة.",
       "unavailable": "تعذّر التحقق من الوثائق الحالية. تُعرض الإرشادات المدمجة.",
-      "privacy": "تُبقي إعدادات الخصوصية البحث في الوثائق دون اتصال."
+      "privacy": "البحث في الوثائق عبر الإنترنت متوقف أثناء تسجيل الخروج أو عند استخدام المعالجة المحلية فقط. تُعرض الإرشادات المدمجة."
     },
     "openFailed": "تعذّر فتح المقال. يمكنك نسخ الرابط وفتحه في المتصفح.",
-    "unknownAnswer": "لا أستطيع التحقق من هذه الميزة أو عنصر التحكم من إرشادات OpenWhispr المدمجة. لم أغيّر أي إعدادات. راجع الوثائق الرسمية أو صِف الإعداد الذي تراه.",
-    "mixedAnswer": "يمكنني عرض مساعدة OpenWhispr هنا دون إجراء تغييرات. يرجى طرح سؤال المساعدة بشكل منفصل عن الإجراء الآخر؛ لم أنفّذ ذلك الإجراء.",
-    "unavailableAnswer": "مساعدة OpenWhispr غير متاحة مؤقتًا. حاول مجددًا أو افتح الوثائق الرسمية.",
     "topicsList": {
       "hotkeys": "الاختصارات",
       "microphone": "الميكروفون",
@@ -4972,11 +4971,19 @@
       "calendar": "التقويمات",
       "language": "اللغات",
       "backup": "النسخ الاحتياطي",
-      "assistant": "المساعد"
+      "assistant": "المساعد",
+      "hold-or-tap": "استمرار الضغط أو النقر",
+      "choose-your-microphone": "اختيار الميكروفون",
+      "microphone-not-working": "الميكروفون لا يعمل",
+      "local-models": "النماذج المحلية",
+      "chat-agent": "وكيل الدردشة",
+      "record-a-meeting": "تسجيل اجتماع",
+      "connect-google-calendar": "ربط تقويم Google",
+      "languages": "الإملاء بلغات أخرى",
+      "sync-across-devices": "مزامنة الملاحظات عبر الأجهزة"
     },
     "appVersion": "إصدار التطبيق",
     "platform": "المنصة",
-    "osVersion": "إصدار نظام التشغيل",
     "processing": "المعالجة",
     "engine": "المحرك",
     "policy": "تسمح السياسة باستخدام المساعد",
