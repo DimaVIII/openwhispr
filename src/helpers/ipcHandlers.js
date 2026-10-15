@@ -11555,6 +11555,11 @@ class IPCHandlers {
 
     let geminiStreamingStartInProgress = false;
     let geminiSendDropCount = 0;
+    let geminiStartAudio = [];
+    let geminiStartAudioBytes = 0;
+    // Match the client's three-second cold-start bound. A model-changing start
+    // owns these frames, even while a previous warm handshake is finishing.
+    const GEMINI_START_AUDIO_MAX = 3 * 16000 * 2;
     // One handshake at a time. A start that raced an in-flight warmup used to
     // clear the cold-start buffer, spend a second single-use managed token and
     // report success while the warmup's handshake (and its failure) were still
@@ -11640,6 +11645,8 @@ class IPCHandlers {
       }
 
       geminiStreamingStartInProgress = true;
+      geminiStartAudio = [];
+      geminiStartAudioBytes = 0;
       try {
         const streaming = ensureGeminiStreaming(event);
         if (geminiConnectInFlight) await geminiConnectInFlight;
@@ -11651,6 +11658,7 @@ class IPCHandlers {
           if (streaming.isConnected) await streaming.disconnect(false);
           await connectGeminiStreaming(event, options);
         }
+        for (const buffer of geminiStartAudio) streaming.sendAudio(buffer);
         geminiSendDropCount = 0;
         debugLogger.debug("Gemini streaming started", { usedWarmConnection }, "streaming");
         return { success: true, usedWarmConnection };
@@ -11662,11 +11670,21 @@ class IPCHandlers {
         return streamingStartFailure(error);
       } finally {
         geminiStreamingStartInProgress = false;
+        geminiStartAudio = [];
+        geminiStartAudioBytes = 0;
       }
     });
 
     ipcMain.on("gemini-streaming-send", (_event, audioBuffer) => {
       try {
+        if (geminiStreamingStartInProgress) {
+          const buffer = Buffer.from(audioBuffer);
+          if (geminiStartAudioBytes + buffer.length <= GEMINI_START_AUDIO_MAX) {
+            geminiStartAudio.push(buffer);
+            geminiStartAudioBytes += buffer.length;
+          }
+          return;
+        }
         if (!this.geminiStreaming) return;
         const sent = this.geminiStreaming.sendAudio(Buffer.from(audioBuffer));
         if (!sent) {
