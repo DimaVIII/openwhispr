@@ -46,6 +46,7 @@ import { GetApiKeyLink } from "./ui/GetApiKeyLink";
 import { ConnectionCheckAnnouncer } from "./ui/ConnectionCheckAnnouncer";
 import { ProviderCheckField } from "./ui/ProviderCheckField";
 import { usePanelVisible } from "./ui/usePanelVisible";
+import { useCredentialDraft } from "../hooks/useCredentialDraft";
 import { useFocusHold } from "../hooks/useFocusHold";
 import { useTypingPause } from "../hooks/useTypingPause";
 import {
@@ -1072,20 +1073,23 @@ export default function TranscriptionModelPicker({
 
   const providerCredentials =
     PROVIDER_CREDENTIALS[displayedCloudProvider] ?? PROVIDER_CREDENTIALS.openai;
+  // Credential fields show what is typed; the store gets it once saved (useCredentialDraft).
+  const keyDraft = useCredentialDraft();
   const credentialValues: Record<ProviderCredentialField["key"], string> = {
-    openaiApiKey,
-    groqApiKey,
-    xaiApiKey,
-    mistralApiKey,
-    geminiApiKey,
-    cortiClientId,
-    cortiClientSecret,
+    openaiApiKey: keyDraft.value("openaiApiKey", openaiApiKey),
+    groqApiKey: keyDraft.value("groqApiKey", groqApiKey),
+    xaiApiKey: keyDraft.value("xaiApiKey", xaiApiKey),
+    mistralApiKey: keyDraft.value("mistralApiKey", mistralApiKey),
+    geminiApiKey: keyDraft.value("geminiApiKey", geminiApiKey),
+    cortiClientId: keyDraft.value("cortiClientId", cortiClientId),
+    cortiClientSecret: keyDraft.value("cortiClientSecret", cortiClientSecret),
     cortiEnvironment,
-    cortiTenant,
-    tinfoilApiKey,
-    deepgramApiKey,
-    assemblyaiApiKey,
+    cortiTenant: keyDraft.value("cortiTenant", cortiTenant),
+    tinfoilApiKey: keyDraft.value("tinfoilApiKey", tinfoilApiKey),
+    deepgramApiKey: keyDraft.value("deepgramApiKey", deepgramApiKey),
+    assemblyaiApiKey: keyDraft.value("assemblyaiApiKey", assemblyaiApiKey),
   };
+  const customKey = keyDraft.value("customTranscriptionApiKey", customTranscriptionApiKey);
   const credentialSetters: Record<ProviderCredentialField["key"], (value: string) => void> = {
     openaiApiKey: setOpenaiApiKey,
     groqApiKey: setGroqApiKey,
@@ -1109,8 +1113,8 @@ export default function TranscriptionModelPicker({
   const isCustom = displayedCloudProvider === "custom";
   const isCorti = displayedCloudProvider === "corti";
   const providerKey = credentialValues[providerCredentials.fields[0].key];
-  // `typed` is what this provider's fields save as they are typed (a speech server's address
-  // and model name included); `context` is what is chosen instead.
+  // `typed` is what is typed into this provider's fields (a speech server's address and
+  // model name included); `context` is what is chosen instead.
   const connection: {
     config: ProviderConnectionConfig;
     ready: boolean;
@@ -1122,11 +1126,11 @@ export default function TranscriptionModelPicker({
           scope: "transcription",
           provider: "custom",
           baseUrl: cloudTranscriptionBaseUrl,
-          apiKey: customTranscriptionApiKey,
+          apiKey: customKey,
           model: panelModel,
         },
         ready: Boolean(cloudTranscriptionBaseUrl.trim() && panelModel.trim()),
-        typed: `${cloudTranscriptionBaseUrl}\n${customTranscriptionApiKey}\n${panelModel}`,
+        typed: `${cloudTranscriptionBaseUrl}\n${customKey}\n${panelModel}`,
         context: [],
       }
     : isCorti
@@ -1134,14 +1138,16 @@ export default function TranscriptionModelPicker({
           config: {
             scope: "transcription",
             provider: "corti",
-            clientId: cortiClientId,
-            clientSecret: cortiClientSecret,
+            clientId: credentialValues.cortiClientId,
+            clientSecret: credentialValues.cortiClientSecret,
             environment: cortiEnvironment,
-            tenant: cortiTenant,
+            tenant: credentialValues.cortiTenant,
           },
-          ready: Boolean(cortiClientId.trim() && cortiClientSecret.trim()),
-          typed: `${cortiClientId}\n${cortiClientSecret}`,
-          context: [cortiEnvironment, cortiTenant],
+          ready: Boolean(
+            credentialValues.cortiClientId.trim() && credentialValues.cortiClientSecret.trim()
+          ),
+          typed: `${credentialValues.cortiClientId}\n${credentialValues.cortiClientSecret}`,
+          context: [cortiEnvironment, credentialValues.cortiTenant],
         }
       : {
           config: {
@@ -1174,10 +1180,14 @@ export default function TranscriptionModelPicker({
     hold: isCustom && endpointHold.held,
     delayMs,
   });
+  const saveKeyDraft = keyDraft.save;
+  useEffect(() => {
+    if (check.phase === "connected") saveKeyDraft();
+  }, [check.phase, saveKeyDraft]);
   // The field that completes the connection carries the status.
   const checkedCredential = isCorti ? "cortiClientSecret" : providerCredentials.fields[0].key;
   const customFailureReason =
-    !customTranscriptionApiKey.trim() && check.failure?.errorCode === "credentialsRejected"
+    !customKey.trim() && check.failure?.errorCode === "credentialsRejected"
       ? t("reasoning.custom.endpointUnauthorized")
       : undefined;
 
@@ -1408,8 +1418,15 @@ export default function TranscriptionModelPicker({
                     <ProviderCheckField
                       aria-label={t("transcription.apiKeyOptional")}
                       type="password"
-                      value={customTranscriptionApiKey}
-                      onChange={(e) => setCustomTranscriptionApiKey(e.target.value.trim())}
+                      value={customKey}
+                      onChange={(e) =>
+                        keyDraft.change(
+                          "customTranscriptionApiKey",
+                          e.target.value.trim(),
+                          setCustomTranscriptionApiKey
+                        )
+                      }
+                      onBlur={keyDraft.save}
                       placeholder={t("apiKeyInput.placeholder")}
                       autoComplete="off"
                       spellCheck={false}
@@ -1475,9 +1492,18 @@ export default function TranscriptionModelPicker({
                             invalidOn="credentialsRejected"
                             type={field.input === "secret" ? "password" : "text"}
                             value={credentialValues[field.key]}
-                            onChange={(e) => credentialSetters[field.key](e.target.value.trim())}
+                            onChange={(e) =>
+                              keyDraft.change(
+                                field.key,
+                                e.target.value.trim(),
+                                credentialSetters[field.key]
+                              )
+                            }
                             onFocus={editing.onFocus}
-                            onBlur={editing.onBlur}
+                            onBlur={(event) => {
+                              editing.onBlur(event);
+                              keyDraft.save();
+                            }}
                             placeholder={
                               field.input === "secret"
                                 ? t("apiKeyInput.placeholder")

@@ -75,15 +75,18 @@ test("a hidden picker sends nothing until it is shown, then asks again", async (
   assert.equal(panel.requests().length, 2, "a shown panel asks again");
 });
 
-test("a key saves trimmed as it changes", async (t) => {
+test("a key saves trimmed once its check passes, never half typed", async (t) => {
   const panel = await mount(t);
+  await panel.type(KEY, " gsk-pas");
   await panel.type(KEY, " gsk-pasted ");
-  assert.equal(panel.state().groqApiKey, "gsk-pasted");
   await panel.wait(500); // the key still has focus, so the pause runs
   assert.deepEqual(
     panel.requests().map((config) => config.apiKey),
     ["gsk-pasted"]
   );
+  assert.equal(panel.state().groqApiKey, "", "nothing is saved while the key is typed");
+  await panel.answer({ success: true });
+  assert.equal(panel.state().groqApiKey, "gsk-pasted", "a passing key saves at once");
 });
 
 test("Corti: the secret holds the status, checked with ID, region and tenant", async (t) => {
@@ -117,7 +120,9 @@ test("Corti: the secret holds the status, checked with ID, region and tenant", a
   await panel.wait(0); // choosing a region checks at once
   assert.equal(panel.requests().at(-1).environment, "us");
   await panel.type(CLIENT_ID, " corti-id-2 ");
-  assert.equal(panel.state().cortiClientId, "corti-id-2");
+  assert.equal(panel.state().cortiClientId, "corti-id", "nothing is saved while it is typed");
+  await panel.blur(CLIENT_ID);
+  assert.equal(panel.state().cortiClientId, "corti-id-2", "leaving the field saves it");
 });
 
 test("Custom: the model holds the status, and the address waits until it is left", async (t) => {

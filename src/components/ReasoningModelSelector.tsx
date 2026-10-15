@@ -27,6 +27,7 @@ import { ConnectionCheckAnnouncer } from "./ui/ConnectionCheckAnnouncer";
 import { ProviderCheckField } from "./ui/ProviderCheckField";
 import { usePanelVisible } from "./ui/usePanelVisible";
 import { useConnectionAutoCheck } from "../hooks/useConnectionAutoCheck";
+import { useCredentialDraft } from "../hooks/useCredentialDraft";
 import { useFocusHold } from "../hooks/useFocusHold";
 import { useTypingPause } from "../hooks/useTypingPause";
 import { getCachedPlatform } from "../utils/platform";
@@ -445,12 +446,14 @@ export default function ReasoningModelSelector({
     },
   };
   const hostedKey = hostedKeys[displayedCloudProvider];
+  const keyDraft = useCredentialDraft();
+  const typedKey = keyDraft.value(displayedCloudProvider, hostedKey?.value ?? "");
   const visible = usePanelVisible();
   const editing = useFocusHold();
   // A tab that is only being browsed has no model of this panel's: the key alone is checked.
   const checkedModel = localReasoningProvider === displayedCloudProvider ? reasoningModel : "";
   const delayMs = useTypingPause({
-    typed: hostedKey?.value ?? "",
+    typed: typedKey,
     context: JSON.stringify([displayedCloudProvider, effectiveMode, visible, checkedModel]),
     held: editing.held,
   });
@@ -458,7 +461,7 @@ export default function ReasoningModelSelector({
     config: {
       scope: "reasoning",
       provider: displayedCloudProvider,
-      apiKey: hostedKey?.value ?? "",
+      apiKey: typedKey,
       model: checkedModel,
     },
     // A hidden panel is not ready to ask; a shown one asks again, and the main process answers
@@ -466,10 +469,14 @@ export default function ReasoningModelSelector({
     ready:
       effectiveMode === "cloud" &&
       providerAllowed(displayedCloudProvider) &&
-      Boolean(hostedKey?.value.trim()) &&
+      Boolean(typedKey.trim()) &&
       visible,
     delayMs,
   });
+  const saveKeyDraft = keyDraft.save;
+  useEffect(() => {
+    if (check.phase === "connected") saveKeyDraft();
+  }, [check.phase, saveKeyDraft]);
 
   const localProviders = useMemo<LocalProvider[]>(() => {
     return modelRegistry.getAllProviders().map((provider) => ({
@@ -670,8 +677,15 @@ export default function ReasoningModelSelector({
                         check={check}
                         invalidOn="credentialsRejected"
                         type="password"
-                        value={hostedKey.value}
-                        onChange={(event) => hostedKey.set(event.target.value.trim())}
+                        value={typedKey}
+                        onChange={(event) =>
+                          keyDraft.change(
+                            displayedCloudProvider,
+                            event.target.value.trim(),
+                            hostedKey.set
+                          )
+                        }
+                        onBlur={keyDraft.save}
                         placeholder={t("apiKeyInput.placeholder")}
                         autoComplete="off"
                         spellCheck={false}

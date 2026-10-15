@@ -438,7 +438,7 @@ async function testTranscriptionEndpoint(request, model, fetchImpl) {
       // Nothing takes transcriptions at this address.
       if (response.status === 404 || response.status === 405) {
         return {
-          errorCode: "endpointNotFound",
+          errorCode: "transcriptionEndpointNotFound",
           error: "Nothing takes transcriptions at this address.",
           status: response.status,
         };

@@ -31,6 +31,16 @@ const listError = (panel) =>
   panel.find((node) => node.props?.className === "text-xs text-destructive")[0];
 const mount = (t, { overrides, ...options } = {}) =>
   mountSettingsPanel(t, { module: PANEL, props: props(overrides), fetch: modelList, ...options });
+// The key setter saves straight into the panel's props, as the store does for its parent.
+const savingKey = (saved) => {
+  const live = props({
+    setApiKey: (value) => {
+      saved.push(value);
+      live.apiKey = value;
+    },
+  });
+  return live;
+};
 
 test("an applied address is checked at once; its field holds the status", async (t) => {
   const panel = await mount(t);
@@ -147,28 +157,35 @@ test("a hidden server panel sends nothing until it is shown, then asks again", a
 
 test("a key typed into a failed list waits for its check to settle", async (t) => {
   const saved = [];
-  const panel = await mount(t, {
-    fetch: respond(401),
-    overrides: { setApiKey: (value) => saved.push(value) },
-  });
+  const panel = await mount(t, { fetch: respond(401), props: savingKey(saved) });
   await panel.wait(0); // the list fails without a key; the check goes out
   assert.equal(globalThis.fetch.mock.calls.length, 1);
   await panel.answer(KEYLESS_REFUSAL);
-  for (const key of ["s", "sk"]) {
-    await panel.type(OPTIONAL_KEY, key);
-    await panel.setProps({ apiKey: key });
-  }
-  assert.deepEqual(saved, ["s", "sk"]);
+  for (const key of ["s", "sk"]) await panel.type(OPTIONAL_KEY, key);
   await panel.wait(499);
   assert.equal(globalThis.fetch.mock.calls.length, 1, "the list never sees a half-typed key");
   assert.equal(panel.requests().length, 1, "nor does the check");
   await panel.wait(1);
   assert.equal(panel.requests().at(-1).apiKey, "sk");
   assert.equal(globalThis.fetch.mock.calls.length, 1, "the list waits for the check's answer");
+  assert.deepEqual(saved, [], "nor is it saved");
   await panel.answer({ success: true });
+  assert.deepEqual(saved, ["sk"], "a passing key saves at once");
   assert.equal(globalThis.fetch.mock.calls.length, 2, "a settled key retries the failed list");
   const [, init] = globalThis.fetch.mock.calls[1].arguments;
   assert.equal(init.headers.Authorization, "Bearer sk");
+});
+
+test("a parent's new setter on each render never reloads a failed list", async (t) => {
+  const panel = await mount(t, { fetch: respond(401) });
+  await panel.wait(0); // the list fails without a key
+  await panel.answer(KEYLESS_REFUSAL);
+  for (const key of ["s", "sk"]) {
+    await panel.type(OPTIONAL_KEY, key);
+    // InferenceConfigEditor passes setField("cloudBaseUrl"), a new function on each render.
+    await panel.setProps({ setBaseUrl() {} });
+  }
+  assert.equal(globalThis.fetch.mock.calls.length, 1, "the list never sees a half-typed key");
 });
 
 test("a key typed while the list is still loading retries once the load settles", async (t) => {
@@ -179,11 +196,11 @@ test("a key typed while the list is still loading retries once the load settles"
   });
   const panel = await mount(t, {
     fetch: (...args) => (globalThis.fetch.mock.calls.length > 1 ? modelList(...args) : slow),
+    props: savingKey([]),
   });
   await panel.wait(0); // the list is still loading; the check goes out
   await panel.answer(KEYLESS_REFUSAL);
   await panel.type(OPTIONAL_KEY, "sk-late");
-  await panel.setProps({ apiKey: "sk-late" });
   await panel.wait(500);
   assert.equal(panel.requests().at(-1).apiKey, "sk-late");
   await panel.answer({ success: true });
@@ -207,15 +224,17 @@ test("a hidden panel's failed list stays quiet when its key changes elsewhere", 
   assert.equal(panel.requests().length, 0);
 });
 
-test("a server key saves trimmed as it changes, and the address is checked again", async (t) => {
+test("a server key saves trimmed once its field is left, and the address is checked again", async (t) => {
   const saved = [];
-  const panel = await mount(t, { overrides: { setApiKey: (value) => saved.push(value) } });
+  const panel = await mount(t, { props: savingKey(saved) });
+  await panel.type(OPTIONAL_KEY, " sk-ser");
   await panel.type(OPTIONAL_KEY, " sk-server ");
-  assert.deepEqual(saved, ["sk-server"]);
-  await panel.setProps({ apiKey: "sk-server" });
   await panel.wait(500); // the key still has focus, so the pause runs
   assert.deepEqual(
     panel.requests().map((config) => config.apiKey),
     ["sk-server"]
   );
+  assert.deepEqual(saved, [], "nothing is saved while the key is typed");
+  await panel.blur(OPTIONAL_KEY);
+  assert.deepEqual(saved, ["sk-server"], "leaving the field saves it");
 });

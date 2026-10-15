@@ -19,6 +19,7 @@ import { ProviderCheckField } from "./ui/ProviderCheckField";
 import { usePanelVisible } from "./ui/usePanelVisible";
 import { isWindowSwitchBlur, useFocusHold } from "../hooks/useFocusHold";
 import { useConnectionAutoCheck } from "../hooks/useConnectionAutoCheck";
+import { useCredentialDraft } from "../hooks/useCredentialDraft";
 import { useTypingPause } from "../hooks/useTypingPause";
 
 interface ModelOption {
@@ -50,7 +51,7 @@ interface OpenAICompatiblePanelProps {
 export default function OpenAICompatiblePanel({
   baseUrl,
   setBaseUrl,
-  apiKey,
+  apiKey: savedApiKey,
   setApiKey,
   model,
   setModel,
@@ -73,11 +74,16 @@ export default function OpenAICompatiblePanel({
   const lastLoadedKeyRef = useRef<string | null>(null);
   const pendingBaseRef = useRef<string | null>(null);
   const latestBaseRef = useRef<string>(normalizeBaseUrl(baseUrl));
-  // The list reads the key through a ref, so a key change alone reloads nothing.
+  const keyDraft = useCredentialDraft();
+  const apiKey = keyDraft.value("apiKey", savedApiKey);
+  // The list reads the key and the address setter through refs, so neither a key change nor
+  // a parent's new setter on each render reloads it.
   const apiKeyRef = useRef(apiKey);
+  const setBaseUrlRef = useRef(setBaseUrl);
   useEffect(() => {
     apiKeyRef.current = apiKey;
-  }, [apiKey]);
+    setBaseUrlRef.current = setBaseUrl;
+  }, [apiKey, setBaseUrl]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -111,6 +117,10 @@ export default function OpenAICompatiblePanel({
     ready: checkReady && visible,
     delayMs,
   });
+  const saveKeyDraft = keyDraft.save;
+  useEffect(() => {
+    if (check.phase === "connected") saveKeyDraft();
+  }, [check.phase, saveKeyDraft]);
 
   useEffect(() => {
     latestBaseRef.current = normalizedBase;
@@ -252,7 +262,7 @@ export default function OpenAICompatiblePanel({
             activeBase = resolvedBase;
             latestBaseRef.current = resolvedBase;
             setDraftBase(resolvedBase);
-            setBaseUrl(resolvedBase);
+            setBaseUrlRef.current(resolvedBase);
           }
           setModelOptions(mapped);
           // `/models` is a discovery aid, not an allowlist — keep the user's
@@ -282,7 +292,7 @@ export default function OpenAICompatiblePanel({
         }
       }
     },
-    [baseUrl, lockedBaseUrl, setBaseUrl, t]
+    [baseUrl, lockedBaseUrl, t]
   );
 
   useEffect(() => {
@@ -397,7 +407,8 @@ export default function OpenAICompatiblePanel({
           invalidOn="credentialsRejected"
           type="password"
           value={apiKey}
-          onChange={(event) => setApiKey(event.target.value.trim())}
+          onChange={(event) => keyDraft.change("apiKey", event.target.value.trim(), setApiKey)}
+          onBlur={keyDraft.save}
           placeholder={t("apiKeyInput.placeholder")}
           autoComplete="off"
           spellCheck={false}

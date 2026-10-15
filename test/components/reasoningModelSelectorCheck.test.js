@@ -74,11 +74,19 @@ test("a shown panel with a remembered answer shows it at once, with no pause", a
   assert.equal(panel.announcement(), "connected");
 });
 
-test("a key saves trimmed as it changes", async (t) => {
+test("a key saves trimmed once its check passes or its field is left, never half typed", async (t) => {
   const panel = await mount(t);
   assert.equal(panel.phase(), "idle", "no key, no status");
+  await panel.type(KEY, "  sk-pas");
   await panel.type(KEY, "  sk-pasted  ");
-  assert.equal(panel.state().openaiApiKey, "sk-pasted");
+  await panel.wait(500);
+  assert.equal(panel.requests().at(-1).apiKey, "sk-pasted");
+  assert.equal(panel.state().openaiApiKey, "", "nothing is saved while the key is typed");
+  await panel.answer({ success: true });
+  assert.equal(panel.state().openaiApiKey, "sk-pasted", "a passing key saves at once");
+  await panel.type(KEY, "sk-other");
+  await panel.blur(KEY, { windowSwitch: true });
+  assert.equal(panel.state().openaiApiKey, "sk-other", "leaving the window saves it");
 });
 
 test("typing keeps the 0.5 s pause, and leaving the field sends at once", async (t) => {

@@ -718,8 +718,8 @@ test("the transcription address's answers keep their meaning", async (t) => {
   for (const [status, errorCode, error] of [
     [401, "credentialsRejected", "The provider rejected these credentials."],
     [403, "credentialsRejected", "The provider rejected these credentials."],
-    [404, "endpointNotFound", nothingHere],
-    [405, "endpointNotFound", nothingHere],
+    [404, "transcriptionEndpointNotFound", nothingHere],
+    [405, "transcriptionEndpointNotFound", nothingHere],
     [500, "providerStatus", "The provider returned status 500."],
     [200, "providerStatus", "The provider returned status 200."],
   ]) {
