@@ -125,7 +125,7 @@ export function productHelpMetadata(
   const sources = (Array.isArray(value.articles) ? value.articles : [])
     .slice(0, 8)
     .flatMap((article) => {
-      if (!article || !allowedPaths.has(article.path)) return [];
+      if (!article?.text || !allowedPaths.has(article.path)) return [];
       return [
         {
           title: article.path.split("/").pop(),

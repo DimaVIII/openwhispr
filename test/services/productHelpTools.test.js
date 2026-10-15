@@ -224,9 +224,12 @@ test("tool registration excludes demos and model output bounds articles; durable
   assert.equal(data.articles[1].text, "");
   assert.equal(data.articles[1].excerpt, true);
   assert.equal(data.articles[1].url, "https://docs.openwhispr.com/help/dictation/hold-or-tap");
-  assert.doesNotMatch(
-    JSON.stringify(productHelpMetadata(tool.name, data)),
-    /private article|"text"/
+  const metadata = productHelpMetadata(tool.name, data);
+  assert.doesNotMatch(JSON.stringify(metadata), /private article|"text"/);
+  // Only pages the model received text from are cited.
+  assert.deepEqual(
+    metadata.sources.map((source) => source.path),
+    ["/help/dictation/hotkeys"]
   );
   const settings = productHelpMetadata("get_openwhispr_context", {
     readAt: "2026-10-07T00:00:00Z",
