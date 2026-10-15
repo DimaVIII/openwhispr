@@ -39,6 +39,10 @@ private extension KeyboardViewController {
   var touchTestPadding: (side: CGFloat, bottom: CGFloat) {
     (metrics.rootHorizontalPadding, metrics.rootBottomPadding)
   }
+
+  static func touchTestRemoveTouchDelays(from recognizers: [UIGestureRecognizer]?) {
+    removeTouchDelays(from: recognizers)
+  }
 }
 
 private struct TouchChecks {
@@ -66,6 +70,7 @@ private enum KeyboardTouchTests {
     checkSyntheticRows(&checks)
     checkEdgeTies(&checks)
     checkOtherControls(&checks)
+    checkWindowTouchDelays(&checks)
     for width: CGFloat in [360, 393, 430, 852] {
       checkProductionLayout(width: width, numbers: false, globe: false, &checks)
       checkProductionLayout(width: width, numbers: true, globe: false, &checks)
@@ -313,5 +318,22 @@ private enum KeyboardTouchTests {
 
     let stripHalf = CGPoint(x: root.bounds.midX, y: top - 0.5)
     checks.check("\(layout): the strip's half of the gap takes no key taps", !(root.hitTest(stripHalf, with: nil) is KeyButton))
+  }
+
+  /// The system holds back touches near the screen edges; the keyboard turns
+  /// that delay off without stopping a real system swipe from cancelling.
+  @MainActor
+  static func checkWindowTouchDelays(_ checks: inout TouchChecks) {
+    let edge = UIScreenEdgePanGestureRecognizer()
+    let tap = UITapGestureRecognizer()
+    for recognizer in [edge, tap] {
+      recognizer.delaysTouchesBegan = true
+      recognizer.delaysTouchesEnded = true
+    }
+    KeyboardViewController.touchTestRemoveTouchDelays(from: [edge, tap])
+    checks.check("window recognizers no longer delay touch-down", !edge.delaysTouchesBegan && !tap.delaysTouchesBegan)
+    checks.check("window recognizers no longer delay lift", !edge.delaysTouchesEnded && !tap.delaysTouchesEnded)
+    checks.check("a system swipe can still cancel key touches", edge.cancelsTouchesInView && tap.cancelsTouchesInView)
+    KeyboardViewController.touchTestRemoveTouchDelays(from: nil)
   }
 }

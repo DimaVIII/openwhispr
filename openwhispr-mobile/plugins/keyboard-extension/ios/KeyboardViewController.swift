@@ -785,8 +785,21 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
     _ = consumePendingTranscriptIfAvailable(trigger: "textDidChange")
   }
 
+  /// The system holds back touches near the screen edges while it checks for its
+  /// own swipes, which delays q, a, z, p, l, shift and delete. Only the delay is
+  /// removed: those recognizers can still cancel a touch for a real system swipe.
+  private static func removeTouchDelays(from recognizers: [UIGestureRecognizer]?) {
+    recognizers?.forEach { recognizer in
+      recognizer.delaysTouchesBegan = false
+      recognizer.delaysTouchesEnded = false
+    }
+  }
+
   override func viewDidAppear(_ animated: Bool) {
     super.viewDidAppear(animated)
+    let windowRecognizers = view.window?.gestureRecognizers
+    Self.removeTouchDelays(from: windowRecognizers)
+    KeyboardLog.ui.debug("Removed touch delays from \(windowRecognizers?.count ?? 0, privacy: .public) window recognizers")
     // Without Full Access every write below is a no-op and every resume gate
     // reads a dead App Group. Today this method reaches refreshRecordButton()
     // anyway, but only because four separate resume gates each happen to fail
