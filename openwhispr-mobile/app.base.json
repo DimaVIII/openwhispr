@@ -105,6 +105,7 @@
       "react-native-appsflyer",
       "./plugins/android-backup/withAndroidBackup",
       "./plugins/android-bundle-inputs/withAndroidBundleInputs",
+      "./plugins/android-inference/withAndroidInference",
       [
         "expo-splash-screen",
         {

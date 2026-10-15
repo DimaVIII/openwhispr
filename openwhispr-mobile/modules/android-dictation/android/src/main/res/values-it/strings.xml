@@ -5,4 +5,5 @@
   <string name="ow_bubble_recording">OpenWhispr · In ascolto…</string>
   <string name="ow_bubble_notice">Tocca per aprire. Disattiva il pulsante mobile in Account.</string>
   <string name="ow_bubble_channel">Mostra pulsante mobile</string>
+  <string name="ow_audio_unreadable">Impossibile leggere questo file audio. Prova un file WAV, MP3 o M4A valido.</string>
 </resources>

@@ -5,6 +5,9 @@ import { withAndroidInference } from './inferenceQueue';
 import { tokenTimingsToWhisperSegments } from '@/services/transcription/parakeetSegments';
 import type { TranscriptionResponse } from '@/types';
 import i18n from './strings';
+import Constants from 'expo-constants';
+
+const diagnostics = __DEV__ || Constants.expoConfig?.extra?.openWhispr?.isDevelopment === true;
 
 export const PARAKEET_LANGUAGES = new Set([
   'bg',
@@ -51,7 +54,7 @@ export const LocalSpeechModel = {
       // The native engine decodes compressed uploads and owns its temporary PCM file.
       const result = await AndroidDictation!.transcribeParakeet(uri, modelPath('parakeet-v3'));
       if (job !== generation) throw new Error(i18n.t('cancelled'));
-      if (__DEV__)
+      if (diagnostics)
         console.log(`[android-speech] model=parakeet-v3 elapsedMs=${result.processingMs}`);
       return {
         text: result.text,

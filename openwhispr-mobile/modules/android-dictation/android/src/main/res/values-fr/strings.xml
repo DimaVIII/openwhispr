@@ -5,4 +5,5 @@
   <string name="ow_bubble_recording">OpenWhispr · Écoute…</string>
   <string name="ow_bubble_notice">Touchez pour ouvrir. Désactivez le bouton flottant dans Compte.</string>
   <string name="ow_bubble_channel">Afficher la bulle flottante</string>
+  <string name="ow_audio_unreadable">Ce fichier audio est illisible. Essayez un fichier WAV, MP3 ou M4A valide.</string>
 </resources>

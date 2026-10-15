@@ -86,7 +86,8 @@ export default function AndroidHome() {
   useEffect(() => {
     applyHistoryRetention().catch(() => undefined);
   }, []);
-  const words = history.reduce(
+  const completed = history.filter((item) => (item.status ?? 'completed') === 'completed');
+  const words = completed.reduce(
     (total, item) => total + item.text.trim().split(/\s+/).filter(Boolean).length,
     0,
   );
@@ -134,7 +135,7 @@ export default function AndroidHome() {
           <Text style={styles.caption}>{t('words')}</Text>
         </Card>
         <Card style={{ flex: 1 }}>
-          <Text style={styles.heading}>{history.length}</Text>
+          <Text style={styles.heading}>{completed.length}</Text>
           <Text style={styles.caption}>{t('recordings')}</Text>
         </Card>
       </View>

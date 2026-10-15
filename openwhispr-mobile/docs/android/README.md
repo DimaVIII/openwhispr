@@ -1,6 +1,6 @@
 # Android development app
 
-This is an Android implementation in the existing mobile app. Start with [the acceptance matrix](acceptance.md); it distinguishes tested behavior from work still in progress. [Parakeet](parakeet.md) records the speech runtime, exact model choice and measured limits. [The implementation plan](implementation-plan.md) records product decisions and shared iPhone functionality.
+This is an Android implementation in the existing mobile app. Start with [the acceptance matrix](acceptance.md); it distinguishes the completed development review from unverified provider and physical-device behavior. [Parakeet](parakeet.md) records the speech runtime, exact model choice and measured limits. [The implementation plan](implementation-plan.md) records product decisions and shared iPhone functionality.
 
 ## Build
 
@@ -18,7 +18,7 @@ The script prebuilds the development application ID (`com.gizmolabs.openwhispr.d
 
 The Android bundle-input plugin explicitly tracks `src/android` and `src/locales`: React Native's default input tree excludes directories named `android` and omits JSON. Keep this plugin enabled so incremental APK builds include current Android code and translations.
 
-Gradle compiles the speech-only Sherpa JNI from pinned source on its first run. Downloads and compilation are cached in the Gradle user directory; the APK does not contain model weights. Models download inside the app and activate only after exact size and SHA-256 verification. Download Parakeet v3 and Qwen2.5 1.5B (Balanced) for the tested local pairing. The light text model is available but did not translate the tutorial reliably in the initial check.
+Gradle compiles the speech-only Sherpa JNI from pinned source on its first run. The Android inference plugin also sets `rnllamaBuildFromSource=true`: the checked-in llama.rn patch removes unconditional prompt-token and decoded-text logs, so the default prebuilt libraries must not be used. Downloads and compilation are cached in the Gradle user directory; the APK does not contain model weights. Models download inside the app and activate only after exact size and SHA-256 verification. Download Parakeet v3 and Qwen2.5 1.5B (Balanced) for the tested local pairing. The light text model is available but did not translate the tutorial reliably in the initial check.
 
 For development with Fast Refresh:
 
@@ -37,9 +37,9 @@ Enable overlay and text insertion through Bubble & permissions and Android's nor
 
 For unattended testing, keep emulator host microphone input off and use **Use an audio file** with explicitly identified synthetic/prerecorded audio. File inference, silent recorder lifecycle and cross-process insertion tests are separate checks; none proves physical-phone speech quality, thermals or battery behavior.
 
-Development builds log text-model loading and generation timings under `android-reasoning`, without logging the prompt or result. Native CPU thread selection uses the runtime defaults with strict affinity disabled. Final packaged-build latency still needs verification; some earlier cleanup runs timed out. Failed cleanup preserves a recoverable raw transcript in Home. The smaller text model can also miss formatting instructions.
+Development builds log speech elapsed time under `android-speech` and text-model loading/generation timings under `android-reasoning`. Prompt-token and decoded-text logs are removed from the native runtime. Native CPU thread selection uses the runtime defaults with strict affinity disabled. Packaged inference has been measured; see the runtime notes for the input-specific results. Cold local loading is slow and some earlier styled cleanup runs timed out. Failed cleanup preserves a recoverable raw transcript in Home. The smaller text model can also miss formatting instructions.
 
-Translate, Write and Edit transcribe the speech unchanged, then run the requested text action once. They skip the ordinary dictation cleanup, agent and snippet passes, whose output those actions would discard. Dictate retains the shared cleanup behavior. Regression checks cover this distinction for local, cloud and BYOK speech; emulator timing still needs a normal device unlock.
+Translate, Write and Edit transcribe the speech unchanged, then run the requested text action once. They skip the ordinary dictation cleanup, agent and snippet passes, whose output those actions would discard. Dictate retains the shared cleanup behavior. Regression checks cover this distinction for local, cloud and BYOK speech; the packaged local Translate, Write and Edit paths also ran on the emulator.
 
 ## Checks
 
@@ -53,4 +53,4 @@ cd android
 
 The native insertion fixture is `scripts/android-smoke/run.py`. It installs only its own disposable test package and writes into two harmless unsent fields. Instrumentation restarts the target app; turn the OpenWhispr accessibility service off in Settings first, start the script, then enable it normally during the 60-second wait. Do not run UIAutomator dumps while that test is active: UIAutomator can suppress the service being tested. It checks cursor/selection preservation, empty hints, changed focus/text and password exclusion. Remove only `com.openwhispr.androidtest` after testing. The script never grants permissions through the shell.
 
-Private competitor analysis, audio, screenshots and logs are intentionally outside this public repository. Remaining account, provider, physical-device and delivery gaps are recorded in the acceptance matrix.
+Private competitor analysis, audio, screenshots and logs are intentionally outside this public repository. Remaining account, provider and physical-device gaps are recorded in the acceptance matrix.

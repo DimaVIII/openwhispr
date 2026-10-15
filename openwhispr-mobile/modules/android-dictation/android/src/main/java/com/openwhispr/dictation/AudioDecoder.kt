@@ -15,10 +15,14 @@ object AudioDecoder {
     val extractor = MediaExtractor()
     var decoder: MediaCodec? = null
     try {
-      extractor.setDataSource(input.path)
+      try {
+        extractor.setDataSource(input.path)
+      } catch (error: Exception) {
+        throw IllegalArgumentException(context.getString(R.string.ow_audio_unreadable), error)
+      }
       val track = (0 until extractor.trackCount).firstOrNull {
         extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
-      } ?: error("This file has no supported audio track.")
+      } ?: error(context.getString(R.string.ow_audio_unreadable))
       extractor.selectTrack(track)
       val format = extractor.getTrackFormat(track)
       var rate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
