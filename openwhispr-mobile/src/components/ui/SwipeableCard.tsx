@@ -139,9 +139,17 @@ export function SwipeableCard({
   return (
     <View style={[styles.container, inset && styles.containerInset]}>
       {/* Action icons revealed under the row */}
-      <Animated.View style={[styles.actionsContainer, { width: revealWidth }, revealStyle]}>
+      <Animated.View
+        collapsable={false}
+        accessibilityElementsHidden={!isRevealed}
+        importantForAccessibility={isRevealed ? 'auto' : 'no-hide-descendants'}
+        pointerEvents={isRevealed ? 'auto' : 'none'}
+        style={[styles.actionsContainer, { width: revealWidth }, revealStyle]}
+      >
         {onMove && (
           <Pressable
+            accessible={isRevealed}
+            focusable={isRevealed}
             accessibilityRole="button"
             accessibilityLabel={t('android:moveAction', { defaultValue: 'Move' })}
             accessibilityElementsHidden={!isRevealed}
@@ -158,6 +166,8 @@ export function SwipeableCard({
           </Pressable>
         )}
         <Pressable
+          accessible={isRevealed}
+          focusable={isRevealed}
           accessibilityRole="button"
           accessibilityLabel={t('android:deleteAction', { defaultValue: 'Delete' })}
           accessibilityElementsHidden={!isRevealed}

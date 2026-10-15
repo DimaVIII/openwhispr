@@ -27,7 +27,7 @@ const SUBMIT_SHADOW: ViewStyle = {
 
 type FormSheetProps = {
   visible: boolean;
-  onClose: () => void;
+  onClose: () => void | boolean;
   title: string;
   subtitle?: string;
   submitLabel: string;

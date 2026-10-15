@@ -69,6 +69,17 @@ export function AddSnippetSheet({
     onClose();
   };
 
+  const handleClose = () => {
+    if (trigger === (initial?.trigger ?? '') && replacement === (initial?.replacement ?? '')) {
+      onClose();
+      return;
+    }
+    confirmDestructive('Discard changes?', 'Your snippet changes have not been saved.', onClose, {
+      destructiveLabel: 'Discard',
+    });
+    return false;
+  };
+
   // Edit mode only: confirm before deleting so a tap can't remove a snippet by mistake.
   const destructiveAction =
     isEditing && onDelete
@@ -86,7 +97,7 @@ export function AddSnippetSheet({
   return (
     <FormSheet
       visible={visible}
-      onClose={onClose}
+      onClose={handleClose}
       title={isEditing ? 'Edit snippet' : 'Add snippet'}
       subtitle="A spoken trigger expands to its replacement text in your dictation."
       submitLabel={isEditing ? 'Save' : 'Add'}
@@ -106,6 +117,7 @@ export function AddSnippetSheet({
           value={trigger}
           onChangeText={setTrigger}
           placeholder="e.g. signoff"
+          accessibilityLabel="Trigger"
           placeholderTextColor={PLACEHOLDER_COLOR}
           maxLength={TRIGGER_MAX_LENGTH}
           returnKeyType="next"
@@ -126,6 +138,7 @@ export function AddSnippetSheet({
           value={replacement}
           onChangeText={setReplacement}
           placeholder="e.g. Best regards, Alex"
+          accessibilityLabel="Replacement"
           placeholderTextColor={PLACEHOLDER_COLOR}
           multiline
           style={[styles.input, styles.multiline]}

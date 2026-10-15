@@ -15,6 +15,7 @@ import { SyncStatusLabel } from '@/components/notes/SyncStatusLabel';
 import { useDictionaryStore, type DictionaryEntry } from '@/store/useDictionaryStore';
 import { safeHaptics, formatRelativeTime } from '@/lib/utils';
 import { iosColor } from '@/config/colors';
+import { confirmDestructive } from '@/lib/alerts';
 
 type Filter = 'all' | 'manual' | 'learned';
 type Mode = 'words' | 'snippets';
@@ -44,10 +45,22 @@ function alphabetize(entries: DictionaryEntry[]): { title: string; data: Diction
 }
 
 function DictionaryRow({ entry, onDelete }: { entry: DictionaryEntry; onDelete: () => void }) {
+  const { t } = useTranslation();
   const dotColor = entry.source === 'manual' ? LINK : PURPLE;
   return (
     <SwipeableCard onDelete={onDelete} inset>
-      <View className="flex-row items-center gap-3 bg-secondarySystemGroupedBackground px-4 py-2.5">
+      <View
+        accessible
+        accessibilityLabel={`${entry.word}, ${sourceLabel(entry)}`}
+        accessibilityActions={[
+          { name: 'delete', label: t('android:deleteAction', { defaultValue: 'Delete' }) },
+        ]}
+        onAccessibilityAction={({ nativeEvent }) => {
+          if (nativeEvent.actionName === 'delete')
+            confirmDestructive('Delete word?', `"${entry.word}" will be deleted.`, onDelete);
+        }}
+        className="flex-row items-center gap-3 bg-secondarySystemGroupedBackground px-4 py-2.5"
+      >
         <View style={{ backgroundColor: dotColor }} className="h-1.5 w-1.5 shrink-0 rounded-full" />
         <View className="min-w-0 flex-1">
           <Text className="text-[15px] text-label" numberOfLines={1}>

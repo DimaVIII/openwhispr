@@ -2,8 +2,13 @@ import { Tabs, useSegments } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { SystemIcon } from '@/components/ui/SystemIcon';
 import { palette } from './ui';
+import { useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Text } from '@/components/ui/Text';
 export default function AndroidTabs() {
   const { t } = useTranslation();
+  const { fontScale } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const segments = useSegments() as string[];
   const detail =
     segments.includes('(notes)') &&
@@ -20,8 +25,16 @@ export default function AndroidTabs() {
           backgroundColor: palette.background,
           borderTopColor: palette.line,
           display: detail ? 'none' : 'flex',
+          height: Math.max(64, 40 + 30 * fontScale) + insets.bottom,
         },
-        tabBarLabelStyle: { fontSize: 12 },
+        tabBarLabel: ({ color, children }) => (
+          <Text
+            style={{ fontSize: 12, lineHeight: 15, color, textAlign: 'center' }}
+            numberOfLines={2}
+          >
+            {children}
+          </Text>
+        ),
       }}
     >
       <Tabs.Screen
