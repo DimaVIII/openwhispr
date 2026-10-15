@@ -338,7 +338,7 @@ test("cancelling while the streaming microphone opens never enters recording", a
     streamingFallbackChunks: [],
     _streamingFallbackSegments: [],
     streamingTextDebounce: null,
-    preparedMicCapture: { take: async () => null },
+    preparedMicCapture: { take: async () => null, cancel() {} },
     micRecovery: { stop() {} },
     isRecordingAllowedByPolicy: () => true,
     getAudioConstraints: async () => ({}),
@@ -807,7 +807,7 @@ function createStartingManager(AudioManager, { providerName, provider }) {
     streamingTextDebounce: null,
     pendingAssistantConversation: null,
     pendingSelectionEdit: null,
-    preparedMicCapture: { take: async () => null },
+    preparedMicCapture: { take: async () => null, cancel() {} },
     micRecovery: { stop() {} },
     isRecordingAllowedByPolicy: () => true,
     getAudioConstraints: async () => ({}),
@@ -1840,4 +1840,104 @@ test("a selection edit that fails during the language re-transcription surfaces 
   assert.equal(cancelled.stopResult, true);
   assert.deepEqual(cancelled.errors, []);
   assert.deepEqual(cancelled.published, []);
+});
+
+test("generic startup fallback after Stop uploads retained capture without reopening the mic", async (t) => {
+  const AudioManager = await loadManagerClass(t);
+  useManagedOrukeetSettings();
+  installCapture(t);
+  const gate = Promise.withResolvers();
+  const entered = Promise.withResolvers();
+  const provider = startingOrukeetProvider({
+    start: () => {
+      entered.resolve();
+      return gate.promise;
+    },
+  });
+  const { manager, errors, uploads } = createStartingManager(AudioManager, {
+    providerName: "openai-realtime",
+    provider,
+  });
+  const started = manager.startStreamingRecording();
+  await entered.promise;
+  manager.recordingStartTime = Date.now() - 3000;
+  await manager.stopStreamingRecording();
+  await new Promise(setImmediate);
+  assert.equal(manager.streamingFallbackRecorder, null, "capture settles before network startup");
+  gate.resolve({ success: false, code: "NO_API" });
+  await started;
+  assert.deepEqual(uploads, [{ audio: "opening words", reason: undefined }]);
+  assert.deepEqual(errors, []);
+  assert.equal(manager.isProcessing, false);
+});
+
+test("Stop releases a replacement mic while the previous fallback segment is still finishing", async (t) => {
+  const AudioManager = await loadManagerClass(t);
+  const { manager } = createFinalizingManager(AudioManager);
+  const gate = Promise.withResolvers();
+  let oldStops = 0;
+  let replacementStops = 0;
+  let replacementRecorders = 0;
+  let sourceDisconnects = 0;
+  const previous = { getTracks: () => [{ stop: () => oldStops++ }] };
+  const replacement = { getTracks: () => [{ stop: () => replacementStops++ }] };
+  manager._markCaptureStreamReleased = () => {};
+  manager.streamingStream = previous;
+  manager.streamingProcessor = {
+    port: { postMessage: () => queueMicrotask(() => manager._streamingFlushResolve?.()) },
+    disconnect() {},
+  };
+  manager.streamingAudioContext = {
+    createMediaStreamSource: () => ({ connect() {}, disconnect: () => sourceDisconnects++ }),
+  };
+  manager.finishStreamingFallbackSegment = () => gate.promise;
+  manager.startStreamingFallbackRecorder = () => replacementRecorders++;
+  const swapped = manager.replaceStreamingMic(replacement, previous);
+  const swapRejected = assert.rejects(swapped, /stopped during microphone recovery/);
+  const stopped = manager.stopStreamingRecording();
+  await new Promise(setImmediate);
+  assert.equal(oldStops, 1);
+  assert.equal(replacementStops, 1, "release replacement before old recorder settles");
+  assert.equal(sourceDisconnects, 1);
+  gate.resolve(null);
+  await Promise.all([swapRejected, stopped]);
+  assert.equal(replacementRecorders, 0, "late swap cannot start a new fallback recorder");
+  assert.equal(manager.streamingStream, null);
+});
+
+test("a startup Stop flush timeout rejects late PCM and never commits a partial stream", async (t) => {
+  const AudioManager = await loadManagerClass(t);
+  useManagedOrukeetSettings();
+  installCapture(t);
+  const gate = Promise.withResolvers();
+  const entered = Promise.withResolvers();
+  const provider = startingOrukeetProvider({
+    start: () => {
+      entered.resolve();
+      return gate.promise;
+    },
+    finalize: async () => assert.fail("incomplete PCM must never commit"),
+  });
+  const { manager, uploads, errors } = createStartingManager(AudioManager, {
+    providerName: "orukeet",
+    provider,
+  });
+  const started = manager.startStreamingRecording();
+  await entered.promise;
+  const port = manager.streamingProcessor.port;
+  port.onmessage({ data: speechPcm() });
+  port.postMessage = () => {};
+  manager.recordingStartTime = Date.now() - 3000;
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  await manager.stopStreamingRecording();
+  t.mock.timers.tick(5000);
+  await new Promise(setImmediate);
+  port.onmessage({ data: speechPcm() });
+  assert.equal(provider.sent.length, 1, "watchdog closes admission even without a sentinel");
+  t.mock.timers.reset();
+  gate.resolve({ success: true });
+  await started;
+  assert.deepEqual(uploads, [{ audio: "opening words", reason: "stream_no_final" }]);
+  assert.deepEqual(errors, []);
+  assert.equal(manager.streamingStream, null);
 });

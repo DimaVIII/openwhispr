@@ -235,7 +235,12 @@ export const useAudioRecording = (toast, options = {}) => {
           }
         }
 
-        const didStart = audioManagerRef.current.shouldUseStreaming()
+        const useStreaming = audioManagerRef.current.shouldUseStreaming();
+        if (useStreaming && stopRequestedDuringStartRef.current) {
+          audioManagerRef.current.cancelPreparedMicCapture?.();
+          return false;
+        }
+        const didStart = useStreaming
           ? await audioManagerRef.current.startStreamingRecording()
           : await audioManagerRef.current.startRecording();
         recordingStarted = didStart;
@@ -247,7 +252,11 @@ export const useAudioRecording = (toast, options = {}) => {
         // A stop that landed while the start was still awaiting the mic open was
         // dropped (isRecording was still false), leaving a runaway recording
         // until the next hotkey press. Honor it now that we started.
-        if (didStart && stopRequestedDuringStartRef.current) {
+        if (
+          didStart &&
+          stopRequestedDuringStartRef.current &&
+          audioManagerRef.current.getState().isRecording
+        ) {
           window.electronAPI?.unregisterCancelHotkey?.();
           // Cue semantics mirror performStopRecording: unconditional for
           // streaming, gated on the stop landing for batch.
@@ -298,9 +307,18 @@ export const useAudioRecording = (toast, options = {}) => {
 
   const performStopRecording = useCallback(async () => {
     if (startLockRef.current) {
+      if (stopRequestedDuringStartRef.current) return true;
       stopRequestedDuringStartRef.current = true;
       setIsPreparing(false);
       setIsStopping(true);
+      const manager = audioManagerRef.current;
+      const state = manager?.getState();
+      if (state?.isStreaming || state?.isStreamingStartInProgress) {
+        window.electronAPI?.unregisterCancelHotkey?.();
+        void playStopCue();
+        return manager.stopStreamingRecording();
+      }
+      if (manager?.shouldUseStreaming()) manager.cancelPreparedMicCapture?.();
       return true;
     }
     if (stopLockRef.current) return false;
