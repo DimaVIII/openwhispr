@@ -5,7 +5,7 @@ type TestProviderConnection = NonNullable<Window["electronAPI"]["testProviderCon
 export type ProviderConnectionConfig = Parameters<TestProviderConnection>[0];
 export type ProviderConnectionResult = Awaited<ReturnType<TestProviderConnection>>;
 /** "waiting": the pause runs and nothing is sent; "checking": a request is out. */
-export type ConnectionCheckPhase = "idle" | "waiting" | "checking" | "connected" | "failed";
+type ConnectionCheckPhase = "idle" | "waiting" | "checking" | "connected" | "failed";
 
 export interface ConnectionAutoCheck {
   phase: ConnectionCheckPhase;
@@ -23,9 +23,9 @@ export const CONNECTION_CHECK_DELAY_MS = 500;
  * "Testing…" is announced only for a request still out after this long, so quick answers
  * don't chatter.
  */
-export const CONNECTION_CHECK_ANNOUNCE_DELAY_MS = 1000;
+const CONNECTION_CHECK_ANNOUNCE_DELAY_MS = 1000;
 
-export interface ConnectionAutoCheckOptions {
+interface ConnectionAutoCheckOptions {
   config: ProviderConnectionConfig;
   /** Every required field is filled. */
   ready: boolean;

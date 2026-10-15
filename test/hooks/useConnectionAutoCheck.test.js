@@ -30,9 +30,7 @@ async function mountCheck(t, initialProps = {}) {
   });
   const container = installHookDom(t);
   const vite = await createRendererServer(t, { cachePrefix: "openwhispr-auto-check-" });
-  const { useConnectionAutoCheck } = await vite.ssrLoadModule(
-    "/hooks/useConnectionAutoCheck.ts"
-  );
+  const { useConnectionAutoCheck } = await vite.ssrLoadModule("/hooks/useConnectionAutoCheck.ts");
   t.mock.timers.enable({ apis: ["setTimeout"] });
 
   let props = { config: CONFIG, ready: true, ...initialProps };
@@ -71,7 +69,10 @@ test("a complete form spins at once and sends one request after the pause", asyn
   await auto.wait(499);
   assert.equal(auto.requests.length, 0);
   await auto.wait(1);
-  assert.deepEqual(auto.requests.map((request) => request.config), [CONFIG]);
+  assert.deepEqual(
+    auto.requests.map((request) => request.config),
+    [CONFIG]
+  );
   assert.equal(auto.state().phase, "checking");
   await auto.answer(PASS);
   assert.equal(auto.state().phase, "connected");
@@ -86,7 +87,10 @@ test("typing sends nothing until the typing pauses", async (t) => {
   }
   assert.equal(auto.requests.length, 0);
   await auto.wait(500);
-  assert.deepEqual(auto.requests.map((request) => request.config.apiKey), ["gsk-a"]);
+  assert.deepEqual(
+    auto.requests.map((request) => request.config.apiKey),
+    ["gsk-a"]
+  );
 });
 
 test("an answer for an earlier entry is discarded", async (t) => {

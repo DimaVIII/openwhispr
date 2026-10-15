@@ -761,7 +761,7 @@ export function ByokProviderStep({
 
         <StepPrimaryAction
           onClick={commitAndProceed}
-          disabled={!connected || !fieldsReady}
+          disabled={!connected}
           className="mt-4! w-full"
         >
           {t("onboarding.rehaul.provider.proceed")}

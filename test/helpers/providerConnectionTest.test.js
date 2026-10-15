@@ -536,8 +536,17 @@ test("a Corti key of only spaces is never sent", async () => {
 
 test("hosted providers refuse redirects; custom servers keep following them", async () => {
   const hosted = [
-    "openai", "groq", "xai", "mistral", "anthropic", "gemini",
-    "openrouter", "corti", "deepgram", "assemblyai",
+    "openai",
+    "groq",
+    "xai",
+    "mistral",
+    "anthropic",
+    "gemini",
+    "openrouter",
+    "corti",
+    "tinfoil",
+    "deepgram",
+    "assemblyai",
   ];
   for (const provider of hosted) {
     assert.equal(resolveProviderRequest({ provider, apiKey: "k" }).redirect, "error", provider);

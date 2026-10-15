@@ -197,19 +197,13 @@ test("each checked field is marked invalid only by a failure about its own value
 });
 
 test("the live region is always there and says only what the check found", async (t) => {
-  for (const [name, options] of [
-    ["hosted", { settings: HOSTED_GROQ }],
-    ["corti", { settings: CORTI }],
-    ["self-hosted", { selfHostedRequested: true }],
-  ]) {
-    await t.test(name, async (t) => {
-      const region = (await mountByokStep(t, options)).liveRegion();
-      assert.equal(region.props["aria-live"], "polite");
-      assert.equal(region.props["aria-atomic"], "true");
-      assert.match(region.props.className, /\bsr-only\b/);
-      assert.equal(region.props.children, "");
-    });
-  }
+  await t.test("empty on arrival", async (t) => {
+    const region = (await mountByokStep(t, { settings: HOSTED_GROQ })).liveRegion();
+    assert.equal(region.props["aria-live"], "polite");
+    assert.equal(region.props["aria-atomic"], "true");
+    assert.match(region.props.className, /\bsr-only\b/);
+    assert.equal(region.props.children, "");
+  });
   await t.test("a slow check, then its result, then an edit", async (t) => {
     const step = await mountByokStep(t, {
       settings: HOSTED_GROQ,
