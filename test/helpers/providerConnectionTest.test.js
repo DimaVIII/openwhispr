@@ -229,6 +229,27 @@ test("accepts selected models from OpenAI and Gemini model-list shapes", async (
   }
 });
 
+// Anthropic's model list carries only dated snapshots of the aliases the registry uses.
+test("accepts an Anthropic alias by its dated snapshot, but not a prefix", async () => {
+  const check = (config, id) =>
+    testProviderConnection({ apiKey: "k", ...config }, async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: [{ id }] }),
+    }));
+  const snapshot = "claude-opus-4-5-20251101";
+  assert.deepEqual(await check({ provider: "anthropic", model: "claude-opus-4-5" }, snapshot), {
+    success: true,
+  });
+  assert.equal(
+    (await check({ provider: "anthropic", model: "claude-opus-4" }, snapshot)).errorCode,
+    "modelNotFound"
+  );
+  // A custom server matches ids exactly, so it would reject the undated id.
+  const custom = { provider: "custom", baseUrl: "http://localhost:1234/v1", model: "foo" };
+  assert.equal((await check(custom, "foo-20251001")).errorCode, "modelNotFound");
+});
+
 test("continues to a compatible candidate when an earlier model list omits the selection", async () => {
   const attempted = [];
   const result = await testProviderConnection(

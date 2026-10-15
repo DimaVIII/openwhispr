@@ -336,11 +336,20 @@ function responseModelIds(payload) {
     .filter(Boolean);
 }
 
-async function responseOffersModel(response, model) {
+// Anthropic resolves an alias (claude-haiku-4-5) to a dated snapshot and lists only the
+// snapshot (claude-haiku-4-5-20251001). Other servers match ids exactly.
+function isDatedSnapshot(id, model) {
+  return id.startsWith(model) && /^-\d{8}$/.test(id.slice(model.length));
+}
+
+async function responseOffersModel(response, model, provider) {
   if (!model) return true;
   try {
     const payload = await response.json();
-    return responseModelIds(payload).includes(normalizeModelId(model));
+    const selected = normalizeModelId(model);
+    return responseModelIds(payload).some(
+      (id) => id === selected || (provider === "anthropic" && isDatedSnapshot(id, selected))
+    );
   } catch {
     return false;
   }
@@ -390,7 +399,7 @@ async function testProviderConnection(config, fetchImpl = fetch) {
       if (!response.ok) return describeResponseFailure(response, provider);
       if (provider === "openrouter") return describeOpenRouterKey(response);
       // AssemblyAI's probe lists transcripts, not models, so a 200 is the whole signal.
-      if (provider === "assemblyai" || (await responseOffersModel(response, model))) {
+      if (provider === "assemblyai" || (await responseOffersModel(response, model, provider))) {
         return null;
       }
       return MODEL_NOT_FOUND;
