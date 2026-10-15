@@ -4159,11 +4159,13 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       const selfHostedModel = resolveSelfHostedTranscriptionModel(s);
       if (selfHostedModel) return selfHostedModel;
       const provider = s.cloudTranscriptionProvider || "openai";
-      // Tinfoil and Gemini pin their batch model in the registry rather than in
-      // settings: their streaming model has no batch endpoint, so a streaming
-      // fallback that reused the selected model would POST an unusable id.
+      // A streaming selection needs the provider's batch fallback. A selected
+      // compatible batch model must retain its own ID, including live additions.
       const batchModel = getBatchTranscriptionModel(provider);
-      if (batchModel) return batchModel;
+      const selectedModel = getTranscriptionProvider(provider)?.models.find(
+        (model) => model.id === s.cloudTranscriptionModel?.trim()
+      );
+      if (batchModel && (!selectedModel || selectedModel.streaming)) return batchModel;
       return resolveByokModel(provider, s.cloudTranscriptionModel);
     } catch (error) {
       return "gpt-transcribe";

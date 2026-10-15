@@ -345,6 +345,10 @@ function assertCompatibleCatalog(input, previousInput) {
           );
           if (section === "transcriptionProviders") {
             requireCondition(
+              !["xai", "corti"].includes(provider.id),
+              `Transcription adapter ${provider.id} does not support model selection`,
+            );
+            requireCondition(
               !model.streaming || oldProvider.models.some((m) => m.streaming),
               `Unsupported streaming provider ${provider.id}`,
             );

@@ -64,6 +64,10 @@ IPC adds a snapshot request and a change event. Main verifies cached data before
 
 OpenAI's `REALTIME_MODELS` set and Gemini live routing must derive eligible BYOK model IDs from the current registry, while preserving explicit provider checks. A new streaming model must both appear in the picker and reach the correct existing adapter. The Gemini streaming client must accept the selected compatible BYOK model instead of overwriting it with a constant. Managed OpenWhispr token/default-model paths remain server-controlled.
 
+Batch routing checks live provider membership before legacy model-name heuristics. Gemini uses its pinned batch fallback only for a streaming or unknown selection; a selected compatible batch model keeps its ID. Deepgram includes the selected BYOK model in its socket identity and reconnect options, while preserving the existing Nova-3 language fallback and managed model selection. xAI and Corti transcription adapters send no model-selection parameter, so the shared contract rejects new transcription IDs for those providers until their adapters support them. Tinfoil additions remain streaming-only because its batch adapter owns a fixed attested model.
+
+When a new OpenAI, Tinfoil, or Gemini selection replaces an unfinished warm connection, main buffers up to three seconds of initial PCM and sends it only to the selected connection. Failure clears the queue. Orukeet retains its existing larger startup buffer; Deepgram keeps its existing audio-driven connection behavior.
+
 Tinfoil's live discovery remains its existing independent overlay, including its confirmed-fetch retirement behavior. A generic catalog refresh must not overwrite a fresher Tinfoil overlay, and Tinfoil overlay mutation must not affect canonical signature or additive validation. The migration does not alter other provider selection defaults, existing policy deny decisions, or installed-model ownership.
 
 The desktop LLM canary scripts continue to inspect the bundled snapshot. Remotely added models enter that canary's coverage after an explicit snapshot sync; catalog publication alone is not a successful inference canary for the new model.

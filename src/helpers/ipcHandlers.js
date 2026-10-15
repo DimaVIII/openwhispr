@@ -107,7 +107,11 @@ const HyprlandShortcutManager = require("./hyprlandShortcut");
 const AssemblyAiStreaming = require("./assemblyAiStreaming");
 const { i18nMain, changeLanguage } = require("./i18nMain");
 const DeepgramStreaming = require("./deepgramStreaming");
-const { GeminiLiveStreaming, GEMINI_LIVE_MODEL } = require("./geminiLiveStreaming");
+const {
+  GeminiLiveStreaming,
+  GEMINI_LIVE_MODEL,
+  resolveGeminiLiveModel,
+} = require("./geminiLiveStreaming");
 const CortiStreaming = require("./cortiStreaming");
 const OpenAIRealtimeStreaming = require("./openaiRealtimeStreaming");
 const { getCortiToken } = require("./cortiAuth");
@@ -9618,7 +9622,18 @@ class IPCHandlers {
       return warmup;
     });
 
+    let dictationStartInProgress = false;
+    let dictationBufferStartAudio = false;
+    let dictationStartAudio = [];
+    let dictationStartAudioBytes = 0;
+    const DICTATION_START_AUDIO_MAX = 3 * 16000 * 2;
+
     ipcMain.handle("dictation-realtime-start", async (event, options = {}) => {
+      if (dictationStartInProgress) return { success: false, error: "Operation in progress" };
+      dictationStartInProgress = true;
+      // OpenAI and Tinfoil finish setup without audio. Keep the first frames
+      // away from an older warmup while a different model is being selected.
+      dictationBufferStartAudio = options.provider !== "orukeet";
       try {
         clearDictationIdleTimer();
         this._dictationPreviewEnabled = !!options.preview;
@@ -9628,13 +9643,27 @@ class IPCHandlers {
         ) {
           await connectDictationStreaming(event, options);
         }
+        for (const buffer of dictationStartAudio) this._dictationStreaming?.sendAudio(buffer);
         return { success: true };
       } catch (err) {
         return streamingStartFailure(err);
+      } finally {
+        dictationStartInProgress = false;
+        dictationBufferStartAudio = false;
+        dictationStartAudio = [];
+        dictationStartAudioBytes = 0;
       }
     });
 
     ipcMain.on("dictation-realtime-send", (_event, buffer) => {
+      if (dictationBufferStartAudio) {
+        const bytes = Buffer.from(buffer);
+        if (dictationStartAudioBytes + bytes.length <= DICTATION_START_AUDIO_MAX) {
+          dictationStartAudio.push(bytes);
+          dictationStartAudioBytes += bytes.length;
+        }
+        return;
+      }
       this._dictationStreaming?.sendAudio(Buffer.from(buffer));
     });
 
@@ -11586,12 +11615,7 @@ class IPCHandlers {
 
     // Managed tokens are constrained to the server's existing model. BYOK can
     // select newly published compatible models, each requiring its own socket.
-    const geminiConnectionModel = (options) =>
-      options.mode === "byok" &&
-      typeof options.model === "string" &&
-      options.model.startsWith("gemini-")
-        ? options.model
-        : GEMINI_LIVE_MODEL;
+    const geminiConnectionModel = resolveGeminiLiveModel;
     // A warm socket cannot cross credentials, modes, or selected models.
     const geminiConnectionKey = (options) =>
       JSON.stringify([
