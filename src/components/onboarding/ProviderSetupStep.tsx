@@ -10,10 +10,12 @@ import {
 import { AudioLines, Check, CircleCheck, Download, MousePointer2 } from "../icons";
 import { useTranslation } from "react-i18next";
 import { FieldLabel, ProviderCheckField } from "../ui/ProviderCheckField";
+import { ConnectionCheckAnnouncer } from "../ui/ConnectionCheckAnnouncer";
 import { Button } from "../ui/button";
 import { ProviderIcon } from "../ui/ProviderIcon";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { useConnectionAutoCheck } from "../../hooks/useConnectionAutoCheck";
+import { isWindowSwitchBlur } from "../../hooks/useFocusHold";
 import { useModelDownload } from "../../hooks/useModelDownload";
 import type { ParakeetCheckResult } from "../../types/electron";
 import { useSettingsStore } from "../../stores/settingsStore";
@@ -521,16 +523,8 @@ export function ByokProviderStep({
   // Switching to another app blurs the field but leaves it focused in the page, and the
   // address there may still be half typed.
   const releaseEndpoint = (event: FocusEvent<HTMLInputElement>) => {
-    if (event.currentTarget.ownerDocument.activeElement !== event.currentTarget) {
-      setEndpointFocused(false);
-    }
+    if (!isWindowSwitchBlur(event)) setEndpointFocused(false);
   };
-  const announcement =
-    check.announcement === "connected"
-      ? t("onboarding.rehaul.provider.connected")
-      : check.announcement === "testing"
-        ? t("onboarding.rehaul.provider.testing")
-        : "";
 
   const commitAndProceed = () => {
     if (selfHosted) {
@@ -749,10 +743,7 @@ export function ByokProviderStep({
         </StepPrimaryAction>
       </div>
 
-      {/* Present from the start: a region that appears together with its text is missed. */}
-      <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
-        {announcement}
-      </div>
+      <ConnectionCheckAnnouncer announcement={check.announcement} />
     </section>
   );
 }
