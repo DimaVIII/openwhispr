@@ -254,6 +254,12 @@
     "noteLeaveTitle": "¿Salir de esta grabación?",
     "noteLeaveBody": "Finaliza para añadir la transcripción a la nota o descarta esta grabación.",
     "noteFinishingTitle": "Finalizando dictado",
-    "noteFinishingBody": "Permanece en esta nota mientras la grabación comienza o termina."
+    "noteFinishingBody": "Permanece en esta nota mientras la grabación comienza o termina.",
+    "savingPreference": "Guardando…",
+    "statsLoading": "Actualizando los totales de la cuenta…",
+    "statsOffline": "Sin conexión · último total sincronizado",
+    "statsUnavailable": "Los totales de la cuenta no están disponibles. Conéctate e inténtalo de nuevo.",
+    "statsPending": "Hay dictados pendientes de sincronizar. Los totales se actualizarán después.",
+    "statsPaused": "La sincronización está pausada. Estos son los recuentos de este teléfono."
   }
 }

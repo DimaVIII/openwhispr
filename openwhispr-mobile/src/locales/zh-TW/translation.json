@@ -254,6 +254,12 @@
     "noteLeaveTitle": "離開此錄音？",
     "noteLeaveBody": "完成錄音以將轉錄加入筆記，或捨棄此錄音。",
     "noteFinishingTitle": "正在完成聽寫",
-    "noteFinishingBody": "錄音開始或完成處理期間，請停留在此筆記。"
+    "noteFinishingBody": "錄音開始或完成處理期間，請停留在此筆記。",
+    "savingPreference": "正在儲存…",
+    "statsLoading": "正在更新帳戶統計…",
+    "statsOffline": "離線 · 顯示上次同步的統計",
+    "statsUnavailable": "帳戶統計暫時無法取得。請連線後重試。",
+    "statsPending": "部分聽寫等待同步。同步後統計將更新。",
+    "statsPaused": "帳戶同步已暫停。此處顯示本機統計。"
   }
 }

@@ -254,6 +254,12 @@
     "noteLeaveTitle": "Aufnahme verlassen?",
     "noteLeaveBody": "Beende die Aufnahme, um den Text zur Notiz hinzuzufügen, oder verwirf sie.",
     "noteFinishingTitle": "Diktat wird abgeschlossen",
-    "noteFinishingBody": "Bleibe bei dieser Notiz, während die Aufnahme startet oder abgeschlossen wird."
+    "noteFinishingBody": "Bleibe bei dieser Notiz, während die Aufnahme startet oder abgeschlossen wird.",
+    "savingPreference": "Wird gespeichert…",
+    "statsLoading": "Kontostatistik wird aktualisiert…",
+    "statsOffline": "Offline · zuletzt synchronisierter Stand",
+    "statsUnavailable": "Kontostatistik nicht verfügbar. Stelle eine Verbindung her und versuche es erneut.",
+    "statsPending": "Einige Diktate warten auf die Synchronisierung. Danach werden die Zahlen aktualisiert.",
+    "statsPaused": "Kontosynchronisierung pausiert. Dies sind die Zahlen auf diesem Smartphone."
   }
 }

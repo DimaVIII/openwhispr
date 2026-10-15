@@ -50,7 +50,7 @@ const event: InsightEvent = {
   model: null,
   counter_version: 2,
 };
-beforeEach(() => {
+beforeEach(async () => {
   memory.clear();
   mockSaveError = null;
   jest.clearAllMocks();
@@ -66,6 +66,11 @@ beforeEach(() => {
   });
   jest.mocked(api.post).mockResolvedValue({ accepted: ['one'], rejected: [] });
   jest.mocked(api.get).mockResolvedValue({ totalWords: 10, totalDictations: 3 });
+  // Explicit, successfully persisted opt-in resets the process-local consent gate.
+  mockUser = null;
+  await setInsightsSyncConsent(true);
+  mockUser = { id: 'a' };
+  mockConfig.insightsSyncEnabled = false;
 });
 it('deduplicates persisted events and preserves counts when retention changes', async () => {
   recordInsight(insightsScope(), event);
@@ -191,4 +196,134 @@ it('flushes an event added while the previous batch is in flight', async () => {
   expect(jest.mocked(api.post).mock.calls[1][1]).toEqual({
     events: [{ ...event, event_id: 'two' }],
   });
+});
+
+it('blocks uploads immediately when even the opt-out marker cannot be written', async () => {
+  recordInsight(insightsScope(), event);
+  mockConfig.insightsSyncEnabled = true;
+  const original = localStorage.setItem;
+  localStorage.setItem = () => {
+    throw new Error('storage unavailable');
+  };
+  await expect(setInsightsSyncConsent(false)).rejects.toThrow('storage unavailable');
+  localStorage.setItem = original;
+  await refreshInsights();
+  expect(mockConfig.insightsSyncEnabled).toBe(true);
+  expect(api.post).not.toHaveBeenCalled();
+  expect(api.get).not.toHaveBeenCalled();
+  await setInsightsSyncConsent(true);
+  expect(api.post).toHaveBeenCalledTimes(1);
+  await refreshInsights();
+});
+it('keeps the in-memory opt-out if clearing the durable marker fails', async () => {
+  recordInsight(insightsScope(), event);
+  await setInsightsSyncConsent(false);
+  const original = localStorage.removeItem;
+  localStorage.removeItem = () => {
+    throw new Error('storage unavailable');
+  };
+  await expect(setInsightsSyncConsent(true)).rejects.toThrow('storage unavailable');
+  localStorage.removeItem = original;
+  // Even if another actor clears the marker, a failed opt-in must not authorize sync.
+  memory.delete('android-insights-opt-out');
+  await refreshInsights();
+  expect(api.post).not.toHaveBeenCalled();
+  expect(api.get).not.toHaveBeenCalled();
+});
+it('discards an in-flight acknowledgement after an opt-out marker write failure', async () => {
+  recordInsight(insightsScope(), event);
+  mockConfig.insightsSyncEnabled = true;
+  let resolve!: (value: unknown) => void;
+  jest.mocked(api.post).mockImplementationOnce(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  const pending = refreshInsights();
+  const original = localStorage.setItem;
+  localStorage.setItem = () => {
+    throw new Error('storage unavailable');
+  };
+  await expect(setInsightsSyncConsent(false)).rejects.toThrow('storage unavailable');
+  localStorage.setItem = original;
+  resolve({ accepted: ['one'], rejected: [] });
+  await pending;
+  expect(api.get).not.toHaveBeenCalled();
+  expect(useInsights.getState().ledger.acknowledged).toEqual([]);
+});
+it('keeps loading visible when a second refresh joins an existing request', async () => {
+  mockConfig.insightsSyncEnabled = true;
+  let resolve!: (value: unknown) => void;
+  jest.mocked(api.get).mockImplementationOnce(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  const first = refreshInsights();
+  const second = refreshInsights();
+  expect(useInsights.getState().status).toBe('loading');
+  resolve({ totalWords: 0, totalDictations: 0 });
+  await Promise.all([first, second]);
+  expect(useInsights.getState().status).toBe('idle');
+});
+it('uploads more than 200 events in bounded batches and retries after transport failure', async () => {
+  for (let i = 0; i < 401; i++) recordInsight(insightsScope(), { ...event, event_id: String(i) });
+  mockConfig.insightsSyncEnabled = true;
+  jest.mocked(api.post).mockRejectedValueOnce(new Error('offline'));
+  await refreshInsights();
+  expect(useInsights.getState().ledger.acknowledged).toEqual([]);
+  jest.mocked(api.post).mockImplementation(async (_path, body) => ({
+    accepted: (body as { events: InsightEvent[] }).events.map((item) => item.event_id),
+    rejected: [],
+  }));
+  await refreshInsights();
+  expect(
+    jest
+      .mocked(api.post)
+      .mock.calls.map((call) => (call[1] as { events: InsightEvent[] }).events.length),
+  ).toEqual([200, 200, 200, 1]);
+  expect(useInsights.getState().ledger.acknowledged).toHaveLength(401);
+});
+it('never applies account A responses to account B after an in-flight switch', async () => {
+  recordInsight(insightsScope(), event);
+  mockConfig.insightsSyncEnabled = true;
+  let resolve!: (value: unknown) => void;
+  jest.mocked(api.post).mockImplementationOnce(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  const first = refreshInsights();
+  mockUser = { id: 'b' };
+  await Promise.resolve();
+  const second = refreshInsights();
+  expect(useInsights.getState().ledger.events).toEqual([]);
+  resolve({ accepted: ['one'], rejected: [] });
+  await Promise.all([first, second]);
+  await refreshInsights();
+  expect(useInsights.getState().scope).toBe('account:b');
+  expect(useInsights.getState().ledger.events).toEqual([]);
+  expect(JSON.parse(memory.get('android-insights-v1:account:a')!).acknowledged).toEqual([]);
+});
+
+it('allows opt-out while the opt-in sync request is still pending', async () => {
+  let resolve!: (value: unknown) => void;
+  jest.mocked(api.get).mockImplementationOnce(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  await setInsightsSyncConsent(true);
+  expect(useInsights.getState().status).toBe('loading');
+  const pending = refreshInsights();
+  await setInsightsSyncConsent(false);
+  expect(useInsights.getState().consentPaused).toBe(true);
+  resolve({ totalWords: 100, totalDictations: 5 });
+  await pending;
+  await Promise.resolve();
+  expect(useInsights.getState().ledger.summary).toBeUndefined();
 });

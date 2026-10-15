@@ -225,20 +225,24 @@ export function Row({
   detail,
   onPress,
   icon,
+  disabled = false,
 }: {
   title: string;
   detail?: string;
   onPress: () => void;
   icon?: LucideIconName;
+  disabled?: boolean;
 }) {
   return (
     <Pressable
       cssInterop={false}
       accessibilityRole="button"
+      accessibilityState={{ disabled }}
+      disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [
         styles.row,
-        { minHeight: 60, paddingVertical: 12, opacity: pressed ? 0.6 : 1 },
+        { minHeight: 60, paddingVertical: 12, opacity: disabled ? 0.5 : pressed ? 0.6 : 1 },
       ]}
     >
       {icon && (

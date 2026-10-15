@@ -7,11 +7,13 @@ export function SegmentedControl<T extends string>({
   options,
   onChange,
   scrollable = false,
+  disabled = false,
 }: {
   value: T;
   options: readonly { value: T; label: string }[];
   onChange: (value: T) => void;
   scrollable?: boolean;
+  disabled?: boolean;
 }) {
   const segments = (
     <View
@@ -27,7 +29,8 @@ export function SegmentedControl<T extends string>({
           cssInterop={false}
           key={option.value}
           accessibilityRole="tab"
-          accessibilityState={{ selected: option.value === value }}
+          accessibilityState={{ selected: option.value === value, disabled }}
+          disabled={disabled}
           onPress={() => onChange(option.value)}
           style={({ pressed }) => ({
             flex: scrollable ? undefined : 1,

@@ -254,6 +254,12 @@
     "noteLeaveTitle": "録音を終了しますか？",
     "noteLeaveBody": "完了すると文字起こしがノートに追加されます。または、この録音を破棄できます。",
     "noteFinishingTitle": "音声入力を処理中",
-    "noteFinishingBody": "録音の開始または処理が完了するまで、このノートを開いたままにしてください。"
+    "noteFinishingBody": "録音の開始または処理が完了するまで、このノートを開いたままにしてください。",
+    "savingPreference": "保存中…",
+    "statsLoading": "アカウントの合計を更新中…",
+    "statsOffline": "オフライン · 最後に同期した合計を表示",
+    "statsUnavailable": "アカウントの合計を取得できません。接続して再試行してください。",
+    "statsPending": "同期待ちの音声入力があります。同期後に合計が更新されます。",
+    "statsPaused": "アカウントの同期は一時停止中です。この端末の件数を表示しています。"
   }
 }

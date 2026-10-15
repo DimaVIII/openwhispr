@@ -254,6 +254,12 @@
     "noteLeaveTitle": "Uscire dalla registrazione?",
     "noteLeaveBody": "Termina per aggiungere la trascrizione alla nota oppure scarta questa registrazione.",
     "noteFinishingTitle": "Completamento dettatura",
-    "noteFinishingBody": "Resta su questa nota durante l’avvio o il completamento della registrazione."
+    "noteFinishingBody": "Resta su questa nota durante l’avvio o il completamento della registrazione.",
+    "savingPreference": "Salvataggio…",
+    "statsLoading": "Aggiornamento dei totali dell’account…",
+    "statsOffline": "Offline · ultimi totali sincronizzati",
+    "statsUnavailable": "Totali dell’account non disponibili. Connettiti e riprova.",
+    "statsPending": "Alcune dettature attendono la sincronizzazione. I totali verranno aggiornati al termine.",
+    "statsPaused": "Sincronizzazione in pausa. Questi sono i conteggi di questo telefono."
   }
 }

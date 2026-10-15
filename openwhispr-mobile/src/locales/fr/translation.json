@@ -254,6 +254,12 @@
     "noteLeaveTitle": "Quitter cet enregistrement ?",
     "noteLeaveBody": "Terminez pour ajouter la transcription à la note, ou supprimez cet enregistrement.",
     "noteFinishingTitle": "Finalisation de la dictée",
-    "noteFinishingBody": "Restez sur cette note pendant le démarrage ou la finalisation."
+    "noteFinishingBody": "Restez sur cette note pendant le démarrage ou la finalisation.",
+    "savingPreference": "Enregistrement…",
+    "statsLoading": "Mise à jour des totaux du compte…",
+    "statsOffline": "Hors ligne · derniers totaux synchronisés",
+    "statsUnavailable": "Totaux indisponibles. Connectez-vous et réessayez.",
+    "statsPending": "Des dictées attendent la synchronisation. Les totaux seront ensuite actualisés.",
+    "statsPaused": "La synchronisation est en pause. Ces chiffres concernent ce téléphone."
   }
 }

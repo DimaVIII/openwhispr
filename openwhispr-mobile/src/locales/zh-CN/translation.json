@@ -254,6 +254,12 @@
     "noteLeaveTitle": "离开此录音？",
     "noteLeaveBody": "完成录音以将转录添加到笔记，或放弃此录音。",
     "noteFinishingTitle": "正在完成听写",
-    "noteFinishingBody": "录音开始或完成处理期间，请停留在此笔记。"
+    "noteFinishingBody": "录音开始或完成处理期间，请停留在此笔记。",
+    "savingPreference": "正在保存…",
+    "statsLoading": "正在更新账户统计…",
+    "statsOffline": "离线 · 显示上次同步的统计",
+    "statsUnavailable": "账户统计暂不可用。请联网后重试。",
+    "statsPending": "部分听写等待同步。同步后统计将更新。",
+    "statsPaused": "账户同步已暂停。此处显示本机统计。"
   }
 }

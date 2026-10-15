@@ -77,27 +77,53 @@ export const useInsights = create<{
   scope: string;
   ledger: Ledger;
   status: 'idle' | 'loading' | 'offline' | 'blocked';
-}>(() => ({ scope: '', ledger: empty(), status: 'idle' }));
+  consentPaused: boolean;
+}>(() => ({ scope: '', ledger: empty(), status: 'idle', consentPaused: false }));
+let syncDenied = false;
+let consentRevision = 0;
+function isConsentPaused() {
+  if (syncDenied) return true;
+  try {
+    return Boolean(localStorage.getItem('android-insights-opt-out'));
+  } catch {
+    return true;
+  }
+}
 function canSync(scope: string) {
+  if (isConsentPaused()) return false;
   const config = useConfigStore.getState().config;
-  return (
-    !localStorage.getItem('android-insights-opt-out') &&
-    !localStorage.getItem(`${key(scope)}:deleted`) &&
-    insightsScope() === scope &&
-    scope.startsWith('account:') &&
-    config?.insightsSyncEnabled === true &&
-    config.androidHistoryDays !== 0
-  );
+  try {
+    return (
+      !localStorage.getItem(`${key(scope)}:deleted`) &&
+      insightsScope() === scope &&
+      scope.startsWith('account:') &&
+      config?.insightsSyncEnabled === true &&
+      config.androidHistoryDays !== 0
+    );
+  } catch {
+    // Unreadable consent storage cannot authorize an upload.
+    return false;
+  }
 }
 export async function setInsightsSyncConsent(enabled: boolean): Promise<void> {
-  // A failed preference write must never undo an explicit opt-out.
+  // Stop immediately, even if the very first disk write fails. Only a fully
+  // persisted, explicit opt-in may lift this process-local block.
+  const revision = ++consentRevision;
+  syncDenied = true;
+  useInsights.setState({ consentPaused: true });
   if (!enabled) localStorage.setItem('android-insights-opt-out', 'true');
   await useConfigStore.getState().updateConfig({ insightsSyncEnabled: enabled });
   const state = useConfigStore.getState();
   if (state.error || state.config?.insightsSyncEnabled !== enabled)
     throw new Error(state.error || 'Unable to save Insights preference.');
-  if (enabled) localStorage.removeItem('android-insights-opt-out');
-  await refreshInsights();
+  if (revision !== consentRevision) return;
+  if (enabled) {
+    localStorage.removeItem('android-insights-opt-out');
+    syncDenied = false;
+    useInsights.setState({ consentPaused: false });
+  }
+  // Network latency must not prevent a subsequent opt-out in Settings.
+  void refreshInsights();
 }
 export function eraseAccountInsights(userId: string): void {
   const scope = `account:${userId}`;
@@ -110,7 +136,13 @@ let trailing = false;
 let active: Promise<void> | null = null;
 export function refreshInsights(): Promise<void> {
   const scope = insightsScope();
-  useInsights.setState({ scope, ledger: read(scope), status: 'idle' });
+  const continuing = active && useInsights.getState().scope === scope;
+  useInsights.setState({
+    scope,
+    ledger: read(scope),
+    status: continuing ? 'loading' : 'idle',
+    consentPaused: isConsentPaused(),
+  });
   if (!canSync(scope)) return Promise.resolve();
   if (active) return active;
   const run = async () => {

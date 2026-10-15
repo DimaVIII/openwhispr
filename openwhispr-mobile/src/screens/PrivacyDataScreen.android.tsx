@@ -1,4 +1,5 @@
-import { Alert, Switch, View, Pressable } from 'react-native';
+import { useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Switch, View, Pressable } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -6,7 +7,7 @@ import { useConfigStore } from '@/store/useConfigStore';
 import { useSyncStore } from '@/sync/useSyncStore';
 import { requestSync } from '@/sync/syncEngine';
 import { requiresRealAccount } from '@/lib/accountAccess';
-import { setInsightsSyncConsent } from '@/android/insights';
+import { setInsightsSyncConsent, useInsights } from '@/android/insights';
 import { applyHistoryRetention } from '@/android/pipeline';
 import { Page, Card, Button, styles, palette } from '@/android/ui';
 
@@ -15,11 +16,18 @@ export default function PrivacyDataScreen() {
   const config = useConfigStore((state) => state.config);
   const signedIn = useAuthStore((state) => !requiresRealAccount(state.user));
   const sync = useSyncStore();
+  const insightsPaused = useInsights((state) => state.consentPaused);
+  const [saving, setSaving] = useState(false);
+  const savePending = useRef(false);
   const update = async (change: {
     cloudBackupEnabled?: boolean;
     usageAnalyticsEnabled?: boolean;
     insightsSyncEnabled?: boolean;
+    androidHistoryDays?: number;
   }) => {
+    if (savePending.current) return;
+    savePending.current = true;
+    setSaving(true);
     try {
       if (change.insightsSyncEnabled !== undefined)
         await setInsightsSyncConsent(change.insightsSyncEnabled);
@@ -27,21 +35,33 @@ export default function PrivacyDataScreen() {
         await useConfigStore.getState().updateConfig(change);
         if (useConfigStore.getState().error) throw new Error(useConfigStore.getState().error!);
       }
-      if (change.cloudBackupEnabled) await requestSync('manual');
+      if (change.androidHistoryDays !== undefined) await applyHistoryRetention();
+      if (change.cloudBackupEnabled)
+        void requestSync('manual').catch((error: Error) =>
+          Alert.alert(t('errorTitle'), error.message),
+        );
     } catch (error) {
       Alert.alert(t('errorTitle'), (error as Error).message);
+    } finally {
+      savePending.current = false;
+      setSaving(false);
     }
   };
   return (
     <Page title={t('privacyData')} back>
       <Text style={styles.body}>{t('privateBody')}</Text>
+      {saving ? (
+        <ActivityIndicator accessibilityLabel={t('savingPreference')} color={palette.blue} />
+      ) : null}
       <Card>
         <View style={styles.row}>
           <Text style={{ flex: 1 }}>{t('cloudBackup')}</Text>
           <Switch
             accessibilityLabel={t('cloudBackup')}
             value={config?.cloudBackupEnabled ?? false}
-            disabled={!signedIn || sync.policyBlocked || sync.subscriptionRequired}
+            disabled={
+              saving || !config || !signedIn || sync.policyBlocked || sync.subscriptionRequired
+            }
             onValueChange={(value) => {
               void update({ cloudBackupEnabled: value });
             }}
@@ -74,8 +94,14 @@ export default function PrivacyDataScreen() {
           <Text style={{ flex: 1 }}>{t('insightsSync')}</Text>
           <Switch
             accessibilityLabel={t('insightsSync')}
-            value={config?.insightsSyncEnabled ?? false}
-            disabled={!signedIn || config?.androidHistoryDays === 0 || sync.policyBlocked}
+            value={config?.insightsSyncEnabled === true && !insightsPaused}
+            disabled={
+              saving ||
+              !config ||
+              !signedIn ||
+              config?.androidHistoryDays === 0 ||
+              sync.policyBlocked
+            }
             onValueChange={(value) => {
               void update({ insightsSyncEnabled: value });
             }}
@@ -88,6 +114,7 @@ export default function PrivacyDataScreen() {
           <Text style={{ flex: 1 }}>{t('analytics')}</Text>
           <Switch
             accessibilityLabel={t('analytics')}
+            disabled={saving || !config}
             value={config?.usageAnalyticsEnabled ?? true}
             onValueChange={(value) => {
               void update({ usageAnalyticsEnabled: value });
@@ -105,7 +132,11 @@ export default function PrivacyDataScreen() {
           <Pressable
             key={days}
             accessibilityRole="radio"
-            accessibilityState={{ checked: (config?.androidHistoryDays ?? -1) === days }}
+            accessibilityState={{
+              checked: (config?.androidHistoryDays ?? -1) === days,
+              disabled: saving || !config,
+            }}
+            disabled={saving || !config}
             style={[styles.row, { minHeight: 48 }]}
             onPress={() =>
               Alert.alert(t('retention'), t(days < 0 ? 'retentionHint' : 'retentionConfirm'), [
@@ -113,11 +144,7 @@ export default function PrivacyDataScreen() {
                 {
                   text: t('save'),
                   onPress: () => {
-                    void useConfigStore
-                      .getState()
-                      .updateConfig({ androidHistoryDays: days })
-                      .then(applyHistoryRetention)
-                      .catch((error: Error) => Alert.alert(t('errorTitle'), error.message));
+                    void update({ androidHistoryDays: days });
                   },
                 },
               ])

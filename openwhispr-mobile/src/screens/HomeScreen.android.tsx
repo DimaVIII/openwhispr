@@ -106,10 +106,32 @@ export default function AndroidHome() {
   const expectedScope = user && !user.isAnonymous ? `account:${user.id}` : 'device';
   const ledger =
     insights.scope === expectedScope ? insights.ledger : { events: [], summary: undefined };
-  const accountSummary = syncInsights && historyEnabled ? ledger.summary : undefined;
-  const words =
-    accountSummary?.totalWords ?? ledger.events.reduce((total, item) => total + item.word_count, 0);
-  const dictations = accountSummary?.totalDictations ?? ledger.events.length;
+  const accountRequested = syncInsights && historyEnabled && expectedScope.startsWith('account:');
+  const accountStats = accountRequested && !insights.consentPaused;
+  const accountSummary = accountStats ? ledger.summary : undefined;
+  const words = accountStats
+    ? accountSummary?.totalWords
+    : ledger.events.reduce((total, item) => total + item.word_count, 0);
+  const dictations = accountStats ? accountSummary?.totalDictations : ledger.events.length;
+  const status = insights.scope === expectedScope ? insights.status : 'loading';
+  const acknowledged = new Set('acknowledged' in ledger ? ledger.acknowledged : []);
+  const hasPending = ledger.events.some((event) => !acknowledged.has(event.event_id));
+  const statsFeedback =
+    accountRequested && insights.consentPaused
+      ? 'statsPaused'
+      : !accountStats
+        ? undefined
+        : status === 'blocked'
+          ? 'syncPolicy'
+          : status === 'offline'
+            ? accountSummary
+              ? 'statsOffline'
+              : 'statsUnavailable'
+            : status === 'loading' || !accountSummary
+              ? 'statsLoading'
+              : hasPending
+                ? 'statsPending'
+                : undefined;
   return (
     <Page title="OpenWhispr">
       <Text style={styles.title}>{t('greeting')}</Text>
@@ -146,18 +168,23 @@ export default function AndroidHome() {
       ) : null}
       <View style={styles.row}>
         <Card style={{ flex: 1 }}>
-          <Text style={styles.heading}>{words}</Text>
+          <Text style={styles.heading}>{words ?? '—'}</Text>
           <Text style={styles.caption}>{t('wordsDictated')}</Text>
         </Card>
         <Card style={{ flex: 1 }}>
-          <Text style={styles.heading}>{dictations}</Text>
+          <Text style={styles.heading}>{dictations ?? '—'}</Text>
           <Text style={styles.caption}>{t('recordings')}</Text>
         </Card>
       </View>
-      <Text style={styles.caption}>{t(accountSummary ? 'accountStats' : 'deviceStats')}</Text>
-      {insights.status === 'offline' || insights.status === 'blocked' ? (
+      <Text style={styles.caption}>{t(accountStats ? 'accountStats' : 'deviceStats')}</Text>
+      {statsFeedback ? (
+        <Text accessibilityLiveRegion="polite" style={styles.caption}>
+          {t(statsFeedback)}
+        </Text>
+      ) : null}
+      {accountStats && (status === 'offline' || status === 'blocked') ? (
         <Row
-          title={t(insights.status === 'blocked' ? 'syncPolicy' : 'retry')}
+          title={t('retry')}
           onPress={() => {
             void refreshInsights();
           }}

@@ -254,6 +254,12 @@
     "noteLeaveTitle": "Sair desta gravação?",
     "noteLeaveBody": "Conclua para adicionar a transcrição à nota ou descarte esta gravação.",
     "noteFinishingTitle": "Concluindo ditado",
-    "noteFinishingBody": "Permaneça nesta nota enquanto a gravação começa ou termina."
+    "noteFinishingBody": "Permaneça nesta nota enquanto a gravação começa ou termina.",
+    "savingPreference": "Salvando…",
+    "statsLoading": "Atualizando os totais da conta…",
+    "statsOffline": "Offline · último total sincronizado",
+    "statsUnavailable": "Totais da conta indisponíveis. Conecte-se e tente novamente.",
+    "statsPending": "Alguns ditados aguardam sincronização. Os totais serão atualizados depois.",
+    "statsPaused": "Sincronização pausada. Estas são as contagens deste telefone."
   }
 }

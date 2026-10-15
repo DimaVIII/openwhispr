@@ -254,6 +254,12 @@
     "noteLeaveTitle": "Leave this recording?",
     "noteLeaveBody": "Finish to add the transcript to your note, or discard this recording.",
     "noteFinishingTitle": "Finishing dictation",
-    "noteFinishingBody": "Stay on this note while the recording starts or finishes."
+    "noteFinishingBody": "Stay on this note while the recording starts or finishes.",
+    "savingPreference": "Saving…",
+    "statsLoading": "Updating account totals…",
+    "statsOffline": "Offline · showing the last synced total",
+    "statsUnavailable": "Account totals unavailable. Connect and retry.",
+    "statsPending": "Some dictations are waiting to sync. Totals will update after sync.",
+    "statsPaused": "Account sync is paused. These are your counts on this phone."
   }
 }
