@@ -892,6 +892,14 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
   private let processingCancelButton = UIButton(type: .system)
   private let toneButton = KeyButton(type: .system)
   private let keyboardRowsStack = KeyboardRowsStack()
+  private lazy var keyTouches: KeyTouchCoordinator = {
+    let coordinator = KeyTouchCoordinator()
+    coordinator.rows = keyboardRowsStack
+    coordinator.onActivate = { [weak self] key in self?.activateKey(key) }
+    coordinator.onRepeatBegan = { [weak self] in self?.startDeleteRepeating() }
+    coordinator.onRepeatEnded = { [weak self] in self?.stopDeleteRepeating() }
+    return coordinator
+  }()
   private let lettersRowsStack = UIStackView()
   private let numbersRowsStack = UIStackView()
 
@@ -1148,6 +1156,7 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
   override func viewWillDisappear(_ animated: Bool) {
     super.viewWillDisappear(animated)
     logRecordMarker("viewWillDisappear")
+    keyTouches.cancelAll()
     stopDeleteRepeating()
     issueResetTimer?.invalidate()
     waitForTranscriptTimer?.invalidate()
@@ -1167,7 +1176,20 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
     stopHandoffObservers()
   }
 
-  @objc private func handleCharacterKeyTapped(_ sender: UIButton) {
+  private func activateKey(_ key: KeyButton) {
+    switch key.keyAction {
+    case .character: handleCharacterKeyTapped(key)
+    case .space: handleSpaceTapped()
+    case .returnKey: handleReturnTapped()
+    case .fieldShortcut: handleShortcutTapped(key)
+    case .backspace: handleBackspaceTapped()
+    case .shift: handleShiftTapped()
+    case .layoutMode: handleLayoutModeSwitchTapped()
+    case nil: break
+    }
+  }
+
+  private func handleCharacterKeyTapped(_ sender: UIButton) {
     guard let title = sender.title(for: .normal), !title.isEmpty else { return }
     playKeyClick()
 
@@ -1188,7 +1210,7 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
     }
   }
 
-  @objc private func handleShiftTapped() {
+  private func handleShiftTapped() {
     playKeyClick()
     let now = Date()
 
@@ -1215,23 +1237,12 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
     refreshShiftState()
   }
 
-  @objc private func handleBackspaceTapped() {
+  private func handleBackspaceTapped() {
     playKeyClick()
     textDocumentProxy.deleteBackward()
   }
 
-  @objc private func handleBackspaceLongPress(_ gesture: UILongPressGestureRecognizer) {
-    switch gesture.state {
-    case .began:
-      startDeleteRepeating()
-    case .ended, .cancelled, .failed:
-      stopDeleteRepeating()
-    default:
-      break
-    }
-  }
-
-  @objc private func handleLayoutModeSwitchTapped() {
+  private func handleLayoutModeSwitchTapped() {
     playKeyClick()
     layoutMode = layoutMode == .letters ? .numbers : .letters
     isCapsLocked = false
@@ -1240,7 +1251,7 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
     refreshShiftState()
   }
 
-  @objc private func handleSpaceTapped() {
+  private func handleSpaceTapped() {
     playKeyClick()
     if !applyDoubleSpacePeriod() {
       textDocumentProxy.insertText(" ")
@@ -1248,7 +1259,7 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
     syncShiftWithContextIfNeeded()
   }
 
-  @objc private func handleShortcutTapped(_ sender: UIButton) {
+  private func handleShortcutTapped(_ sender: UIButton) {
     guard let title = sender.title(for: .normal), !title.isEmpty else { return }
     playKeyClick()
     textDocumentProxy.insertText(title)
@@ -1294,7 +1305,7 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
     return false
   }
 
-  @objc private func handleReturnTapped() {
+  private func handleReturnTapped() {
     playKeyClick()
     textDocumentProxy.insertText("\n")
     syncShiftWithContextIfNeeded()
@@ -2264,6 +2275,7 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
   }
 
   private func rebuildKeyboard() {
+    keyTouches.cancelAll()
     keyboardRowsStack.arrangedSubviews.forEach { view in
       keyboardRowsStack.removeArrangedSubview(view)
       view.removeFromSuperview()
@@ -2468,8 +2480,7 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
     ])
 
     for key in keys {
-      let button = makeKeyButton(title: key, role: .character)
-      button.addTarget(self, action: #selector(handleCharacterKeyTapped), for: .touchUpInside)
+      let button = makeKeyButton(title: key, role: .character, action: .character)
       if registersLetters {
         characterButtons.append(button)
       }
@@ -2504,8 +2515,7 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
       rowStack.bottomAnchor.constraint(equalTo: rowContainer.bottomAnchor),
     ])
 
-    let shift = makeKeyButton(title: nil, imageSystemName: "shift", role: .utility)
-    shift.addTarget(self, action: #selector(handleShiftTapped), for: .touchUpInside)
+    let shift = makeKeyButton(title: nil, imageSystemName: "shift", role: .utility, action: .shift)
     shift.widthAnchor.constraint(equalToConstant: 52).isActive = true
     shiftButton = shift
 
@@ -2515,20 +2525,12 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
     lettersStack.distribution = .fillEqually
 
     for key in ["z", "x", "c", "v", "b", "n", "m"] {
-      let button = makeKeyButton(title: key, role: .character)
-      button.addTarget(self, action: #selector(handleCharacterKeyTapped), for: .touchUpInside)
+      let button = makeKeyButton(title: key, role: .character, action: .character)
       characterButtons.append(button)
       lettersStack.addArrangedSubview(button)
     }
 
-    let backspace = makeKeyButton(title: nil, imageSystemName: "delete.left", role: .utility)
-    backspace.addTarget(self, action: #selector(handleBackspaceTapped), for: .touchUpInside)
-    let longPress = UILongPressGestureRecognizer(
-      target: self,
-      action: #selector(handleBackspaceLongPress(_:))
-    )
-    longPress.minimumPressDuration = 0.35
-    backspace.addGestureRecognizer(longPress)
+    let backspace = makeKeyButton(title: nil, imageSystemName: "delete.left", role: .utility, action: .backspace)
     backspace.widthAnchor.constraint(equalToConstant: 58).isActive = true
 
     rowStack.addArrangedSubview(shift)
@@ -2556,8 +2558,7 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
       rowStack.bottomAnchor.constraint(equalTo: rowContainer.bottomAnchor),
     ])
 
-    let symbolToggleButton = makeKeyButton(title: "#+=", role: .utility)
-    symbolToggleButton.addTarget(self, action: #selector(handleLayoutModeSwitchTapped), for: .touchUpInside)
+    let symbolToggleButton = makeKeyButton(title: "#+=", role: .utility, action: .layoutMode)
     symbolToggleButton.widthAnchor.constraint(equalToConstant: 56).isActive = true
 
     let symbolsStack = UIStackView()
@@ -2566,19 +2567,11 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
     symbolsStack.distribution = .fillEqually
 
     for key in [".", ",", "?", "!", "'"] {
-      let button = makeKeyButton(title: key, role: .character)
-      button.addTarget(self, action: #selector(handleCharacterKeyTapped), for: .touchUpInside)
+      let button = makeKeyButton(title: key, role: .character, action: .character)
       symbolsStack.addArrangedSubview(button)
     }
 
-    let backspace = makeKeyButton(title: nil, imageSystemName: "delete.left", role: .utility)
-    backspace.addTarget(self, action: #selector(handleBackspaceTapped), for: .touchUpInside)
-    let longPress = UILongPressGestureRecognizer(
-      target: self,
-      action: #selector(handleBackspaceLongPress(_:))
-    )
-    longPress.minimumPressDuration = 0.35
-    backspace.addGestureRecognizer(longPress)
+    let backspace = makeKeyButton(title: nil, imageSystemName: "delete.left", role: .utility, action: .backspace)
     backspace.widthAnchor.constraint(equalToConstant: 58).isActive = true
 
     rowStack.addArrangedSubview(symbolToggleButton)
@@ -2595,9 +2588,9 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
 
     let modeButton = makeKeyButton(
       title: layoutMode == .letters ? "123" : "ABC",
-      role: .utility
+      role: .utility,
+      action: .layoutMode
     )
-    modeButton.addTarget(self, action: #selector(handleLayoutModeSwitchTapped), for: .touchUpInside)
     modeButton.translatesAutoresizingMaskIntoConstraints = false
     modeButton.widthAnchor.constraint(equalToConstant: 56).isActive = true
     self.modeButton = modeButton
@@ -2606,19 +2599,16 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
     nextKeyboardButton.translatesAutoresizingMaskIntoConstraints = false
     nextKeyboardButton.widthAnchor.constraint(equalToConstant: needsInputModeSwitchKey ? 42 : 0).isActive = true
 
-    let spaceButton = makeKeyButton(title: nil, role: .space)
-    spaceButton.addTarget(self, action: #selector(handleSpaceTapped), for: .touchUpInside)
+    let spaceButton = makeKeyButton(title: nil, role: .space, action: .space)
     spaceButton.translatesAutoresizingMaskIntoConstraints = false
     addSpaceBranding(to: spaceButton)
 
-    let returnButton = makeKeyButton(title: nil, imageSystemName: "return.left", role: .utility)
-    returnButton.addTarget(self, action: #selector(handleReturnTapped), for: .touchUpInside)
+    let returnButton = makeKeyButton(title: nil, imageSystemName: "return.left", role: .utility, action: .returnKey)
     returnButton.translatesAutoresizingMaskIntoConstraints = false
     returnButton.widthAnchor.constraint(equalToConstant: 62).isActive = true
     self.returnButton = returnButton
 
-    let shortcutButton = makeKeyButton(title: nil, role: .utility)
-    shortcutButton.addTarget(self, action: #selector(handleShortcutTapped(_:)), for: .touchUpInside)
+    let shortcutButton = makeKeyButton(title: nil, role: .utility, action: .fieldShortcut)
     shortcutButton.translatesAutoresizingMaskIntoConstraints = false
     shortcutButton.isHidden = true
     let shortcutWidth = shortcutButton.widthAnchor.constraint(equalToConstant: 0)
@@ -2710,9 +2700,14 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
   private func makeKeyButton(
     title: String?,
     imageSystemName: String? = nil,
-    role: KeyRole
+    role: KeyRole,
+    action: KeyAction? = nil
   ) -> KeyButton {
     let button = KeyButton(type: .custom)
+    if let action {
+      button.keyAction = action
+      button.touchCoordinator = keyTouches
+    }
     // Each key's target reaches its neighbours and the keyboard's padding, so no
     // gap or pixel-rounding sliver is dead; KeyboardRowsStack resolves overlaps.
     button.hitTestOutsets = UIEdgeInsets(

@@ -50,6 +50,9 @@ private extension KeyboardViewController {
 
   func touchTestRefreshFieldKeys() { refreshFieldAwareKeys() }
   var touchTestReturnKey: KeyButton? { returnButton }
+  var touchTestCoordinator: KeyTouchCoordinator { keyTouches }
+  var touchTestIsNumbers: Bool { layoutMode == .numbers }
+  var touchTestShiftEnabled: Bool { isShiftEnabled }
 }
 
 private struct TouchChecks {
@@ -84,9 +87,13 @@ private enum KeyboardTouchTests {
     checkTouchCoordinator(&checks)
     for width: CGFloat in [360, 393, 430, 852] {
       checkProductionLayout(width: width, numbers: false, globe: false, &checks)
+      checkKeyWiring(width: width, numbers: false, globe: false, &checks)
       checkProductionLayout(width: width, numbers: true, globe: false, &checks)
+      checkKeyWiring(width: width, numbers: true, globe: false, &checks)
       checkProductionLayout(width: width, numbers: false, globe: true, &checks)
+      checkKeyWiring(width: width, numbers: false, globe: true, &checks)
     }
+    checkKeyDispatch(&checks)
 
     print("Keyboard touch routing: \(checks.count - checks.failures.count)/\(checks.count) passed")
     if !checks.failures.isEmpty {
@@ -251,16 +258,7 @@ private enum KeyboardTouchTests {
     let rows = controller.touchTestRows
     let layout = "\(Int(width)) pt \(numbers ? "numbers" : "letters")\(globe ? " with globe" : "")"
 
-    var keys = [KeyButton]()
-    func collect(_ view: UIView) {
-      guard !view.isHidden else { return }
-      if let key = view as? KeyButton {
-        keys.append(key)
-        return
-      }
-      view.subviews.forEach(collect)
-    }
-    collect(rows)
+    let keys = visibleKeys(in: rows)
     let rects = keys.map { $0.convert($0.bounds, to: rows) }
     checks.check(
       "\(layout): keys laid out at row height",
@@ -588,5 +586,77 @@ private enum KeyboardTouchTests {
     checks.check("VoiceOver types a coordinated key", b.accessibilityActivate() && typed == ["b"])
     let plain = KeyButton(type: .custom)
     checks.check("an uncoordinated key keeps single-touch UIControl behaviour", !plain.isMultipleTouchEnabled)
+  }
+
+  /// Every visible key under `root`, in layout order.
+  static func visibleKeys(in root: UIView) -> [KeyButton] {
+    var keys = [KeyButton]()
+    func collect(_ view: UIView) {
+      guard !view.isHidden else { return }
+      if let key = view as? KeyButton {
+        keys.append(key)
+        return
+      }
+      view.subviews.forEach(collect)
+    }
+    collect(root)
+    return keys
+  }
+
+  /// Every typing key goes through the coordinator and nothing else; the globe
+  /// stays a UIControl for the system input-mode menu.
+  @MainActor
+  static func checkKeyWiring(width: CGFloat, numbers: Bool, globe: Bool, _ checks: inout TouchChecks) {
+    let controller = KeyboardViewController.makeLaidOutKeyboard(width: width, numbers: numbers, globe: globe)
+    let layout = "\(Int(width)) pt \(numbers ? "numbers" : "letters")\(globe ? " with globe" : "")"
+    let keys = visibleKeys(in: controller.touchTestRows)
+    let typing = keys.filter { $0.accessibilityLabel != "Next keyboard" }
+    checks.check(
+      "\(layout): every typing key goes through the touch coordinator",
+      typing.allSatisfy { $0.keyAction != nil && $0.touchCoordinator === controller.touchTestCoordinator }
+    )
+    checks.check("\(layout): no typing key still fires UIControl actions", typing.allSatisfy { $0.allTargets.isEmpty })
+    // UIKit adds press-only focus recognizers to every button; only one that
+    // takes touches (like the old delete long press) would compete with the keys.
+    checks.check(
+      "\(layout): no typing key keeps a touch gesture recognizer",
+      typing.allSatisfy { key in
+        (key.gestureRecognizers ?? []).allSatisfy { $0.allowedTouchTypes.isEmpty }
+      }
+    )
+    if globe {
+      let globeKey = keys.first { $0.accessibilityLabel == "Next keyboard" }
+      checks.check(
+        "\(layout): the globe key keeps the system input-mode menu",
+        globeKey?.keyAction == nil && !(globeKey?.allTargets.isEmpty ?? true)
+      )
+    }
+  }
+
+  /// Coordinator activations reach the controller's handlers: shift as the
+  /// finger lands, 123 on lift, and VoiceOver through accessibilityActivate.
+  @MainActor
+  static func checkKeyDispatch(_ checks: inout TouchChecks) {
+    let controller = KeyboardViewController.makeLaidOutKeyboard(width: 393, numbers: false, globe: false)
+    let keys = visibleKeys(in: controller.touchTestRows)
+    guard let shift = keys.first(where: { $0.keyAction == .shift }),
+          let mode = keys.first(where: { $0.keyAction == .layoutMode }) else {
+      checks.check("shift and 123 keys exist", false)
+      return
+    }
+    let finger = NSObject()
+    let id = ObjectIdentifier(finger)
+    let coordinator = controller.touchTestCoordinator
+
+    let shiftBefore = controller.touchTestShiftEnabled
+    coordinator.began(id, on: shift)
+    checks.check("shift acts as the finger lands", controller.touchTestShiftEnabled != shiftBefore)
+    coordinator.ended(id, on: shift)
+
+    coordinator.began(id, on: mode)
+    checks.check("123 waits for the lift", !controller.touchTestIsNumbers)
+    coordinator.ended(id, on: mode)
+    checks.check("123 switches to numbers on lift", controller.touchTestIsNumbers)
+    checks.check("VoiceOver switches back to letters", mode.accessibilityActivate() && !controller.touchTestIsNumbers)
   }
 }
