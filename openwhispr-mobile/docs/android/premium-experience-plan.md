@@ -12,6 +12,7 @@
 
 ## Global constraints
 
+- Android research and implementation use Android platform guidance. Do not expose or invoke Apple Intelligence in Android. Evaluate Google/Samsung capabilities only against public developer APIs, supported devices and the actual foreground/background workflow; manufacturer AI is optional unless it solves a verified product need.
 - Keep Home, Notes, Dictionary and Style bottom tabs and the top-right Account entry.
 - OpenWhispr desktop supplies the overall visual language. Wispr supplies Home/Style layout; Style context tabs match Dictionary's Words / Snippets treatment.
 - Recording begins only after explicit action. The real bubble appears in onboarding practice and outside OpenWhispr, and is hidden over ordinary app screens.
@@ -118,7 +119,7 @@ Subscriptions belong under Plan. Third-party/model attribution belongs under Lic
 
 Research supports decisions; it does not verify implementation. Existing short file-transcription results do not verify meetings. Emulator speed does not support physical-device recommendations. A mocked successful purchase does not verify Play checkout or server entitlement reconciliation. Complete independent implementation even when provider/device access is missing, then name the exact unavailable artifact/device/account and remaining check. Do not mark the encompassing goal complete while its agreed completion conditions remain unmet.
 
-Guidance reviewed by the main session on 2026-10-15: [Apple settings](https://developer.apple.com/design/human-interface-guidelines/settings.md) (minimal settings, contextual choices, system preferences), [Android layout basics](https://developer.android.com/design/ui/mobile/guides/layout-and-content/layout-basics) (safe areas, input visibility and action reach), [Android predictive Back](https://developer.android.com/design/ui/mobile/guides/patterns/predictive-back). Figma Home `21:800` and Style `21:814` were visually inspected by the main session; this plan does not claim an independent visual inspection.
+Current platform guidance: [Android layout basics](https://developer.android.com/design/ui/mobile/guides/layout-and-content/layout-basics) (safe areas, input visibility and action reach), [Android predictive Back](https://developer.android.com/design/ui/mobile/guides/patterns/predictive-back). Josh's Android-only correction supersedes the earlier Apple settings research direction. Figma Home `21:800` and Style `21:814` were visually inspected by the main session; this plan does not claim an independent visual inspection.
 
 ## Implementation checkpoint — 2026-10-15, review build v3
 
