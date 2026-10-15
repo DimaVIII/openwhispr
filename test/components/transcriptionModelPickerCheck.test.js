@@ -168,6 +168,25 @@ test("Custom: the model holds the status, and the address waits until it is left
   assert.equal(panel.field(MODEL).props.failureReason, "reasoning.custom.endpointUnauthorized");
 });
 
+test("Custom: an Azure endpoint is not checked, any other address is", async (t) => {
+  const panel = await mount(t, {
+    overrides: {
+      selectedCloudProvider: "custom",
+      selectedCloudModel: "whisper-deployment",
+      cloudTranscriptionBaseUrl: "https://my-resource.cognitiveservices.azure.com",
+    },
+  });
+  await panel.wait(5000);
+  assert.equal(panel.requests().length, 0, "Azure takes its own URL and api-key header");
+  assert.equal(panel.phase(), "idle");
+  await panel.setProps({ cloudTranscriptionBaseUrl: "http://127.0.0.1:8000/v1" });
+  await panel.wait(500);
+  assert.deepEqual(
+    panel.requests().map((config) => config.baseUrl),
+    ["http://127.0.0.1:8000/v1"]
+  );
+});
+
 test("leaving an address that is tidied on blur checks at once", async (t) => {
   // The setter saves straight into the picker's props, as the store does for its parent, so
   // the tidied address and the hold's drop reach the picker in one render.

@@ -42,6 +42,7 @@ import { STREAMING_ONLY_PROVIDERS } from "../helpers/transcriptionRoute";
 import { getRemoteProviderIcon } from "../utils/providerIcons";
 import { createExternalLinkHandler } from "../utils/externalLinks";
 import { API_ENDPOINTS, normalizeBaseUrl } from "../config/constants";
+import { isAzureOpenAIEndpoint } from "../utils/urlUtils";
 import { GetApiKeyLink } from "./ui/GetApiKeyLink";
 import { ConnectionCheckAnnouncer } from "./ui/ConnectionCheckAnnouncer";
 import { ProviderCheckField } from "./ui/ProviderCheckField";
@@ -1128,7 +1129,10 @@ export default function TranscriptionModelPicker({
           apiKey: customKey,
           model: panelModel,
         },
-        ready: Boolean(cloudTranscriptionBaseUrl.trim() && panelModel.trim()),
+        // The check speaks only OpenAI's API; Azure gets its own URL and `api-key` header.
+        ready:
+          Boolean(cloudTranscriptionBaseUrl.trim() && panelModel.trim()) &&
+          !isAzureOpenAIEndpoint(cloudTranscriptionBaseUrl),
         typed: `${cloudTranscriptionBaseUrl}\n${customKey}\n${panelModel}`,
         context: [],
       }
