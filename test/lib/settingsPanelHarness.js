@@ -180,6 +180,7 @@ async function mountSettingsPanel(
       shown = value;
       return render();
     },
+    unmount,
     find,
     field,
     checkField,

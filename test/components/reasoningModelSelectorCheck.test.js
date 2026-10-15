@@ -89,6 +89,17 @@ test("a key saves trimmed once its check passes or its field is left, never half
   assert.equal(panel.state().openaiApiKey, "sk-other", "leaving the window saves it");
 });
 
+test("a typed key saves when another provider takes its field or the panel unmounts", async (t) => {
+  const panel = await mount(t);
+  await panel.type(KEY, "sk-typed");
+  // The scope's provider changes elsewhere, so the focused field shows Anthropic's key.
+  await panel.setProps({ localReasoningProvider: "anthropic" });
+  await panel.type(KEY, "sk-ant-typed");
+  assert.equal(panel.state().openaiApiKey, "sk-typed");
+  await panel.unmount(); // Escape closing Settings fires no blur
+  assert.equal(panel.state().anthropicApiKey, "sk-ant-typed");
+});
+
 test("typing keeps the 0.5 s pause, and leaving the field sends at once", async (t) => {
   const panel = await mount(t);
   await panel.type(KEY, "sk-first");

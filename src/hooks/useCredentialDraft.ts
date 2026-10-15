@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface CredentialDraft {
   field: string;
@@ -14,6 +14,12 @@ interface CredentialDraft {
  */
 export function useCredentialDraft() {
   const [draft, setDraft] = useState<CredentialDraft | null>(null);
+  const latest = useRef(draft);
+  useEffect(() => {
+    latest.current = draft;
+  });
+  // Unmounting fires no blur, as when Escape closes Settings.
+  useEffect(() => () => latest.current?.save(latest.current.value), []);
   const save = useCallback(() => {
     if (!draft) return;
     draft.save(draft.value);
@@ -21,8 +27,11 @@ export function useCredentialDraft() {
   }, [draft]);
   return {
     value: (field: string, saved: string) => (draft?.field === field ? draft.value : saved),
-    change: (field: string, value: string, save: (value: string) => void) =>
-      setDraft({ field, value, save }),
+    change: (field: string, value: string, save: (value: string) => void) => {
+      // Another field took over the input without a blur, as when a provider changes elsewhere.
+      if (draft && draft.field !== field) draft.save(draft.value);
+      setDraft({ field, value, save });
+    },
     save,
   };
 }
