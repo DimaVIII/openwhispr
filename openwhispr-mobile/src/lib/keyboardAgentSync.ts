@@ -213,6 +213,22 @@ export function clearKeyboardAgentJob(): void {
   AppGroupStorage.removeItem(APP_GROUP_KEYS.KEYBOARD_AGENT_JOB);
 }
 
+// Onboarding's voice assistant step tells the user what to say, so the keyboard's example
+// instruction would contradict it. A deadline rather than a flag, so a step the app never left
+// (killed mid-onboarding) stops hiding them on its own.
+const AGENT_HINTS_HIDDEN_MS = 15 * 60_000;
+
+// Hides the keyboard's example instructions; the returned function shows them again.
+export function hideKeyboardAgentHints(): () => void {
+  AppGroupStorage.setItem(
+    APP_GROUP_KEYS.KEYBOARD_AGENT_HINTS_HIDDEN_UNTIL_MS,
+    String(Date.now() + AGENT_HINTS_HIDDEN_MS),
+  );
+  return (): void => {
+    AppGroupStorage.removeItem(APP_GROUP_KEYS.KEYBOARD_AGENT_HINTS_HIDDEN_UNTIL_MS);
+  };
+}
+
 // The draft the keyboard's card opens on, picked as its readAgentResult picks it: the active
 // version, the first without one, clamped to the list. It is written before agent_ready, so a
 // listener for that status reads the new one.
