@@ -1,6 +1,10 @@
-# Pro paywall facelift — blue draft, 14 October 2026
+# Pro paywall facelift — published revision 13, 14 October 2026
 
-Status: **reviewable, unpublished Superwall draft; approved CTA simplification implemented**. Josh confirmed target 271365 and then explicitly selected the blue design. No Publish, campaign change, mobile release, financial transaction, real redemption, or live creator validation request was executed. Purchase, restore, and callback actions were exercised through the editor’s explicit simulation UI during the parity follow-up.
+Status: **published as Superwall revision 13 on 14 October 2026 at 5:33 PM (editor display)**, following Josh's explicit instruction to publish and assign Chad for review. The publish confirmation named the existing **Creator Code PROBE ONLY 2026-09-25** campaign. PR #2680 is ready for review, assigned to Chad Piha (`Chadpiha`), with a review request to him. Campaign routing and mobile source were not changed.
+
+The editor reported a stale starting revision 11 against revision 12. Revision 12 was already the checked and retained baseline; Overwrite Anyway created revision 13. Version history confirms #13 and retains #12. See `published-revision-13.jpg`.
+
+The sections below describe the pre-publication implementation and validation evidence. References to an unpublished draft document that earlier checkpoint; the status above supersedes them.
 
 ![Final blue editor preview](after-blue.jpg)
 
@@ -91,4 +95,4 @@ To roll back the provider draft, use revision history to restore revision 12 aft
 
 Repository `OpenWhispr/openwhispr`; stacked on affiliate PR #2334 head `3a434905b813eba100ac3320cb420d4171082d92`, branch `feat/mobile-affiliate-port-20260924`. Fresh main at baseline was `2516e6e000b866a06099f69fd851b914069653d4`.
 
-Owned sparse checkout: `/Users/joshuadavidpadoa/dev/ow-pro-paywall-facelift-20261014`, branch `codex/pro-paywall-facelift-20261014`. **Kept** for the open draft PR and visual review follow-up; no copied dependencies, builds, or owned servers remain. Retire it when this draft handoff is accepted or superseded. Other sessions' worktrees and the primary Titan checkout were untouched.
+Owned sparse checkout: `/Users/joshuadavidpadoa/dev/ow-pro-paywall-facelift-20261014`, branch `codex/pro-paywall-facelift-20261014`. **Kept** for Chad’s open PR review and visual follow-up; no copied dependencies, builds, or owned servers remain. Retire it when this review handoff is accepted or superseded. Other sessions' worktrees and the primary Titan checkout were untouched.
