@@ -49,6 +49,7 @@ export const useAudioRecording = (toast, options = {}) => {
   const [isPasting, setIsPasting] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [isAssistantVoice, setIsAssistantVoice] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   const [isPreparing, setIsPreparing] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
   const [micCaptureStatus, setMicCaptureStatus] = useState("inactive");
@@ -1089,7 +1090,14 @@ export const useAudioRecording = (toast, options = {}) => {
       // A streaming start in its mic-open phase is not yet `isStreaming`;
       // only the streaming cancel knows how to abandon it.
       if (state.isStreaming || state.isStreamingStartInProgress) {
-        return await audioManagerRef.current.cancelStreamingRecording();
+        // The streaming cancel reports processing while it tears the stream
+        // down; set in the same batch so no render sees that as a command.
+        setIsCancelling(true);
+        try {
+          return await audioManagerRef.current.cancelStreamingRecording();
+        } finally {
+          setIsCancelling(false);
+        }
       }
       return audioManagerRef.current.cancelRecording();
     }
@@ -1147,6 +1155,7 @@ export const useAudioRecording = (toast, options = {}) => {
     isProcessing: isProcessing || (isPasting && !isRecording),
     isStreaming,
     isAssistantVoice,
+    isCancelling,
     isPreparing,
     isStopping,
     micCaptureStatus,

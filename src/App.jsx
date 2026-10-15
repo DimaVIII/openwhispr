@@ -44,6 +44,7 @@ import {
   VOICE_PILL_FOOTPRINT,
   isVoicePillActivationKey,
   shouldActivateVoicePill,
+  shouldBeginAssistantFollowUpThinking,
   shouldOfferLiveTranscriptReopen,
   shouldSuppressPillForAssistantActions,
 } from "./helpers/voicePillPresentation";
@@ -211,6 +212,7 @@ export default function App() {
     isRecording,
     isProcessing,
     isAssistantVoice,
+    isCancelling,
     isPreparing,
     isStopping,
     micCaptureStatus,
@@ -283,10 +285,17 @@ export default function App() {
 
   const { beginThinking: beginAssistantThinking } = assistant;
   useEffect(() => {
-    if (isAssistantVoice && isProcessing && assistantOpenRef.current) {
+    if (
+      shouldBeginAssistantFollowUpThinking({
+        isAssistantVoice,
+        isProcessing,
+        isCancelling,
+        panelOpen: assistantOpenRef.current,
+      })
+    ) {
       beginAssistantThinking();
     }
-  }, [isAssistantVoice, isProcessing, assistantOpenRef, beginAssistantThinking]);
+  }, [isAssistantVoice, isProcessing, isCancelling, assistantOpenRef, beginAssistantThinking]);
 
   // While the Agent panel is open, plain dictation renders on the
   // opposite-edge companion pill — neither its recording nor its processing
