@@ -662,6 +662,7 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
   private var deleteRepeatCount = 0
   private var issueResetTimer: Timer?
   private var recordingPollTimer: Timer?
+  private var recordingPollTick = 0
   private var waitForTranscriptTimer: Timer?
   private var isObservingHandoffNotifications = false
   private var didBuildKeyboard = false
@@ -793,6 +794,14 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
       recognizer.delaysTouchesBegan = false
       recognizer.delaysTouchesEnded = false
     }
+  }
+
+  /// Poll ticks (0.12 s each) between shared-state reads while nothing is starting
+  /// or recording; a recording started elsewhere still shows within 0.48 s.
+  private static let idlePollStride = 4
+
+  private static func shouldPollSharedState(tick: Int, isLive: Bool) -> Bool {
+    isLive || tick % idlePollStride == 0
   }
 
   override func viewDidAppear(_ animated: Bool) {
@@ -3240,6 +3249,11 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
     let signpost = KeyboardLog.signposter.beginInterval("recordingPoll")
     defer { KeyboardLog.signposter.endInterval("recordingPoll", signpost) }
     if isAgentReviewShown { return }
+    recordingPollTick &+= 1
+    guard Self.shouldPollSharedState(
+      tick: recordingPollTick,
+      isLive: isDarwinStartPending || isRemoteRecordingActive
+    ) else { return }
     let provider = KeyboardHandoffProvider.shared
 
     if isDarwinStartPending {
@@ -4071,9 +4085,11 @@ private struct KeyboardHandoffProvider {
     return "\(short)+\(build)"
   }()
 
-  private var appGroupId: String {
-    "group.\(Self.resolvedContainingAppBundleID)"
-  }
+  // One instance for the extension's lifetime. Every read used to resolve the
+  // group from Info.plist and open the suite again, several times per keystroke.
+  private let sharedDefaults = UserDefaults(
+    suiteName: "group.\(KeyboardHandoffProvider.resolvedContainingAppBundleID)"
+  )
   private let pendingTranscriptKey = "keyboard_pending_transcript"
   private let pendingTranscriptJobIdKey = "keyboard_pending_transcript_job_id"
   private let orphanedRawTranscriptKey = "keyboard_orphaned_raw_transcript"
@@ -4162,7 +4178,7 @@ private struct KeyboardHandoffProvider {
   }()
 
   func consumePendingTranscript() -> String? {
-    guard let sharedDefaults = UserDefaults(suiteName: appGroupId) else {
+    guard let sharedDefaults = sharedDefaults else {
       KeyboardLog.storage.error("Unable to open app-group defaults for keyboard handoff.")
       KeyboardLog.echo("Unable to open app-group defaults for keyboard handoff.")
       return nil
@@ -4196,7 +4212,7 @@ private struct KeyboardHandoffProvider {
   }
 
   func currentTone() -> String {
-    guard let defaults = UserDefaults(suiteName: appGroupId),
+    guard let defaults = sharedDefaults,
           let raw = defaults.string(forKey: dictationToneKey),
           Self.toneValues.contains(raw) else {
       return "default"
@@ -4206,13 +4222,13 @@ private struct KeyboardHandoffProvider {
 
   func setTone(_ tone: String) {
     guard Self.toneValues.contains(tone),
-          let defaults = UserDefaults(suiteName: appGroupId) else { return }
+          let defaults = sharedDefaults else { return }
     defaults.set(tone, forKey: dictationToneKey)
     defaults.synchronize()
   }
 
   func isToneApplicable() -> Bool {
-    guard let defaults = UserDefaults(suiteName: appGroupId) else { return false }
+    guard let defaults = sharedDefaults else { return false }
     return defaults.string(forKey: toneApplicableKey) != "0"
   }
 
@@ -4220,23 +4236,23 @@ private struct KeyboardHandoffProvider {
 
   /// The dictation agent is off entirely unless the app has mirrored enabled=1.
   func isAgentEnabled() -> Bool {
-    UserDefaults(suiteName: appGroupId)?.string(forKey: agentEnabledKey) == "1"
+    sharedDefaults?.string(forKey: agentEnabledKey) == "1"
   }
 
   /// Applicable = usable in the current mode (Cloud on). Not applicable ⇒ the
   /// entry button is dimmed and points the user at the app, mirroring tone.
   func isAgentApplicable() -> Bool {
-    UserDefaults(suiteName: appGroupId)?.string(forKey: agentApplicableKey) == "1"
+    sharedDefaults?.string(forKey: agentApplicableKey) == "1"
   }
 
   /// Only when the user has opted in do we share the surrounding field text.
   func agentSharesContext() -> Bool {
-    UserDefaults(suiteName: appGroupId)?.string(forKey: agentShareContextKey) == "1"
+    sharedDefaults?.string(forKey: agentShareContextKey) == "1"
   }
 
   /// Display name shown in the recording/review headers ("Tell {name}…").
   func agentName() -> String {
-    guard let raw = UserDefaults(suiteName: appGroupId)?.string(forKey: agentNameKey) else {
+    guard let raw = sharedDefaults?.string(forKey: agentNameKey) else {
       return "your agent"
     }
     let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -4247,7 +4263,7 @@ private struct KeyboardHandoffProvider {
   /// used for recording-active). While the agent is generating, a stale/missing
   /// heartbeat means the app process died mid-job and no result is coming.
   func isAppHeartbeatFresh() -> Bool {
-    guard let defaults = UserDefaults(suiteName: appGroupId),
+    guard let defaults = sharedDefaults,
           let raw = defaults.string(forKey: backgroundSessionHeartbeatKey),
           let heartbeatMs = Double(raw) else { return false }
     return Date().timeIntervalSince1970 * 1000 - heartbeatMs <= 5_000
@@ -4261,7 +4277,7 @@ private struct KeyboardHandoffProvider {
     contextBefore: String?,
     contextAfter: String?
   ) {
-    guard let defaults = UserDefaults(suiteName: appGroupId) else { return }
+    guard let defaults = sharedDefaults else { return }
     var payload: [String: Any] = [
       "kind": "compose",
       "requestedAtMs": Int(Date().timeIntervalSince1970 * 1000),
@@ -4277,7 +4293,7 @@ private struct KeyboardHandoffProvider {
   }
 
   func clearAgentRequest() {
-    guard let defaults = UserDefaults(suiteName: appGroupId) else { return }
+    guard let defaults = sharedDefaults else { return }
     defaults.removeObject(forKey: agentRequestKey)
     defaults.synchronize()
   }
@@ -4286,7 +4302,7 @@ private struct KeyboardHandoffProvider {
   /// the app reuses `sessionId` so the reply threads onto the same session. No
   /// selectedText/context is re-captured — the follow-up refines the last reply.
   func writeAgentFollowUpRequest(sessionId: String) {
-    guard let defaults = UserDefaults(suiteName: appGroupId) else { return }
+    guard let defaults = sharedDefaults else { return }
     let payload: [String: Any] = [
       "kind": "follow_up",
       "sessionId": sessionId,
@@ -4306,7 +4322,7 @@ private struct KeyboardHandoffProvider {
   @discardableResult
   func writeAgentRegenerateAction(sessionId: String) -> Int64 {
     let atMs = Int64(Date().timeIntervalSince1970 * 1000)
-    guard let defaults = UserDefaults(suiteName: appGroupId) else { return atMs }
+    guard let defaults = sharedDefaults else { return atMs }
     let requestId = "\(atMs)-\(UUID().uuidString)"
     let payload: [String: Any] = [
       "type": "regenerate",
@@ -4328,7 +4344,7 @@ private struct KeyboardHandoffProvider {
   /// recording. Lets the keyboard recover "this recording is an agent one" after
   /// it was rebuilt mid-recording (a common jetsam case on the handoff path).
   func hasAgentJobForCurrentRecording() -> Bool {
-    guard let defaults = UserDefaults(suiteName: appGroupId),
+    guard let defaults = sharedDefaults,
           let activeJobId = defaults.string(forKey: recordingJobIdKey),
           !activeJobId.isEmpty,
           let raw = defaults.string(forKey: agentJobKey),
@@ -4344,7 +4360,7 @@ private struct KeyboardHandoffProvider {
   /// JSON, or when the result's job is superseded by a newer recording — reusing
   /// the same timestamp-prefix staleness rule as pending transcripts.
   func readAgentResult() -> AgentResult? {
-    guard let defaults = UserDefaults(suiteName: appGroupId),
+    guard let defaults = sharedDefaults,
           let raw = defaults.string(forKey: agentResultKey),
           let data = raw.data(using: .utf8),
           let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -4377,7 +4393,7 @@ private struct KeyboardHandoffProvider {
   }
 
   func clearAgentResult() {
-    guard let defaults = UserDefaults(suiteName: appGroupId) else { return }
+    guard let defaults = sharedDefaults else { return }
     defaults.removeObject(forKey: agentResultKey)
     defaults.synchronize()
   }
@@ -4403,14 +4419,14 @@ private struct KeyboardHandoffProvider {
   /// Stamps the App Group with the moment the keyboard came on screen so the
   /// main app can detect a successful keyboard switch during onboarding.
   func markShown() {
-    guard let defaults = UserDefaults(suiteName: appGroupId) else { return }
+    guard let defaults = sharedDefaults else { return }
     defaults.set(String(Int(Date().timeIntervalSince1970 * 1000)), forKey: shownAtMsKey)
     defaults.set(Self.bundleVersionIdentity, forKey: shownAtVersionKey)
     defaults.synchronize()
   }
 
   func isRecordingActive() -> Bool {
-    guard let defaults = UserDefaults(suiteName: appGroupId) else { return false }
+    guard let defaults = sharedDefaults else { return false }
     guard defaults.string(forKey: recordingActiveKey) == "1" else { return false }
 
     // The host app writes a heartbeat every 1s while alive. If it's missing
@@ -4432,25 +4448,25 @@ private struct KeyboardHandoffProvider {
   }
 
   func forceClearActiveFlag() {
-    guard let defaults = UserDefaults(suiteName: appGroupId) else { return }
+    guard let defaults = sharedDefaults else { return }
     defaults.set("0", forKey: recordingActiveKey)
   }
 
   func clearBackgroundSessionReady() {
-    guard let defaults = UserDefaults(suiteName: appGroupId) else { return }
+    guard let defaults = sharedDefaults else { return }
     defaults.set("0", forKey: backgroundSessionReadyKey)
     defaults.synchronize()
   }
 
   func currentAudioLevel() -> Float {
-    guard let defaults = UserDefaults(suiteName: appGroupId),
+    guard let defaults = sharedDefaults,
           let raw = defaults.string(forKey: audioLevelKey),
           let value = Float(raw) else { return 0 }
     return min(max(value, 0), 1)
   }
 
   func requestStop() {
-    guard let defaults = UserDefaults(suiteName: appGroupId) else { return }
+    guard let defaults = sharedDefaults else { return }
     defaults.set("1", forKey: stopRequestedKey)
     defaults.set(String(Int(Date().timeIntervalSince1970 * 1000)), forKey: stopRequestedAtMsKey)
     defaults.set("transcribing", forKey: transcriptionStatusKey)
@@ -4466,21 +4482,21 @@ private struct KeyboardHandoffProvider {
   }
 
   func requestCancel() {
-    guard let defaults = UserDefaults(suiteName: appGroupId) else { return }
+    guard let defaults = sharedDefaults else { return }
     defaults.set("1", forKey: cancelRequestedKey)
     requestStop()
     KeyboardLog.echo("MARKER provider.requestCancel")
   }
 
   func currentRecordingJobId() -> String? {
-    UserDefaults(suiteName: appGroupId)?.string(forKey: recordingJobIdKey)
+    sharedDefaults?.string(forKey: recordingJobIdKey)
   }
 
   /// Cancel during the transcription phase (recording already stopped). Raises
   /// the cancel flag the app polls at its checkpoints and clears any transcript
   /// already written for this job, leaving the status idle.
   func cancelProcessingJob() {
-    guard let defaults = UserDefaults(suiteName: appGroupId) else { return }
+    guard let defaults = sharedDefaults else { return }
     defaults.set("1", forKey: cancelRequestedKey)
     defaults.removeObject(forKey: pendingTranscriptKey)
     defaults.removeObject(forKey: pendingTranscriptJobIdKey)
@@ -4495,7 +4511,7 @@ private struct KeyboardHandoffProvider {
   /// Drops a pending transcript that belongs to a cancelled job. Returns true
   /// when it discarded one, so the caller knows not to insert anything.
   func discardPendingTranscriptIfMatches(jobId: String) -> Bool {
-    guard let defaults = UserDefaults(suiteName: appGroupId),
+    guard let defaults = sharedDefaults,
           defaults.string(forKey: pendingTranscriptKey) != nil,
           defaults.string(forKey: pendingTranscriptJobIdKey) == jobId else { return false }
     defaults.removeObject(forKey: pendingTranscriptKey)
@@ -4564,7 +4580,7 @@ private struct KeyboardHandoffProvider {
   }
 
   func storeHostReturnInfo(from controller: UIInputViewController) {
-    guard let defaults = UserDefaults(suiteName: appGroupId) else { return }
+    guard let defaults = sharedDefaults else { return }
     if let scheme = hostUrlScheme(from: controller) {
       defaults.set(scheme, forKey: "keyboard_return_url")
       KeyboardLog.echo("Stored return URL: \(scheme)")
@@ -4578,7 +4594,7 @@ private struct KeyboardHandoffProvider {
   }
 
   func isBackgroundSessionReady() -> Bool {
-    guard let defaults = UserDefaults(suiteName: appGroupId) else { return false }
+    guard let defaults = sharedDefaults else { return false }
     guard defaults.string(forKey: backgroundSessionReadyKey) == "1" else { return false }
 
     guard let rawHeartbeat = defaults.string(forKey: backgroundSessionHeartbeatKey),
@@ -4602,7 +4618,7 @@ private struct KeyboardHandoffProvider {
   /// fails the freshness check, so another host app never reads a false positive.
   /// Private-API host bundle-id detection is unreliable, so this is the signal.
   func isContainingAppForeground() -> Bool {
-    guard let defaults = UserDefaults(suiteName: appGroupId) else { return false }
+    guard let defaults = sharedDefaults else { return false }
     guard let raw = defaults.string(forKey: "containing_app_foreground_at_ms"),
           let atMs = Double(raw) else { return false }
     let ageMs = Date().timeIntervalSince1970 * 1000 - atMs
@@ -4610,7 +4626,7 @@ private struct KeyboardHandoffProvider {
   }
 
   func requestStart() {
-    if let defaults = UserDefaults(suiteName: appGroupId) {
+    if let defaults = sharedDefaults {
       let jobId = "\(Int(Date().timeIntervalSince1970 * 1000))-\(UUID().uuidString)"
       defaults.set("0", forKey: stopRequestedKey)
       defaults.removeObject(forKey: stopRequestedAtMsKey)
@@ -4646,7 +4662,7 @@ private struct KeyboardHandoffProvider {
   }
 
   func recordingStateSnapshot() -> (active: String, ready: String, stopRequested: String, warmMic: String) {
-    guard let defaults = UserDefaults(suiteName: appGroupId) else {
+    guard let defaults = sharedDefaults else {
       return ("?", "?", "?", "?")
     }
     return (
@@ -4658,27 +4674,27 @@ private struct KeyboardHandoffProvider {
   }
 
   func transcriptionStatus() -> String? {
-    guard let defaults = UserDefaults(suiteName: appGroupId) else { return nil }
+    guard let defaults = sharedDefaults else { return nil }
     return defaults.string(forKey: transcriptionStatusKey)
   }
 
   /// The error detail riding alongside an error status: `usage_limit`,
   /// `session_expired`, or a free-form message.
   func transcriptionError() -> String? {
-    UserDefaults(suiteName: appGroupId)?.string(forKey: transcriptionErrorKey)
+    sharedDefaults?.string(forKey: transcriptionErrorKey)
   }
 
   /// Milliseconds since the shared transcription status last changed, or nil
   /// when no writer has stamped it (e.g. right after the app reset state).
   func transcriptionStatusAgeMs() -> Int? {
-    guard let defaults = UserDefaults(suiteName: appGroupId),
+    guard let defaults = sharedDefaults,
           let raw = defaults.string(forKey: transcriptionStatusUpdatedAtMsKey),
           let updatedAtMs = Double(raw) else { return nil }
     return Int(Date().timeIntervalSince1970 * 1000 - updatedAtMs)
   }
 
   func clearTranscriptionStatus() {
-    guard let defaults = UserDefaults(suiteName: appGroupId) else { return }
+    guard let defaults = sharedDefaults else { return }
     defaults.set("idle", forKey: transcriptionStatusKey)
     defaults.removeObject(forKey: transcriptionErrorKey)
   }
@@ -4686,7 +4702,7 @@ private struct KeyboardHandoffProvider {
   /// Stamped on every Activate tap so the main app can recover the handoff if
   /// the deep link itself never arrives (cold-launch getInitialURL race).
   func markHandoffIntent() {
-    guard let defaults = UserDefaults(suiteName: appGroupId) else { return }
+    guard let defaults = sharedDefaults else { return }
     defaults.set(String(Int(Date().timeIntervalSince1970 * 1000)), forKey: handoffIntentAtMsKey)
     defaults.synchronize()
     KeyboardLog.echo("MARKER provider.markHandoffIntent")

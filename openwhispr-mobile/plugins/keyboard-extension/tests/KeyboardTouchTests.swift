@@ -43,6 +43,10 @@ private extension KeyboardViewController {
   static func touchTestRemoveTouchDelays(from recognizers: [UIGestureRecognizer]?) {
     removeTouchDelays(from: recognizers)
   }
+
+  static func touchTestShouldPoll(tick: Int, isLive: Bool) -> Bool {
+    shouldPollSharedState(tick: tick, isLive: isLive)
+  }
 }
 
 private struct TouchChecks {
@@ -71,6 +75,7 @@ private enum KeyboardTouchTests {
     checkEdgeTies(&checks)
     checkOtherControls(&checks)
     checkWindowTouchDelays(&checks)
+    checkPollCadence(&checks)
     for width: CGFloat in [360, 393, 430, 852] {
       checkProductionLayout(width: width, numbers: false, globe: false, &checks)
       checkProductionLayout(width: width, numbers: true, globe: false, &checks)
@@ -335,5 +340,20 @@ private enum KeyboardTouchTests {
     checks.check("window recognizers no longer delay lift", !edge.delaysTouchesEnded && !tap.delaysTouchesEnded)
     checks.check("a system swipe can still cancel key touches", edge.cancelsTouchesInView && tap.cancelsTouchesInView)
     KeyboardViewController.touchTestRemoveTouchDelays(from: nil)
+  }
+
+  /// The shared-state poll reads every tick while a recording starts or runs,
+  /// and every fourth tick otherwise.
+  @MainActor
+  static func checkPollCadence(_ checks: inout TouchChecks) {
+    let ticks = Array(1...8)
+    checks.check(
+      "a live recording reads shared state every tick",
+      ticks.allSatisfy { KeyboardViewController.touchTestShouldPoll(tick: $0, isLive: true) }
+    )
+    checks.check(
+      "an idle keyboard reads shared state every fourth tick",
+      ticks.filter { KeyboardViewController.touchTestShouldPoll(tick: $0, isLive: false) } == [4, 8]
+    )
   }
 }
