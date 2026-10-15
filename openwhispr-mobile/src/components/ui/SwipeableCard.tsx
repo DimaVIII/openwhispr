@@ -11,6 +11,7 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { Trash2, FolderInput } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { iosColor } from '@/config/colors';
 
 interface SwipeableCardProps {
@@ -37,6 +38,7 @@ export function SwipeableCard({
   inset = false,
   cardBackground,
 }: SwipeableCardProps) {
+  const { t } = useTranslation();
   const revealWidth = onMove ? ACTION_WIDTH * 2 : ACTION_WIDTH;
   const snapThreshold = -revealWidth * 0.5;
 
@@ -140,6 +142,10 @@ export function SwipeableCard({
       <Animated.View style={[styles.actionsContainer, { width: revealWidth }, revealStyle]}>
         {onMove && (
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('android:moveAction', { defaultValue: 'Move' })}
+            accessibilityElementsHidden={!isRevealed}
+            importantForAccessibility={isRevealed ? 'yes' : 'no-hide-descendants'}
             onPress={handleMovePress}
             onPressIn={pressIn(moveScale)}
             onPressOut={pressOut(moveScale)}
@@ -152,6 +158,10 @@ export function SwipeableCard({
           </Pressable>
         )}
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('android:deleteAction', { defaultValue: 'Delete' })}
+          accessibilityElementsHidden={!isRevealed}
+          importantForAccessibility={isRevealed ? 'yes' : 'no-hide-descendants'}
           onPress={handleDeletePress}
           onPressIn={pressIn(deleteScale)}
           onPressOut={pressOut(deleteScale)}

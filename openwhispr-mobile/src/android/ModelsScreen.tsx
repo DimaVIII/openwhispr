@@ -90,6 +90,14 @@ export function ModelsContent({ onNavigate }: { onNavigate?: () => void } = {}) 
   return (
     <>
       <Text style={styles.body}>{t('modelIntro')}</Text>
+      <Row
+        title={t('deviceCheck')}
+        detail={t('deviceCheckSummary')}
+        onPress={() => {
+          onNavigate?.();
+          router.push('/(account)/device-check');
+        }}
+      />
       <Card>
         <View style={styles.row}>
           <Text style={[styles.heading, { flex: 1 }]}>{t('privateMode')}</Text>

@@ -145,3 +145,31 @@ it('discards a native result when cancellation arrives during inference', async 
   await expect(LocalSpeechModel.transcribe('file:///sample.wav', {})).rejects.toThrow('cancelled');
   expect(AndroidDictation!.cancelParakeet).toHaveBeenCalled();
 });
+
+it('uses the explicitly pinned speech model without changing the saved selection', async () => {
+  jest.mocked(selectedSpeechModel).mockReturnValue('parakeet-v3');
+  await LocalSpeechModel.transcribe('file:///sample.wav', {
+    androidModel: 'moonshine-tiny',
+    language: 'en',
+  });
+  expect(AndroidDictation!.transcribeMoonshine).toHaveBeenCalled();
+  expect(AndroidDictation!.transcribeParakeet).not.toHaveBeenCalled();
+});
+it('does not cancel another job when an aborted sample is waiting in the inference queue', async () => {
+  let release!: () => void;
+  const occupied = withAndroidInference(
+    () =>
+      new Promise<void>((done) => {
+        release = done;
+      }),
+  );
+  await Promise.resolve();
+  const controller = new AbortController();
+  const waiting = LocalSpeechModel.transcribe('file:///sample.wav', { signal: controller.signal });
+  controller.abort();
+  expect(AndroidDictation!.cancelParakeet).not.toHaveBeenCalled();
+  release();
+  await occupied;
+  await expect(waiting).rejects.toThrow();
+  expect(AndroidDictation!.transcribeParakeet).not.toHaveBeenCalled();
+});

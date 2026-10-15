@@ -42,6 +42,7 @@ export default function AccountLayout() {
         headerLeft: renderHeaderLeft,
       }}
     >
+      <Stack.Screen name="device-check" options={customHeaderStackOptions} />
       <Stack.Screen name="help" options={customHeaderStackOptions} />
       <Stack.Screen name="index" options={customHeaderStackOptions} />
       <Stack.Screen name="profile" options={{ title: 'Profile', headerLargeTitle: false }} />

@@ -1,6 +1,6 @@
 import { initLlama, type LlamaContext } from 'llama.rn';
 import Constants from 'expo-constants';
-import { modelPath, modelReady, type AndroidModelId } from './models';
+import { modelPath, modelReady } from './models';
 import type { ReasoningRequest, ReasoningResponse, LocalReasoningReadiness } from '@/types';
 import { useConfigStore } from '@/store/useConfigStore';
 import { AndroidDictation } from '../../modules/android-dictation/src';
@@ -17,7 +17,8 @@ function exclusive<T>(work: () => Promise<T>): Promise<T> {
   queue = result.catch(() => undefined);
   return result;
 }
-export function selectedTextModel(): AndroidModelId {
+export type AndroidTextModelId = 'qwen-small' | 'qwen-balanced';
+export function selectedTextModel(): AndroidTextModelId {
   return useConfigStore.getState().config?.androidTextModel === 'qwen-small'
     ? 'qwen-small'
     : 'qwen-balanced';
@@ -32,8 +33,8 @@ export async function androidTextReadiness(): Promise<LocalReasoningReadiness> {
 export const LocalTextModel = {
   async processText(
     request: ReasoningRequest & { responseSchema?: object },
+    model: AndroidTextModelId = selectedTextModel(),
   ): Promise<ReasoningResponse> {
-    const model = selectedTextModel();
     return withAndroidInference(() =>
       exclusive(async () => {
         if (request.signal?.aborted) throw new Error(i18n.t('generationCancelled'));

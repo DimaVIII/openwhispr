@@ -10,7 +10,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 object AudioDecoder {
-  fun decode(context: Context, input: File, cancelled: () -> Boolean = { false }): Map<String, Any> {
+  fun decode(context: Context, input: File, maxDurationMs: Long? = null, cancelled: () -> Boolean = { false }): Map<String, Any> {
     val output = File(context.cacheDir, "decoded-${System.nanoTime()}.wav")
     val extractor = MediaExtractor()
     var decoder: MediaCodec? = null
@@ -25,6 +25,9 @@ object AudioDecoder {
       } ?: error(context.getString(R.string.ow_audio_unreadable))
       extractor.selectTrack(track)
       val format = extractor.getTrackFormat(track)
+      if (maxDurationMs != null && format.containsKey(MediaFormat.KEY_DURATION)) {
+        require(format.getLong(MediaFormat.KEY_DURATION) <= maxDurationMs * 1000) { "SAMPLE_TOO_LONG" }
+      }
       var rate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
       var channels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
       val codec = MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME)!!)
@@ -67,6 +70,7 @@ object AudioDecoder {
               }
             }
             wav.write(bytes.array(), 0, bytes.position())
+            if (maxDurationMs != null) require(outputFrames * 1000 / 16000 <= maxDurationMs) { "SAMPLE_TOO_LONG" }
             outputEnded = info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
             codec.releaseOutputBuffer(slot, false)
             check(outputFrames < 16000L * 3600) { "Audio uploads must be shorter than one hour." }

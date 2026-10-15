@@ -19,7 +19,22 @@ export interface LocalSpeechResult {
   processingMs: number;
   tokenTimings?: { token: string; startTime: number; endTime: number }[];
 }
+export interface DeviceProfile {
+  manufacturer: string;
+  model: string;
+  androidVersion: string;
+  apiLevel: number;
+  totalMemoryBytes: number;
+  availableMemoryBytes: number;
+  lowMemory: boolean;
+  lowRamDevice: boolean;
+  freeStorageBytes: number;
+  cpuCores: number;
+  thermalStatus: number | null;
+  emulator: boolean;
+}
 interface NativeDictation {
+  getDeviceProfile(): DeviceProfile;
   getLocale(): string;
   getStatus(): BubbleStatus;
   openSettings(kind: 'overlay' | 'accessibility' | 'battery' | 'app'): void;
@@ -31,6 +46,9 @@ interface NativeDictation {
   startRecording(): Promise<void>;
   stopRecording(cancel: boolean): Promise<Recording>;
   decodeAudio(uri: string): Promise<Recording>;
+  prepareSampleDecode(): string;
+  cancelSampleDecode(id: string): void;
+  decodeSampleAudio(uri: string, id: string): Promise<Recording>;
   sha256(uri: string): Promise<string>;
   transcribeParakeet(uri: string, modelDirectory: string): Promise<LocalSpeechResult>;
   cancelParakeet(): void;

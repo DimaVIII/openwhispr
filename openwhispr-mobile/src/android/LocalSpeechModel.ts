@@ -6,7 +6,7 @@ import { tokenTimingsToWhisperSegments } from '@/services/transcription/parakeet
 import type { TranscriptionResponse } from '@/types';
 import i18n from './strings';
 import Constants from 'expo-constants';
-import { selectedSpeechModel } from './speechSelection';
+import { selectedSpeechModel, type AndroidSpeechModelId } from './speechSelection';
 import { speechModelSupportsLanguages } from './speechCapabilities';
 import { getPreferredTranscriptionLanguages } from '@/lib/transcriptionLanguage';
 
@@ -16,12 +16,17 @@ let generation = 0;
 export const LocalSpeechModel = {
   async transcribe(
     uri: string,
-    options: { language?: string; wordTimestamps?: boolean },
+    options: {
+      language?: string;
+      wordTimestamps?: boolean;
+      androidModel?: AndroidSpeechModelId;
+      signal?: AbortSignal;
+    },
   ): Promise<TranscriptionResponse> {
     const job = generation;
-    const model = selectedSpeechModel();
+    const model = options.androidModel ?? selectedSpeechModel();
     return withAndroidInference(async () => {
-      if (job !== generation) throw new Error(i18n.t('cancelled'));
+      if (job !== generation || options.signal?.aborted) throw new Error(i18n.t('cancelled'));
       const languages =
         options.language && options.language !== 'auto'
           ? [options.language]
@@ -34,13 +39,20 @@ export const LocalSpeechModel = {
       await LocalTextModel.release();
       if (model === 'parakeet-v3') await AndroidDictation!.releaseMoonshine();
       else await AndroidDictation!.releaseParakeet();
-      if (job !== generation) throw new Error(i18n.t('cancelled'));
+      if (job !== generation || options.signal?.aborted) throw new Error(i18n.t('cancelled'));
       // The native engine decodes compressed uploads and owns its temporary PCM file.
-      const result =
+      const cancel = () => {
+        if (model === 'parakeet-v3') AndroidDictation!.cancelParakeet();
+        else AndroidDictation!.cancelMoonshine();
+      };
+      options.signal?.addEventListener('abort', cancel, { once: true });
+      const result = await (async () =>
         model === 'parakeet-v3'
           ? await AndroidDictation!.transcribeParakeet(uri, modelPath(model))
-          : await AndroidDictation!.transcribeMoonshine(uri, modelPath(model), model);
-      if (job !== generation) throw new Error(i18n.t('cancelled'));
+          : await AndroidDictation!.transcribeMoonshine(uri, modelPath(model), model))().finally(
+        () => options.signal?.removeEventListener('abort', cancel),
+      );
+      if (job !== generation || options.signal?.aborted) throw new Error(i18n.t('cancelled'));
       if (diagnostics)
         console.log(`[android-speech] model=${model} elapsedMs=${result.processingMs}`);
       return {

@@ -3,6 +3,9 @@ package com.openwhispr.dictation
 import android.content.Intent
 import android.net.Uri
 import android.os.PowerManager
+import android.os.Build
+import android.os.StatFs
+import android.app.ActivityManager
 import android.provider.Settings
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.modules.Module
@@ -10,9 +13,13 @@ import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.functions.Queues
 import java.io.File
 import java.security.MessageDigest
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 
 class AndroidDictationModule : Module() {
   private var recorder: WavRecorder? = null
+  private val sampleDecodes = ConcurrentHashMap<String, AtomicBoolean>()
   private val providerRuntime = lazy { ProviderTransport(context) }
   private val speechRuntime = lazy { ParakeetEngine(context) }
   private val moonshineRuntime = lazy { MoonshineEngine(context) }
@@ -38,6 +45,8 @@ class AndroidDictationModule : Module() {
       DictationService.instance?.updateVisibility()
     }
     OnDestroy {
+      sampleDecodes.values.forEach { it.set(true) }
+      sampleDecodes.clear()
       appContext.reactContext?.let {
         it.stopService(Intent(it, DictationService::class.java))
         it.stopService(Intent(it, MeetingCaptureService::class.java))
@@ -88,6 +97,22 @@ class AndroidDictationModule : Module() {
     AsyncFunction("requestProvider") { options: Map<String, Any?> -> providers.request(options) }
     Function("cancelProviderRequest") { id: String -> providers.cancel(id) }
     Function("getLocale") { context.resources.configuration.locales[0].toLanguageTag() }
+    Function("getDeviceProfile") {
+      val manager = context.getSystemService(ActivityManager::class.java)
+      val memory = ActivityManager.MemoryInfo()
+      manager.getMemoryInfo(memory)
+      val power = context.getSystemService(PowerManager::class.java)
+      mapOf(
+        "manufacturer" to Build.MANUFACTURER, "model" to Build.MODEL,
+        "androidVersion" to Build.VERSION.RELEASE, "apiLevel" to Build.VERSION.SDK_INT,
+        "totalMemoryBytes" to memory.totalMem.toDouble(), "availableMemoryBytes" to memory.availMem.toDouble(),
+        "lowMemory" to memory.lowMemory, "lowRamDevice" to manager.isLowRamDevice,
+        "freeStorageBytes" to StatFs(context.filesDir.path).availableBytes.toDouble(),
+        "cpuCores" to Runtime.getRuntime().availableProcessors(),
+        "thermalStatus" to if (Build.VERSION.SDK_INT >= 29) power.currentThermalStatus else null,
+        "emulator" to (Build.FINGERPRINT.startsWith("generic") || Build.MODEL.contains("sdk_gphone") || Build.HARDWARE in listOf("goldfish", "ranchu"))
+      )
+    }
     Function("getStatus") {
       mapOf("overlay" to Settings.canDrawOverlays(context), "accessibility" to (InsertionService.instance != null),
         "enabled" to (DictationService.instance != null),
@@ -139,6 +164,19 @@ class AndroidDictationModule : Module() {
       try { active.stop(cancel) } finally { active.close(); recorder = null }
     }
     AsyncFunction("decodeAudio") { uri: String -> AudioDecoder.decode(context, localFile(uri)) }
+    Function("prepareSampleDecode") {
+      val id = UUID.randomUUID().toString()
+      sampleDecodes[id] = AtomicBoolean(false)
+      id
+    }
+    Function("cancelSampleDecode") { id: String -> sampleDecodes[id]?.set(true) }
+    AsyncFunction("decodeSampleAudio") { uri: String, id: String ->
+      val cancelled = requireNotNull(sampleDecodes[id]) { "Sample cancelled." }
+      try {
+        check(!cancelled.get()) { "Sample cancelled." }
+        AudioDecoder.decode(context, localFile(uri), maxDurationMs = 30000) { cancelled.get() }
+      } finally { sampleDecodes.remove(id) }
+    }
     AsyncFunction("sha256") { uri: String ->
       val digest = MessageDigest.getInstance("SHA-256")
       localFile(uri).inputStream().buffered().use { input ->
