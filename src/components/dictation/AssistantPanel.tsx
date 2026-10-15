@@ -27,7 +27,7 @@ import {
   AGENT_TOOL_NAME_FALLBACK_KEY,
 } from "../../helpers/agentToolPresentation";
 import { useCopyFeedback } from "../../hooks/useCopyFeedback";
-import type { AgentState, ChatImageAttachment } from "../chat/types";
+import type { AgentState, ChatImageAttachment, Message } from "../chat/types";
 import {
   normalizeAgentSelectionContext,
   type AgentSelectionContext,
@@ -152,7 +152,13 @@ export function AssistantPanel({
     .reverse()
     .find((message) => message.role === "assistant");
   const responseContent = latestAssistantMessage?.content ?? "";
-  const helpEvidence = extractHelpEvidence(latestAssistantMessage?.toolCalls);
+  // A follow-up keeps the previous answer, and its help sources, on screen
+  // until the new answer has content.
+  const displayedMessageRef = useRef<Message | undefined>(undefined);
+  if (responseContent) displayedMessageRef.current = latestAssistantMessage;
+  const displayedMessage = displayedMessageRef.current;
+  const displayedResponse = displayedMessage?.content ?? "";
+  const helpEvidence = extractHelpEvidence(displayedMessage?.toolCalls);
   const responseCopyText = helpAnswerPlainText(
     responseContent,
     helpEvidence,
@@ -301,9 +307,6 @@ export function AssistantPanel({
     return () => onBusyChange(false);
   }, [isBusy, onBusyChange]);
 
-  const displayedResponseRef = useRef("");
-  if (responseContent) displayedResponseRef.current = responseContent;
-  const displayedResponse = responseContent || displayedResponseRef.current;
   // Keep the previous response ineligible throughout a follow-up request. Audio
   // processing can return voiceState to idle one render before the chat stream
   // reports busy; without this latch, the old response briefly restores the
@@ -329,7 +332,7 @@ export function AssistantPanel({
     persistence.handleNewChat();
     onConversationIdChange(null);
     clearSelectedContext();
-    displayedResponseRef.current = "";
+    displayedMessageRef.current = undefined;
     onConversationReset();
   }, [
     clearSelectedContext,

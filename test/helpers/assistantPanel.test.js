@@ -1082,3 +1082,67 @@ for (const scenario of [
     if (scenario.source === "bundled") assert.match(copy, /could not be checked/);
   });
 }
+
+test("voice help sources stay with the answer on screen while a follow-up runs", async (t) => {
+  let root = null;
+  t.after(async () => {
+    if (root) await React.act(async () => root.unmount());
+  });
+  const helpCall = (id, path) => ({
+    id,
+    name: "search_openwhispr_help",
+    status: "completed",
+    arguments: "{}",
+    metadata: {
+      kind: "product-help",
+      sources: [
+        {
+          title: path.split("/").pop(),
+          path,
+          url: `https://docs.openwhispr.com${path}`,
+          source: "live",
+          reason: null,
+        },
+      ],
+      readAt: null,
+    },
+  });
+  const answered = {
+    id: "answered",
+    role: "assistant",
+    content: "Open Settings → App → Hotkeys.",
+    isStreaming: false,
+    toolCalls: [helpCall("first", "/help/dictation/hotkeys")],
+  };
+  installBrowserGlobals(t);
+  const container = installInteractiveDom(t);
+  const { AssistantPanel, props } = await setupAssistantPanel(t, [answered]);
+  const { createRoot } = require("react-dom/client");
+  root = createRoot(container);
+  await React.act(async () => root.render(React.createElement(AssistantPanel, props)));
+
+  // The follow-up's lookup has finished but its answer hasn't started streaming.
+  globalThis.__assistantPanelMessages = [
+    answered,
+    { id: "question", role: "user", content: "And local models?" },
+    {
+      id: "pending",
+      role: "assistant",
+      content: "",
+      isStreaming: true,
+      toolCalls: [helpCall("second", "/guides/local-models")],
+    },
+  ];
+  await React.act(async () => root.render(React.createElement(AssistantPanel, { ...props })));
+
+  const link = (path) =>
+    findElement(
+      container,
+      (element) =>
+        element.tagName === "A" &&
+        element.getAttribute("href") === `https://docs.openwhispr.com${path}`
+    );
+  assert.match(container.textContent, /Open Settings → App → Hotkeys/);
+  assert.ok(link("/help/dictation/hotkeys"), "the answer on screen keeps its own source");
+  assert.equal(link("/guides/local-models"), null, "the pending answer's source waits for it");
+});
