@@ -5310,6 +5310,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
 
       await this.cleanupStreaming();
       this.isRecording = false;
+      this.isProcessing = false;
       this.recordingStartTime = null;
       this.onStateChange?.({ isRecording: false, isProcessing: false, isStreaming: false });
       return false;

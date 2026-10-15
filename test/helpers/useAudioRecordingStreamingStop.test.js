@@ -14,8 +14,16 @@ export default class AudioManager {
 }
 `;
 
-for (const phase of ["streaming", "before manager startup", "batch"]) {
+for (const phase of [
+  "streaming",
+  "before manager startup",
+  "visual frames",
+  "batch",
+  "batch visual frames",
+]) {
   test(`Stop while the hook start lock is held (${phase})`, async (t) => {
+    const isBatch = phase.startsWith("batch");
+    const holdsFrames = phase.endsWith("visual frames");
     let root;
     t.after(async () => {
       if (root) await React.act(async () => root.unmount());
@@ -34,16 +42,19 @@ for (const phase of ["streaming", "before manager startup", "batch"]) {
           onCancelDictationPreparation: noopDispose,
           onStopDictation: noopDispose,
           captureDictationTarget: () =>
-            phase === "before manager startup" ? targetGate.promise : undefined,
+            phase === "before manager startup" || holdsFrames ? targetGate.promise : undefined,
         },
       },
     });
     const container = installHookDom(t);
+    const pendingFrames = [];
     globalThis.requestAnimationFrame = (callback) => {
-      callback();
+      if (holdsFrames) pendingFrames.push(callback);
+      else callback();
       return 1;
     };
     const gate = Promise.withResolvers();
+    let prepareCalls = 0;
     let startCalls = 0;
     let stopCalls = 0;
     let state = {};
@@ -56,11 +67,14 @@ for (const phase of ["streaming", "before manager startup", "batch"]) {
       setVoiceAgentRequested() {},
       setAssistantSelectionContext() {},
       setTranslationRequested() {},
-      shouldUseStreaming: () => phase !== "batch",
+      shouldUseStreaming: () => !isBatch,
       isSttConfigStale: () => false,
       getRecordingAudioLevel: () => 0,
       cleanup() {},
       cancelPreparedMicCapture() {},
+      prepareMicCapture() {
+        prepareCalls++;
+      },
       async startStreamingRecording() {
         startCalls++;
         state = { isStreaming: true, isStreamingStartInProgress: true };
@@ -109,6 +123,7 @@ for (const phase of ["streaming", "before manager startup", "batch"]) {
     }
     root = createRoot(container);
     await React.act(async () => root.render(React.createElement(Harness)));
+    if (holdsFrames) t.mock.timers.enable({ apis: ["setTimeout"] });
     let started;
     await React.act(async () => {
       started = api.startRecording();
@@ -122,11 +137,23 @@ for (const phase of ["streaming", "before manager startup", "batch"]) {
     });
     const stopsBeforeReadiness = stopCalls;
     await React.act(async () => {
+      while (pendingFrames.length) pendingFrames.shift()();
+      await new Promise(setImmediate);
+    });
+    if (holdsFrames && !isBatch) {
+      assert.equal(
+        prepareCalls,
+        0,
+        "a completed visual wait must not open the microphone after Stop"
+      );
+      assert.equal(startCalls, 0);
+    }
+    await React.act(async () => {
       targetGate.resolve();
       gate.resolve();
       await started;
     });
-    assert.equal(callsBeforeStop, phase === "before manager startup" ? 0 : 1);
+    assert.equal(callsBeforeStop, phase === "before manager startup" || holdsFrames ? 0 : 1);
     assert.equal(
       stopsBeforeReadiness,
       phase === "streaming" ? 1 : 0,
@@ -134,10 +161,10 @@ for (const phase of ["streaming", "before manager startup", "batch"]) {
     );
     assert.equal(
       stopCalls,
-      phase === "before manager startup" ? 0 : 1,
+      phase === "before manager startup" || (holdsFrames && !isBatch) ? 0 : 1,
       "a deferred Stop must finalize exactly once"
     );
-    if (phase === "before manager startup") {
+    if (phase === "before manager startup" || (holdsFrames && !isBatch)) {
       assert.equal(startCalls, 0, "Stop during preparation must not later begin streaming capture");
       assert.equal(api.isPreparing, false);
       assert.equal(api.isStopping, false);

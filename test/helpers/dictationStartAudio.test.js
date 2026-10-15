@@ -889,3 +889,38 @@ for (const provider of ["openai-realtime", "tinfoil-realtime", "gemini"]) {
     assert.equal(r.manager.isProcessing, false);
   });
 }
+
+for (const provider of ["openai-realtime", "tinfoil-realtime", "gemini"]) {
+  test(`${provider} startup rejection after Stop returns to idle and permits retry`, async (t) => {
+    const s = scenario(t, provider === "gemini" ? "gemini-streaming" : "dictation-realtime");
+    const r = await rendererScenario(t, s, provider);
+    const states = [];
+    r.manager.onStateChange = (state) => states.push(state);
+    const gate = (tokenGate = Promise.withResolvers());
+    const started = r.manager.startStreamingRecording();
+    while (!r.calls.includes("start")) await new Promise(setImmediate);
+    s.send(Buffer.alloc(3200, 1));
+    await r.manager.stopStreamingRecording();
+    gate.reject(new Error("test token unavailable"));
+    assert.equal(await started, false);
+    assert.equal(
+      r.manager.getState().isProcessing,
+      false,
+      "failed startup must release the processing guard"
+    );
+    assert.equal(r.manager.getState().isRecording, false);
+    assert.equal(r.manager.getState().isStreaming, false);
+    assert.equal(r.manager.streamingStartInProgress, false);
+    assert.deepEqual(r.completions, []);
+    assert.equal(r.errors.length, 1, "the failed request surfaces once");
+    assert.equal(states.at(-1).isProcessing, false, "reported state matches the internal state");
+    assert.equal(r.manager.streamingStream, null);
+    tokenGate = null;
+    assert.equal(
+      await r.manager.startStreamingRecording(),
+      true,
+      "the next dictation is not blocked"
+    );
+    await r.manager.cancelStreamingRecording();
+  });
+}

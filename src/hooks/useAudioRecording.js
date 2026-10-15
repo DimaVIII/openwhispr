@@ -164,6 +164,9 @@ export const useAudioRecording = (toast, options = {}) => {
         setIsAssistantVoice(voiceAgentRequested);
         await waitForVisualFrames();
         if (preparationGeneration !== preparationGenerationRef.current) return false;
+        if (stopRequestedDuringStartRef.current && audioManagerRef.current.shouldUseStreaming()) {
+          return false;
+        }
 
         // Start acquisition only after the compact thinking frame has reached
         // the compositor. startRecording() joins this prepared capture, so the
