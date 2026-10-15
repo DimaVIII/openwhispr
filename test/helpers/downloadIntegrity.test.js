@@ -138,19 +138,17 @@ test("complete compressed archives are checked before extraction", async (t) => 
 test("cancelling archive verification stops the read before extraction can begin", async (t) => {
   const { validateModelArchive } = require("../../src/helpers/modelArchiveIntegrity");
   const { createDownloadSignal, dest } = setup(t, Buffer.alloc(0));
-  const originalRead = fs.createReadStream;
-  const stalled = new PassThrough();
-  fs.createReadStream = () => stalled;
-  t.after(() => {
-    fs.createReadStream = originalRead;
-    stalled.destroy();
-  });
+  fs.writeFileSync(
+    dest,
+    Buffer.from(require("../fixtures/large-model-archive.json").base64, "base64")
+  );
   const { signal, abort } = createDownloadSignal();
+  const previousAbort = () => {};
+  signal.onAbort = previousAbort;
   const verifying = validateModelArchive(dest, "root", signal);
-  abort();
-  // Give the old validator a terminal input too: it wrongly succeeds instead
-  // of hanging this regression test while ignoring the cancelled signal.
-  stalled.end(Buffer.from(require("../fixtures/model-archives.json").valid, "base64"));
+  setTimeout(abort, 50);
   await assert.rejects(verifying, /abort|cancel/i);
-  assert.equal(stalled.destroyed, true);
+  assert.equal(signal.onAbort, previousAbort);
+  // The worker has exited, so callers can immediately remove the archive on Windows too.
+  fs.unlinkSync(dest);
 });

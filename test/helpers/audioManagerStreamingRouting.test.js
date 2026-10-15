@@ -653,3 +653,36 @@ for (const translationRequested of [false, true]) {
     }
   });
 }
+
+test("missing published dictation model starts no streaming, network, or local fallback", async (t) => {
+  const manager = await loadManager(t);
+  const model = "registry-deepgram-missing";
+  globalThis.localStorage.setItem(
+    "publishedModelIds",
+    JSON.stringify([JSON.stringify(["transcriptionProviders", "deepgram", model])])
+  );
+  setSettings({
+    cloudTranscriptionProvider: "deepgram",
+    cloudTranscriptionModel: model,
+    deepgramApiKey: "dg-test",
+    allowLocalFallback: true,
+  });
+  manager.getEffectiveSttLanguage = () => "en";
+  manager.getTranscriptionModel = () => "nova-3";
+  let requests = 0;
+  manager.getAPIKey = async () => {
+    requests++;
+    return "key";
+  };
+  globalThis.window.electronAPI.transcribeLocalWhisper = async () => {
+    requests++;
+    return { success: true, text: "fallback" };
+  };
+  assert.equal(manager.shouldUseStreaming(), false);
+  assert.equal(await manager.warmupStreamingConnection(), false);
+  await assert.rejects(manager.processWithOpenAIAPI(new Blob(["audio"])), {
+    code: "MODEL_CATALOG_UNAVAILABLE",
+    messageKey: "onboarding.rehaul.provider.errors.modelNotFound",
+  });
+  assert.equal(requests, 0);
+});

@@ -1,4 +1,5 @@
 import { useRegistryVersion } from "../hooks/useRegistryVersion";
+import { wasPublishedModel } from "../models/registryModelHistory";
 import { useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "./ui/button";
@@ -677,6 +678,18 @@ export default function TranscriptionModelPicker({
     // Reconcile null means the input needs no correction — echo the browsed
     // input, not the committed pair, or browsing to the Custom tab (always
     // reconciled as valid) would never display it.
+    // History only covers a missing catalog entry; a known model filtered out
+    // by this scope must still be reconciled (for example batch-only in meetings).
+    if (
+      !browsedCloudProvider &&
+      cloudProviders.some((provider) => provider.id === selectedCloudProvider) &&
+      !getTranscriptionProviders()
+        .find((provider) => provider.id === selectedCloudProvider)
+        ?.models.some((model) => model.id === selectedCloudModel) &&
+      wasPublishedModel("transcriptionProviders", selectedCloudProvider, selectedCloudModel)
+    ) {
+      return { provider: selectedCloudProvider, model: selectedCloudModel };
+    }
     return (
       reconcileCloudProviderSelection({
         selectedProvider: browsedCloudProvider ?? selectedCloudProvider,

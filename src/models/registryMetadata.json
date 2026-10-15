@@ -8,5 +8,13 @@
     "envelope": "ad6476c1f69d0a0a141c4856f456b6ecc1b0abed38dcca57ce10b8aab21b7ca9",
     "selection": "ac0b1bb56c0918addeb03b662378e448304aaa658745785c910df6d8ddb2775c"
   },
-  "payloadSha256": "0205f39330826101d09d7b8ba04de4a207b945391e1f061f408c27f9bf557006"
+  "payloadSha256": "0205f39330826101d09d7b8ba04de4a207b945391e1f061f408c27f9bf557006",
+  "runtimeContract": {
+    "sourceCommit": "2e8f2b2d71735d01c9f52b27ead3dead4d319dc8",
+    "contractHashes": {
+      "schema": "cdbafb6a8d87b24226382b0480b44ea1f0f1aaba80a8e2e158417f1e16385288",
+      "envelope": "ad6476c1f69d0a0a141c4856f456b6ecc1b0abed38dcca57ce10b8aab21b7ca9",
+      "selection": "390b8a538a301f259d1dec8674ed7500c4270259f2a254892467917970b94f41"
+    }
+  }
 }

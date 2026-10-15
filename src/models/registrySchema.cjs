@@ -1,18 +1,20 @@
 const { z } = require("zod");
-const { selectCatalogForVersion } = require("./registrySelection.js");
+const { selectCatalogForVersion, isRegistryVersion } = require("./registrySelection.js");
 
 const text = z.string().min(1).max(4096);
 const id = z
   .string()
   .min(1)
   .max(200)
-  .regex(/^[A-Za-z0-9][A-Za-z0-9._:/+-]*$/);
-const version = z
-  .string()
-  .regex(/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/)
-  .refine((value) =>
-    value.split(".").every((part) => Number.isSafeInteger(Number(part))),
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._:/+-]*$/)
+  .refine(
+    (value) =>
+      !/^[A-Za-z]:/.test(value) &&
+      value.split("/").every((part) => part !== "" && part !== "." && part !== ".."),
+    "Unsafe model ID path"
   );
+const version = z.string().refine(isRegistryVersion, "Invalid semantic version");
+const revision = z.string().regex(/^[a-f0-9]{40}$/);
 const sha256 = z.string().regex(/^[a-f0-9]{64}$/);
 const positive = z.number().positive().finite();
 const safeName = z
@@ -26,7 +28,7 @@ const safeName = z
       !/^temp-extract-/i.test(value) &&
       !/\.(tmp|tar\.bz2)$/i.test(value) &&
       !value.endsWith(".") &&
-      !/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(value),
+      !/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(value)
   );
 const hfRepo = z
   .string()
@@ -51,18 +53,13 @@ function isModelUrl(value) {
       return /^\/[^/]+\/[^/]+\/resolve\/[^/]+\/.+/.test(url.pathname);
     return (
       url.hostname === "github.com" &&
-      /^\/(k2-fsa|ggml-org|OpenWhispr)\/[^/]+\/releases\/download\/[^/]+\/.+/.test(
-        url.pathname,
-      )
+      /^\/(k2-fsa|ggml-org|OpenWhispr)\/[^/]+\/releases\/download\/[^/]+\/.+/.test(url.pathname)
     );
   } catch {
     return false;
   }
 }
-const modelUrl = z
-  .string()
-  .max(2048)
-  .refine(isModelUrl, "Unsupported model download URL");
+const modelUrl = z.string().max(2048).refine(isModelUrl, "Unsupported model download URL");
 const description = {
   name: text,
   description: text,
@@ -93,23 +90,21 @@ const localModel = z
     quantization: text,
     contextLength: z.number().int().positive().max(10000000),
     hfRepo,
+    revision: revision.optional(),
     recommended: z.boolean().optional(),
     supportsThinking: z.boolean().optional(),
     sha256: sha256.optional(),
     draftHfRepo: hfRepo.optional(),
+    draftRevision: revision.optional(),
     draftFileName: safeName.optional(),
     draftSizeBytes: positive.optional(),
     draftSha256: sha256.optional(),
   })
   .strict()
   .refine((model) => {
-    const draft = [
-      model.draftHfRepo,
-      model.draftFileName,
-      model.draftSizeBytes,
-    ];
+    const draft = [model.draftHfRepo, model.draftFileName, model.draftSizeBytes];
     return draft.every((value) => value === undefined)
-      ? model.draftSha256 === undefined
+      ? model.draftSha256 === undefined && model.draftRevision === undefined
       : draft.every((value) => value !== undefined);
   }, "Incomplete draft artifact");
 const whisperModel = z
@@ -165,7 +160,7 @@ const catalogSchema = z
           defaultModel: id.optional(),
           models: list(cloudModel),
         })
-        .strict(),
+        .strict()
     ),
     enterpriseProviders: list(
       z
@@ -175,7 +170,7 @@ const catalogSchema = z
           defaultModel: id.optional(),
           models: list(cloudModel),
         })
-        .strict(),
+        .strict()
     ),
     transcriptionProviders: list(
       z
@@ -185,7 +180,7 @@ const catalogSchema = z
           batchModel: id.optional(),
           models: list(transcriptionModel),
         })
-        .strict(),
+        .strict()
     ),
     localProviders: list(
       z
@@ -194,7 +189,7 @@ const catalogSchema = z
           baseUrl: z.literal("https://huggingface.co"),
           models: list(localModel),
         })
-        .strict(),
+        .strict()
     ),
     // Preserved legacy sections have no runtime consumer. They cannot be edited remotely.
     diarizationModels: z.record(z.string(), z.json()),
@@ -219,7 +214,7 @@ function rejectUnsafeKeys(value) {
   for (const [key, child] of Object.entries(value)) {
     requireCondition(
       !["__proto__", "prototype", "constructor"].includes(key),
-      "Unsafe registry property",
+      "Unsafe registry property"
     );
     rejectUnsafeKeys(child);
   }
@@ -231,24 +226,15 @@ function validateCatalog(input) {
   for (const section of PROVIDER_SECTIONS) {
     const providers = new Set();
     for (const item of data[section]) {
-      requireCondition(
-        !providers.has(item.id),
-        `Duplicate provider ${item.id}`,
-      );
+      requireCondition(!providers.has(item.id), `Duplicate provider ${item.id}`);
       providers.add(item.id);
       const models = new Set();
       for (const model of item.models) {
-        requireCondition(
-          !models.has(model.id),
-          `Duplicate model ${item.id}/${model.id}`,
-        );
+        requireCondition(!models.has(model.id), `Duplicate model ${item.id}/${model.id}`);
         models.add(model.id);
       }
       if (item.defaultModel)
-        requireCondition(
-          models.has(item.defaultModel),
-          `Missing default for ${item.id}`,
-        );
+        requireCondition(models.has(item.defaultModel), `Missing default for ${item.id}`);
     }
   }
   return data;
@@ -265,26 +251,30 @@ const NATIVE_MUTABLE_FIELDS = new Set([
 function assertNativeIdentity(next, previous) {
   for (const key of new Set([...Object.keys(next), ...Object.keys(previous)])) {
     if (NATIVE_MUTABLE_FIELDS.has(key)) continue;
-    requireCondition(
-      same(next[key], previous[key]),
-      `Changed native model identity: ${key}`,
-    );
+    requireCondition(same(next[key], previous[key]), `Changed native model identity: ${key}`);
   }
   for (const key of ["sha256", "draftSha256"]) {
     if (previous[key])
-      requireCondition(
-        next[key] === previous[key],
-        `Changed artifact digest: ${key}`,
-      );
+      requireCondition(next[key] === previous[key], `Changed artifact digest: ${key}`);
   }
 }
 function assertNewDownload(model) {
   requireCondition(!!model.sha256, "New model download requires sha256");
-  if (model.draftFileName)
-    requireCondition(
-      !!model.draftSha256,
-      "New draft download requires draftSha256",
-    );
+  if (model.hfRepo)
+    requireCondition(!!model.revision, "New model download requires a pinned revision");
+  for (const field of ["downloadUrl", "manifestUrl"]) {
+    if (!model[field]) continue;
+    const url = new URL(model[field]);
+    if (url.hostname === "huggingface.co")
+      requireCondition(
+        /^\/[^/]+\/[^/]+\/resolve\/[a-f0-9]{40}\//.test(url.pathname),
+        "New model download requires a pinned revision"
+      );
+  }
+  if (model.draftFileName) {
+    requireCondition(!!model.draftRevision, "New draft download requires a pinned revision");
+    requireCondition(!!model.draftSha256, "New draft download requires draftSha256");
+  }
 }
 
 function assertCompatibleCatalog(input, previousInput) {
@@ -294,38 +284,33 @@ function assertCompatibleCatalog(input, previousInput) {
     requireCondition(
       same(
         next[section].map((p) => p.id),
-        previous[section].map((p) => p.id),
+        previous[section].map((p) => p.id)
       ),
-      `Changed provider order in ${section}`,
+      `Changed provider order in ${section}`
     );
     requireCondition(
       next[section].length === previous[section].length,
-      `Changed providers in ${section}`,
+      `Changed providers in ${section}`
     );
     for (const oldProvider of previous[section]) {
       const provider = next[section].find((item) => item.id === oldProvider.id);
       requireCondition(!!provider, `Removed provider ${oldProvider.id}`);
-      for (const field of [
-        "baseUrl",
-        "allowCustomModelId",
-        "defaultModel",
-        "batchModel",
-      ]) {
+      for (const field of ["baseUrl", "allowCustomModelId", "defaultModel", "batchModel"]) {
         requireCondition(
           provider[field] === oldProvider[field],
-          `Changed provider contract ${provider.id}/${field}`,
+          `Changed provider contract ${provider.id}/${field}`
         );
       }
       requireCondition(
         provider.models[0]?.id === oldProvider.models[0]?.id,
-        `Changed default model for ${provider.id}`,
+        `Changed default model for ${provider.id}`
       );
       requireCondition(
         same(
           provider.models.slice(0, oldProvider.models.length).map((m) => m.id),
-          oldProvider.models.map((m) => m.id),
+          oldProvider.models.map((m) => m.id)
         ),
-        `Existing models must retain their order in ${provider.id}`,
+        `Existing models must retain their order in ${provider.id}`
       );
       for (const model of provider.models) {
         if (!oldProvider.models.some((old) => old.id === model.id)) {
@@ -339,22 +324,19 @@ function assertCompatibleCatalog(input, previousInput) {
             .flatMap((key) => next[key])
             .flatMap((p) => p.models)
             .filter((m) => m.id === model.id);
-          requireCondition(
-            matches.length === 1,
-            `Ambiguous new model ID ${model.id}`,
-          );
+          requireCondition(matches.length === 1, `Ambiguous new model ID ${model.id}`);
           if (section === "transcriptionProviders") {
             requireCondition(
               !["xai", "corti"].includes(provider.id),
-              `Transcription adapter ${provider.id} does not support model selection`,
+              `Transcription adapter ${provider.id} does not support model selection`
             );
             requireCondition(
               !model.streaming || oldProvider.models.some((m) => m.streaming),
-              `Unsupported streaming provider ${provider.id}`,
+              `Unsupported streaming provider ${provider.id}`
             );
             requireCondition(
               model.streaming || oldProvider.models.some((m) => !m.streaming),
-              `Unsupported batch provider ${provider.id}`,
+              `Unsupported batch provider ${provider.id}`
             );
           }
           if (section === "localProviders") {
@@ -367,70 +349,60 @@ function assertCompatibleCatalog(input, previousInput) {
               !occupied.includes(model.fileName.toLowerCase()) &&
                 (!model.draftFileName ||
                   (!occupied.includes(model.draftFileName.toLowerCase()) &&
-                    model.fileName.toLowerCase() !==
-                      model.draftFileName.toLowerCase())),
-              "Colliding model artifact filename",
+                    model.fileName.toLowerCase() !== model.draftFileName.toLowerCase())),
+              "Colliding model artifact filename"
             );
           }
         }
       }
       for (const oldModel of oldProvider.models) {
         const model = provider.models.find((item) => item.id === oldModel.id);
-        requireCondition(
-          !!model,
-          `Removed model ${provider.id}/${oldModel.id}`,
-        );
+        requireCondition(!!model, `Removed model ${provider.id}/${oldModel.id}`);
         requireCondition(
           model.minAppVersion === oldModel.minAppVersion,
-          "Changed published minimum app version",
+          "Changed published minimum app version"
         );
         if (section === "localProviders") assertNativeIdentity(model, oldModel);
         if (section === "transcriptionProviders")
           requireCondition(
             model.streaming === oldModel.streaming,
-            "Changed transcription transport",
+            "Changed transcription transport"
           );
       }
       if (section === "localProviders")
         for (const model of provider.models) {
-          if (!oldProvider.models.some((old) => old.id === model.id))
-            assertNewDownload(model);
+          if (!oldProvider.models.some((old) => old.id === model.id)) assertNewDownload(model);
         }
     }
   }
   for (const section of MAP_SECTIONS) {
     requireCondition(
       same(
-        Object.keys(next[section]).slice(
-          0,
-          Object.keys(previous[section]).length,
-        ),
-        Object.keys(previous[section]),
+        Object.keys(next[section]).slice(0, Object.keys(previous[section]).length),
+        Object.keys(previous[section])
       ),
-      `Existing models must retain their order in ${section}`,
+      `Existing models must retain their order in ${section}`
     );
     for (const [modelId, model] of Object.entries(next[section])) {
       if (Object.hasOwn(previous[section], modelId)) continue;
       requireCondition(
-        MAP_SECTIONS.filter((key) => Object.hasOwn(next[key], modelId))
-          .length === 1,
-        `Ambiguous local model ID ${modelId}`,
+        MAP_SECTIONS.filter((key) => Object.hasOwn(next[key], modelId)).length === 1,
+        `Ambiguous local model ID ${modelId}`
       );
       if (section === "whisperModels")
         requireCondition(
           Object.entries(next.whisperModels).every(
             ([id, other]) =>
-              id === modelId ||
-              other.fileName.toLowerCase() !== model.fileName.toLowerCase(),
+              id === modelId || other.fileName.toLowerCase() !== model.fileName.toLowerCase()
           ),
-          "Colliding Whisper filename",
+          "Colliding Whisper filename"
         );
       if (section === "parakeetModels") {
         requireCondition(
           Object.keys(next.parakeetModels).filter(
-            (id) => id.toLowerCase() === modelId.toLowerCase(),
+            (id) => id.toLowerCase() === modelId.toLowerCase()
           ).length === 1,
-          "Colliding Parakeet directory",
+          "Colliding Parakeet directory"
         );
         const engine = (m) => [
           m.runtime || "offline",
@@ -438,10 +410,8 @@ function assertCompatibleCatalog(input, previousInput) {
           m.sherpaModelType || "auto",
         ];
         requireCondition(
-          Object.values(previous.parakeetModels).some((old) =>
-            same(engine(old), engine(model)),
-          ),
-          "Unsupported native engine combination",
+          Object.values(previous.parakeetModels).some((old) => same(engine(old), engine(model))),
+          "Unsupported native engine combination"
         );
       }
     }
@@ -449,7 +419,7 @@ function assertCompatibleCatalog(input, previousInput) {
       requireCondition(Object.hasOwn(next[section], modelId), `Removed model ${modelId}`);
       requireCondition(
         next[section][modelId].minAppVersion === oldModel.minAppVersion,
-        "Changed published minimum app version",
+        "Changed published minimum app version"
       );
       assertNativeIdentity(next[section][modelId], oldModel);
     }
@@ -457,10 +427,7 @@ function assertCompatibleCatalog(input, previousInput) {
       if (!Object.hasOwn(previous[section], modelId)) assertNewDownload(model);
   }
   for (const section of ["diarizationModels", "openwhisprCloudModels"])
-    requireCondition(
-      same(next[section], previous[section]),
-      `Changed legacy section ${section}`,
-    );
+    requireCondition(same(next[section], previous[section]), `Changed legacy section ${section}`);
   return next;
 }
 
@@ -473,9 +440,7 @@ function selectCatalog(input, fallback, appVersion) {
 const manifestSchema = z
   .object({
     schemaVersion: z.literal(1),
-    contractHashes: z
-      .object({ schema: sha256, envelope: sha256, selection: sha256 })
-      .strict(),
+    contractHashes: z.object({ schema: sha256, envelope: sha256, selection: sha256 }).strict(),
     manifestVersion: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
     publishedAt: z.iso.datetime(),
     sourceCommit: z.string().regex(/^[a-f0-9]{40}$/),

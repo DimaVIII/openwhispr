@@ -1172,7 +1172,7 @@ async function startApp() {
     applySnapshot: replaceRegistryData,
     fetch: (...args) => net.fetch(...args),
     onError: (error) =>
-      debugLogger.warn("Model registry update unavailable", { error: error.message }),
+      debugLogger?.warn("Model registry update unavailable", { error: error.message }),
   });
   await registryLoader.start();
   disposeRegistryIpc = registerRegistryIpc(ipcMain, (channel, snapshot) => {

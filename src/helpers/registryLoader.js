@@ -71,6 +71,14 @@ function createRegistryLoader({
   let stopped = false;
   let started = false;
 
+  function reportError(error) {
+    try {
+      Promise.resolve(onError(error)).catch(() => {});
+    } catch {
+      // Diagnostics must never turn recoverable registry errors into startup failures.
+    }
+  }
+
   function accept(bytes) {
     const manifest = validateManifest(verifyEnvelope(bytes, trustedKeys));
     if (stopped || manifest.manifestVersion <= snapshot.manifestVersion) return false;
@@ -94,7 +102,7 @@ function createRegistryLoader({
       await fs.rename(temporary, cachePath);
     } catch (error) {
       await fs.unlink(temporary).catch(() => {});
-      onError(error);
+      reportError(error);
     }
   }
 
@@ -129,7 +137,7 @@ function createRegistryLoader({
         ]);
         if (!stopped && !signal.aborted && accept(bytes)) await persist(bytes);
       } catch (error) {
-        if (!stopped) onError(error);
+        if (!stopped) reportError(error);
       } finally {
         clearTimeout(timer);
         controller = null;
@@ -145,7 +153,7 @@ function createRegistryLoader({
     try {
       accept(await readBoundedCache(cachePath));
     } catch (error) {
-      if (error.code !== "ENOENT") onError(error);
+      if (error.code !== "ENOENT") reportError(error);
     }
     if (stopped) return;
     startupTimer = setTimeout(() => {

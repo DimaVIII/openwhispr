@@ -1,7 +1,6 @@
 const fs = require("fs");
 const fsPromises = require("fs").promises;
 const path = require("path");
-const { pipeline } = require("stream/promises");
 const debugLogger = require("./debugLogger");
 const { runSystemTar } = require("./systemTar");
 const {
@@ -13,7 +12,7 @@ const {
   cleanupStaleDownloads,
   checkDiskSpace,
 } = require("./downloadUtils");
-const { validateModelArchive } = require("./modelArchiveIntegrity");
+const { validateModelArchive, extractModelArchive } = require("./modelArchiveIntegrity");
 const ParakeetServerManager = require("./parakeetServer");
 const { getModelsDirForService } = require("./modelDirUtils");
 const { assertParakeetSupported, getParakeetCapability } = require("./parakeetCapability");
@@ -591,9 +590,7 @@ class ParakeetManager {
       });
     }
 
-    const unbzip2 = require("unbzip2-stream");
-    const tar = require("tar");
-    await pipeline(fs.createReadStream(archivePath), unbzip2(), tar.x({ cwd: extractDir }));
+    await extractModelArchive(archivePath, extractDir);
   }
 
   _runSystemTar(archivePath, extractDir) {

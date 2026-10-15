@@ -206,3 +206,84 @@ test("future entries in the bundle do not prevent later compatible publications"
   assert.equal(x.loader.getSnapshot().manifestVersion, 3);
   assert.equal(x.loader.getSnapshot().data.cloudProviders[0].models.at(-1).id, "supported-c");
 });
+
+test("main's actual startup handler tolerates damaged caches before the logger initializes", async (t) => {
+  const vm = require("node:vm");
+  const { createRequire } = require("node:module");
+  const mainPath = path.join(__dirname, "../../main.js");
+  const source = fs.readFileSync(mainPath, "utf8");
+  const start = source.indexOf("  registryLoader = createRegistryLoader({");
+  const end = source.indexOf("  disposeRegistryIpc =", start);
+  assert.ok(start > 0 && end > start);
+  for (const bytes of ["", "{", signed(4).replace('"fixture"', '"unknown-key"'), null]) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "registry-main-startup-"));
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    const cachePath = path.join(dir, "model-registry.json");
+    if (bytes === null) fs.mkdirSync(cachePath);
+    else fs.writeFileSync(cachePath, bytes);
+    let loader;
+    let onError;
+    const context = {
+      path,
+      require: createRequire(mainPath),
+      debugLogger: null,
+      registryTrustedKeys: trustedKeys,
+      app: { getPath: () => dir, getVersion: () => "1.10.3" },
+      replaceRegistryData: () => {},
+      net: { fetch: async () => new Response(signed(3)) },
+      createRegistryLoader(config) {
+        onError = config.onError;
+        loader = createRegistryLoader(config);
+        t.after(() => loader.stop());
+        return loader;
+      },
+    };
+    await assert.doesNotReject(
+      vm.runInNewContext(`(async () => {${source.slice(start, end)}})()`, context)
+    );
+    assert.doesNotThrow(() => onError(new Error("logger still initializing")));
+    assert.equal(loader.getSnapshot().manifestVersion, 2);
+    await loader.refresh();
+    assert.equal(loader.getSnapshot().manifestVersion, 3);
+  }
+});
+
+test("throwing error reporters cannot interrupt cache fallback, refresh recovery, or persistence", async (t) => {
+  let response = "{";
+  const x = setup(t, {
+    onError: () => {
+      throw new Error("reporter unavailable");
+    },
+    fetch: async () => new Response(response),
+  });
+  fs.mkdirSync(x.config.cachePath);
+  await assert.doesNotReject(x.loader.start());
+  assert.equal(x.loader.getSnapshot().manifestVersion, 1);
+  await assert.doesNotReject(x.loader.refresh());
+  response = signed(2);
+  await assert.doesNotReject(x.loader.refresh());
+  assert.equal(x.loader.getSnapshot().manifestVersion, 2);
+});
+
+test("prerelease builds start from the bundle and accept compatible updates", async (t) => {
+  const x = setup(t, { appVersion: "1.11.0-beta.1" });
+  await x.loader.start();
+  await x.loader.refresh();
+  assert.equal(x.loader.getSnapshot().manifestVersion, 2);
+});
+
+test("async error reporters cannot cause unhandled startup or refresh failures", async (t) => {
+  const x = setup(t, {
+    onError: async () => {
+      throw new Error("async reporter unavailable");
+    },
+    fetch: async () => {
+      throw new Error("offline");
+    },
+  });
+  fs.writeFileSync(x.config.cachePath, "{");
+  await x.loader.start();
+  await x.loader.refresh();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(x.loader.getSnapshot().manifestVersion, 1);
+});

@@ -30,6 +30,12 @@ import {
 import type { ManagedEnterpriseRequestContext } from "../types/enterpriseIdentity.ts";
 import { getRegistryData } from "../models/registryData.js";
 
+import {
+  isPublishedTranscriptionModelUnavailable,
+  MODEL_CATALOG_UNAVAILABLE,
+  MODEL_CATALOG_UNAVAILABLE_MESSAGE_KEY,
+} from "../models/registryModelAvailability.ts";
+
 const BYOK_FILE_SIZE_LIMIT = 25 * 1024 * 1024;
 
 // Gemini's Interactions API takes inline base64 audio inside a 20 MB total
@@ -67,6 +73,7 @@ export interface TranscriptionRouteSettings {
   remoteTranscriptionUrl?: string;
   remoteTranscriptionModel?: string;
   cloudTranscriptionProvider?: string;
+  cloudTranscriptionMode?: string;
   cloudTranscriptionModel?: string;
   cloudTranscriptionBaseUrl?: string;
   cortiEnvironment?: string;
@@ -331,6 +338,16 @@ export function resolveTranscriptionRoute({
   }
 
   const provider = s.cloudTranscriptionProvider || "openai";
+  if (
+    s.cloudTranscriptionMode !== "openwhispr" &&
+    isPublishedTranscriptionModelUnavailable(provider, s.cloudTranscriptionModel)
+  ) {
+    return error(
+      "The selected model is not available from this provider.",
+      MODEL_CATALOG_UNAVAILABLE,
+      MODEL_CATALOG_UNAVAILABLE_MESSAGE_KEY
+    );
+  }
   const model = resolveByokModel(provider, request?.model ?? s.cloudTranscriptionModel);
 
   if (provider === "tinfoil" || provider === "mistral" || provider === "xai") {

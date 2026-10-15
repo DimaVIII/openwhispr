@@ -17,10 +17,12 @@ export interface ModelDefinition {
   quantization: string;
   contextLength: number;
   hfRepo: string;
+  revision?: string;
   recommended?: boolean;
   supportsThinking?: boolean;
   // Optional MTP speculative-decoding drafter downloaded alongside the main GGUF.
   draftHfRepo?: string;
+  draftRevision?: string;
   draftFileName?: string;
   draftSizeBytes?: number;
   draftSha256?: string;
@@ -215,7 +217,7 @@ class ModelRegistry {
         baseUrl: providerData.baseUrl,
         models: providerData.models,
         getDownloadUrl(model: ModelDefinition): string {
-          return `${providerData.baseUrl}/${model.hfRepo}/resolve/main/${model.fileName}`;
+          return `${providerData.baseUrl}/${model.hfRepo}/resolve/${model.revision || "main"}/${model.fileName}`;
         },
       });
     }

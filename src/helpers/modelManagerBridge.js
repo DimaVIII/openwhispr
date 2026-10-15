@@ -453,12 +453,12 @@ class ModelManager {
 
   getDownloadUrl(provider, model) {
     const baseUrl = provider.baseUrl || "https://huggingface.co";
-    return `${baseUrl}/${model.hfRepo}/resolve/main/${model.fileName}`;
+    return `${baseUrl}/${model.hfRepo}/resolve/${model.revision || "main"}/${model.fileName}`;
   }
 
   getDraftDownloadUrl(provider, model) {
     const baseUrl = provider.baseUrl || "https://huggingface.co";
-    return `${baseUrl}/${model.draftHfRepo}/resolve/main/${model.draftFileName}`;
+    return `${baseUrl}/${model.draftHfRepo}/resolve/${model.draftRevision || "main"}/${model.draftFileName}`;
   }
 
   modelHasDrafter(model) {

@@ -119,3 +119,119 @@ test("a mounted model consumer renders a new catalog without remounting", async 
     await React.act(async () => root.unmount());
   }
 });
+
+test("a previously published selection survives a later launch with only the bundle", async (t) => {
+  const { storage } = installBrowserGlobals(t, {
+    initialStorage: { _llmScopeKeysMigrated: "1", _providerSettingsMigrated: "1" },
+  });
+  const vite = await createRendererServer(t, { cachePrefix: "registry-lost-cache-" });
+  let settings = await vite.ssrLoadModule("/stores/settingsStore.ts");
+  const store = await vite.ssrLoadModule("/models/registryData.js");
+  const data = structuredClone(seed);
+  data.cloudProviders
+    .find((p) => p.id === "openai")
+    .models.push({
+      id: "remote-saved",
+      name: "Remote",
+      description: "Fixture",
+    });
+  data.transcriptionProviders
+    .find((provider) => provider.id === "openai")
+    .models.push({
+      id: "remote-transcription",
+      name: "Remote speech",
+      description: "Fixture",
+      streaming: true,
+    });
+  data.localProviders[0].models.push({
+    ...data.localProviders[0].models[0],
+    id: "remote-local-saved",
+  });
+  store.replaceRegistryData({ data, manifestVersion: store.getRegistryVersion() + 1 });
+  storage.setItem("cleanupProvider", "openai");
+  storage.setItem("cleanupModel", "remote-saved");
+  storage.setItem("chatAgentMode", "local");
+  storage.setItem("chatAgentProvider", data.localProviders[0].id);
+  storage.setItem("chatAgentModel", "remote-local-saved");
+  // Recreate the renderer with no verified main cache. Only local preferences survive.
+  vite.moduleGraph.invalidateAll();
+  settings = await vite.ssrLoadModule("/stores/settingsStore.ts");
+  settings.reconcileRetiredCloudModelSelections();
+  globalThis.window.electronAPI.modelGetAll = async () => [];
+  await settings.reconcileLocalModelSelections();
+  assert.equal(settings.useSettingsStore.getState().cleanupModel, "remote-saved");
+  assert.equal(storage.getItem("cleanupModel"), "remote-saved");
+  assert.equal(settings.useSettingsStore.getState().chatAgentModel, "remote-local-saved");
+  assert.equal(storage.getItem("chatAgentModel"), "remote-local-saved");
+  const managed = {
+    status: "managed",
+    appVersion: "1.10.3",
+    policy: {
+      transcription: { allowedModes: ["providers"], allowedByokProviders: ["openai", "groq"] },
+      llm: { allowedModes: ["providers", "local"], allowedByokProviders: ["openai"] },
+      features: { agentEnabled: true, webSearchEnabled: true },
+    },
+  };
+  const saved = {
+    ...settings.useSettingsStore.getState(),
+    transcriptionMode: "providers",
+    cloudTranscriptionProvider: "openai",
+    cloudTranscriptionModel: "remote-transcription",
+  };
+  const effective = settings.selectPolicyEffectiveSettings(saved, managed);
+  assert.equal(
+    effective.cloudTranscriptionModel,
+    "remote-transcription",
+    "allowed missing selection reaches the unavailable-catalog guard instead of a default"
+  );
+  const denied = structuredClone(managed);
+  denied.policy.transcription.allowedByokProviders = ["groq"];
+  const restricted = settings.selectPolicyEffectiveSettings(saved, denied);
+  assert.equal(restricted.cloudTranscriptionProvider, "groq");
+  assert.notEqual(restricted.cloudTranscriptionModel, "remote-transcription");
+});
+
+test("a catalog addition immediately rechecks an already-required local model", async (t) => {
+  const { installHookDom } = require("../lib/rendererTestHarness");
+  installBrowserGlobals(t);
+  const container = installHookDom(t);
+  const React = require("react");
+  const { createRoot } = require("react-dom/client");
+  let checks = 0;
+  globalThis.window.electronAPI.listWhisperModels = async () => {
+    checks++;
+    return { success: true, models: [{ model: "required-future", downloaded: false }] };
+  };
+  globalThis.window.electronAPI.listParakeetModels = async () => ({ success: true, models: [] });
+  const vite = await createRendererServer(t, {
+    cachePrefix: "registry-required-live-",
+    mockModules: {
+      "./usePolicy": `const snapshot = { status: 'managed', policy: { requiredLocalModels: ['required-future'] } }; export const usePolicySnapshot = () => snapshot;`,
+      "./useModelDownload": `export const LOCAL_MODELS_CHANGED_EVENT = 'local-models-changed';`,
+    },
+  });
+  const { useRequiredLocalModels } = await vite.ssrLoadModule("/hooks/useRequiredLocalModels.ts");
+  const store = await vite.ssrLoadModule("/models/registryData.js");
+  let state;
+  function Probe() {
+    state = useRequiredLocalModels();
+    return null;
+  }
+  const root = createRoot(container);
+  try {
+    await React.act(async () => root.render(React.createElement(Probe)));
+    assert.deepEqual(state.required, []);
+    assert.equal(checks, 0);
+    const data = structuredClone(seed);
+    data.whisperModels["required-future"] = { ...data.whisperModels.base };
+    await React.act(async () =>
+      store.replaceRegistryData({ data, manifestVersion: store.getRegistryVersion() + 1 })
+    );
+    assert.deepEqual(state.required, ["required-future"]);
+    assert.deepEqual(state.missing, ["required-future"]);
+    assert.equal(state.loading, false);
+    assert.equal(checks, 1);
+  } finally {
+    await React.act(async () => root.unmount());
+  }
+});

@@ -8965,7 +8965,7 @@ class IPCHandlers {
                 baseUrl: options.baseUrl,
               });
             }
-            return;
+            return streaming;
           }
           const apiKey = await fetchRealtimeToken(event, {
             mode: options.mode,
@@ -8993,6 +8993,7 @@ class IPCHandlers {
               preconfigured: isCloud,
             });
           }
+          return streaming;
         } catch (err) {
           if (provider === "orukeet") await streaming.disconnect().catch(() => {});
           if (this._dictationStreaming === streaming) this._dictationStreaming = null;
@@ -9002,7 +9003,7 @@ class IPCHandlers {
 
       this._dictationConnectPromise = connectInner();
       try {
-        await this._dictationConnectPromise;
+        return await this._dictationConnectPromise;
       } finally {
         this._dictationConnectPromise = null;
       }
@@ -9683,11 +9684,17 @@ class IPCHandlers {
     let dictationBufferStartAudio = false;
     let dictationStartAudio = [];
     let dictationStartAudioBytes = 0;
-    const DICTATION_START_AUDIO_MAX = 3 * 16000 * 2;
+    let dictationStartError = null;
+    // A socket factory and its session handshake can each take 15 seconds.
+    // Hold that full window at the worklet's 16kHz rate (960KB), and fail the
+    // start if it fills rather than returning success with missing words.
+    const DICTATION_START_AUDIO_MAX = 30 * 16000 * 2;
 
     ipcMain.handle("dictation-realtime-start", async (event, options = {}) => {
       if (dictationStartInProgress) return { success: false, error: "Operation in progress" };
       dictationStartInProgress = true;
+      dictationStartError = null;
+      let streaming;
       // OpenAI and Tinfoil finish setup without audio. Keep the first frames
       // away from an older warmup while a different model is being selected.
       dictationBufferStartAudio = options.provider !== "orukeet";
@@ -9698,11 +9705,18 @@ class IPCHandlers {
           !this._dictationStreaming?.isConnected ||
           this._dictationStreaming.connectionKey !== dictationConnectionKey(options)
         ) {
-          await connectDictationStreaming(event, options);
+          streaming = await connectDictationStreaming(event, options);
+        } else {
+          streaming = this._dictationStreaming;
         }
-        for (const buffer of dictationStartAudio) this._dictationStreaming?.sendAudio(buffer);
+        if (dictationStartError) throw dictationStartError;
+        for (const buffer of dictationStartAudio) streaming?.sendAudio(buffer);
         return { success: true };
       } catch (err) {
+        if (streaming && dictationStartError) {
+          retireDictationStreaming(streaming);
+          if (this._dictationStreaming === streaming) this._dictationStreaming = null;
+        }
         return streamingStartFailure(err);
       } finally {
         dictationStartInProgress = false;
@@ -9714,10 +9728,15 @@ class IPCHandlers {
 
     ipcMain.on("dictation-realtime-send", (_event, buffer) => {
       if (dictationBufferStartAudio) {
+        if (dictationStartError) return;
         const bytes = Buffer.from(buffer);
         if (dictationStartAudioBytes + bytes.length <= DICTATION_START_AUDIO_MAX) {
           dictationStartAudio.push(bytes);
           dictationStartAudioBytes += bytes.length;
+        } else {
+          dictationStartError = new Error("Dictation startup audio buffer exceeded; please retry.");
+          dictationStartAudio = [];
+          dictationStartAudioBytes = 0;
         }
         return;
       }
@@ -9736,6 +9755,11 @@ class IPCHandlers {
     });
 
     ipcMain.handle("dictation-realtime-stop", async () => {
+      if (dictationStartInProgress) {
+        dictationStartError = new Error("Dictation stopped during startup.");
+        dictationStartAudio = [];
+        dictationStartAudioBytes = 0;
+      }
       clearDictationIdleTimer();
       if (!this._dictationStreaming) {
         return { success: true, text: "" };

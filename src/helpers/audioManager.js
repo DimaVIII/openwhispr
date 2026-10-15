@@ -1,3 +1,7 @@
+import {
+  isPublishedTranscriptionModelUnavailable,
+  MODEL_CATALOG_UNAVAILABLE,
+} from "../models/registryModelAvailability.ts";
 import ReasoningService from "../services/ReasoningService";
 import {
   EMPTY_OUTPUT_MESSAGE_KEY,
@@ -4126,7 +4130,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
         );
       }
     } catch (error) {
-      if (error.name === "AbortError") throw error;
+      if (error.name === "AbortError" || error.code === MODEL_CATALOG_UNAVAILABLE) throw error;
       if (error.selectionEditFatal) {
         throw error;
       }
@@ -4570,6 +4574,15 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
 
     // Self-hosted transcription is batch HTTP to the user's server, never cloud realtime WS.
     if (isSelfHostedTranscription(s)) return false;
+
+    if (
+      s.cloudTranscriptionMode === "byok" &&
+      isPublishedTranscriptionModelUnavailable(
+        s.cloudTranscriptionProvider || "openai",
+        s.cloudTranscriptionModel
+      )
+    )
+      return false;
 
     if (
       s.cloudTranscriptionMode === "openwhispr" &&
