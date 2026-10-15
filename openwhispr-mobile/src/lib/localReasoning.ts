@@ -15,6 +15,9 @@ export const LOCAL_TOKEN_CHAR_RATIO = 3.5;
 let cachedReadiness: Promise<LocalReasoningReadiness> | null = null;
 
 export class LocalReasoningError extends Error {
+  // On-device failures are refusals, limits, unavailability or a cancellation:
+  // a retry gets the same answer, and a timed-out run would time out again.
+  readonly retryable = false;
   code: LocalReasoningErrorCode;
   readiness?: LocalReasoningReadiness;
 
@@ -205,6 +208,9 @@ export function toLocalReasoningError(error: unknown): LocalReasoningError {
       ? String((error as { code?: unknown }).code)
       : undefined;
   const message = error instanceof Error ? error.message : 'Local AI failed.';
+  if (error instanceof Error && error.name === 'AbortError') {
+    return new LocalReasoningError('APPLE_LLM_CANCELLED', message);
+  }
 
   switch (code) {
     case 'APPLE_LLM_GUARDRAIL':
@@ -212,6 +218,7 @@ export function toLocalReasoningError(error: unknown): LocalReasoningError {
     case 'APPLE_LLM_RATE_LIMITED':
     case 'APPLE_LLM_UNAVAILABLE':
     case 'APPLE_LLM_FAILED':
+    case 'APPLE_LLM_CANCELLED':
       return new LocalReasoningError(code, message);
     default:
       return new LocalReasoningError('APPLE_LLM_FAILED', message);

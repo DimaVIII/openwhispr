@@ -17,12 +17,15 @@ export class LocalReasoningService {
 
     try {
       const startedAt = Date.now();
-      const result = await AppleLLM.generateText({
-        instructions,
-        prompt: request.text,
-        temperature: request.temperature,
-        maxTokens: request.maxTokens ?? LOCAL_OUTPUT_TOKEN_RESERVE,
-      });
+      const result = await AppleLLM.generateText(
+        {
+          instructions,
+          prompt: request.text,
+          temperature: request.temperature,
+          maxTokens: request.maxTokens ?? LOCAL_OUTPUT_TOKEN_RESERVE,
+        },
+        { signal: request.signal },
+      );
 
       if (__DEV__) {
         console.log(
