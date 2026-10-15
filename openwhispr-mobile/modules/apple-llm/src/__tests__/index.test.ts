@@ -65,6 +65,25 @@ it('gives each request its own id', async () => {
   expect(first).not.toBe(second);
 });
 
+// A JS reload restarts the counter, but native keeps the runs started before it.
+it('keeps ids unique across a JS reload', async () => {
+  mockNative.generateText.mockResolvedValue(response);
+  const { signal } = new AbortController();
+  const now = jest.spyOn(Date, 'now');
+  for (const time of [1_000, 2_000]) {
+    now.mockReturnValue(time);
+    await jest.isolateModulesAsync(async () => {
+      const reloaded = jest.requireActual<typeof import('../index')>('../index');
+      await reloaded.AppleLLM.generateText(request, { signal });
+    });
+  }
+  now.mockRestore();
+  const [beforeReload, afterReload] = mockNative.generateText.mock.calls.map(
+    ([sent]) => (sent as { requestId: string }).requestId,
+  );
+  expect(beforeReload).not.toBe(afterReload);
+});
+
 it('rejects an already-aborted signal without starting a native run', async () => {
   const controller = new AbortController();
   controller.abort();

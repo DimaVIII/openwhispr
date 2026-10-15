@@ -19,7 +19,7 @@ private struct AppleLLMGenerateRequest: Record {
 }
 
 // Generations JavaScript can stop by id. A timed-out cleanup must end the model
-// run too, or the next request meets it as a concurrent request.
+// run too, or it keeps the on-device model busy after JavaScript gave up on it.
 private final class AppleLLMGenerations: @unchecked Sendable {
   private let lock = NSLock()
   private var tasks: [String: Task<Void, Never>] = [:]

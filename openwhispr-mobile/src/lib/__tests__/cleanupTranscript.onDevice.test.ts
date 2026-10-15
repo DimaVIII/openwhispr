@@ -74,28 +74,73 @@ it('pastes the raw transcript at the timeout and stops the model run', async () 
   const result = cleanupTranscript('um hello there', { inferenceRoute: onDeviceRoute, onSkipped });
 
   await jest.advanceTimersByTimeAsync(CLEANUP_TIMEOUT_MS);
-
-  await expect(result).resolves.toBe('um hello there');
-  expect(onSkipped).toHaveBeenCalledWith('Cleanup failed. Your raw transcript is saved.');
-  const { requestId } = mockNative.generateText.mock.calls[0][0] as { requestId: string };
-  expect(mockNative.cancelGeneration).toHaveBeenCalledWith(requestId);
+  // A retry would start a second run before the next timeout; checked before awaiting the
+  // result, which a retry would hold back until the timers move again.
   await jest.advanceTimersByTimeAsync(CLEANUP_TIMEOUT_MS);
   expect(mockNative.generateText).toHaveBeenCalledTimes(1);
+
+  await expect(result).resolves.toBe('um hello there');
+  expect(onSkipped).toHaveBeenCalledWith(
+    'Apple Intelligence took too long. Your raw transcript is saved.',
+  );
+  const { requestId } = mockNative.generateText.mock.calls[0][0] as { requestId: string };
+  expect(mockNative.cancelGeneration).toHaveBeenCalledWith(requestId);
 });
 
-it.each(['APPLE_LLM_RATE_LIMITED', 'APPLE_LLM_GUARDRAIL', 'APPLE_LLM_FAILED'])(
-  'pastes the raw transcript after one %s attempt',
-  async (code) => {
-    mockNative.generateText.mockRejectedValue(Object.assign(new Error('refused'), { code }));
-    const result = cleanupTranscript('um hello there', { inferenceRoute: onDeviceRoute });
+// Apple Intelligence writes about as many tokens as the transcript has, so a long one gets
+// longer than Cloud's 12 s.
+describe('a long transcript', () => {
+  beforeEach(() => {
+    mockNative.countTokens.mockResolvedValue(600);
+  });
 
-    await jest.advanceTimersByTimeAsync(0);
+  it('is cleaned when the model needs longer than 12 s', async () => {
+    mockNative.generateText.mockReturnValue(
+      new Promise((resolve) =>
+        setTimeout(() => resolve({ text: 'Long text.', model: 'apple-foundation-models' }), 20_000),
+      ),
+    );
+    const result = cleanupTranscript('um long text', { inferenceRoute: onDeviceRoute });
 
-    await expect(result).resolves.toBe('um hello there');
-    await jest.advanceTimersByTimeAsync(CLEANUP_TIMEOUT_MS);
-    expect(mockNative.generateText).toHaveBeenCalledTimes(1);
-  },
-);
+    await jest.advanceTimersByTimeAsync(20_000);
+
+    await expect(result).resolves.toBe('Long text.');
+    expect(mockNative.cancelGeneration).not.toHaveBeenCalled();
+  });
+
+  it('still stops a run that never finishes', async () => {
+    mockNative.generateText.mockReturnValue(new Promise(() => undefined));
+    const onSkipped = jest.fn();
+    const result = cleanupTranscript('um long text', { inferenceRoute: onDeviceRoute, onSkipped });
+
+    // 5 s to start, plus 600 tokens at 25 a second.
+    await jest.advanceTimersByTimeAsync(28_999);
+    expect(mockNative.cancelGeneration).not.toHaveBeenCalled();
+    await jest.advanceTimersByTimeAsync(1);
+
+    await expect(result).resolves.toBe('um long text');
+    expect(mockNative.cancelGeneration).toHaveBeenCalledTimes(1);
+    expect(onSkipped).toHaveBeenCalledWith(
+      'Apple Intelligence took too long. Your raw transcript is saved.',
+    );
+  });
+});
+
+it.each([
+  ['APPLE_LLM_RATE_LIMITED', 'Apple Intelligence was busy.'],
+  ['APPLE_LLM_GUARDRAIL', 'Cleanup failed.'],
+  ['APPLE_LLM_FAILED', 'Cleanup failed.'],
+])('pastes the raw transcript after one %s attempt', async (code, reason) => {
+  mockNative.generateText.mockRejectedValue(Object.assign(new Error('refused'), { code }));
+  const onSkipped = jest.fn();
+  const result = cleanupTranscript('um hello there', { inferenceRoute: onDeviceRoute, onSkipped });
+
+  await jest.advanceTimersByTimeAsync(CLEANUP_TIMEOUT_MS);
+  expect(mockNative.generateText).toHaveBeenCalledTimes(1);
+
+  await expect(result).resolves.toBe('um hello there');
+  expect(onSkipped).toHaveBeenCalledWith(`${reason} Your raw transcript is saved.`);
+});
 
 it('returns the cleaned text when the model answers in time', async () => {
   mockNative.generateText.mockResolvedValue({

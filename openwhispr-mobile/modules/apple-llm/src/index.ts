@@ -73,7 +73,8 @@ export const AppleLLM = {
     if (signal.aborted) throw abortError();
 
     requestSequence += 1;
-    const requestId = `apple-llm-${requestSequence}`;
+    // The time keeps an id unique across JS reloads, which restart the counter but not native.
+    const requestId = `apple-llm-${Date.now()}-${requestSequence}`;
     // Settle on abort without waiting for native: an older binary can't stop the
     // run, and a newer one reports the cancellation only once the model yields.
     return new Promise<AppleLLMGenerateTextResponse>((resolve, reject) => {
