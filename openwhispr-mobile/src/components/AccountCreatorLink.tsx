@@ -1,15 +1,19 @@
-import { useCallback, useRef, useState } from 'react';
-import { Keyboard, Pressable, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AccessibilityInfo, Keyboard, Pressable, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { SettingsRow } from '@/components/ui/SettingsSection';
 import { SystemIcon } from '@/components/ui/SystemIcon';
 import { Text } from '@/components/ui/Text';
 import { CreatorLinkInput } from '../../modules/creator-link-input/src';
 import { getAffiliateClientConfig } from '@/lib/affiliateLink';
+import { AppFont } from '@/lib/fonts';
 import { useAffiliateStore } from '@/store/useAffiliateStore';
 import { useAuthStore } from '@/store/useAuthStore';
 
 export type CreatorOfferResult = 'shown' | 'unavailable' | 'invalid' | 'cancelled';
+
+const UNAVAILABLE_TEXT =
+  'Your creator is saved, but we couldn’t verify an available offer right now.';
 
 export function AccountCreatorLink({
   onCheckOffer,
@@ -72,9 +76,19 @@ export function AccountCreatorLink({
     }
   };
 
-  if (!getAffiliateClientConfig()) return null;
   const busy = phase === 'checking' || checking;
   const feedback = localError ?? error;
+  // accessibilityLiveRegion is Android-only; VoiceOver needs an explicit announcement,
+  // and only for feedback that is on screen.
+  const announcement =
+    busy || !open || !focused
+      ? null
+      : (feedback ?? (phase === 'unavailable' ? UNAVAILABLE_TEXT : null));
+  useEffect(() => {
+    if (announcement) AccessibilityInfo.announceForAccessibility(announcement);
+  }, [announcement]);
+
+  if (!getAffiliateClientConfig()) return null;
 
   return (
     <View>
@@ -105,6 +119,7 @@ export function AccountCreatorLink({
                 <CreatorLinkInput
                   value={link}
                   editable={!busy && focused}
+                  fontFamily={AppFont.regular}
                   onChangeText={(value) => {
                     if (!isActive()) return;
                     setLocalError(null);
@@ -129,7 +144,7 @@ export function AccountCreatorLink({
             {busy
               ? 'Checking your offer…'
               : phase === 'unavailable'
-                ? 'Your creator is saved, but we couldn’t verify an available offer right now.'
+                ? UNAVAILABLE_TEXT
                 : saved
                   ? 'Your creator is saved. You can check your offer whenever you’re ready.'
                   : 'Paste your code or creator link to check your offer. Typing instead? Tap Go.'}

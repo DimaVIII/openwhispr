@@ -550,6 +550,9 @@ export function EnabledSuperwallGateProvider({ children }: Props) {
       requiresAccount = isTransactionalSuperwallPlacement(placement),
     }: RegisterSuperwallGateOptions): Promise<boolean> => {
       const isOnboarding = placement === SUPERWALL_PLACEMENTS.onboardingPaywall;
+      // A blocked Account creator offer reports failure instead of granting access.
+      // Onboarding still moves on silently, with or without an offer.
+      const passesThroughWhenBlocked = !requiresAccount && (!creatorOffer || isOnboarding);
       if (signal?.aborted) return false;
       debugLog('register', {
         placement,
@@ -568,7 +571,7 @@ export function EnabledSuperwallGateProvider({ children }: Props) {
           level: 'warning',
           data: { placement, activePlacement: pendingGateRef.current.placement },
         });
-        if (!requiresAccount && !creatorOffer) {
+        if (passesThroughWhenBlocked) {
           feature?.();
           runAccessGrantedWithoutPurchaseCallback(onAccessGrantedWithoutPurchase, placement);
           return true;
@@ -595,7 +598,7 @@ export function EnabledSuperwallGateProvider({ children }: Props) {
           level: 'warning',
           data: { placement, configurationError },
         });
-        if (!requiresAccount && !creatorOffer) {
+        if (passesThroughWhenBlocked) {
           feature?.();
           runAccessGrantedWithoutPurchaseCallback(onAccessGrantedWithoutPurchase, placement);
           activePlacementRef.current = null;
@@ -620,7 +623,7 @@ export function EnabledSuperwallGateProvider({ children }: Props) {
           level: 'info',
           data: { placement },
         });
-        if (!requiresAccount && !creatorOffer) {
+        if (passesThroughWhenBlocked) {
           feature?.();
           runAccessGrantedWithoutPurchaseCallback(onAccessGrantedWithoutPurchase, placement);
           activePlacementRef.current = null;

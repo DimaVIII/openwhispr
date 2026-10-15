@@ -1,9 +1,9 @@
-import { PaywallHighlights } from '@/components/onboarding/PaywallHighlights';
 import { useOnboardingStep } from '@/hooks/useOnboardingStep';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
+import { View } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { OnboardingShell } from '@/components/onboarding/OnboardingShell';
+import { SystemIcon, type LucideIconName } from '@/components/ui/SystemIcon';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useAffiliateStore } from '@/store/useAffiliateStore';
 import { loadAffiliateOffer, type AffiliateOffer } from '@/lib/affiliateOffer';
@@ -13,6 +13,12 @@ import { SUPERWALL_PLACEMENTS } from '@/lib/superwall';
 import { describeOnboardingError } from '@/lib/onboardingErrors';
 import { getAffiliateClientConfig } from '@/lib/affiliateLink';
 import { TrackingPermissionStep } from './TrackingPermissionStep';
+
+const HIGHLIGHTS: { icon: string; mdIcon: LucideIconName; label: string }[] = [
+  { icon: 'cloud', mdIcon: 'Cloud', label: 'Cloud transcription with no word limit' },
+  { icon: 'arrow.triangle.2.circlepath', mdIcon: 'RefreshCw', label: 'Sync notes across devices' },
+  { icon: 'sparkles', mdIcon: 'Sparkles', label: 'AI cleanup, actions, and note chat' },
+];
 
 // A cold launch that resumes on this step arrives before the SDK's configure
 // round trip has finished; registering then is answered immediately for a
@@ -44,12 +50,19 @@ export function PaywallStep() {
     usageOwnerKey === getUsageOwnerKey() &&
     !usage.isSubscribed;
   const { register, state, isConfigured } = useSuperwallGate();
+  // Creator preparation awaits before registering; by then the SDK may have
+  // finished configuring, so register through the latest gate, not this render's.
+  const registerRef = useRef(register);
+  useEffect(() => {
+    registerRef.current = register;
+  }, [register]);
   const hasPresentedRef = useRef(false);
   const hasAdvancedRef = useRef(false);
   const unmountedRef = useRef(false);
   const registrationRef = useRef<AbortController | null>(null);
   const [readyGraceElapsed, setReadyGraceElapsed] = useState(false);
   const [presenting, setPresenting] = useState(false);
+  const [registering, setRegistering] = useState(false);
   const [skipping, setSkipping] = useState(false);
   const [escapeElapsed, setEscapeElapsed] = useState(false);
   const affiliateEnabled = Boolean(getAffiliateClientConfig());
@@ -86,10 +99,10 @@ export function PaywallStep() {
   }, [isConfigured]);
 
   useEffect(() => {
-    if (!presenting) return;
+    if (!registering) return;
     const timer = setTimeout(() => setEscapeElapsed(true), PAYWALL_ESCAPE_MS);
     return () => clearTimeout(timer);
-  }, [presenting]);
+  }, [registering]);
 
   useEffect(() => {
     // Once presented, stay presented: `register` is rebuilt whenever the gate
@@ -137,6 +150,8 @@ export function PaywallStep() {
       } catch {
         // Optional referral storage must not skip ordinary purchasing.
       }
+      // Continue's escape timer counts from here, not from before preparation.
+      setRegistering(true);
       if (!isCurrent()) return;
       const latestUsage = useUsageStore.getState();
       if (
@@ -149,7 +164,7 @@ export function PaywallStep() {
         setSkipping(true);
         return;
       }
-      await register({
+      await registerRef.current({
         placement: SUPERWALL_PLACEMENTS.onboardingPaywall,
         signal: controller.signal,
         creatorOffer,
@@ -166,7 +181,6 @@ export function PaywallStep() {
     isConfigured,
     isConfirmedFree,
     readyGraceElapsed,
-    register,
     user,
     sessionCookie,
   ]);
@@ -197,23 +211,23 @@ export function PaywallStep() {
     return <TrackingPermissionStep onComplete={completeConsent} />;
 
   return (
-    <KeyboardAvoidingView
-      className="flex-1"
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    <OnboardingShell
+      title="Go further with OpenWhispr Pro."
+      titleAccent="Pro"
+      subtitle="Unlock more with Pro, or close the offer to keep using Cloud with your current limits."
+      ctaLabel="Continue"
+      ctaDisabled={ctaDisabled}
+      onCta={advance}
     >
-      <OnboardingShell
-        title="Go further with OpenWhispr Pro."
-        titleAccent="Pro"
-        subtitle="Unlock more with Pro, or close the offer to keep using Cloud with your current limits."
-        ctaLabel="Continue"
-        ctaDisabled={ctaDisabled}
-        onCta={advance}
-      >
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerClassName="gap-4 pt-2">
-          {errorNotice}
-          <PaywallHighlights />
-        </ScrollView>
-      </OnboardingShell>
-    </KeyboardAvoidingView>
+      <View className="gap-4 pt-2">
+        {errorNotice}
+        {HIGHLIGHTS.map((item) => (
+          <View key={item.label} className="flex-row items-center gap-3">
+            <SystemIcon name={item.icon} mdName={item.mdIcon} size={20} />
+            <Text className="flex-1 text-[16px] text-label">{item.label}</Text>
+          </View>
+        ))}
+      </View>
+    </OnboardingShell>
   );
 }

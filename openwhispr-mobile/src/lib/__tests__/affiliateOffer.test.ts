@@ -1,5 +1,7 @@
 import { getTrackingAuthorizationStatus } from '../trackingTransparency';
-const mockConfig = { config: { usageAnalyticsEnabled: true } };
+const mockConfig: { config: { usageAnalyticsEnabled?: boolean } } = {
+  config: { usageAnalyticsEnabled: true },
+};
 jest.mock('@/store/useConfigStore', () => ({ useConfigStore: { getState: () => mockConfig } }));
 jest.mock('../trackingTransparency', () => ({
   getTrackingAuthorizationStatus: jest.fn(async () => 'authorized'),
@@ -152,6 +154,10 @@ it('discards verified product data arriving after dismissal', async () => {
   expect(await loadAffiliateOffer(() => current)).toBeNull();
 });
 
+it('offers the code on the default Usage Analytics setting', async () => {
+  delete mockConfig.config.usageAnalyticsEnabled;
+  expect(await loadAffiliateOffer()).toEqual(offer);
+});
 it('does not allocate stock when a saved creator has Analytics disabled or tracking denied', async () => {
   mockConfig.config.usageAnalyticsEnabled = false;
   expect(await loadAffiliateOffer()).toBeNull();

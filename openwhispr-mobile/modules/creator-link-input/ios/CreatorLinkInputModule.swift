@@ -8,6 +8,7 @@ public class CreatorLinkInputModule: Module {
       Events("onInput")
       Prop("value") { (view, value: String) in view.pendingValue = value }
       Prop("mostRecentEventCount") { (view, count: Int) in view.acknowledgedEventCount = count }
+      Prop("fontFamily") { (view, name: String) in view.setFont(named: name) }
       Prop("editable") { (view, editable: Bool) in
         view.field.isEnabled = editable
         if !editable { view.field.resignFirstResponder() }
@@ -39,9 +40,7 @@ final class CreatorLinkInputView: ExpoView, UITextFieldDelegate, UITextPasteDele
     field.spellCheckingType = .no
     field.accessibilityLabel = "Creator code or link"
     field.placeholder = "Enter a creator code or link"
-    field.font = UIFontMetrics(forTextStyle: .body).scaledFont(
-      for: UIFont(name: "SpaceGrotesk-Regular", size: 16) ?? .systemFont(ofSize: 16)
-    )
+    setFont(named: "")
     field.adjustsFontForContentSizeCategory = true
     field.textColor = .label
     field.addTarget(self, action: #selector(changed), for: .editingChanged)
@@ -51,6 +50,16 @@ final class CreatorLinkInputView: ExpoView, UITextFieldDelegate, UITextPasteDele
   override func layoutSubviews() {
     super.layoutSubviews()
     field.frame = bounds.insetBy(dx: 12, dy: 10)
+  }
+
+  // The app passes its regular face. Yowza is embedded under its PostScript name;
+  // without it the app's Space Grotesk alias is an expo-font name UIKit can't
+  // resolve, so fall back to that face's PostScript name.
+  func setFont(named name: String) {
+    let face =
+      UIFont(name: name, size: 16) ?? UIFont(name: "SpaceGrotesk-Regular", size: 16)
+      ?? .systemFont(ofSize: 16)
+    field.font = UIFontMetrics(forTextStyle: .body).scaledFont(for: face)
   }
 
   func applyValue() {

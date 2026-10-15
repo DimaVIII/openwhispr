@@ -7,7 +7,6 @@ import {
   type NativeSyntheticEvent,
   type ViewProps,
 } from 'react-native';
-import { AppFont } from '@/lib/fonts';
 
 type InputEvent = {
   text: string;
@@ -17,6 +16,7 @@ type InputEvent = {
 type Props = {
   value: string;
   editable: boolean;
+  fontFamily: string;
   onChangeText: (text: string) => void;
   onPaste: (text: string) => void;
   onSubmit: (text: string) => void;
@@ -28,6 +28,7 @@ const NativeInput =
         ViewProps & {
           value: string;
           editable: boolean;
+          fontFamily: string;
           mostRecentEventCount: number;
           onInput: (event: NativeSyntheticEvent<InputEvent>) => void;
         }
@@ -37,6 +38,7 @@ const NativeInput =
 export function CreatorLinkInput({
   value,
   editable,
+  fontFamily,
   onChangeText,
   onPaste,
   onSubmit,
@@ -58,7 +60,7 @@ export function CreatorLinkInput({
         keyboardType="url"
         returnKeyType="go"
         maxLength={2048}
-        style={{ minHeight: 50, padding: 12, fontFamily: AppFont.regular, fontSize: 16 }}
+        style={{ minHeight: 50, padding: 12, fontFamily, fontSize: 16 }}
       />
     );
   }
@@ -66,6 +68,7 @@ export function CreatorLinkInput({
     <NativeInput
       value={value}
       editable={editable}
+      fontFamily={fontFamily}
       mostRecentEventCount={eventCount}
       style={{ height: Math.max(50, 22 * fontScale + 24) }}
       onInput={({ nativeEvent }) => {

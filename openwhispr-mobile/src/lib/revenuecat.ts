@@ -9,24 +9,31 @@ import { Sentry } from '@/lib/sentry';
 let configured = false;
 let identityQueue: Promise<unknown> = Promise.resolve();
 
+const IDENTITY_CALL_TIMEOUT_MS = 10_000;
+const IDENTITY_QUEUE_WAIT_MS = 30_000;
+
+// Identity changes run one at a time and in order, so the last login or logout
+// always wins; queued work is never skipped. A call's own deadline starts when it
+// runs, so ordinary queueing never fails it, and a separate cap on the wait
+// releases callers stuck behind a native call that never settles. Native calls
+// cannot be cancelled: a released call still runs, and holds the lock until it
+// settles.
 function withIdentity<T>(operation: () => Promise<T>): Promise<T> {
-  let expired = false;
-  const run = () => {
-    if (expired) throw new Error('Billing operation expired before starting');
-    return operation();
-  };
-  const result = identityQueue.then(run, run);
-  // Native calls cannot be cancelled. Keep the lock until they settle, while
-  // releasing callers and skipping expired queued work instead of hanging UI.
-  identityQueue = result.catch(() => {});
-  let timer: ReturnType<typeof setTimeout>;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
-      expired = true;
+  return new Promise<T>((resolve, reject) => {
+    const tooLong = () =>
       reject(new Error('Billing is taking too long. Retry or restart the app.'));
-    }, 10000);
+    const waiting = setTimeout(tooLong, IDENTITY_QUEUE_WAIT_MS);
+    const run = () => {
+      clearTimeout(waiting);
+      const timer = setTimeout(tooLong, IDENTITY_CALL_TIMEOUT_MS);
+      const work = Promise.resolve()
+        .then(operation)
+        .finally(() => clearTimeout(timer));
+      work.then(resolve, reject);
+      return work;
+    };
+    identityQueue = identityQueue.then(run).catch(() => {});
   });
-  return Promise.race([result, timeout]).finally(() => clearTimeout(timer));
 }
 
 function getRevenueCatApiKey(): string | undefined {
@@ -84,18 +91,6 @@ export async function resetRevenueCatUser(): Promise<void> {
     await withIdentity(() => Purchases.logOut());
   } catch (error) {
     reportRevenueCatError('reset', error);
-  }
-}
-
-export async function syncRevenueCatPurchases(): Promise<boolean> {
-  if (!configured) configureRevenueCat();
-  if (!configured) return false;
-  try {
-    await withIdentity(() => Purchases.syncPurchasesForResult());
-    return true;
-  } catch (error) {
-    reportRevenueCatError('sync-purchases', error);
-    return false;
   }
 }
 

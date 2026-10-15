@@ -25,7 +25,9 @@ const mockUsage = {
   endBillingSession: jest.fn(),
   load: jest.fn(),
 };
-const mockConfig = { config: { usageAnalyticsEnabled: true } };
+const mockConfig: { config: { usageAnalyticsEnabled?: boolean } } = {
+  config: { usageAnalyticsEnabled: true },
+};
 const mockCandidate = {
   link: '',
   saved: false,
@@ -159,6 +161,10 @@ it.each(['denied', 'notDetermined'] as const)(
     expect(loadAffiliateOffer).not.toHaveBeenCalled();
   },
 );
+it('applies a code on the default Usage Analytics setting', async () => {
+  delete mockConfig.config.usageAnalyticsEnabled;
+  expect((await start().handle(apply())).status).toBe('success');
+});
 it('refuses a different saved creator instead of treating new text as saved', async () => {
   mockCandidate.saved = true;
   mockCandidate.link = 'first';
@@ -275,6 +281,25 @@ it('seeds Account display values while keeping redemption private and avoiding a
   expect(Linking.openURL).toHaveBeenCalledTimes(1);
   expect((await session.handle(request)).status).toBe('failure');
   expect(Linking.openURL).toHaveBeenCalledTimes(1);
+});
+it('keeps a seeded offer redeemable after a refused apply of another code', async () => {
+  mockCandidate.saved = true;
+  mockCandidate.link = 'first';
+  const session = createAffiliatePaywallSession(() => true, jest.fn(), offer);
+  sessions.push(session);
+  expect((await session.handle(apply())).status).toBe('failure');
+  const request = {
+    name: 'creatorOfferRedeem',
+    variables: {
+      [CREATOR_PLAN_KEY]: 1,
+      [CREATOR_PRODUCT_KEY]: 'monthly',
+      ...Object.fromEntries(
+        Object.entries(session.initialParams).map(([key, value]) => [`params.${key}`, value]),
+      ),
+    },
+  };
+  expect((await session.handle(request)).status).toBe('success');
+  expect(Linking.openURL).toHaveBeenCalledWith(offer.redemptionUrl);
 });
 it('clears cached seed parameters for the next ordinary presentation', () => {
   const seeded = createAffiliatePaywallSession(() => true, jest.fn(), offer);

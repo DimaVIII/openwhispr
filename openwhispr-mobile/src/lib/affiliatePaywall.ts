@@ -7,6 +7,7 @@ import { getBillingIdentity, isBillingIdentityCurrent } from './billingIdentity'
 import { getTrackingAuthorizationStatus } from './trackingTransparency';
 import { getAppStorefrontCountryCode } from './revenuecat';
 import { reconcileStoreBilling } from './billingReconciliation';
+import { isUsageAnalyticsAllowed } from './usageAnalytics';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useAffiliateStore } from '@/store/useAffiliateStore';
 import { useConfigStore } from '@/store/useConfigStore';
@@ -93,7 +94,7 @@ export function createAffiliatePaywallSession(
   const eligible = () =>
     alive() &&
     !useUsageStore.getState().usage?.isSubscribed &&
-    useConfigStore.getState().config?.usageAnalyticsEnabled === true;
+    isUsageAnalyticsAllowed(useConfigStore.getState().config);
   const permission = async () => {
     const status = await getTrackingAuthorizationStatus();
     return eligible() && (status === 'authorized' || status === 'notSupported');
@@ -153,7 +154,7 @@ export function createAffiliatePaywallSession(
           'Creator codes are unavailable with your current tracking settings. You can use the regular plan.',
         );
       if (callback.name === 'creatorCodeApply') {
-        offer = null;
+        // A refused apply keeps the offer already on screen redeemable.
         const input = variables[CREATOR_INPUT_KEY];
         const config = getAffiliateClientConfig();
         if (typeof input !== 'string' || input.length > 2048 || !config) return failure();

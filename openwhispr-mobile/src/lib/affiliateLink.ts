@@ -15,14 +15,20 @@ export function getAffiliateClientConfig(): { domain: string; publishableKey: st
   return { domain: config.domain, publishableKey: config.publishableKey };
 }
 
+export class AffiliateInputError extends Error {
+  constructor() {
+    super('Enter a valid OpenWhispr creator link.');
+  }
+}
+
 export function parseAffiliateLink(input: string, domain: string): URL {
   const value = input.trim();
-  if (!value || value.length > 2048) throw new Error('Enter a valid OpenWhispr creator link.');
+  if (!value || value.length > 2048) throw new AffiliateInputError();
   let url: URL;
   try {
     url = new URL(value);
   } catch {
-    throw new Error('Enter a valid OpenWhispr creator link.');
+    throw new AffiliateInputError();
   }
   if (
     url.protocol !== 'https:' ||
@@ -32,7 +38,7 @@ export function parseAffiliateLink(input: string, domain: string): URL {
     url.password ||
     !/^\/[A-Za-z0-9_-]+$/.test(url.pathname)
   ) {
-    throw new Error('Enter a valid OpenWhispr creator link.');
+    throw new AffiliateInputError();
   }
   return url;
 }

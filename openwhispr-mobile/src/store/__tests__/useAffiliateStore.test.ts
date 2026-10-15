@@ -2,7 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAffiliateStore } from '../useAffiliateStore';
 import { useAuthStore } from '../useAuthStore';
 import { useConfigStore } from '../useConfigStore';
-import { getAffiliateClientConfig } from '@/lib/affiliateLink';
+import { AffiliateInputError, getAffiliateClientConfig } from '@/lib/affiliateLink';
+import { ApiError } from '@/lib/apiClient';
 import { checkAndClaimAffiliate } from '@/lib/affiliateAttribution';
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
@@ -11,16 +12,27 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 }));
 jest.mock('../useAuthStore', () => ({ useAuthStore: { getState: jest.fn() } }));
 jest.mock('../useConfigStore', () => ({ useConfigStore: { getState: jest.fn() } }));
-jest.mock('@/lib/affiliateLink', () => ({ getAffiliateClientConfig: jest.fn() }));
+jest.mock('@/lib/affiliateLink', () => ({
+  getAffiliateClientConfig: jest.fn(),
+  AffiliateInputError: class MockAffiliateInputError extends Error {},
+}));
 jest.mock('@/lib/affiliateAttribution', () => ({
   checkAndClaimAffiliate: jest.fn(),
   AffiliateConsentError: class AffiliateConsentError extends Error {},
 }));
-jest.mock('@/lib/apiClient', () => ({ ApiError: class ApiError extends Error {} }));
+jest.mock('@/lib/apiClient', () => ({
+  ApiError: class MockApiError extends Error {
+    status: number;
+    constructor(message: string, status: number) {
+      super(message);
+      this.status = status;
+    }
+  },
+}));
 
 const claim = jest.mocked(checkAndClaimAffiliate);
 let auth: { user: { id: string } | null; sessionCookie: string | null; isInitialized: boolean };
-let config: { usageAnalyticsEnabled: boolean };
+let config: { usageAnalyticsEnabled?: boolean };
 beforeEach(async () => {
   jest.clearAllMocks();
   jest
@@ -106,7 +118,7 @@ it('checking twice makes one claim and an offline failure retains input for retr
   expect(await first).toBe(false);
   expect(claim).toHaveBeenCalledTimes(1);
   expect(useAffiliateStore.getState().link).toContain('/creator');
-  expect(useAffiliateStore.getState().error).toContain('clear the field');
+  expect(useAffiliateStore.getState().error).toBe('We couldn’t check your link. Try again.');
   await useAffiliateStore.getState().edit('');
   expect(await useAffiliateStore.getState().prepare()).toBe(true);
 });
@@ -174,6 +186,45 @@ it('analytics refusal prevents collection and review does not show saved success
   expect(useAffiliateStore.getState().saved).toBe(false);
 });
 
+it('claims on the default Usage Analytics setting', async () => {
+  delete config.usageAnalyticsEnabled;
+  await useAffiliateStore.getState().edit('https://sandbox.dub.link/creator');
+  expect(await useAffiliateStore.getState().prepare()).toBe(true);
+  expect(claim).toHaveBeenCalledTimes(1);
+});
+it.each([
+  ['an invalid entry', () => new AffiliateInputError(), 'Enter your exact creator code'],
+  [
+    'an unavailable link',
+    () => new ApiError('unavailable', 400),
+    'This creator link is unavailable',
+  ],
+])('stops retrying an inbound link refused as %s', async (_, makeError, message) => {
+  claim.mockRejectedValue(makeError());
+  await useAffiliateStore.getState().edit('https://sandbox.dub.link/demo', true);
+  expect(await useAffiliateStore.getState().prepare()).toBe(false);
+  expect(useAffiliateStore.getState().error).toContain(message);
+  expect(useAffiliateStore.getState()).toMatchObject({
+    autoSubmit: false,
+    inboundOfferPending: false,
+  });
+});
+it('stops retrying an inbound link the server sends to review', async () => {
+  claim.mockResolvedValue('review');
+  await useAffiliateStore.getState().edit('https://sandbox.dub.link/demo', true);
+  expect(await useAffiliateStore.getState().prepare()).toBe(false);
+  expect(useAffiliateStore.getState()).toMatchObject({
+    saved: false,
+    autoSubmit: false,
+    inboundOfferPending: false,
+  });
+});
+it('keeps retrying an inbound link after a transient failure', async () => {
+  claim.mockRejectedValue(new Error('offline'));
+  await useAffiliateStore.getState().edit('https://sandbox.dub.link/demo', true);
+  expect(await useAffiliateStore.getState().prepare()).toBe(false);
+  expect(useAffiliateStore.getState().autoSubmit).toBe(true);
+});
 it('disabling affiliate configuration never blocks ordinary onboarding with a cached link', async () => {
   await useAffiliateStore.getState().edit('https://sandbox.dub.link/creator');
   jest.mocked(getAffiliateClientConfig).mockReturnValue(null);

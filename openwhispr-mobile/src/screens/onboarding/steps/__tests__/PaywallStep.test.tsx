@@ -2,10 +2,6 @@ import { loadAffiliateOffer } from '@/lib/affiliateOffer';
 jest.mock('@/lib/affiliateOffer', () => ({
   loadAffiliateOffer: jest.fn().mockResolvedValue(null),
 }));
-jest.mock('@/store/useAffiliateOfferStore', () => ({
-  presentAffiliateOffer: jest.fn().mockResolvedValue(false),
-  closeAffiliateOffer: jest.fn(),
-}));
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 let mockAffiliateEnabled = false;
 const mockPrepare = jest.fn();
@@ -17,12 +13,6 @@ jest.mock('@/lib/affiliateLink', () => ({
 jest.mock('@/store/useAffiliateStore', () => ({
   useAffiliateStore: {
     getState: () => ({ prepare: mockPrepare, consumeInboundOffer: mockConsumeInbound }),
-  },
-}));
-jest.mock('@/components/onboarding/CreatorLinkField', () => ({
-  CreatorLinkField: () => {
-    const { Text } = require('react-native');
-    return <Text>Have a creator link?</Text>;
   },
 }));
 jest.mock('../TrackingPermissionStep', () => ({
@@ -48,7 +38,11 @@ jest.mock('@/store/useOnboardingStore', () => ({
 }));
 
 const mockRegister = jest.fn();
-type MockGate = { isConfigured: boolean; state: { status: string } };
+type MockGate = {
+  isConfigured: boolean;
+  state: { status: string };
+  register?: jest.Mock;
+};
 let mockGate: MockGate = { isConfigured: true, state: { status: 'idle' } };
 jest.mock('@/hooks/useSuperwallGate', () => ({
   useSuperwallGate: () => ({ register: mockRegister, ...mockGate }),
@@ -102,12 +96,10 @@ beforeEach(() => {
 it('opens the shared paywall directly after existing consent, without claiming or allocating', async () => {
   mockAffiliateEnabled = true;
   const screen = render(<PaywallStep />);
-  expect(screen.queryByText('Have a creator link?')).toBeNull();
   expect(mockRegister).not.toHaveBeenCalled();
   await act(async () => {
     fireEvent.press(screen.getByText('Existing tracking choice'));
   });
-  expect(screen.queryByText('Have a creator link?')).toBeNull();
   expect(mockPrepare).not.toHaveBeenCalled();
   expect(loadAffiliateOffer).not.toHaveBeenCalled();
   expect(mockRegister).toHaveBeenCalledTimes(1);
@@ -428,6 +420,48 @@ it('keeps ordinary Cloud purchasing available when an inbound offer is refused',
   expect(mockRegister).toHaveBeenCalledWith(expect.objectContaining({ creatorOffer: undefined }));
 });
 
+it('registers through the gate current after inbound preparation, not the one it started with', async () => {
+  mockAffiliateEnabled = true;
+  let finishPreparation!: () => void;
+  mockConsumeInbound.mockReturnValue(
+    new Promise<boolean>((resolve) => {
+      finishPreparation = () => resolve(false);
+    }),
+  );
+  const screen = render(<PaywallStep />);
+  await act(async () => fireEvent.press(screen.getByText('Existing tracking choice')));
+  const configuredRegister = jest.fn().mockResolvedValue(true);
+  mockGate = { ...mockGate, register: configuredRegister };
+  screen.rerender(<PaywallStep />);
+  await act(async () => finishPreparation());
+  expect(configuredRegister).toHaveBeenCalledTimes(1);
+  expect(mockRegister).not.toHaveBeenCalled();
+});
+it('starts the Continue escape timer only once preparation has finished', async () => {
+  jest.useFakeTimers();
+  mockAffiliateEnabled = true;
+  mockRegister.mockReturnValue(new Promise<boolean>(() => {}));
+  let finishPreparation!: () => void;
+  mockConsumeInbound.mockReturnValue(
+    new Promise<boolean>((resolve) => {
+      finishPreparation = () => resolve(false);
+    }),
+  );
+  const screen = render(<PaywallStep />);
+  await act(async () => fireEvent.press(screen.getByText('Existing tracking choice')));
+  await act(async () => {
+    jest.advanceTimersByTime(PAYWALL_ESCAPE_MS);
+  });
+  await act(async () => finishPreparation());
+  expect(mockRegister).toHaveBeenCalledTimes(1);
+  await act(async () => fireEvent.press(screen.getByText('Continue')));
+  expect(mockGoNext).not.toHaveBeenCalled();
+  await act(async () => {
+    jest.advanceTimersByTime(PAYWALL_ESCAPE_MS);
+  });
+  await act(async () => fireEvent.press(screen.getByText('Continue')));
+  expect(mockGoNext).toHaveBeenCalledTimes(1);
+});
 it('still presents ordinary purchasing if consuming an optional inbound intent fails', async () => {
   mockAffiliateEnabled = true;
   mockConsumeInbound.mockRejectedValueOnce(new Error('storage unavailable'));

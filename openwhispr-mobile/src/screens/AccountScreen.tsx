@@ -1,4 +1,3 @@
-import { loadAffiliateOffer, type AffiliateOffer } from '@/lib/affiliateOffer';
 import React, { useCallback, useEffect, useRef } from 'react';
 import { Alert, Platform, View, Pressable } from 'react-native';
 import { Text } from '@/components/ui/Text';
@@ -26,6 +25,8 @@ import { iosColor } from '@/config/colors';
 import { getAccountDisplay } from '@/lib/accountDisplay';
 import { useSuperwallGate } from '@/hooks/useSuperwallGate';
 import { useAffiliateStore } from '@/store/useAffiliateStore';
+import { getAffiliateClientConfig } from '@/lib/affiliateLink';
+import { loadAffiliateOffer, type AffiliateOffer } from '@/lib/affiliateOffer';
 import { AccountCreatorLink, type CreatorOfferResult } from '@/components/AccountCreatorLink';
 import { SUPERWALL_PLACEMENTS } from '@/lib/superwall';
 
@@ -126,7 +127,7 @@ export default function AccountScreen() {
   const usage = useUsageStore((s) => s.usage);
   const loadUsage = useUsageStore((s) => s.load);
   const resetOnboarding = useOnboardingStore((state) => state.reset);
-  const { register: registerSuperwallGate } = useSuperwallGate();
+  const { register: registerSuperwallGate, isConfigured: superwallConfigured } = useSuperwallGate();
   const handledBillingIntentRef = useRef<string | null>(null);
   const billingContextRef = useRef({
     userId: user?.id,
@@ -202,6 +203,8 @@ export default function AccountScreen() {
         if (!isCurrent()) return 'cancelled';
         let creatorOffer: AffiliateOffer | undefined;
         if (!currentUsage?.isSubscribed && intent === 'creator') {
+          // Allocating stock for a paywall that can't open would waste the offer.
+          if (!superwallConfigured) return 'unavailable';
           creatorOffer = (await loadAffiliateOffer(isCurrent)) ?? undefined;
           if (!isCurrent()) return 'cancelled';
           if (!creatorOffer) return 'unavailable';
@@ -241,7 +244,7 @@ export default function AccountScreen() {
         affiliatePendingRef.current = false;
       }
     },
-    [loadUsage, registerSuperwallGate, user],
+    [loadUsage, registerSuperwallGate, superwallConfigured, user],
   );
 
   useEffect(() => {
@@ -344,7 +347,7 @@ export default function AccountScreen() {
         ) : null}
 
         <SettingsSection title="Subscription">
-          {user && usage && !usage.isSubscribed ? (
+          {user && usage && !usage.isSubscribed && getAffiliateClientConfig() ? (
             <AccountCreatorLink
               key={`${user.id}:${sessionCookie}`}
               onCheckOffer={() => handleBillingPress('creator')}

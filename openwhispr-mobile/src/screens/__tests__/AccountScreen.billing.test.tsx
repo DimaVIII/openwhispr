@@ -1,4 +1,10 @@
 jest.mock('@/lib/affiliateOffer', () => ({ loadAffiliateOffer: jest.fn() }));
+let mockAffiliateConfig: { domain: string; publishableKey: string } | null = {
+  domain: 'sandbox.dub.link',
+  publishableKey: 'dub_pk_test',
+};
+jest.mock('@/lib/affiliateLink', () => ({ getAffiliateClientConfig: () => mockAffiliateConfig }));
+let mockSuperwallConfigured = true;
 import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { loadAffiliateOffer, type AffiliateOffer } from '@/lib/affiliateOffer';
@@ -132,7 +138,10 @@ jest.mock('@/store/useUsageStore', () => ({
   ),
 }));
 jest.mock('@/hooks/useSuperwallGate', () => ({
-  useSuperwallGate: () => ({ register: mockRegisterSuperwallGate }),
+  useSuperwallGate: () => ({
+    register: mockRegisterSuperwallGate,
+    isConfigured: mockSuperwallConfigured,
+  }),
 }));
 jest.mock('@/data/remote/billingApi', () => ({
   createStripeBillingPortalSession: (...args: unknown[]) =>
@@ -621,6 +630,24 @@ describe('Account creator offer intent', () => {
     mockUsageStoreState.usage = mockUnsubscribedUsage;
     mockPrepareAffiliate.mockResolvedValue(true);
     jest.mocked(loadAffiliateOffer).mockResolvedValue(null);
+    mockAffiliateConfig = { domain: 'sandbox.dub.link', publishableKey: 'dub_pk_test' };
+    mockSuperwallConfigured = true;
+  });
+
+  it('leaves the Subscription card unchanged when creator codes are not configured', () => {
+    mockAffiliateConfig = null;
+    const screen = render(<AccountScreen />);
+    expect(screen.queryByText('Submit creator link')).toBeNull();
+    expect(screen.getByText('Plans & Billing')).toBeTruthy();
+  });
+
+  it('does not allocate an offer while the paywall cannot open yet', async () => {
+    mockSuperwallConfigured = false;
+    const screen = render(<AccountScreen />);
+    fireEvent.press(screen.getByText('Submit creator link'));
+    await waitFor(() => expect(mockPrepareAffiliate).toHaveBeenCalledTimes(1));
+    expect(loadAffiliateOffer).not.toHaveBeenCalled();
+    expect(mockRegisterSuperwallGate).not.toHaveBeenCalled();
   });
 
   it('checks and shows the offer directly, with no full-price fallback when unavailable', async () => {

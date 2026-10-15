@@ -4,6 +4,7 @@ import { api } from './apiClient';
 import { getAffiliateClientConfig } from './affiliateLink';
 import { getAppStorefrontCountryCode } from './revenuecat';
 import { useConfigStore } from '@/store/useConfigStore';
+import { isUsageAnalyticsAllowed } from './usageAnalytics';
 import { getTrackingAuthorizationStatus } from './trackingTransparency';
 import { useUsageStore } from '@/store/useUsageStore';
 import { getBillingIdentity, isBillingIdentityCurrent } from './billingIdentity';
@@ -62,7 +63,7 @@ export async function loadAffiliateOffer(
   const { sessionCookie, billingUserId } = identity;
   const current = () =>
     isCallerCurrent() &&
-    useConfigStore.getState().config?.usageAnalyticsEnabled === true &&
+    isUsageAnalyticsAllowed(useConfigStore.getState().config) &&
     isBillingIdentityCurrent(identity) &&
     !useUsageStore.getState().usage?.isSubscribed;
   let timer: ReturnType<typeof setTimeout>;

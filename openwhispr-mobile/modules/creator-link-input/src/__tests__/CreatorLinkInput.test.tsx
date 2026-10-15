@@ -13,6 +13,7 @@ it('treats typing, completed paste and keyboard Go as different user actions', (
     <CreatorLinkInput
       value=""
       editable
+      fontFamily="Yowza-Std-Regular"
       onChangeText={onChangeText}
       onPaste={onPaste}
       onSubmit={onSubmit}
@@ -35,6 +36,7 @@ it('treats typing, completed paste and keyboard Go as different user actions', (
     nativeEvent: { text: 'https://sandbox.dub.link/typed', source: 'submit', eventCount: 3 },
   });
   expect(onSubmit).toHaveBeenCalledWith('https://sandbox.dub.link/typed');
+  expect(input().props.fontFamily).toBe('Yowza-Std-Regular');
 });
 
 it('reports oversized paste without submitting old text and ignores disabled callbacks', () => {
@@ -42,7 +44,14 @@ it('reports oversized paste without submitting old text and ignores disabled cal
   const onSubmit = jest.fn();
   const onChangeText = jest.fn();
   const onInvalidPaste = jest.fn();
-  const props = { value: 'old', onChangeText, onPaste, onSubmit, onInvalidPaste };
+  const props = {
+    value: 'old',
+    fontFamily: 'Yowza-Std-Regular',
+    onChangeText,
+    onPaste,
+    onSubmit,
+    onInvalidPaste,
+  };
   const screen = render(<CreatorLinkInput {...props} editable />);
   fireEvent(screen.UNSAFE_getByType(View), 'input', {
     nativeEvent: { text: 'old', source: 'tooLong', eventCount: 1 },

@@ -1,4 +1,3 @@
-import { AffiliateOfferModal } from '@/components/onboarding/AffiliateOfferModal';
 import '../global.css';
 import { useEffect, useRef, useState } from 'react';
 import { AppState, useColorScheme } from 'react-native';
@@ -228,10 +227,7 @@ function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <OpenWhisprSuperwallProvider>
-        <SafeAreaProvider>
-          {renderInner()}
-          <AffiliateOfferModal />
-        </SafeAreaProvider>
+        <SafeAreaProvider>{renderInner()}</SafeAreaProvider>
         <PermissionAlertMount />
         {showSplash && <AnimatedSplash appReady={appReady} onFinish={() => setShowSplash(false)} />}
       </OpenWhisprSuperwallProvider>

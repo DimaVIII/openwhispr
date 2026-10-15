@@ -7,7 +7,7 @@ jest.mock('@/lib/affiliatePaywall', () => ({
   },
 }));
 import React, { useState } from 'react';
-import { Pressable, Text } from 'react-native';
+import { Alert, Pressable, Text } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import {
   DisabledSuperwallGateProvider,
@@ -1144,6 +1144,29 @@ describe('SuperwallGateProvider', () => {
       expect(screen.getByTestId('result').props.children).toBe('false');
       expect(granted).not.toHaveBeenCalled();
       expect(mockRegisterPlacement).not.toHaveBeenCalled();
+    },
+  );
+  it.each(['loading', 'error'])(
+    'moves onboarding on without a billing alert when its creator offer meets an SDK %s',
+    async (state) => {
+      mockIsConfigured = false;
+      mockConfigurationError = state === 'error' ? 'failed' : null;
+      const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+      const creatorOffer = { productId: 'monthly' } as NonNullable<
+        RegisterSuperwallGateOptions['creatorOffer']
+      >;
+      const screen = render(
+        <EnabledSuperwallGateProvider>
+          <GateConsumer
+            placement={SUPERWALL_PLACEMENTS.onboardingPaywall}
+            creatorOffer={creatorOffer}
+          />
+        </EnabledSuperwallGateProvider>,
+      );
+      await act(async () => fireEvent.press(screen.getByText('register')));
+      expect(screen.getByTestId('result').props.children).toBe('true');
+      expect(alert).not.toHaveBeenCalled();
+      alert.mockRestore();
     },
   );
 });

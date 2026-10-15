@@ -30,8 +30,11 @@ export function useAffiliateAttribution(): void {
           )
             break;
           await useAffiliateStore.getState().bindSession();
+          // One tap can arrive through several routes; re-editing the same link
+          // would drop its resolved click and record another one.
           const link = consumeAffiliateArrival();
-          if (link) await useAffiliateStore.getState().edit(link, true);
+          if (link && link !== useAffiliateStore.getState().link)
+            await useAffiliateStore.getState().edit(link, true);
           if (useAffiliateStore.getState().autoSubmit) await useAffiliateStore.getState().prepare();
         }
       } finally {

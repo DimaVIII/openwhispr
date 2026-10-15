@@ -5,7 +5,8 @@ import { useAuthStore } from './useAuthStore';
 import { useConfigStore } from './useConfigStore';
 import { AffiliateConsentError, checkAndClaimAffiliate } from '@/lib/affiliateAttribution';
 import { ApiError } from '@/lib/apiClient';
-import { getAffiliateClientConfig } from '@/lib/affiliateLink';
+import { isUsageAnalyticsAllowed } from '@/lib/usageAnalytics';
+import { AffiliateInputError, getAffiliateClientConfig } from '@/lib/affiliateLink';
 
 const STORAGE_KEY = 'openwhispr_affiliate_candidate_v1';
 const candidateSchema = z.object({
@@ -149,16 +150,12 @@ export const useAffiliateStore = create<AffiliateState>((set, get) => ({
     if (!state.link.trim() || state.saved) return true;
     if (state.checking) return false;
     const auth = useAuthStore.getState();
-    const config = useConfigStore.getState().config;
-    if (!config || config.usageAnalyticsEnabled === false) {
-      set({
-        error:
-          'Creator links are unavailable while Usage Analytics is off. Clear the field to continue.',
-      });
+    if (!isUsageAnalyticsAllowed(useConfigStore.getState().config)) {
+      set({ error: 'Creator links are unavailable while Usage Analytics is off.' });
       return false;
     }
     if (!auth.user || !auth.sessionCookie || state.ownerId !== auth.user.id) {
-      set({ error: 'We couldn’t check your link. Try again, or clear the field to continue.' });
+      set({ error: 'We couldn’t check your link. Try again.' });
       return false;
     }
     const version = revision;
@@ -167,7 +164,14 @@ export const useAffiliateStore = create<AffiliateState>((set, get) => ({
       revision === version &&
       useAuthStore.getState().user?.id === auth.user?.id &&
       useAuthStore.getState().sessionCookie === auth.sessionCookie &&
-      useConfigStore.getState().config?.usageAnalyticsEnabled !== false;
+      isUsageAnalyticsAllowed(useConfigStore.getState().config);
+    // A refused link stays refused: stop retrying an inbound one on every resume,
+    // and don't claim it again for the onboarding offer.
+    const stopAutoSubmit = async () => {
+      if (!get().autoSubmit && !get().inboundOfferPending) return;
+      set({ autoSubmit: false, inboundOfferPending: false });
+      await persist(snapshot(get())).catch(() => {});
+    };
     set({ checking: true, error: null });
     try {
       const status = await checkAndClaimAffiliate(
@@ -183,22 +187,26 @@ export const useAffiliateStore = create<AffiliateState>((set, get) => ({
       );
       if (!isCurrent()) return false;
       if (status === 'review') {
-        set({ error: 'We couldn’t confirm this referral. Clear the field to continue.' });
+        set({ error: 'We couldn’t confirm this referral.' });
+        await stopAutoSubmit();
         return false;
       }
       set({ saved: true, autoSubmit: false });
       await persist(snapshot(get()));
       return isCurrent();
     } catch (error) {
-      if (isCurrent())
-        set({
-          error:
-            error instanceof AffiliateConsentError
-              ? 'Creator links are unavailable with your current tracking settings. Clear the field to continue.'
-              : error instanceof ApiError && error.status === 400
-                ? 'This creator link is unavailable. Try another link, or clear the field to continue.'
-                : 'We couldn’t check your link. Try again, or clear the field to continue.',
-        });
+      if (!isCurrent()) return false;
+      if (error instanceof AffiliateConsentError) {
+        set({ error: 'Creator links are unavailable with your current tracking settings.' });
+      } else if (error instanceof AffiliateInputError) {
+        set({ error: 'Enter your exact creator code, or paste the original creator link.' });
+        await stopAutoSubmit();
+      } else if (error instanceof ApiError && error.status === 400) {
+        set({ error: 'This creator link is unavailable. Try another link.' });
+        await stopAutoSubmit();
+      } else {
+        set({ error: 'We couldn’t check your link. Try again.' });
+      }
       return false;
     } finally {
       if (revision === version) set({ checking: false });
