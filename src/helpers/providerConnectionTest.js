@@ -292,13 +292,13 @@ async function readJson(response) {
 // Gemini, xAI and Corti answer a made-up key with a 400, which on its own can also
 // mean a malformed request. Their error bodies say which it was.
 const KEY_REJECTED_BY_BODY = {
-  gemini: (status, body) =>
+  gemini: (_, body) =>
     Array.isArray(body?.error?.details) &&
     body.error.details.some((detail) => detail?.reason === "API_KEY_INVALID"),
   xai: (status, body) =>
     status === 400 && typeof body?.error === "string" && /incorrect api key/i.test(body.error),
   // Corti's gateway turns an unknown key away before routing, with no body at all.
-  corti: (status, body) => (status === 400 || status === 401) && body === undefined,
+  corti: (status, body) => status === 400 && body === undefined,
 };
 
 async function describeResponseFailure(response, provider) {
@@ -310,11 +310,7 @@ async function describeResponseFailure(response, provider) {
     keyRejected &&
     keyRejected(response.status, await readJson(response))
   ) {
-    return {
-      errorCode: "credentialsRejected",
-      error: "The provider rejected these credentials.",
-      status: response.status,
-    };
+    return { ...describeStatusFailure(401, provider), status: response.status };
   }
   return failure;
 }

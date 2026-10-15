@@ -1,7 +1,7 @@
 import "../../styles/connection-status-icon.css";
 import { cn } from "../lib/utils";
 
-export type ConnectionStatusIconState = "checking" | "connected" | "failed";
+type ConnectionStatusIconState = "checking" | "connected" | "failed";
 
 /**
  * The status of a field that checks itself: a spinning arc while checking, which closes

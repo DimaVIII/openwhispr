@@ -544,6 +544,7 @@ test("hosted providers refuse redirects; custom servers keep following them", as
     "gemini",
     "openrouter",
     "corti",
+    "tinfoil",
     "deepgram",
     "assemblyai",
   ];
