@@ -22,6 +22,9 @@ export interface UserConfig {
   privateModeReturn?: { pinned: Partial<Record<MobileInferenceScope, InferenceSelection>> };
   defaultMode: ProcessingMode;
   cleanupEnabled?: boolean;
+  // Private mode was chosen in setup on an iPhone that couldn't run Apple Intelligence yet (an
+  // older iOS), so On-Device cleanup is saved the first time a launch finds it can.
+  onDeviceCleanupPending?: boolean;
   autoGenerateNoteTitle?: boolean;
   autoLearnCorrections?: boolean;
   preferredLanguage?: string;

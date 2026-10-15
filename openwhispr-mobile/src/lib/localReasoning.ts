@@ -175,6 +175,16 @@ export async function fitsLocalReasoningBudget(input: {
   return count < budget;
 }
 
+// This iPhone runs Apple Intelligence, even if it is turned off in Settings or still preparing
+// its model. Disabled in AI Models or unavailable says nothing about the device either way.
+export function canRunLocalReasoning(readiness?: LocalReasoningReadiness | null): boolean {
+  return (
+    readiness?.status === 'ready' ||
+    readiness?.status === 'appleIntelligenceOff' ||
+    readiness?.status === 'modelNotReady'
+  );
+}
+
 // Unlike Apple Intelligence being off or still downloading, nothing in Settings fixes these.
 export function isLocalReasoningUnsupported(readiness?: LocalReasoningReadiness | null): boolean {
   return readiness?.status === 'unsupportedDevice' || readiness?.status === 'unsupportedOS';
