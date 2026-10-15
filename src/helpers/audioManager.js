@@ -150,8 +150,7 @@ import {
   isSelectionQuestionResponse,
 } from "./selectionEditing";
 import {
-  isOpenAiRealtimeSelection,
-  isGeminiLiveSelection,
+  REALTIME_MODELS,
   defaultStreamingProviderName,
   orukeetDetectedLanguageFields,
   resolveManagedOrukeetRoute,
@@ -4191,13 +4190,11 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       const selfHostedModel = resolveSelfHostedTranscriptionModel(s);
       if (selfHostedModel) return selfHostedModel;
       const provider = s.cloudTranscriptionProvider || "openai";
-      // A streaming selection needs the provider's batch fallback. A selected
-      // compatible batch model must retain its own ID, including live additions.
+      // Tinfoil and Gemini pin their batch model in the registry rather than in
+      // settings: their streaming model has no batch endpoint, so a streaming
+      // fallback that reused the selected model would POST an unusable id.
       const batchModel = getBatchTranscriptionModel(provider);
-      const selectedModel = getTranscriptionProvider(provider)?.models.find(
-        (model) => model.id === s.cloudTranscriptionModel?.trim()
-      );
-      if (batchModel && (!selectedModel || selectedModel.streaming)) return batchModel;
+      if (batchModel) return batchModel;
       return resolveByokModel(provider, s.cloudTranscriptionModel);
     } catch (error) {
       return "gpt-transcribe";
@@ -4600,7 +4597,9 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     // Gemini Live streams over its own WSS on either credential; the batch
     // Gemini model on the same provider stays on HTTP.
     if (s.cloudTranscriptionProvider === "gemini") {
-      if (!isGeminiLiveSelection(s)) return false;
+      const provider = getTranscriptionProvider("gemini");
+      const model = provider?.models.find((m) => m.id === s.cloudTranscriptionModel);
+      if (!model?.streaming) return false;
       if (s.cloudTranscriptionMode === "byok") return !!s.geminiApiKey;
       return !!(isSignedInOverride ?? s.isSignedIn);
     }
@@ -4622,7 +4621,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       return false;
     }
 
-    if (isOpenAiRealtimeSelection(s)) {
+    if (REALTIME_MODELS.has(s.cloudTranscriptionModel)) {
       // Realtime WS is OpenAI-only — other providers fall through to HTTP.
       if ((s.cloudTranscriptionProvider || "openai") !== "openai") return false;
       if (s.cloudTranscriptionMode === "byok") return !!s.openaiApiKey;
