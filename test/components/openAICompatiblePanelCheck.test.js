@@ -17,13 +17,15 @@ const props = (overrides = {}) => ({
   ...overrides,
 });
 // The panel's own model-list load uses the renderer's fetch.
-const respond = (status, body = {}) => async () => ({
-  ok: status === 200,
-  status,
-  statusText: "",
-  json: async () => body,
-  text: async () => "",
-});
+const respond =
+  (status, body = {}) =>
+  async () => ({
+    ok: status === 200,
+    status,
+    statusText: "",
+    json: async () => body,
+    text: async () => "",
+  });
 const modelList = respond(200, { data: [{ id: "llama-test" }] });
 const listError = (panel) =>
   panel.find((node) => node.props?.className === "text-xs text-destructive")[0];
@@ -66,6 +68,11 @@ test("a server that refuses a keyless check says it wants a key", async (t) => {
   await panel.answer(KEYLESS_REFUSAL);
   const unauthorized = "reasoning.custom.endpointUnauthorized";
   assert.equal(panel.field(ENDPOINT).props.failureReason, unauthorized);
+  assert.equal(
+    panel.field(ENDPOINT).props.invalidOn,
+    undefined,
+    "no failure proves an address wrong"
+  );
   await panel.setProps({ apiKey: "sk-server" });
   await panel.wait(0);
   await panel.answer(KEYLESS_REFUSAL);
@@ -107,6 +114,7 @@ test("OpenRouter checks its key, which holds the status", async (t) => {
     [["openrouter", "sk-or-saved"]]
   );
   assert.ok(panel.field("common.apiKey").props.check);
+  assert.equal(panel.field("common.apiKey").props.invalidOn, "credentialsRejected");
 });
 
 test("a hidden server panel sends nothing until it is shown", async (t) => {
@@ -125,5 +133,8 @@ test("a server key saves trimmed as it changes, and the address is checked again
   assert.deepEqual(saved, ["sk-server"]);
   await panel.setProps({ apiKey: "sk-server" });
   await panel.wait(500); // the key still has focus, so the pause runs
-  assert.deepEqual(panel.requests().map((config) => config.apiKey), ["sk-server"]);
+  assert.deepEqual(
+    panel.requests().map((config) => config.apiKey),
+    ["sk-server"]
+  );
 });

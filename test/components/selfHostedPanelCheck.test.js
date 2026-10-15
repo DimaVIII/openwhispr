@@ -20,6 +20,7 @@ const mount = (t, { overrides, ...options } = {}) =>
 test("the model holds the status, and the address waits until it is left", async (t) => {
   const panel = await mount(t, { overrides: { model: "whisper-large-v3" } });
   assert.ok(panel.field(MODEL).props.check);
+  assert.equal(panel.field(MODEL).props.invalidOn, "modelNotFound");
   assert.equal(panel.field(URL_FIELD).props.check, undefined);
   await panel.focus(URL_FIELD);
   await panel.setProps({ url: SERVER });

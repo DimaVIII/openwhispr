@@ -50,6 +50,7 @@ test("a key is checked with the panel's model, or alone under a browsed tab", as
       model: "whisper-large-v3-turbo",
     },
   ]);
+  assert.equal(panel.checkField().props.invalidOn, "credentialsRejected");
   await panel.selectTab("openai");
   await panel.wait(0);
   assert.deepEqual(panel.requests().at(-1), {
@@ -74,7 +75,10 @@ test("a key saves trimmed as it changes", async (t) => {
   await panel.type(KEY, " gsk-pasted ");
   assert.equal(panel.state().groqApiKey, "gsk-pasted");
   await panel.wait(500); // the key still has focus, so the pause runs
-  assert.deepEqual(panel.requests().map((config) => config.apiKey), ["gsk-pasted"]);
+  assert.deepEqual(
+    panel.requests().map((config) => config.apiKey),
+    ["gsk-pasted"]
+  );
 });
 
 test("Corti: the secret holds the status, checked with ID, region and tenant", async (t) => {
@@ -88,6 +92,7 @@ test("Corti: the secret holds the status, checked with ID, region and tenant", a
     },
   });
   assert.ok(panel.field(CLIENT_SECRET).props.check);
+  assert.equal(panel.field(CLIENT_SECRET).props.invalidOn, "credentialsRejected");
   assert.equal(panel.field(CLIENT_SECRET).props.type, "password");
   assert.equal(panel.field(CLIENT_ID).props.check, undefined);
   assert.equal(panel.field(CLIENT_ID).props.type, "text", "a client ID is not a secret");
@@ -120,6 +125,11 @@ test("Custom: the model holds the status, and the address waits until it is left
     },
   });
   assert.ok(panel.field(MODEL).props.check);
+  assert.equal(
+    panel.field(MODEL).props.invalidOn,
+    "modelNotFound",
+    "a missing model is the model's fault"
+  );
   await panel.focus(ENDPOINT);
   for (const url of ["http://127.0.0.1", "http://127.0.0.1:8000/v1"]) {
     await panel.type(ENDPOINT, url);
@@ -164,7 +174,10 @@ test("moving focus between the panel's own fields keeps the pause", async (t) =>
   await panel.wait(199);
   assert.equal(panel.requests().length, 1, "nothing before the pause ends");
   await panel.wait(1);
-  assert.deepEqual(panel.requests().map((config) => config.apiKey), ["", "sk-server"]);
+  assert.deepEqual(
+    panel.requests().map((config) => config.apiKey),
+    ["", "sk-server"]
+  );
 });
 
 test("Note Recording checks its streaming providers' keys too", async (t) => {

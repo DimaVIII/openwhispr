@@ -138,5 +138,8 @@ test("Corti's token request is shared and remembered the same way", async () => 
   assert.deepEqual(tokens, [
     { environment: "eu", tenant: "base", clientId: "corti-id", clientSecret: "corti-secret" },
   ]);
-  assert.equal(probes.some((probe) => probe.provider === "corti"), false);
+  assert.equal(
+    probes.some((probe) => probe.provider === "corti"),
+    false
+  );
 });

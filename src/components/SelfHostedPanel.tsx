@@ -70,6 +70,7 @@ export default function SelfHostedPanel({
           <ProviderCheckField
             aria-label={t("common.model")}
             check={check}
+            invalidOn="modelNotFound"
             // This server is sent no key, so a refusal means it wants one.
             failureReason={
               check.failure?.errorCode === "credentialsRejected"

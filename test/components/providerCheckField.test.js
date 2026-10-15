@@ -241,7 +241,10 @@ test("a saved secret shows its first three and last four characters until focuse
   assert.match(saved, SAVED_KEY_ENDS);
   assert.match(inputTag(saved), /text-transparent!/);
   assert.match(render({ type: "password", value: "sk-short" }), />••••••••</);
-  for (const props of [{ type: "password", value: "" }, { type: "text", value: SAVED_KEY }]) {
+  for (const props of [
+    { type: "password", value: "" },
+    { type: "text", value: SAVED_KEY },
+  ]) {
     const html = render(props);
     assert.doesNotMatch(html, /aria-hidden="true"/, JSON.stringify(props));
     assert.doesNotMatch(html, /text-transparent!/);
@@ -287,16 +290,13 @@ test("the caller's own focus handlers still run", async (t) => {
   assert.deepEqual(calls, ["focus", "blur"]);
 });
 
-test(
-  "a reason override replaces the default text and does not mark the field invalid",
-  async (t) => {
-    const Field = await loadField(t);
-    const html = markup(Field, failed("credentialsRejected"), {
-      failureReason: "reasoning.custom.endpointUnauthorized",
-    });
-    assert.match(html, /role="alert">reasoning\.custom\.endpointUnauthorized</);
-    assert.doesNotMatch(html, /aria-invalid="/, "the value is not what is wrong");
-    const plain = markup(Field, failed("credentialsRejected"));
-    assert.match(plain, /aria-invalid="true"/, "without an override, a rejection marks it");
-  }
-);
+test("a reason override replaces the default text and leaves the field valid", async (t) => {
+  const Field = await loadField(t);
+  const html = markup(Field, failed("credentialsRejected"), {
+    failureReason: "reasoning.custom.endpointUnauthorized",
+  });
+  assert.match(html, /role="alert">reasoning\.custom\.endpointUnauthorized</);
+  assert.doesNotMatch(html, /aria-invalid="/, "the value is not what is wrong");
+  const plain = markup(Field, failed("credentialsRejected"));
+  assert.match(plain, /aria-invalid="true"/, "without an override, a rejection marks it");
+});

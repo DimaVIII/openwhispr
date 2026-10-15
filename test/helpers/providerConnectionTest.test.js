@@ -536,8 +536,16 @@ test("a Corti key of only spaces is never sent", async () => {
 
 test("hosted providers refuse redirects; custom servers keep following them", async () => {
   const hosted = [
-    "openai", "groq", "xai", "mistral", "anthropic", "gemini",
-    "openrouter", "corti", "deepgram", "assemblyai",
+    "openai",
+    "groq",
+    "xai",
+    "mistral",
+    "anthropic",
+    "gemini",
+    "openrouter",
+    "corti",
+    "deepgram",
+    "assemblyai",
   ];
   for (const provider of hosted) {
     assert.equal(resolveProviderRequest({ provider, apiKey: "k" }).redirect, "error", provider);
@@ -694,10 +702,7 @@ test("the transcription address's answers keep their meaning", async (t) => {
   });
   const offline = await testProviderConnection(speech("http://127.0.0.1:9"), flaky.fetchImpl);
   assert.equal(offline.errorCode, "network");
-  assert.deepEqual(
-    [flaky.calls[2].init.method, flaky.calls[2].init.redirect],
-    ["POST", "follow"]
-  );
+  assert.deepEqual([flaky.calls[2].init.method, flaky.calls[2].init.redirect], ["POST", "follow"]);
 });
 
 test("only a speech check with every model list missing asks that address", async (t) => {
@@ -705,7 +710,10 @@ test("only a speech check with every model list missing asks that address", asyn
   // A language-model server keeps today's answer.
   const reasoning = await testProviderConnection({ ...speech(base), scope: "reasoning" });
   assert.equal(reasoning.errorCode, "endpointNotFound");
-  assert.equal(received.some((entry) => entry.method === "POST"), false);
+  assert.equal(
+    received.some((entry) => entry.method === "POST"),
+    false
+  );
 
   const keyed = recordingFetch((url) => jsonResponse(url.endsWith("/v1/models") ? 401 : 404));
   const config = speech("http://127.0.0.1:9", { apiKey: "k" });

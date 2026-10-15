@@ -660,6 +660,7 @@ export default function ReasoningModelSelector({
                       <ProviderCheckField
                         aria-label={t("common.apiKey")}
                         check={check}
+                        invalidOn="credentialsRejected"
                         type="password"
                         value={hostedKey.value}
                         onChange={(event) => hostedKey.set(event.target.value.trim())}

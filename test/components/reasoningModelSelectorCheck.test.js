@@ -82,12 +82,18 @@ test("typing keeps the 0.5 s pause, and leaving the field sends at once", async 
   await panel.wait(499);
   assert.equal(panel.requests().length, 0, "nothing while the pause runs");
   await panel.wait(1);
-  assert.deepEqual(panel.requests().map((config) => config.apiKey), ["sk-first"]);
+  assert.deepEqual(
+    panel.requests().map((config) => config.apiKey),
+    ["sk-first"]
+  );
   await panel.type(KEY, "sk-second");
   await panel.wait(200);
   await panel.blur(KEY); // mid-pause
   await panel.wait(0);
-  assert.deepEqual(panel.requests().map((config) => config.apiKey), ["sk-first", "sk-second"]);
+  assert.deepEqual(
+    panel.requests().map((config) => config.apiKey),
+    ["sk-first", "sk-second"]
+  );
 });
 
 test("a rejected key keeps its reason and Retry, and stays saved", async (t) => {
@@ -95,6 +101,7 @@ test("a rejected key keeps its reason and Retry, and stays saved", async (t) => 
   await panel.wait(0);
   await panel.answer(REJECTED);
   assert.equal(panel.checkField().props.check.failure.errorCode, "credentialsRejected");
+  assert.equal(panel.checkField().props.invalidOn, "credentialsRejected", "the key is at fault");
   assert.equal(panel.state().openaiApiKey, "sk-saved");
   await panel.retry();
   assert.equal(panel.requests().length, 2, "Retry does not wait for the pause");

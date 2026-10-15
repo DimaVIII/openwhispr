@@ -364,6 +364,7 @@ export default function OpenAICompatiblePanel({
           aria-label={keyLabel}
           // At a fixed address the key completes the connection, so it carries the status.
           check={lockedBaseUrl ? check : undefined}
+          invalidOn="credentialsRejected"
           type="password"
           value={apiKey}
           onChange={(event) => setApiKey(event.target.value.trim())}

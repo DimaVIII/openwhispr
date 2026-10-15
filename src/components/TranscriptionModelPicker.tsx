@@ -1397,6 +1397,7 @@ export default function TranscriptionModelPicker({
                     <ProviderCheckField
                       aria-label={t("common.model")}
                       check={check}
+                      invalidOn="modelNotFound"
                       failureReason={customFailureReason}
                       value={panelModel}
                       onChange={(e) => handleCloudModelSelect(e.target.value)}
@@ -1446,6 +1447,7 @@ export default function TranscriptionModelPicker({
                           <ProviderCheckField
                             aria-label={label}
                             check={field.key === checkedCredential ? check : undefined}
+                            invalidOn="credentialsRejected"
                             type={field.input === "secret" ? "password" : "text"}
                             value={credentialValues[field.key]}
                             onChange={(e) => credentialSetters[field.key](e.target.value.trim())}
