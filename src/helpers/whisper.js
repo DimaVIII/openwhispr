@@ -14,7 +14,7 @@ const WhisperServerManager = require("./whisperServer");
 const { createAbortError } = require("./abortError");
 const { getModelsDirForService } = require("./modelDirUtils");
 
-const modelRegistryData = require("../models/modelRegistryData.json");
+const { registryData: modelRegistryData } = require("../models/registryData.js");
 
 const CACHE_TTL_MS = 30000;
 

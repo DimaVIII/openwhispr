@@ -31,7 +31,7 @@ import {
 } from "../config/inferenceScopes";
 import { normalizeChineseScriptPreference } from "../utils/chineseScript";
 import { adjustBedrockModelForRegion } from "../utils/bedrockRegions";
-import modelRegistryData from "../models/modelRegistryData.json";
+import { registryData as modelRegistryData } from "../models/registryData.js";
 import { pickDefaultModelId } from "../models/providerDefaultModel";
 // Both are leaves: tinfoilModelCache imports only a type from ModelRegistry and
 // the switch store only zustand, so neither reopens the ModelRegistry cycle.

@@ -6,7 +6,7 @@
 // allowlist rejected undefined). Pure module, mirrors meetingTranscriptionRouting.
 import { isOrukeetStreaming } from "./selfHostedTranscription.js";
 import { STREAMING_ONLY_PROVIDERS } from "./transcriptionRoute.ts";
-import modelRegistryData from "../models/modelRegistryData.json" with { type: "json" };
+import { registryData as modelRegistryData, subscribeRegistry } from "../models/registryData.js";
 
 export const ORUKEET_MODEL = "orukeet-v0.1.0";
 const ORUKEET_LANGUAGES = new Set(
@@ -58,7 +58,24 @@ export function orukeetDetectedLanguageFields(final) {
   };
 }
 
-export const REALTIME_MODELS = new Set(["gpt-4o-mini-transcribe", "gpt-4o-transcribe"]);
+export function isRegistryStreamingModel(providerId, modelId) {
+  return (
+    modelRegistryData.transcriptionProviders
+      .find((provider) => provider.id === providerId)
+      ?.models.some((model) => model.id === modelId && model.streaming) ?? false
+  );
+}
+export const REALTIME_MODELS = new Set();
+function refreshRealtimeModels() {
+  REALTIME_MODELS.clear();
+  for (const model of modelRegistryData.transcriptionProviders.find(
+    (provider) => provider.id === "openai"
+  )?.models || []) {
+    if (model.streaming) REALTIME_MODELS.add(model.id);
+  }
+}
+refreshRealtimeModels();
+subscribeRegistry(refreshRealtimeModels);
 
 // REALTIME_MODELS is the OpenAI-only shortcut (it forces "openai-realtime"), so
 // Gemini's live model routes on its own. Keying on the model id and not the
@@ -106,7 +123,7 @@ export function resolveStreamingProviderName({ settings, context, sttConfig, lan
   }
   if (
     settings.cloudTranscriptionProvider === "gemini" &&
-    settings.cloudTranscriptionModel === GEMINI_LIVE_MODEL
+    isRegistryStreamingModel("gemini", settings.cloudTranscriptionModel)
   ) {
     return "gemini";
   }
@@ -120,7 +137,10 @@ export function resolveStreamingProviderName({ settings, context, sttConfig, lan
   ) {
     return settings.cloudTranscriptionProvider;
   }
-  if (REALTIME_MODELS.has(settings.cloudTranscriptionModel)) {
+  if (
+    REALTIME_MODELS.has(settings.cloudTranscriptionModel) &&
+    (settings.cloudTranscriptionMode !== "byok" || settings.cloudTranscriptionProvider === "openai")
+  ) {
     return "openai-realtime";
   }
   return sttConfig?.streamingProvider || defaultStreamingProviderName(context);

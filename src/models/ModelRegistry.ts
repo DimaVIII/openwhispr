@@ -1,4 +1,4 @@
-import modelDataRaw from "./modelRegistryData.json";
+import { registryData as modelData, subscribeRegistry } from "./registryData.js";
 import { isCloudCleanupMode, getSettings } from "../stores/settingsStore";
 import { readCachedTinfoilModels } from "./tinfoilModelCache";
 import { filterMeetingStreamingProviders } from "../helpers/meetingTranscriptionRouting";
@@ -132,7 +132,7 @@ export interface ParakeetModelInfo {
 
 export type ParakeetModelsMap = Record<string, ParakeetModelInfo>;
 
-interface ModelRegistryData {
+export interface ModelRegistryData {
   parakeetModels: ParakeetModelsMap;
   whisperModels: WhisperModelsMap;
   transcriptionProviders: TranscriptionProviderData[];
@@ -141,19 +141,14 @@ interface ModelRegistryData {
   localProviders: LocalProviderData[];
 }
 
-const modelData: ModelRegistryData = modelDataRaw as ModelRegistryData;
-
 function getTinfoilCloudProvider(): CloudProviderData | undefined {
-  return modelData.cloudProviders.find((provider) => provider.id === "tinfoil");
+  return modelRegistry.getCloudProviders().find((provider) => provider.id === "tinfoil");
 }
 
 const cachedTinfoilModels = readCachedTinfoilModels().models;
-if (cachedTinfoilModels.length > 0) {
-  const tinfoilProvider = getTinfoilCloudProvider();
-  if (tinfoilProvider) {
-    tinfoilProvider.models = cachedTinfoilModels;
-  }
-}
+let tinfoilOverlay: CloudModelDefinition[] | null = cachedTinfoilModels.length
+  ? cachedTinfoilModels
+  : null;
 
 class ModelRegistry {
   private static instance: ModelRegistry;
@@ -161,6 +156,7 @@ class ModelRegistry {
 
   private constructor() {
     this.registerProvidersFromData();
+    subscribeRegistry(() => this.registerProvidersFromData());
   }
 
   static getInstance(): ModelRegistry {
@@ -203,7 +199,11 @@ class ModelRegistry {
   }
 
   getCloudProviders(): CloudProviderData[] {
-    return modelData.cloudProviders;
+    return modelData.cloudProviders.map((provider) =>
+      provider.id === "tinfoil" && tinfoilOverlay
+        ? { ...provider, models: tinfoilOverlay }
+        : provider
+    );
   }
 
   getEnterpriseProviders(): EnterpriseProviderData[] {
@@ -329,10 +329,7 @@ export function getCloudProviderDefaultModelId(providerId: string): string | und
 }
 
 export function applyTinfoilModels(models: CloudModelDefinition[]): void {
-  const provider = getTinfoilCloudProvider();
-  if (provider) {
-    provider.models = models;
-  }
+  tinfoilOverlay = models;
   const reasoningProvider = REASONING_PROVIDERS.tinfoil;
   if (reasoningProvider) {
     reasoningProvider.models = models.map(toReasoningModel);
@@ -483,13 +480,13 @@ export function getWhisperModelInfo(modelId: string): WhisperModelInfo | undefin
   return modelData.whisperModels[modelId];
 }
 
-export const WHISPER_MODEL_INFO = modelData.whisperModels;
+export const WHISPER_MODEL_INFO = { ...modelData.whisperModels };
 
 export function getCloudModel(
   modelId: string,
   providerId?: string
 ): CloudModelDefinition | undefined {
-  for (const provider of modelData.cloudProviders) {
+  for (const provider of modelRegistry.getCloudProviders()) {
     const model = provider.models.find((m) => m.id === modelId);
     if (model) return model;
   }
@@ -575,7 +572,7 @@ export function isSherpaLocalProvider(provider: string): boolean {
   return provider === "nvidia" || provider === "cohere";
 }
 
-export const PARAKEET_MODEL_INFO = modelData.parakeetModels;
+export const PARAKEET_MODEL_INFO = { ...modelData.parakeetModels };
 
 export function getWhisperModelConfig(modelId: string): WhisperModelConfig | null {
   const modelInfo = modelData.whisperModels[modelId];
@@ -590,3 +587,11 @@ export function getWhisperModelConfig(modelId: string): WhisperModelConfig | nul
 export function getValidWhisperModelNames(): string[] {
   return Object.keys(modelData.whisperModels);
 }
+
+// Maintain stable exported objects for existing consumers while rebuilding all
+// derived lists after the canonical snapshot changes. Tinfoil stays an overlay.
+subscribeRegistry(() => {
+  Object.assign(REASONING_PROVIDERS, buildReasoningProviders());
+  Object.assign(WHISPER_MODEL_INFO, modelData.whisperModels);
+  Object.assign(PARAKEET_MODEL_INFO, modelData.parakeetModels);
+});
