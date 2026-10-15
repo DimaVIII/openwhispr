@@ -30,6 +30,7 @@ import { confirmDestructive } from '@/lib/alerts';
 import { SyncStatusLabel } from '@/components/notes/SyncStatusLabel';
 import { useManualSyncRefresh } from '@/hooks/useManualSyncRefresh';
 import { useMoveNote } from '@/hooks/useMoveNote';
+import { supportsVoiceEnrollment } from '@/lib/voiceEnrollmentCapability';
 
 export default function NotesListScreen() {
   const { t } = useTranslation('android');
@@ -168,6 +169,13 @@ export default function NotesListScreen() {
       { id: 'note', label: 'New note', icon: 'square.and.pencil', mdIcon: 'SquarePen' },
       { id: 'meeting', label: 'Record meeting', icon: 'mic', mdIcon: 'Mic' },
     ];
+    if (Platform.OS === 'android')
+      actions.push({
+        id: 'import',
+        label: 'Import audio',
+        icon: 'square.and.arrow.down',
+        mdIcon: 'FileAudio',
+      });
     if (spaceId != null) {
       actions.push({
         id: 'folder',
@@ -249,12 +257,16 @@ export default function NotesListScreen() {
     (id: string) => {
       if (id === 'note') {
         handleCompose();
-      } else if (id === 'meeting') {
+      } else if (id === 'meeting' || id === 'import') {
         // The meeting is filed where it was started: this folder, or this space.
         const startedIn: { folderId?: string; spaceId?: string } = {};
         if (params.folderId) startedIn.folderId = params.folderId;
         else if (params.spaceId) startedIn.spaceId = params.spaceId;
-        router.push({ pathname: '/(tabs)/(notes)/meeting-record', params: startedIn });
+        router.push({
+          pathname:
+            id === 'import' ? '/(tabs)/(notes)/import-audio' : '/(tabs)/(notes)/meeting-record',
+          params: startedIn,
+        });
       } else if (id === 'folder') {
         safeHaptics('light');
         setNewFolderVisible(true);
@@ -289,35 +301,37 @@ export default function NotesListScreen() {
         <Text className="mb-2 text-[15px] text-tertiaryLabel">{`${totalCount} ${totalCount === 1 ? 'Note' : 'Notes'}`}</Text>
         <SyncStatusLabel />
 
-        <View className="mb-2">
-          <GroupedList>
-            <GroupedList.Row
-              leadingIconSlot={
-                <SystemIcon name="waveform" mdName="AudioLines" size={22} color="brand" />
-              }
-              onPress={openVoiceProfiles}
-              accessibilityRole="button"
-              accessibilityLabel="Voice Profiles"
-            >
-              <View className="flex-row items-center justify-between gap-3">
-                <View className="min-w-0 flex-1">
-                  <Text className="text-[16px] font-medium text-label">Voice Profiles</Text>
-                  <Text className="mt-0.5 text-[13px] text-secondaryLabel">
-                    {voiceProfiles.length === 0
-                      ? 'Teach OpenWhispr your voice'
-                      : `${voiceProfiles.length} ${voiceProfiles.length === 1 ? 'voice' : 'voices'}`}
-                  </Text>
+        {supportsVoiceEnrollment() || voiceProfiles.length > 0 ? (
+          <View className="mb-2">
+            <GroupedList>
+              <GroupedList.Row
+                leadingIconSlot={
+                  <SystemIcon name="waveform" mdName="AudioLines" size={22} color="brand" />
+                }
+                onPress={openVoiceProfiles}
+                accessibilityRole="button"
+                accessibilityLabel="Voice Profiles"
+              >
+                <View className="flex-row items-center justify-between gap-3">
+                  <View className="min-w-0 flex-1">
+                    <Text className="text-[16px] font-medium text-label">Voice Profiles</Text>
+                    <Text className="mt-0.5 text-[13px] text-secondaryLabel">
+                      {voiceProfiles.length === 0
+                        ? 'Teach OpenWhispr your voice'
+                        : `${voiceProfiles.length} ${voiceProfiles.length === 1 ? 'voice' : 'voices'}`}
+                    </Text>
+                  </View>
+                  <SystemIcon
+                    name="chevron.right"
+                    mdName="ChevronRight"
+                    size={13}
+                    color="tertiaryLabel"
+                  />
                 </View>
-                <SystemIcon
-                  name="chevron.right"
-                  mdName="ChevronRight"
-                  size={13}
-                  color="tertiaryLabel"
-                />
-              </View>
-            </GroupedList.Row>
-          </GroupedList>
-        </View>
+              </GroupedList.Row>
+            </GroupedList>
+          </View>
+        ) : null}
 
         {showSpaceFolders && (
           <View className="mb-2">
@@ -419,13 +433,16 @@ export default function NotesListScreen() {
           Platform.OS === 'android'
             ? fabActions.map((action) => ({
                 ...action,
-                label: t(
-                  action.id === 'note'
-                    ? 'newNote'
-                    : action.id === 'meeting'
-                      ? 'meetingSetupTitle'
-                      : 'newFolder',
-                ),
+                label:
+                  action.id === 'import'
+                    ? 'Import audio'
+                    : t(
+                        action.id === 'note'
+                          ? 'newNote'
+                          : action.id === 'meeting'
+                            ? 'meetingSetupTitle'
+                            : 'newFolder',
+                      ),
               }))
             : fabActions
         }

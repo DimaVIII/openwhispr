@@ -1778,15 +1778,13 @@ describe('NoteEditorScreen voice setup', () => {
     expect(mockPush).toHaveBeenCalledWith('/(tabs)/(notes)/voice-enrollment?owner=1&noteId=7');
   });
 
-  it('opens the script right away on Android, which has no sheet onDismiss', () => {
+  it('does not offer voice training on Android without an enrollment engine', () => {
     const platform = Platform.OS;
     Platform.OS = 'android';
     try {
-      const { getByTestId } = render(<NoteEditorScreen />);
-      fireEvent.press(getByTestId('voice-setup-banner-set-up'));
-      fireEvent.press(getByTestId('thats-me-read-script'));
-
-      expect(mockPush).toHaveBeenCalledWith('/(tabs)/(notes)/voice-enrollment?owner=1&noteId=7');
+      const { queryByTestId } = render(<NoteEditorScreen />);
+      expect(queryByTestId('voice-setup-banner-set-up')).toBeNull();
+      expect(mockPush).not.toHaveBeenCalled();
     } finally {
       Platform.OS = platform;
     }

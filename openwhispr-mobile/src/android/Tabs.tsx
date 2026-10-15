@@ -7,7 +7,9 @@ export default function AndroidTabs() {
   const segments = useSegments() as string[];
   const detail =
     segments.includes('(notes)') &&
-    (segments.at(-1) === '[id]' || segments.at(-1) === 'meeting-record');
+    (segments.at(-1) === '[id]' ||
+      segments.at(-1) === 'meeting-record' ||
+      segments.at(-1) === 'import-audio');
   return (
     <Tabs
       screenOptions={{

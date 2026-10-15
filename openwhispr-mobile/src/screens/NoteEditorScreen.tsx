@@ -39,6 +39,7 @@ import { NoteShareSheet } from '@/components/notes/NoteShareSheet';
 import { NoteActionsMenu } from '@/components/notes/NoteActionsMenu';
 import { ConflictBanner } from '@/components/notes/ConflictBanner';
 import { VoiceSetupBanner } from '@/components/notes/VoiceSetupBanner';
+import { supportsVoiceEnrollment } from '@/lib/voiceEnrollmentCapability';
 import { ThatsMeSheet } from '@/components/notes/ThatsMeSheet';
 import { shouldOfferVoiceSetup, voiceSetupCandidates } from '@/lib/notes/voiceSetupPrompt';
 import { SpeakerProfileOwnerAlreadyExistsError } from '@/data/local/notesRepository';
@@ -339,14 +340,16 @@ export default function NoteEditorScreen() {
       }),
     [meetingSpeakerEmbeddings, note, speakers, transcriptSegments, voiceProfiles],
   );
-  const showVoiceSetupBanner = shouldOfferVoiceSetup({
-    isOnDeviceMeeting:
-      note?.noteType === 'meeting' && isManagedMeetingAudioUri(note.id, note.sourceFile),
-    transcriptStatus,
-    hasOwnerProfile: voiceProfiles.some((profile) => profile.isOwner === 1),
-    dismissed: voiceSetupDismissed,
-    candidateCount: voiceCandidates.length,
-  });
+  const showVoiceSetupBanner =
+    supportsVoiceEnrollment() &&
+    shouldOfferVoiceSetup({
+      isOnDeviceMeeting:
+        note?.noteType === 'meeting' && isManagedMeetingAudioUri(note.id, note.sourceFile),
+      transcriptStatus,
+      hasOwnerProfile: voiceProfiles.some((profile) => profile.isOwner === 1),
+      dismissed: voiceSetupDismissed,
+      candidateCount: voiceCandidates.length,
+    });
   // The banner and That's me need your profiles, and a meeting opened straight from
   // recording never passes a screen that loads them.
   useEffect(() => {

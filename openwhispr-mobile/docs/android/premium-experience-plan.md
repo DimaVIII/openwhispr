@@ -22,6 +22,16 @@
 - Keep production deploy, merge, store release and real financial transactions outside this development authorization.
 - Preserve shared iOS behavior and concurrent work. Update existing draft PR #2684 with exact evidence and acceptance gaps.
 
+## Notes import and voice capability checkpoint — review build v10
+
+- Notes → New now offers Import audio. The import snapshots processing choices before the paywall/file picker, pins its destination and account, and saves a regular note named after the file. Private imports started in shared spaces go to Personal with privacy set before transcript content is written. Deleted/moved destinations refuse the save and leave transcript text available to copy.
+- Cancellation/unmount/account-change fences discard late picker/transcription results. Only picker-owned app-cache copies and temporary retained audio are removed; source documents are preserved. A configured remote cleanup provider is disclosed separately from local audio transcription. Delayed paywall callbacks cannot restart an import after leaving or starting another request.
+- Android offers no unsupported voice enrollment/retraining or setup banner. Existing profiles remain manageable, and direct enrollment links explain the current Android limitation without mounting the recorder. Existing iOS training remains available.
+- Verification: six affected suites / 128 tests plus four import-screen tests passed (132 total); TypeScript passed; scoped ESLint reported zero errors / 18 warnings. Read-only independent review found two issues (private cleanup wording and late picker cache cleanup), both repaired and reverified. This is focused review, not the final whole-feature review.
+- ARM64 release build v10 succeeded (2m 8s, 1,234 tasks) and was installed on `emulator-5554`. Notes → New → Import audio was exercised. The synthetic `Android-test-import.wav` produced the exact expected two-sentence transcript in a saved note; the note remained after force-stop/cold restart. Opening the result kept capture off and displayed Start dictation. A direct voice-enrollment link visibly showed the unavailable state with no recorder.
+- Evidence is external under `/Users/joshuadavidpadoa/Desktop/Android Research/premium-2026-10-15/`: `ui-review-v10.apk`, `build-ui-v10.log`, `notes-import-tests.log`, `notes-import-screen-tests.log`, `notes-import-types.log`, `notes-import-lint.log`, `import-v10.png`, `import-result-v10.png/xml`, `notes-import-cold-v10.xml`, `notes-menu-v10.xml`, `import-from-menu-v10.xml`, and `voice-live-v10.png`. One synthetic note and the source WAV remain for continuation; no user notes were removed. Generated repository verification build directories were removed after copying the APK.
+- Physical-device/other-provider import acceptance, broader layout/localization coverage, and full-goal review remain outstanding. UIAutomator intermittently returned a null root/hung while the emulator display was inactive; waking it restored screenshot capture. Do not count that inspection failure as a product failure or a completed cancellation interaction.
+
 ## Review focus
 
 - Interrupted recording, denied/revoked microphone permission, or Android Back must preserve recoverable work and stop capture when cancellation is confirmed (Task 4).
