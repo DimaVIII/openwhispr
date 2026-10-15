@@ -412,11 +412,7 @@ async function describeOpenRouterKey(response) {
   if (response.status !== 200) return describeStatusFailure(response.status, "openrouter");
   const key = (await readJson(response))?.data;
   if (!key?.is_management_key && !key?.is_provisioning_key) return null;
-  return {
-    errorCode: "credentialsRejected",
-    error: "The provider rejected these credentials.",
-    status: response.status,
-  };
+  return { ...describeStatusFailure(401, "openrouter"), status: response.status };
 }
 
 // A speech-only server may publish no model list. Its transcription address answers a

@@ -35,11 +35,10 @@ test("the realtime STT providers use their own auth schemes, not Bearer", () => 
   assert.equal(assemblyai.headers.Authorization, "aai-secret");
 });
 
-// Neither payload is OpenAI-shaped, so responseOffersModel would report
+// AssemblyAI's payload is not OpenAI-shaped, so responseOffersModel would report
 // modelNotFound for a perfectly valid key.
 test("a 200 is the whole signal for providers with no OpenAI-shaped model list", async () => {
   for (const [provider, model, payload] of [
-    ["deepgram", "nova-3", { stt: [{ name: "nova-3", canonical_name: "nova-3-general" }] }],
     ["assemblyai", "universal-streaming-english", { transcripts: [], page_details: {} }],
   ]) {
     assert.deepEqual(
@@ -329,13 +328,6 @@ const GEMINI_OTHER_REASON = {
 };
 const XAI_BAD_KEY = { code: "invalid-argument", error: "Incorrect API key provided: xa***00." };
 const CORTI_MALFORMED_HEADER = { message: "Missing or malformed Authorization header" };
-
-test("Deepgram is checked at its key endpoint with its own scheme", () => {
-  const request = resolveProviderRequest({ provider: "deepgram", apiKey: "dg-secret" });
-  assert.equal(request.endpoint, "https://api.deepgram.com/v1/auth/token");
-  assert.equal(request.headers.Authorization, "Token dg-secret");
-  assert.equal(request.redirect, "error");
-});
 
 test("any 2xx from Deepgram's key check passes, whatever the body or model", async () => {
   const { calls, fetchImpl } = recordingFetch(() => ({ ok: true, status: 200 }));

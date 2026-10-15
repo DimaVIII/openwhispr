@@ -138,6 +138,8 @@ test("Retry runs the check again, and the icon changes state in place", async (t
   const retry = findElement(container, (element) => element.tagName === "BUTTON");
   await React.act(async () => retry.dispatchEvent({ type: "click", bubbles: true }));
   assert.equal(retries, 1);
+  const input = findElement(container, (element) => element.tagName === "INPUT");
+  assert.ok(container.ownerDocument.activeElement === input, "focus moves off Retry to the field");
 });
 
 const SAVED_KEY = "sk-proj-abcd1234wxyz";

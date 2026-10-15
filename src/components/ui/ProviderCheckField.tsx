@@ -1,4 +1,4 @@
-import { useId, useState, type ComponentProps, type ReactNode } from "react";
+import { useId, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type {
   ConnectionAutoCheck,
@@ -23,7 +23,7 @@ const FIELD_CLASS =
 
 type ProviderCheckFieldProps = Omit<
   ComponentProps<typeof Input>,
-  "dir" | "aria-invalid" | "aria-describedby" | "aria-label"
+  "dir" | "aria-invalid" | "aria-describedby" | "aria-label" | "ref"
 > &
   // Onboarding captions the field itself; Settings names it after the heading above it.
   ({ label: string; "aria-label"?: never } | { label?: never; "aria-label": string }) & {
@@ -60,6 +60,7 @@ export function ProviderCheckField({
   const { t } = useTranslation();
   const reasonId = useId();
   const [focused, setFocused] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
   const phase = check?.phase ?? "idle";
   const failure = check?.failure ?? null;
   const secret = inputProps.type === "password";
@@ -79,6 +80,7 @@ export function ProviderCheckField({
       <Input
         dir="ltr"
         {...inputProps}
+        ref={inputRef}
         onFocus={(event) => {
           // Regaining focus after a window switch keeps the caret where it was.
           if (secret && !focused) event.currentTarget.select();
@@ -137,7 +139,11 @@ export function ProviderCheckField({
               {" "}
               <button
                 type="button"
-                onClick={check.retry}
+                // Retry goes away while the check runs, so focus moves to the field first.
+                onClick={() => {
+                  inputRef.current?.focus();
+                  check.retry();
+                }}
                 className="font-medium underline underline-offset-2 hover:opacity-70"
               >
                 {t("common.retry")}
