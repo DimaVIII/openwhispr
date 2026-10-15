@@ -17,9 +17,9 @@ type ModeChoice = 'cloud' | 'private';
 
 type CleanupLine = { included: boolean; text: string; hint?: string };
 
-// What Private Mode's cleanup does on this phone, matching what choosing it saves
-// (chooseOnboardingMode): a cleanup provider saved earlier keeps cleaning, and otherwise it's
-// Apple Intelligence or nothing. On an iPhone nothing is shown until the check answers.
+// What Local Mode's cleanup does on this phone: a cleanup provider saved earlier keeps cleaning,
+// and otherwise it's Apple Intelligence or nothing. On an iPhone nothing is shown until the check
+// answers.
 function privateCleanupLine(
   readiness: LocalReasoningReadiness | null,
   savedCleanup: InferenceMode | undefined,
@@ -124,7 +124,7 @@ export function PrivacyModeStep(): ReactElement {
           <Bullet text="Automatic cleanup & formatting" />
         </ModeCard>
         <ModeCard
-          title="Private Mode"
+          title="Local Mode"
           icon={<SystemIcon name="lock.fill" mdName="Lock" size={18} color="brand" />}
           selected={choice === 'private'}
           onSelect={() => setChoice('private')}

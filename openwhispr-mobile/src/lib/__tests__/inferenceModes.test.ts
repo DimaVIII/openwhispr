@@ -4,6 +4,12 @@ import { Platform } from 'react-native';
 import { dictationModeConfig, getInferenceModes, workflowSaveConfig } from '../inferenceModes';
 import type { UserConfig } from '@/types';
 
+const groqCleanup = {
+  mode: 'providers' as const,
+  providerId: 'groq',
+  modelId: 'llama-3.3-70b-versatile',
+  credentialRef: 'provider.groq',
+};
 const groqDictation = {
   mode: 'providers' as const,
   providerId: 'groq',
@@ -18,13 +24,30 @@ it('releases only the automatic pins when dictation leaves Bring Your Own Key', 
       dictation: groqDictation,
       upload: { mode: 'local' },
       notes: { mode: 'local' },
-      cleanup: { mode: 'local' },
+      cleanup: groqCleanup,
     },
     pinnedInference: ['upload', 'notes'],
   };
   const next = dictationModeConfig(pinned, 'cloud');
-  expect(next.inference).toEqual({ dictation: { mode: 'openwhispr' }, cleanup: { mode: 'local' } });
+  expect(next.inference).toEqual({ dictation: { mode: 'openwhispr' }, cleanup: groqCleanup });
   expect(next.pinnedInference).toBeUndefined();
+});
+
+// The Local Mode switch moves cleanup with it: Local Mode cleans on this iPhone, Cloud on Cloud.
+it.each([
+  ['On-Device', 'cloud', { mode: 'local' as const }],
+  ['OpenWhispr Cloud', 'private', { mode: 'openwhispr' as const }],
+] as const)('drops a saved %s cleanup when switching to %s', (_label, mode, cleanup) => {
+  const saved: UserConfig = {
+    defaultMode: mode === 'cloud' ? 'private' : 'cloud',
+    inference: { cleanup },
+  };
+  expect(dictationModeConfig(saved, mode).inference).not.toHaveProperty('cleanup');
+});
+
+it.each(['cloud', 'private'] as const)('keeps a cleanup provider when switching to %s', (mode) => {
+  const saved: UserConfig = { defaultMode: 'cloud', inference: { cleanup: groqCleanup } };
+  expect(dictationModeConfig(saved, mode).inference?.cleanup).toEqual(groqCleanup);
 });
 
 it('keeps an explicit On-Device upload choice when dictation leaves Bring Your Own Key', () => {
@@ -43,7 +66,7 @@ it('keeps an explicit upload choice when toggling between Cloud and On-Device', 
   expect(dictationModeConfig(explicit, 'private').inference?.upload).toEqual({ mode: 'local' });
 });
 
-it('keeps the dictation selection in step with Private mode', () => {
+it('keeps the dictation selection in step with Local Mode', () => {
   const config = {
     defaultMode: 'private' as const,
     inference: {
@@ -163,14 +186,14 @@ describe('workflowSaveConfig', () => {
     });
   });
 
-  describe('where Private mode returns to', () => {
+  describe('where Local Mode returns to', () => {
     const fromProviders: UserConfig = {
       defaultMode: 'private',
       privateModeReturn: { pinned: { upload: { mode: 'openwhispr' } } },
       inference: { dictation: { mode: 'local' } },
     };
 
-    it('is Bring Your Own Key, with what it held, when Private mode is turned on from it', () => {
+    it('is Bring Your Own Key, with what it held, when Local Mode is turned on from it', () => {
       const config: UserConfig = {
         defaultMode: 'providers',
         inference: {
@@ -186,7 +209,7 @@ describe('workflowSaveConfig', () => {
       expect(next.inference).toEqual({ dictation: { mode: 'local' }, notes: { mode: 'local' } });
     });
 
-    it('is not set when Private mode is turned on from Cloud', () => {
+    it('is not set when Local Mode is turned on from Cloud', () => {
       const config: UserConfig = { defaultMode: 'cloud' };
       expect(
         workflowSaveConfig(config, 'dictation', { mode: 'local' }, 'cloud'),
@@ -206,7 +229,7 @@ describe('workflowSaveConfig', () => {
     it.each([
       ['Cloud', { mode: 'openwhispr' as const }],
       ['Bring Your Own Key', groqDictation],
-    ])('is cleared when dictation leaves Private mode for %s', (_label, selection) => {
+    ])('is cleared when dictation leaves Local Mode for %s', (_label, selection) => {
       const next = workflowSaveConfig(fromProviders, 'dictation', selection, 'private');
       expect(next).toHaveProperty('privateModeReturn', undefined);
     });
@@ -217,7 +240,7 @@ describe('workflowSaveConfig', () => {
       expect(next.pinnedInference).toEqual(['upload']);
     });
 
-    it('keeps a choice made in Private mode over what Bring Your Own Key held', () => {
+    it('keeps a choice made in Local Mode over what Bring Your Own Key held', () => {
       const config: UserConfig = {
         ...fromProviders,
         inference: {
@@ -230,7 +253,7 @@ describe('workflowSaveConfig', () => {
       expect(next).not.toHaveProperty('pinnedInference');
     });
 
-    it('holds workflows on this phone when Private mode was not turned on from it', () => {
+    it('holds workflows on this phone when Local Mode was not turned on from it', () => {
       const config: UserConfig = {
         defaultMode: 'private',
         inference: { dictation: { mode: 'local' } },

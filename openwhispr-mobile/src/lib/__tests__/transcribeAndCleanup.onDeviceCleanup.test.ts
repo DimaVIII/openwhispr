@@ -1,7 +1,8 @@
 /**
- * A transcript made on this phone is cleaned by Apple Intelligence when the user chose
- * On-Device cleanup, or by the provider they saved for cleanup with their own key. Cloud
- * or no choice would send it off the device unasked, so the raw transcript is kept.
+ * A transcript made on this phone is cleaned by Apple Intelligence in Local Mode, or wherever
+ * the user chose On-Device cleanup, or by the provider they saved for cleanup with their own
+ * key. Outside Local Mode, Cloud or no choice would send it off the device unasked, so the raw
+ * transcript is kept.
  */
 import { TranscriptionService } from '@/services/transcription/TranscriptionService';
 import { transcribeAndCleanup } from '@/lib/transcribeAndCleanup';
@@ -155,10 +156,11 @@ it('cleans an On-Device transcript with the provider saved for cleanup', async (
   expect(result.cleanupApplied).toBe(true);
 });
 
+// Local Mode moves every workflow on this phone, cleanup included.
 it.each([
   ['OpenWhispr Cloud', { mode: 'openwhispr' }],
   ['nothing saved', undefined],
-])('keeps an On-Device transcript raw when cleanup is set to %s', async (_label, cleanup) => {
+])('cleans in Local Mode on this phone when cleanup is set to %s', async (_label, cleanup) => {
   mockConfig = {
     cleanupEnabled: true,
     defaultMode: 'private',
@@ -167,10 +169,31 @@ it.each([
 
   const result = await transcribeOnDevice();
 
+  expect(mockReason).toHaveBeenCalledTimes(1);
+  expect((mockReason.mock.calls[0][0] as Record<string, unknown>).inferenceRoute).toEqual({
+    mode: 'local',
+    scope: 'cleanup',
+  });
+  expect(result.text).toBe('cleaned:um hello there');
+});
+
+it('keeps an On-Device upload raw outside Local Mode with nothing saved for cleanup', async () => {
+  mockActiveMode = 'cloud';
+  mockConfig = {
+    cleanupEnabled: true,
+    defaultMode: 'cloud',
+    inference: { upload: { mode: 'local' } },
+  };
+
+  const result = await transcribeAndCleanup({
+    audioUri: 'file://a.wav',
+    provider: 'local',
+    requestContext: 'file',
+  });
+
   expect(mockReason).not.toHaveBeenCalled();
   expect(result.text).toBe('um hello there');
   expect(result.cleanupApplied).toBe(false);
-  expect(result.transcription.cleanupWarning).toBeUndefined();
 });
 
 it('keeps an On-Device transcript raw when cleanup is turned off', async () => {

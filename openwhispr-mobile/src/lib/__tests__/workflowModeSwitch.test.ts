@@ -78,7 +78,7 @@ it('asks a signed-out user to sign in before switching to Cloud', async () => {
   await expect(switchWorkflowMode('cleanup', 'openwhispr')).resolves.toBe('refused');
   expect(alert).toHaveBeenCalledWith(
     'Sign in required',
-    'Sign in to use cloud AI with cloud processing, or turn on Private Mode in Account → AI Models.',
+    'Sign in to use cloud AI with cloud processing, or turn on Local Mode in Account → AI Models.',
     expect.any(Array),
   );
   expect(mockUpdateConfig).not.toHaveBeenCalled();
@@ -210,6 +210,33 @@ describe('setPrivateMode', () => {
       defaultMode: 'cloud',
       inference: { dictation: { mode: 'openwhispr' } },
     });
+  });
+
+  // The switch moves cleanup with it: Local Mode cleans on this iPhone, Cloud on Cloud.
+  it.each([
+    [true, 'cloud', { mode: 'openwhispr' }],
+    [false, 'private', { mode: 'local' }],
+  ] as const)(
+    'turned %s, drops a cleanup saved for the other mode',
+    async (enabled, from, cleanup) => {
+      mockActiveMode = from;
+      mockConfig = {
+        defaultMode: from,
+        inference: { dictation: { mode: from === 'cloud' ? 'openwhispr' : 'local' }, cleanup },
+      };
+      await expect(setPrivateMode(enabled)).resolves.toBe('switched');
+      expect(mockUpdateConfig.mock.calls[0][0].inference).not.toHaveProperty('cleanup');
+    },
+  );
+
+  it('keeps a cleanup provider when turned on', async () => {
+    const cleanup = { mode: 'providers', providerId: 'openai', modelId: 'gpt-5-mini' };
+    mockConfig = {
+      defaultMode: 'cloud',
+      inference: { dictation: { mode: 'openwhispr' }, cleanup },
+    };
+    await expect(setPrivateMode(true)).resolves.toBe('switched');
+    expect(mockUpdateConfig.mock.calls[0][0].inference.cleanup).toEqual(cleanup);
   });
 
   it('remembers Bring Your Own Key, and what it held, when turned on from it', async () => {

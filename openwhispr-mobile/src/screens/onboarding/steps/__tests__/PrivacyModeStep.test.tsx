@@ -58,7 +58,7 @@ async function renderStep(): Promise<ReturnType<typeof render>> {
   return screen;
 }
 const CLOUD = 'OpenWhispr Cloud';
-const LOCAL = 'Private Mode';
+const LOCAL = 'Local Mode';
 
 it('describes each mode in a few short lines', async () => {
   const screen = await renderStep();

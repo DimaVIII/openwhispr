@@ -35,8 +35,7 @@ import {
   ON_DEVICE_MODE_NOTES,
   PRIVATE_MODE_LOCKED,
   PRIVATE_MODE_LOCKED_REASON,
-  UNSET_ON_DEVICE_CLEANUP_NOTE,
-  UNSET_UNSUPPORTED_CLEANUP_NOTE,
+  ON_DEVICE_CLEANUP_UNSUPPORTED_NOTE,
   UNSET_PROVIDER_NOTES,
   WORKFLOW_LABELS,
   WORKFLOWS,
@@ -292,18 +291,15 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
   const setActiveMode = useProcessingModeStore((state) => state.setActiveMode);
   const activeMode = useProcessingModeStore((state) => state.activeMode);
   const storedSelection = config?.inference?.[scope] ?? unsetSelection(scope, activeMode);
-  // Private mode runs dictation and uploads on this phone whatever is saved, so a saved mode it
-  // locks shows as On-Device (Automatic), which is what runs, and stays saved for later.
+  // Local Mode runs dictation, uploads and cleanup on this phone whatever is saved, so a saved mode
+  // it locks shows as On-Device (Automatic), which is what runs.
   const lockedByPrivateMode =
     activeMode === 'private' &&
-    (scope === 'dictation' || scope === 'upload') &&
+    (scope === 'dictation' || scope === 'upload' || scope === 'cleanup') &&
     !!PRIVATE_MODE_LOCKED[scope]?.includes(storedSelection.mode);
   const savedSelection: InferenceSelection = lockedByPrivateMode
     ? { mode: 'local' }
     : storedSelection;
-  // Private mode skips an unsaved cleanup, so the On-Device default must not look picked.
-  const cleanupUnsaved =
-    scope === 'cleanup' && activeMode === 'private' && !config?.inference?.cleanup;
   // Tracks the saved selection, except while a Bring Your Own Key draft is being set up.
   const [selection, setSelection] = useState<InferenceSelection>(savedSelection);
   const remembered = useRef<Record<string, InferenceSelection>>({});
@@ -331,8 +327,6 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
   const modelId = selection.modelId ?? defaultModelId(provider);
   const providerId = provider?.id;
   const models = provider?.models.length ? provider.models : discoveredModels;
-  const shownMode =
-    cleanupUnsaved && selection.mode === savedSelection.mode ? null : selection.mode;
   const speechScope = scope === 'dictation' || scope === 'upload' ? scope : null;
   // On-Device text workflows run on Apple Intelligence, which some iPhones can never run.
   const [onDeviceUnsupported, setOnDeviceUnsupported] = useState<string | null>(null);
@@ -354,13 +348,11 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
     };
   }, [speechScope]);
   const modeNote =
-    (shownMode === null
-      ? onDeviceUnsupported
-        ? UNSET_UNSUPPORTED_CLEANUP_NOTE
-        : UNSET_ON_DEVICE_CLEANUP_NOTE
+    (scope === 'cleanup' && selection.mode === 'local' && onDeviceUnsupported
+      ? ON_DEVICE_CLEANUP_UNSUPPORTED_NOTE
       : undefined) ??
     (lockedByPrivateMode && ON_DEVICE_MODE_NOTES[scope]
-      ? `${ON_DEVICE_MODE_NOTES[scope]} Your ${MODE_LABELS[storedSelection.mode]} choice applies again when Private Mode is off.`
+      ? `${ON_DEVICE_MODE_NOTES[scope]} Your ${MODE_LABELS[storedSelection.mode]} choice applies again when Local Mode is off.`
       : undefined) ??
     (activeMode === 'private' ? ON_DEVICE_MODE_NOTES[scope] : undefined) ??
     (activeMode === 'providers' && !config?.inference?.[scope]
@@ -368,7 +360,7 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
       : undefined) ??
     (selection.mode === 'providers' && savedSelection.mode !== 'providers'
       ? activeMode === 'private'
-        ? 'Save to switch to Bring Your Own Key. This turns Private Mode off.'
+        ? 'Save to switch to Bring Your Own Key. This turns Local Mode off.'
         : 'Save to switch to Bring Your Own Key.'
       : undefined);
   // Private mode is switched in AI Models, so a mode it never runs here can't be picked.
@@ -490,7 +482,7 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
       );
       return;
     }
-    if (mode === savedSelection.mode && !cleanupUnsaved) {
+    if (mode === savedSelection.mode) {
       setSelection(savedSelection);
       return;
     }
@@ -763,7 +755,7 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
           <>
             <InferenceModePicker
               scope={speechScope ? 'speech' : 'text'}
-              selectedMode={shownMode}
+              selectedMode={selection.mode}
               onSelect={chooseMode}
               unavailable={modeUnavailable}
             />
@@ -777,7 +769,7 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
                 lockedChoice={lockedByPrivateMode}
               />
             ) : null}
-            {shownMode === 'local' && !speechScope ? (
+            {selection.mode === 'local' && !speechScope ? (
               <SectionFooter>Runs on Apple Intelligence on this iPhone.</SectionFooter>
             ) : null}
             {selection.mode === 'providers' && provider ? (

@@ -11,7 +11,7 @@ import { getActiveCustomCleanupPrompt } from '@/store/useCustomPromptsStore';
 import { useProcessingModeStore } from '@/store/useProcessingModeStore';
 import { useSnippetsStore } from '@/store/useSnippetsStore';
 import { requiresRealAccount } from './accountAccess';
-import { cleanupSavedOnDevice } from './aiWorkflows';
+import { cleanupRunsOnDevice } from './aiWorkflows';
 import { cleanupTranscript, AGENT_ACTION_TIMEOUT_MS } from './cleanupTranscript';
 import {
   getDictationAgentName,
@@ -68,7 +68,11 @@ function rawTranscriptResult(transcription: TranscriptionResponse): DictationPro
 function cleansLocalTranscript(request: TranscriptionRequest): boolean {
   if (request.cleanupRoute?.mode === 'providers') return true;
   return (
-    request.cleanupRoute?.mode === 'local' && cleanupSavedOnDevice(useConfigStore.getState().config)
+    request.cleanupRoute?.mode === 'local' &&
+    cleanupRunsOnDevice(
+      useConfigStore.getState().config,
+      useProcessingModeStore.getState().activeMode,
+    )
   );
 }
 

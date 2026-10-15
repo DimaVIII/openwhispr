@@ -149,7 +149,7 @@ export default function AIModelsScreen(): React.JSX.Element {
     setRequestedPrivateMode(enabled);
     try {
       if ((await setPrivateMode(enabled)) === 'switched') {
-        showToast(enabled ? 'Private Mode on.' : 'Private Mode off.', 'success');
+        showToast(enabled ? 'Local Mode on.' : 'Local Mode off.', 'success');
       }
     } finally {
       setRequestedPrivateMode(null);
@@ -172,7 +172,7 @@ export default function AIModelsScreen(): React.JSX.Element {
             iconStyle="line"
             icon="lock"
             mdIcon="Lock"
-            title="Private Mode"
+            title="Local Mode"
             description={
               privateMode
                 ? 'Audio stays on this iPhone, notes ask before leaving it, and the voice assistant is off.'
@@ -180,7 +180,7 @@ export default function AIModelsScreen(): React.JSX.Element {
             }
             rightElement={
               <SettingsSwitch
-                accessibilityLabel="Private Mode"
+                accessibilityLabel="Local Mode"
                 value={requestedPrivateMode ?? privateMode}
                 disabled={busy}
                 onValueChange={(enabled) => {

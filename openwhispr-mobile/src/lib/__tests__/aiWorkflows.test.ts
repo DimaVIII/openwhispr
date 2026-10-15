@@ -6,12 +6,21 @@ function config(overrides: Partial<UserConfig> = {}): UserConfig {
 }
 
 describe('workflowSummary for Text Cleanup', () => {
+  // Local Mode moves every workflow on this phone, cleanup included.
   it.each([
     ['nothing saved', undefined],
     ['OpenWhispr Cloud', { mode: 'openwhispr' as const }],
-  ])('is skipped in On-Device mode with %s saved', (_label, cleanup) => {
+  ])('runs On-Device in Local Mode with %s saved', (_label, cleanup) => {
     const saved = config({ inference: cleanup ? { cleanup } : {} });
-    expect(workflowSummary(saved, 'cleanup', 'private')).toBe('Skipped');
+    expect(workflowSummary(saved, 'cleanup', 'private')).toBe('On-Device');
+  });
+
+  it('is skipped in Local Mode when Apple Intelligence cannot run', () => {
+    expect(
+      workflowSummary(config({}), 'cleanup', 'private', {
+        onDeviceUnavailable: 'Not supported on this iPhone',
+      }),
+    ).toBe('Skipped · Not supported on this iPhone');
   });
 
   it('names the provider saved for cleanup in On-Device mode, which cleans there', () => {
@@ -30,14 +39,25 @@ describe('workflowSummary for Text Cleanup', () => {
   });
 
   it.each(['private', 'cloud'] as const)(
-    'says why saved On-Device cleanup cannot run in %s mode',
+    'says why saved On-Device cleanup is skipped in %s mode',
     (mode) => {
       const saved = config({ defaultMode: mode, inference: { cleanup: { mode: 'local' } } });
       expect(
         workflowSummary(saved, 'cleanup', mode, { onDeviceUnavailable: 'Apple Intelligence off' }),
-      ).toBe('On-Device · Apple Intelligence off');
+      ).toBe('Skipped · Apple Intelligence off');
     },
   );
+
+  it('ignores On-Device availability for a cleanup provider in Local Mode', () => {
+    const saved = config({
+      inference: { cleanup: { mode: 'providers', providerId: 'openai', modelId: 'gpt-5-mini' } },
+    });
+    expect(
+      workflowSummary(saved, 'cleanup', 'private', {
+        onDeviceUnavailable: 'Apple Intelligence off',
+      }),
+    ).toBe('OpenAI');
+  });
 
   it('ignores On-Device availability for a cleanup that does not run on the phone', () => {
     const saved = config({ defaultMode: 'cloud', inference: { cleanup: { mode: 'openwhispr' } } });
