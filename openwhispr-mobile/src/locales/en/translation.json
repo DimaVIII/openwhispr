@@ -231,7 +231,7 @@
     "meetingStopSave": "Stop and save",
     "meetingInterrupted": "Meeting interrupted",
     "billingChecking": "Checking your purchase…",
-    "billingPaymentPending": "Your payment is pending in Google Play. Access will update after payment is approved.",
+    "billingPaymentPending": "Your earlier payment is still unresolved. Check its status in Google Play, then refresh access after payment completes. If it was cancelled, contact support before starting another purchase.",
     "billingAccessPending": "Your purchase is complete. We’re checking access with the server. Use Refresh access to retry.",
     "billingAppStore": "Manage this subscription in your Apple account on an Apple device.",
     "billingWorkspace": "Your workspace provides access. Contact its administrator to change the plan.",

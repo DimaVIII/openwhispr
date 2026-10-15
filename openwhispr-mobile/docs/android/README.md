@@ -31,11 +31,13 @@ Open the development client and select that server. NativeWind and CSS interop a
 
 ## Local use and permissions
 
-Choose the explicit local workspace route to use local processing without signing in. Hosted processing, account sync and BYOK are separate choices. Existing account entitlements remain authoritative; the Android screen does not create rewards, purchases or trials.
+Choose the explicit local workspace route to use local processing without signing in. Hosted processing, account sync and BYOK are separate choices. Existing account entitlements remain authoritative; rewards and trial eligibility are never invented locally.
 
 Open **Models & processing** and turn **Private mode** off to use OpenWhispr Cloud. The switch reuses the shared account and model checks. The retained signed-in session completed two live short-clip cloud dictations in the review pass; local processing was restored afterward.
 
-**Explore Pro** currently shows plan information only. It has no pricing, purchase or restore controls, and the review build has no `EXPO_PUBLIC_SUPERWALL_ANDROID_API_KEY`. The shared Superwall provider supports Android, but a configured provider and a connected purchase placement still need checkout and entitlement verification.
+**Plan & billing** now connects a remotely configured Superwall paywall to RevenueCat as the sole Android purchase controller. It selects the exact Play product/base plan/offer, restores purchases, retries server access verification and preserves existing web/workspace subscriptions. Prices and eligibility come from the configured store paywall, not local constants. The local review environment has neither Android public SDK key configured; remote EAS/provider configuration has not been verified. A Play-distributed license-tester build and configured Superwall/RevenueCat/Play catalog are still required for actual checkout and restore acceptance.
+
+Pending payments expose Google Play management and support. Refresh invalidates cached customer information, and an empty restore does not claim that a pending payment was cancelled. Automatic recovery after cancellation/expiry remains incomplete: the current SDK response does not expose a verified terminal transaction state. The app preserves the purchase lock rather than risking a second payment; original-transaction correlation and provider/backend status support are required to clear that lock safely. No real purchase or trial has been issued.
 
 Enable overlay and text insertion through Bubble & permissions and Android's normal consent screens. Enabling the bubble asks for microphone permission, and notification permission on Android 13+. Recording starts only from a user gesture. Password fields are excluded; if the original field or selection changes, the result is preserved in Home instead of writing into another field. Disable the bubble from that settings screen or its close button.
 

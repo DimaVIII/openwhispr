@@ -37,6 +37,7 @@ jest.mock('react-native-purchases', () => ({
     purchaseSubscriptionOption: jest.fn(),
     restorePurchases: jest.fn(),
     getCustomerInfo: jest.fn(),
+    invalidateCustomerInfoCache: jest.fn(async () => undefined),
     addCustomerInfoUpdateListener: jest.fn(),
     removeCustomerInfoUpdateListener: jest.fn(),
   },
@@ -170,6 +171,39 @@ it('does not create a second purchase while payment is pending', async () => {
   useAndroidBillingStatus.setState({ accounts: { 'billing-a': 'payment-pending' } });
   expect(await androidPurchaseController.onPurchase(params)).toMatchObject({ type: 'failed' });
   expect(Purchases.purchaseSubscriptionOption).not.toHaveBeenCalled();
+});
+it('refreshes stale store data without treating missing entitlement as cancelled payment', async () => {
+  useAndroidBillingStatus.setState({ accounts: { 'billing-a': 'payment-pending' } });
+  jest.mocked(Purchases.getCustomerInfo).mockResolvedValue({} as never);
+  await refreshAndroidBillingAccess();
+  expect(Purchases.invalidateCustomerInfoCache).toHaveBeenCalledTimes(1);
+  expect(useAndroidBillingStatus.getState().accounts['billing-a']).toBe('payment-pending');
+  expect(reconcileStoreBilling).not.toHaveBeenCalled();
+});
+it('preserves unresolved payment on empty restore and explains recovery', async () => {
+  useAndroidBillingStatus.setState({ accounts: { 'billing-a': 'payment-pending' } });
+  expect(await restoreAndroidPurchases()).toBe('payment-pending');
+  expect(await androidPurchaseController.onPurchaseRestore()).toMatchObject({
+    type: 'failed',
+    error: expect.stringContaining('Check Google Play'),
+  });
+  expect(useAndroidBillingStatus.getState().accounts['billing-a']).toBe('payment-pending');
+  expect(Purchases.purchaseSubscriptionOption).not.toHaveBeenCalled();
+});
+it('preserves unresolved payment when the fresh store query fails', async () => {
+  useAndroidBillingStatus.setState({ accounts: { 'billing-a': 'payment-pending' } });
+  jest.mocked(Purchases.getCustomerInfo).mockRejectedValueOnce(new Error('offline'));
+  await expect(refreshAndroidBillingAccess()).rejects.toThrow('offline');
+  expect(useAndroidBillingStatus.getState().accounts['billing-a']).toBe('payment-pending');
+});
+it('stops a refresh if the account changes while clearing the store cache', async () => {
+  useAndroidBillingStatus.setState({ accounts: { 'billing-a': 'payment-pending' } });
+  jest.mocked(Purchases.invalidateCustomerInfoCache).mockImplementationOnce(async () => {
+    mockOwner = 'account:b';
+  });
+  await expect(refreshAndroidBillingAccess()).rejects.toThrow('account changed');
+  expect(Purchases.getCustomerInfo).not.toHaveBeenCalled();
+  expect(useAndroidBillingStatus.getState().accounts['billing-a']).toBe('payment-pending');
 });
 it('fresh server proof clears pending even when cached store information would be inactive', async () => {
   useAndroidBillingStatus.setState({ accounts: { 'billing-a': 'payment-pending' } });

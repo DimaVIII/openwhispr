@@ -100,9 +100,11 @@ export function PlanContent() {
                   t(
                     restored === 'restored'
                       ? 'purchaseRestored'
-                      : restored === 'pending'
-                        ? 'billingAccessPending'
-                        : 'noActivePurchase',
+                      : restored === 'payment-pending'
+                        ? 'billingPaymentPending'
+                        : restored === 'pending'
+                          ? 'billingAccessPending'
+                          : 'noActivePurchase',
                   ),
                 );
               });
@@ -121,7 +123,7 @@ export function PlanContent() {
               }}
             />
           )}
-          {sources?.providerStore === 'play_store' && (
+          {(sources?.providerStore === 'play_store' || billingStatus === 'payment-pending') && (
             <Row
               title={t('managePlay')}
               onPress={() => {
@@ -130,6 +132,9 @@ export function PlanContent() {
                 );
               }}
             />
+          )}
+          {billingStatus === 'payment-pending' && (
+            <Row title={t('support')} onPress={() => router.push('/(account)/help')} />
           )}
           {sources?.providerStore === 'app_store' && (
             <Text style={styles.caption}>{t('billingAppStore')}</Text>

@@ -121,7 +121,11 @@ export async function refreshAndroidBillingAccess(): Promise<UsageInfo> {
   if (useAndroidBillingStatus.getState().accounts[account.billingId] === 'payment-pending') {
     const info = await withRevenueCatUser(
       account.billingId,
-      () => Purchases.getCustomerInfo(),
+      async () => {
+        await Purchases.invalidateCustomerInfoCache();
+        account.check();
+        return Purchases.getCustomerInfo();
+      },
       account.check,
     );
     account.check();
@@ -130,7 +134,9 @@ export async function refreshAndroidBillingAccess(): Promise<UsageInfo> {
   return refreshAccountAccess(account);
 }
 
-export async function restoreAndroidPurchases(): Promise<'restored' | 'pending' | 'none'> {
+export async function restoreAndroidPurchases(): Promise<
+  'restored' | 'pending' | 'payment-pending' | 'none'
+> {
   const account = await currentBillingAccount();
   const info = await accountOperation(account, async () => {
     const restored = await Purchases.restorePurchases();
@@ -138,7 +144,10 @@ export async function restoreAndroidPurchases(): Promise<'restored' | 'pending' 
     return restored;
   });
   account.check();
-  if (!hasPlaySubscription(info)) return 'none';
+  if (!hasPlaySubscription(info))
+    return useAndroidBillingStatus.getState().accounts[account.billingId] === 'payment-pending'
+      ? 'payment-pending'
+      : 'none';
   const usage = await refreshAccountAccess(account);
   account.check();
   return hasBackendPlayAccess(usage) ? 'restored' : 'pending';
@@ -274,9 +283,11 @@ export const androidPurchaseController: CustomPurchaseControllerContext = {
       return {
         type: 'failed',
         error:
-          result === 'pending'
-            ? 'Google Play purchase found. Access verification is pending; use Refresh access to retry.'
-            : 'No active Google Play purchase was restored. Existing access is unchanged.',
+          result === 'payment-pending'
+            ? 'Your earlier payment is still unresolved. Check Google Play before starting another purchase. Refresh access after the payment completes, or contact support if it was cancelled.'
+            : result === 'pending'
+              ? 'Google Play purchase found. Access verification is pending; use Refresh access to retry.'
+              : 'No active Google Play purchase was restored. Existing access is unchanged.',
       };
     } catch (error) {
       return { type: 'failed', error: (error as Error).message };
