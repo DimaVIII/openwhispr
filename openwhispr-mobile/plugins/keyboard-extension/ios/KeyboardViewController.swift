@@ -9,6 +9,12 @@ private enum KeyboardLog {
     category: "Transcription"
   )
   static let storage = Logger(subsystem: "com.gizmolabs.openwhispr.keyboard", category: "Storage")
+  /// Points of Interest in Instruments: key presses, text changes and shared-state
+  /// polls, to see on a device what delays or drops a keystroke.
+  static let signposter = OSSignposter(
+    subsystem: "com.gizmolabs.openwhispr.keyboard",
+    category: .pointsOfInterest
+  )
 
   static func echo(_ message: String) {
     #if DEBUG
@@ -84,6 +90,16 @@ private final class KeyButton: UIButton {
       let delta: CGFloat = traitCollection.userInterfaceStyle == .dark ? 0.12 : -0.10
       backgroundColor = resolved.brightened(by: delta)
     }
+  }
+
+  override func beginTracking(_ touch: UITouch, with event: UIEvent?) -> Bool {
+    KeyboardLog.signposter.emitEvent("keyDown")
+    return super.beginTracking(touch, with: event)
+  }
+
+  override func cancelTracking(with event: UIEvent?) {
+    KeyboardLog.signposter.emitEvent("keyCancel")
+    super.cancelTracking(with: event)
   }
 
   override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
@@ -761,6 +777,8 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
   }
 
   override func textDidChange(_ textInput: UITextInput?) {
+    let signpost = KeyboardLog.signposter.beginInterval("textDidChange")
+    defer { KeyboardLog.signposter.endInterval("textDidChange", signpost) }
     super.textDidChange(textInput)
     syncShiftWithContextIfNeeded()
     refreshFieldAwareKeys()
@@ -2086,6 +2104,7 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
   }
 
   private func playKeyClick() {
+    KeyboardLog.signposter.emitEvent("keyClick")
     UIDevice.current.playInputClick()
   }
 
@@ -3205,6 +3224,8 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
   }
 
   private func pollRecordingState() {
+    let signpost = KeyboardLog.signposter.beginInterval("recordingPoll")
+    defer { KeyboardLog.signposter.endInterval("recordingPoll", signpost) }
     if isAgentReviewShown { return }
     let provider = KeyboardHandoffProvider.shared
 
