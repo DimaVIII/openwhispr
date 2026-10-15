@@ -373,6 +373,7 @@ class ModelManager {
 
       await sharedDownloadFile(downloadUrl, modelPath, {
         signal,
+        expectedSha256: model.sha256,
         onProgress: hasDrafter
           ? (downloadedBytes) => emitCombined(downloadedBytes)
           : (downloadedBytes, totalBytes) => {
@@ -406,6 +407,7 @@ class ModelManager {
         try {
           await sharedDownloadFile(this.getDraftDownloadUrl(provider, model), draftPath, {
             signal,
+            expectedSha256: model.draftSha256,
             onProgress: (downloadedBytes) => emitCombined(stats.size + downloadedBytes),
           });
           const draftStats = await fsPromises.stat(draftPath);

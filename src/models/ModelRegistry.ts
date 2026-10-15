@@ -11,7 +11,9 @@ export interface ModelDefinition {
   sizeBytes: number;
   description: string;
   descriptionKey?: string;
+  minAppVersion?: string;
   fileName: string;
+  sha256?: string;
   quantization: string;
   contextLength: number;
   hfRepo: string;
@@ -21,6 +23,7 @@ export interface ModelDefinition {
   draftHfRepo?: string;
   draftFileName?: string;
   draftSizeBytes?: number;
+  draftSha256?: string;
 }
 
 export interface LocalProviderData {
@@ -43,6 +46,7 @@ export interface CloudModelDefinition {
   name: string;
   description: string;
   descriptionKey?: string;
+  minAppVersion?: string;
   disableThinking?: boolean;
   supportsThinking?: boolean;
   supportsVision?: boolean;
@@ -67,6 +71,7 @@ export interface TranscriptionModelDefinition {
   name: string;
   description: string;
   descriptionKey?: string;
+  minAppVersion?: string;
   streaming?: boolean;
 }
 
@@ -83,9 +88,11 @@ export interface WhisperModelInfo {
   name: string;
   description: string;
   descriptionKey?: string;
+  minAppVersion?: string;
   size: string;
   sizeMb: number;
   fileName: string;
+  sha256?: string;
   downloadUrl: string;
   recommended?: boolean;
 }
@@ -94,6 +101,7 @@ export interface WhisperModelConfig {
   url: string;
   size: number;
   fileName: string;
+  sha256?: string;
 }
 
 export type WhisperModelsMap = Record<string, WhisperModelInfo>;
@@ -118,6 +126,8 @@ export interface ParakeetModelInfo {
   recommended?: boolean;
   downloadUrl: string;
   extractDir: string;
+  sha256?: string;
+  minAppVersion?: string;
 }
 
 export type ParakeetModelsMap = Record<string, ParakeetModelInfo>;
