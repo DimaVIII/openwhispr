@@ -346,16 +346,27 @@ describe('readKeyboardAgentDraft', () => {
     expect(readKeyboardAgentDraft()).toBe('first');
   });
 
-  it('falls back to the newest version without an activeIndex', () => {
-    store.keyboard_agent_result = JSON.stringify({ versions: ['first', 'second'] });
-    expect(readKeyboardAgentDraft()).toBe('second');
+  // As the keyboard's card picks it (KeyboardViewController.readAgentResult).
+  it.each([
+    ['the first version without an activeIndex', { versions: ['first', 'second'] }, 'first'],
+    ['the last version past the end', { versions: ['first', 'second'], activeIndex: 3 }, 'second'],
+    [
+      'the first version before the start',
+      { versions: ['first', 'second'], activeIndex: -1 },
+      'first',
+    ],
+  ])('returns %s', (_label, result, draft) => {
+    store.keyboard_agent_result = JSON.stringify(result);
+    expect(readKeyboardAgentDraft()).toBe(draft);
   });
 
   it.each([
     ['nothing is stored', undefined],
     ['the JSON is invalid', 'bad json{{{'],
+    ['the result is not an object', 'null'],
     ['there are no versions', JSON.stringify({ activeIndex: 0 })],
-    ['the active version is missing', JSON.stringify({ versions: ['only'], activeIndex: 3 })],
+    ['the versions are empty', JSON.stringify({ versions: [], activeIndex: 0 })],
+    ['a version is not text', JSON.stringify({ versions: ['first', 2], activeIndex: 0 })],
   ])('returns null when %s', (_label, raw) => {
     delete store.keyboard_agent_result;
     if (raw !== undefined) store.keyboard_agent_result = raw;

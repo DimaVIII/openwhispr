@@ -9,7 +9,8 @@ jest.mock('react-native-reanimated', () => ({
   __esModule: true,
   default: { View: require('react-native').View },
   useAnimatedStyle: () => ({}),
-  useSharedValue: (value: number) => ({ value }),
+  // Stable across renders, as the real one is, so the pulse effect runs only when its inputs change.
+  useSharedValue: (value: number) => require('react').useRef({ value }).current,
   withSequence: jest.fn(),
   withTiming: jest.fn(),
 }));
@@ -135,8 +136,9 @@ it('shows the request and a drafted message when the live try is unavailable', (
   expect(
     screen.getByText('“Write a message to my landlord asking if I can pay rent two days late.”'),
   ).toBeTruthy();
-  expect(screen.getByText(/rent two days late\? Thanks for understanding\./)).toBeTruthy();
-  expect(screen.queryByText(/lunch/)).toBeNull();
+  expect(screen.getByText(/^Hi, would it be okay .* Thanks for understanding\.$/)).toBeTruthy();
+  // The example is a first draft: no follow-up and nothing asked for changes.
+  expect(screen.queryByText(/Ask for changes|paycheck/)).toBeNull();
 });
 
 it('walks through a request, a spoken follow-up and inserting the result', () => {
@@ -348,7 +350,7 @@ describe('placeholders', () => {
   const FILL_IN =
     'Now tap Ask for changes and fill in [Landlord’s Name] and [Your Name]. Say: “My landlord is Maria, and sign it Alex.”';
   const STILL_MISSING =
-    'Still missing [Your Name]. Tap Ask for changes again. Say: “Sign it Alex.”';
+    'Still missing [Your Name]. Tap Ask for changes again. Say: “Sign it Alex.” Or tap ✓ to insert it as is.';
 
   it('says what to fill in for the placeholders in the first draft', () => {
     const screen = render(<VoiceAgentStep />);
@@ -390,18 +392,29 @@ describe('placeholders', () => {
     expect(screen.getByText(INSERT)).toBeTruthy();
   });
 
-  it('forgets the placeholders on Retry', async () => {
+  it('does not nudge again for a draft that arrives after inserting', () => {
     const screen = render(<VoiceAgentStep />);
     emit('recording');
-    mockDraft = 'Hi [Landlord’s Name], could I pay rent two days late?';
     emit('agent_ready', undefined, '1000');
-    emit('agent_error', 'Network request failed');
-    await act(async () => {
-      fireEvent.press(screen.getByText('Retry'));
-    });
-    emit('recording');
-    mockDraft = DRAFT;
+    fireEvent.changeText(screen.getByLabelText('Your message'), DRAFT);
+    jest.mocked(safeHaptics).mockClear();
+    // Regenerating on the card after inserting.
+    mockDraft = 'Hi [Landlord’s Name], could I pay rent two days late?';
     emit('agent_ready', undefined, '2000');
-    expect(screen.getByText(FOLLOW_UP)).toBeTruthy();
+    expect(screen.getByText(DONE)).toBeTruthy();
+    expect(safeHaptics).not.toHaveBeenCalled();
+  });
+
+  it('does not nudge when a new draft leaves the instruction the same', () => {
+    render(<VoiceAgentStep />);
+    emit('recording');
+    mockDraft = '[Name], [Unit], [Amount], [Your Name]';
+    emit('agent_ready', undefined, '1000');
+    mockDraft = '[Name], [Unit], [Amount], [Due Date], [Your Name]';
+    emit('agent_ready', undefined, '2000');
+    jest.mocked(safeHaptics).mockClear();
+    mockDraft = '[Name], [Unit], [Amount], [Your Name]';
+    emit('agent_ready', undefined, '3000');
+    expect(safeHaptics).not.toHaveBeenCalled();
   });
 });

@@ -27,7 +27,7 @@ type Phase = 'start' | 'asking' | 'first-draft' | 'refined' | 'done';
 // ones the draft actually has.
 const REQUEST = 'Write a message to my landlord asking if I can pay rent two days late.';
 const EXAMPLE_DRAFT =
-  'Hi Maria, would it be okay if I paid this month’s rent two days late? Thanks for understanding.';
+  'Hi, would it be okay if I paid this month’s rent two days late? Thanks for understanding.';
 const INSERT = 'Tap ✓ to insert it.';
 
 // The field is focused on arrival, so the first instruction points straight at the keyboard's agent
@@ -43,17 +43,10 @@ const INSTRUCTIONS: Record<Exclude<Phase, 'first-draft' | 'refined'>, ReactNode>
   done: 'That’s your voice assistant.',
 };
 
-// After a draft, the instruction names the placeholders it still has. A failed change leaves the
-// earlier draft on the keyboard's card, ready to insert.
-function instructionFor(phase: Phase, placeholders: string[], failed: boolean): ReactNode {
-  if (failed) return INSERT;
-  if (phase === 'first-draft') {
-    return placeholders.length ? fillInInstruction(placeholders, false) : DEFAULT_FOLLOW_UP;
-  }
-  if (phase === 'refined') {
-    return placeholders.length ? fillInInstruction(placeholders, true) : INSERT;
-  }
-  return INSTRUCTIONS[phase];
+// After a draft, the instruction names the placeholders it still has.
+function draftInstruction(refined: boolean, placeholders: string[]): string {
+  if (placeholders.length) return fillInInstruction(placeholders, refined);
+  return refined ? INSERT : DEFAULT_FOLLOW_UP;
 }
 
 // Errors a retry can't clear: the server wants an account (the free tries are used up, the guest
@@ -91,15 +84,15 @@ export function VoiceAgentStep(): ReactElement {
   const pulseStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + pulse.value * 0.04 }] }));
   const flashStyle = useAnimatedStyle(() => ({ opacity: pulse.value * 0.18 }));
 
+  const draftText = hasDraft ? draftInstruction(phase === 'refined', placeholders) : null;
+
   // Eyes are on the keyboard during the try, so each new instruction pulses the card and taps the
-  // phone to draw them back up.
-  // A changed draft can name different placeholders without changing the phase.
-  const placeholderKey = placeholders.join('\n');
+  // phone to draw them back up. A new draft can change it without changing the phase.
   useEffect(() => {
     if (phase === 'start') return;
     pulse.value = withSequence(withTiming(1, { duration: 160 }), withTiming(0, { duration: 700 }));
     safeHaptics(phase === 'done' ? 'success' : 'light');
-  }, [phase, placeholderKey, pulse]);
+  }, [phase, draftText, pulse]);
 
   useEffect(() => {
     const subscription = addKeyboardStatusChangedListener((event) => {
@@ -126,7 +119,6 @@ export function VoiceAgentStep(): ReactElement {
 
   const retry = (): void => {
     draftsReady.current = 0;
-    setPlaceholders([]);
     setAgentError(null);
     setPhase('start');
     setValue('');
@@ -190,7 +182,8 @@ export function VoiceAgentStep(): ReactElement {
                 }
                 className="flex-1 text-[16px] leading-[22px] text-label"
               >
-                {instructionFor(phase, placeholders, !!agentError)}
+                {/* A failed change leaves the earlier draft on the keyboard's card, ready to insert. */}
+                {agentError ? INSERT : hasDraft ? draftText : INSTRUCTIONS[phase]}
               </Text>
             </Animated.View>
             {errorNote ? (

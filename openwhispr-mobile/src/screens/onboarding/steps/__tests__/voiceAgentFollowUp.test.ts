@@ -26,6 +26,18 @@ describe('fillInInstruction', () => {
     [['Amount'], 'Say: “It’s $1,500.”'],
     [['Unit Number'], 'Say: “I’m in unit 4B.”'],
     [['Name'], 'Say: “My landlord is Maria.”'],
+    [['Landlord Name'], 'Say: “My landlord is Maria.”'],
+    [['Your Landlord’s Name'], 'Say: “My landlord is Maria.”'],
+    [['Property Manager’s Name'], 'Say: “My landlord is Maria.”'],
+    [['Your Full Name'], 'Say: “Sign it Alex.”'],
+    [['Tenant Name'], 'Say: “Sign it Alex.”'],
+    [['Signature'], 'Say: “Sign it Alex.”'],
+    [['Your Unit Number'], 'Say: “I’m in unit 4B.”'],
+    [['Your Apartment Number'], 'Say: “I’m in unit 4B.”'],
+    [['Your Address'], 'Say: “I’m in unit 4B.”'],
+    [['Property Address'], 'Say: “I’m in unit 4B.”'],
+    [['Rent Due Date'], 'Say: “Rent is due on the 1st.”'],
+    [['Rent Amount'], 'Say: “It’s $1,500.”'],
   ])('suggests what to say for %s', (placeholders, say) => {
     expect(fillInInstruction(placeholders, false)).toBe(
       `Now tap Ask for changes and fill in [${placeholders[0]}]. ${say}`,
@@ -53,15 +65,32 @@ describe('fillInInstruction', () => {
     );
   });
 
+  // Saying the wrong answer leaves the bracket in the draft, so these get no script at all.
+  it.each([
+    'Your Phone Number',
+    'Your Email',
+    'Your Contact Information',
+    'Building Name',
+    'Today’s Date',
+    'Time',
+  ])('gives no script for [%s]', (placeholder) => {
+    expect(fillInInstruction([placeholder, 'Your Name'], false)).toBe(
+      `Now tap Ask for changes and fill in [${placeholder}] and [Your Name]. Say what goes there.`,
+    );
+  });
+
   it('stops naming them past three', () => {
     expect(fillInInstruction(['Name', 'Unit', 'Amount', 'Your Name'], false)).toBe(
       'Now tap Ask for changes and fill in the parts in brackets. Say what goes there.',
     );
   });
 
-  it('asks again for what a changed draft still leaves in brackets', () => {
+  it('asks again for what a changed draft still leaves in brackets, or to insert it as is', () => {
     expect(fillInInstruction(['Your Name'], true)).toBe(
-      'Still missing [Your Name]. Tap Ask for changes again. Say: “Sign it Alex.”',
+      'Still missing [Your Name]. Tap Ask for changes again. Say: “Sign it Alex.” Or tap ✓ to insert it as is.',
+    );
+    expect(fillInInstruction(['Reason'], true)).toBe(
+      'Still missing [Reason]. Tap Ask for changes again. Say what goes there. Or tap ✓ to insert it as is.',
     );
   });
 });
