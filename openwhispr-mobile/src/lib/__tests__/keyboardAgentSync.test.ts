@@ -2,6 +2,7 @@ import {
   startKeyboardAgentSync,
   snapshotKeyboardAgentRequest,
   readKeyboardAgentJob,
+  readKeyboardAgentDraft,
   clearKeyboardAgentJob,
   writeKeyboardAgentResult,
   consumeKeyboardAgentAction,
@@ -329,6 +330,36 @@ describe('readKeyboardAgentJob', () => {
   it('returns null on invalid JSON', () => {
     store.keyboard_agent_job = 'bad json{{{';
     expect(readKeyboardAgentJob('job-1')).toBeNull();
+  });
+});
+
+// ─── readKeyboardAgentDraft ─────────────────────────────────────────────────
+
+describe('readKeyboardAgentDraft', () => {
+  it('returns the version the card shows', () => {
+    writeKeyboardAgentResult({
+      sessionId: 'sess-1',
+      jobId: 'job-1',
+      versions: ['first', 'second'],
+      activeIndex: 0,
+    });
+    expect(readKeyboardAgentDraft()).toBe('first');
+  });
+
+  it('falls back to the newest version without an activeIndex', () => {
+    store.keyboard_agent_result = JSON.stringify({ versions: ['first', 'second'] });
+    expect(readKeyboardAgentDraft()).toBe('second');
+  });
+
+  it.each([
+    ['nothing is stored', undefined],
+    ['the JSON is invalid', 'bad json{{{'],
+    ['there are no versions', JSON.stringify({ activeIndex: 0 })],
+    ['the active version is missing', JSON.stringify({ versions: ['only'], activeIndex: 3 })],
+  ])('returns null when %s', (_label, raw) => {
+    delete store.keyboard_agent_result;
+    if (raw !== undefined) store.keyboard_agent_result = raw;
+    expect(readKeyboardAgentDraft()).toBeNull();
   });
 });
 

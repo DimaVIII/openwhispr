@@ -213,6 +213,22 @@ export function clearKeyboardAgentJob(): void {
   AppGroupStorage.removeItem(APP_GROUP_KEYS.KEYBOARD_AGENT_JOB);
 }
 
+// The draft the keyboard's card shows. It is written before agent_ready, so a listener for that
+// status reads the new one.
+export function readKeyboardAgentDraft(): string | null {
+  const raw = AppGroupStorage.getItem(APP_GROUP_KEYS.KEYBOARD_AGENT_RESULT);
+  if (raw === null) return null;
+  try {
+    const result = JSON.parse(raw) as Partial<KeyboardAgentResult>;
+    const draft = Array.isArray(result.versions)
+      ? result.versions[result.activeIndex ?? result.versions.length - 1]
+      : undefined;
+    return typeof draft === 'string' ? draft : null;
+  } catch {
+    return null;
+  }
+}
+
 // Enforces the 5-version cap and trims oversized strings to stay within the
 // keyboard extension's jetsam budget. Adjusts activeIndex after each trim.
 export function writeKeyboardAgentResult(input: KeyboardAgentResultInput): void {
