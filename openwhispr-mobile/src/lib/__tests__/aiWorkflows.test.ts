@@ -6,13 +6,19 @@ function config(overrides: Partial<UserConfig> = {}): UserConfig {
 }
 
 describe('workflowSummary for Text Cleanup', () => {
-  // Local Mode moves every workflow on this phone, cleanup included.
+  // With nothing saved, Local Mode cleans on OpenWhispr Cloud for a signed-in account and on this
+  // phone otherwise, since a separate Cloud pass needs a real account.
   it.each([
-    ['nothing saved', undefined],
-    ['OpenWhispr Cloud', { mode: 'openwhispr' as const }],
-  ])('runs On-Device in Local Mode with %s saved', (_label, cleanup) => {
-    const saved = config({ inference: cleanup ? { cleanup } : {} });
-    expect(workflowSummary(saved, 'cleanup', 'private')).toBe('On-Device');
+    ['account', 'OpenWhispr Cloud'],
+    ['session', 'On-Device'],
+    ['none', 'On-Device'],
+  ] as const)('with nothing saved in Local Mode and %s access, runs %s', (cloudAccess, label) => {
+    expect(workflowSummary(config({}), 'cleanup', 'private', { cloudAccess })).toBe(label);
+  });
+
+  it('runs a saved OpenWhispr Cloud cleanup in Local Mode', () => {
+    const saved = config({ inference: { cleanup: { mode: 'openwhispr' } } });
+    expect(workflowSummary(saved, 'cleanup', 'private')).toBe('OpenWhispr Cloud');
   });
 
   it('is skipped in Local Mode when Apple Intelligence cannot run', () => {
@@ -23,12 +29,12 @@ describe('workflowSummary for Text Cleanup', () => {
     ).toBe('Skipped · Not supported on this iPhone');
   });
 
-  it('runs On-Device in Local Mode with a provider saved, which applies again in Cloud', () => {
+  it('names a cleanup provider saved in Local Mode', () => {
     const saved = config({
       inference: { cleanup: { mode: 'providers', providerId: 'openai', modelId: 'gpt-5-mini' } },
     });
-    expect(workflowSummary(saved, 'cleanup', 'private')).toBe('On-Device');
-    expect(workflowSummary(saved, 'cleanup', 'cloud', { keyMissing: true })).toBe(
+    expect(workflowSummary(saved, 'cleanup', 'private')).toBe('OpenAI');
+    expect(workflowSummary(saved, 'cleanup', 'private', { keyMissing: true })).toBe(
       'OpenAI · Key missing',
     );
   });
@@ -48,7 +54,7 @@ describe('workflowSummary for Text Cleanup', () => {
     },
   );
 
-  it('says Local Mode cleanup is skipped with a provider saved, when On-Device cannot run', () => {
+  it('ignores On-Device availability for a cleanup provider saved in Local Mode', () => {
     const saved = config({
       inference: { cleanup: { mode: 'providers', providerId: 'openai', modelId: 'gpt-5-mini' } },
     });
@@ -56,7 +62,7 @@ describe('workflowSummary for Text Cleanup', () => {
       workflowSummary(saved, 'cleanup', 'private', {
         onDeviceUnavailable: 'Apple Intelligence off',
       }),
-    ).toBe('Skipped · Apple Intelligence off');
+    ).toBe('OpenAI');
   });
 
   it('ignores On-Device availability for a cleanup that does not run on the phone', () => {
@@ -87,6 +93,31 @@ describe('workflowSummary for Text Cleanup', () => {
     });
     expect(workflowSummary(saved, 'cleanup', 'providers', { keyMissing: true })).toBe(
       'Groq · Key missing',
+    );
+  });
+});
+
+describe('workflowSummary for Uploads', () => {
+  // With nothing saved, Local Mode uploads to OpenWhispr Cloud whenever there is a session.
+  it.each([
+    ['account', 'OpenWhispr Cloud'],
+    ['session', 'OpenWhispr Cloud'],
+    ['none', 'On-Device'],
+  ] as const)('with nothing saved in Local Mode and %s access, runs %s', (cloudAccess, label) => {
+    expect(workflowSummary(config({}), 'upload', 'private', { cloudAccess })).toBe(label);
+  });
+
+  it('names an upload provider saved in Local Mode', () => {
+    const saved = config({
+      inference: { upload: { mode: 'providers', providerId: 'openai', modelId: 'whisper-1' } },
+    });
+    expect(workflowSummary(saved, 'upload', 'private')).toBe('OpenAI');
+  });
+
+  it('keeps dictation On-Device in Local Mode whatever is saved', () => {
+    const saved = config({ inference: { dictation: { mode: 'openwhispr' } } });
+    expect(workflowSummary(saved, 'dictation', 'private', { cloudAccess: 'account' })).toBe(
+      'On-Device',
     );
   });
 });

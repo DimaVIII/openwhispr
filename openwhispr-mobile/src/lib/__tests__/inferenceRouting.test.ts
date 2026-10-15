@@ -14,11 +14,16 @@ jest.mock('@/store/useConfigStore', () => ({ useConfigStore: { getState: () => m
 jest.mock('@/store/useProcessingModeStore', () => ({
   useProcessingModeStore: { getState: () => mockProcessing },
 }));
+let mockUser: { id: string; isAnonymous: boolean } | null = null;
+jest.mock('@/store/useAuthStore', () => ({
+  useAuthStore: { getState: () => ({ user: mockUser }) },
+}));
 
 describe('mobile inference routing', () => {
   beforeEach(() => {
     mockState.config = { defaultMode: 'cloud', inference: {} };
     mockProcessing.activeMode = 'cloud';
+    mockUser = null;
   });
   it('does not opt existing configuration into providers', () => {
     expect(getInferenceSelection('dictation')).toBeUndefined();
@@ -208,18 +213,45 @@ const OPENAI_TEXT = {
   credentialRef: 'provider.openai',
 };
 
-it('keeps every text workflow of a Local Mode recording on this phone, a saved provider included', () => {
+// Local Mode keeps dictation on this phone; cleanup runs what is saved for it.
+it.each([
+  ['a provider', OPENAI_TEXT, { mode: 'providers', providerId: 'openai', modelId: 'gpt-5-mini' }],
+  ['OpenWhispr Cloud', { mode: 'openwhispr' }, { mode: 'openwhispr' }],
+  ['On-Device', { mode: 'local' }, { mode: 'local' }],
+])('cleans a Local Mode recording with %s saved for cleanup there', (_label, cleanup, route) => {
   mockProcessing.activeMode = 'private';
-  mockState.config.inference = {
-    dictation: { mode: 'local' },
-    cleanup: OPENAI_TEXT,
-    agent: OPENAI_TEXT,
-  };
+  mockUser = null;
+  mockState.config.inference = { dictation: { mode: 'local' }, cleanup, agent: OPENAI_TEXT };
   const snapshot = snapshotTranscriptionJob('dictation');
   expect(snapshot.provider).toBe('local');
-  expect(snapshot.cleanupRoute).toEqual({ mode: 'local', scope: 'cleanup' });
+  expect(snapshot.cleanupRoute).toMatchObject({ ...route, scope: 'cleanup' });
   expect(snapshot.agentRoute).toEqual({ mode: 'local', scope: 'agent' });
-  expect(snapshot.cleanupUnavailable).toBeUndefined();
+});
+
+// With nothing saved, Local Mode cleans on OpenWhispr Cloud only for a signed-in account.
+it.each([
+  ['a signed-in account', { id: 'u', isAnonymous: false }, 'openwhispr'],
+  ['an anonymous session', { id: 'a', isAnonymous: true }, 'local'],
+  ['no session', null, 'local'],
+])('cleans a Local Mode recording with nothing saved for %s', (_label, user, mode) => {
+  mockProcessing.activeMode = 'private';
+  mockUser = user;
+  mockState.config.inference = { dictation: { mode: 'local' } };
+  expect(snapshotTranscriptionJob('dictation').cleanupRoute).toEqual({ mode, scope: 'cleanup' });
+});
+
+// Uploads in Local Mode run what is saved for them, or OpenWhispr Cloud when there is a session.
+it.each([
+  ['nothing saved, with a session', undefined, { id: 'a', isAnonymous: true }, 'cloud'],
+  ['nothing saved, with no session', undefined, null, 'local'],
+  ['a provider saved', { mode: 'providers', providerId: 'groq' }, null, 'byok'],
+  ['On-Device saved', { mode: 'local' }, { id: 'u', isAnonymous: false }, 'local'],
+])('routes a Local Mode upload with %s', (_label, upload, user, provider) => {
+  mockProcessing.activeMode = 'private';
+  mockUser = user;
+  mockState.config.inference = upload ? { upload } : {};
+  expect(getTranscriptionProvider('upload')).toBe(provider);
+  expect(getTranscriptionProvider('dictation')).toBe('local');
 });
 
 it('sends an On-Device upload outside Local Mode to the provider saved for cleanup', () => {
@@ -232,17 +264,5 @@ it('sends an On-Device upload outside Local Mode to the provider saved for clean
     scope: 'cleanup',
     providerId: 'openai',
     modelId: 'gpt-5-mini',
-  });
-});
-
-it.each([
-  ['OpenWhispr Cloud', { mode: 'openwhispr' }],
-  ['nothing', undefined],
-])('keeps cleanup On-Device for an On-Device recording with %s saved', (_label, cleanup) => {
-  mockProcessing.activeMode = 'private';
-  mockState.config.inference = { dictation: { mode: 'local' }, ...(cleanup ? { cleanup } : {}) };
-  expect(snapshotTranscriptionJob('dictation').cleanupRoute).toEqual({
-    mode: 'local',
-    scope: 'cleanup',
   });
 });

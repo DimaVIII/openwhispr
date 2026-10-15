@@ -10,7 +10,7 @@ import { Toast } from '@/components/ui/Toast';
 import { useConfigToggle } from '@/hooks/useConfigToggle';
 import { useToast } from '@/hooks/useToast';
 import { confirmDestructive } from '@/lib/alerts';
-import { WORKFLOW_LABELS, WORKFLOWS, workflowSummary } from '@/lib/aiWorkflows';
+import { WORKFLOW_LABELS, WORKFLOWS, cloudAccessFor, workflowSummary } from '@/lib/aiWorkflows';
 import { getLocalReasoningReadiness } from '@/lib/localReasoning';
 import type { InferenceSelection, MobileInferenceScope } from '@/lib/mobileProviders';
 import {
@@ -19,6 +19,7 @@ import {
   getProviderCredentialStatus,
   subscribeProviderCredentialChanges,
 } from '@/services/providers/ProviderCredentials';
+import { useAuthStore } from '@/store/useAuthStore';
 import { useConfigStore } from '@/store/useConfigStore';
 import { useProcessingModeStore } from '@/store/useProcessingModeStore';
 import type { LocalReasoningReadiness } from '@/types';
@@ -74,6 +75,7 @@ async function isKeyMissing(selection: InferenceSelection | undefined): Promise<
 export default function AIModelsScreen(): React.JSX.Element {
   const config = useConfigStore((state) => state.config);
   const activeMode = useProcessingModeStore((state) => state.activeMode);
+  const cloudAccess = useAuthStore((state) => cloudAccessFor(state.user));
   const [localReadiness, setLocalReadiness] = useState<LocalReasoningReadiness | null>(null);
   const localIntelligenceEnabled = config?.appleLocalIntelligenceEnabled ?? true;
   const handleToggleLocalIntelligence = useConfigToggle('appleLocalIntelligenceEnabled');
@@ -155,6 +157,7 @@ export default function AIModelsScreen(): React.JSX.Element {
               subtitle={workflowSummary(config, scope, activeMode, {
                 keyMissing: missingKeys.includes(scope),
                 onDeviceUnavailable,
+                cloudAccess,
               })}
               onPress={() => router.push({ pathname: '/(account)/ai-workflow', params: { scope } })}
             />

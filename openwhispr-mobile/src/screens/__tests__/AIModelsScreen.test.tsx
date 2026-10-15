@@ -6,6 +6,10 @@ const mockPush = jest.fn();
 const mockClearCredentials = jest.fn().mockResolvedValue(undefined);
 let mockActiveMode = 'cloud';
 let mockConfig: Record<string, unknown> | null = null;
+let mockUser: { id: string; isAnonymous: boolean } | null = null;
+jest.mock('@/store/useAuthStore', () => ({
+  useAuthStore: (selector: (state: unknown) => unknown) => selector({ user: mockUser }),
+}));
 const mockCredentialStatus = jest.fn();
 let mockCredentialListener: (() => void) | null = null;
 const MockText = require('react-native').Text;
@@ -50,6 +54,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockActiveMode = 'cloud';
   mockConfig = null;
+  mockUser = null;
   Platform.OS = 'ios';
   mockCredentialStatus.mockResolvedValue({ isConfigured: true });
   mockReadiness.mockResolvedValue({ status: 'ready', tokenCounting: false });
@@ -119,7 +124,7 @@ it('has no provider keys to remove on Android', async () => {
   await screen.findByText(/Status: Ready/);
 });
 
-it('shows what each workflow really does while On-Device mode is on', async () => {
+it('shows what each workflow runs while Local Mode is on', async () => {
   mockActiveMode = 'private';
   mockConfig = {
     defaultMode: 'private',
@@ -130,25 +135,30 @@ it('shows what each workflow really does while On-Device mode is on', async () =
     },
   };
   render(<AIModelsScreen />);
-  // A picked model keeps its name; uploads stay on the phone whatever is saved.
+  // A picked model keeps its name; uploads and cleanup run what is saved for them.
   expect(screen.getByText('Whisper base')).toBeTruthy();
-  expect(screen.queryByText('OpenAI')).toBeNull();
-  // Local Mode cleans on this phone too, whatever is saved short of a provider.
-  expect(screen.queryByText('Skipped')).toBeNull();
-  // Note chat keeps its own selection, which is OpenWhispr Cloud when unset.
-  expect(screen.getByText('OpenWhispr Cloud')).toBeTruthy();
+  expect(screen.getByText('OpenAI')).toBeTruthy();
+  // Cleanup and note chat, which is OpenWhispr Cloud when unset.
+  expect(screen.getAllByText('OpenWhispr Cloud')).toHaveLength(2);
   await screen.findByText(/Status: Ready/);
 });
 
-it('runs cleanup On-Device in Local Mode with nothing saved', async () => {
+// With nothing saved, Local Mode uploads to Cloud with any session and cleans there when signed in.
+// Note chat is always one of the OpenWhispr Cloud rows.
+it.each([
+  ['no session', 1, null],
+  ['an anonymous session', 2, { id: 'a', isAnonymous: true }],
+  ['a signed-in account', 3, { id: 'u', isAnonymous: false }],
+])('with nothing saved in Local Mode for %s, shows %d Cloud rows', async (_label, count, user) => {
+  mockUser = user;
   mockActiveMode = 'private';
   mockConfig = { defaultMode: 'private', inference: { dictation: { mode: 'local' } } };
   render(<AIModelsScreen />);
-  expect(screen.queryByText('Skipped')).toBeNull();
+  expect(screen.getAllByText('OpenWhispr Cloud')).toHaveLength(count);
   await screen.findByText(/Status: Ready/);
 });
 
-it('runs cleanup On-Device in Local Mode with a provider saved for it', async () => {
+it('names a cleanup provider saved in Local Mode', async () => {
   mockActiveMode = 'private';
   mockConfig = {
     defaultMode: 'private',
@@ -158,8 +168,7 @@ it('runs cleanup On-Device in Local Mode with a provider saved for it', async ()
     },
   };
   render(<AIModelsScreen />);
-  expect(screen.queryByText('OpenAI')).toBeNull();
-  expect(screen.getAllByText('On-Device').length).toBeGreaterThan(0);
+  expect(screen.getByText('OpenAI')).toBeTruthy();
   await screen.findByText(/Status: Ready/);
 });
 

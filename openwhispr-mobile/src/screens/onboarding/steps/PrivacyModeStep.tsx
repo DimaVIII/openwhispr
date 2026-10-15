@@ -6,19 +6,34 @@ import { SystemIcon } from '@/components/ui/SystemIcon';
 import { OpenWhisprMark } from '@/components/ui/OpenWhisprMark';
 import { BRAND } from '@/config/colors';
 import { useOnboardingStep } from '@/hooks/useOnboardingStep';
+import { cloudAccessFor, unsetSelection } from '@/lib/aiWorkflows';
 import { canRunLocalReasoning, getLocalReasoningReadiness } from '@/lib/localReasoning';
 import { chooseOnboardingMode } from '@/lib/onboardingMode';
+import { useAuthStore } from '@/store/useAuthStore';
+import { useConfigStore } from '@/store/useConfigStore';
 import { useModelDownloadStore } from '@/store/useModelDownloadStore';
 import { useOnboardingStore } from '@/store/useOnboardingStore';
-import type { LocalReasoningReadiness } from '@/types';
+import type { InferenceMode, LocalReasoningReadiness } from '@/types';
 
 type ModeChoice = 'cloud' | 'private';
 
 type CleanupLine = { included: boolean; text: string; hint?: string };
 
-// What Local Mode's cleanup does on this phone: Apple Intelligence or nothing. On an iPhone nothing
-// is shown until the check answers.
-function privateCleanupLine(readiness: LocalReasoningReadiness | null): CleanupLine | null {
+// What cleanup does in Local Mode: the mode saved for cleanup, or with nothing saved, OpenWhispr
+// Cloud for a signed-in account and Apple Intelligence or nothing otherwise (unsetSelection). On an
+// iPhone the On-Device line waits for the readiness check.
+function privateCleanupLine(
+  readiness: LocalReasoningReadiness | null,
+  cleanup: InferenceMode,
+): CleanupLine | null {
+  if (cleanup === 'providers') {
+    return {
+      included: true,
+      text: 'Cleanup with your saved provider',
+      hint: 'Your transcription is sent to the provider you chose in AI Models.',
+    };
+  }
+  if (cleanup === 'openwhispr') return { included: true, text: 'Cleanup with OpenWhispr Cloud' };
   if (Platform.OS !== 'ios') {
     return {
       included: false,
@@ -71,7 +86,12 @@ export function PrivacyModeStep(): ReactElement {
       cancelled = true;
     };
   }, []);
-  const cleanupLine = privateCleanupLine(readiness);
+  const cloudAccess = useAuthStore((state) => cloudAccessFor(state.user));
+  const savedCleanup = useConfigStore((state) => state.config?.inference?.cleanup);
+  const cleanupLine = privateCleanupLine(
+    readiness,
+    (savedCleanup ?? unsetSelection('cleanup', 'private', cloudAccess)).mode,
+  );
 
   const handleContinue = async (): Promise<void> => {
     if (choice === 'private') {
@@ -117,9 +137,9 @@ export function PrivacyModeStep(): ReactElement {
           onSelect={() => setChoice('private')}
         >
           <Text className="mt-1 text-[14px] leading-[19px] text-secondaryLabel">
-            Everything runs on your device. Nothing is ever uploaded.
+            Dictation runs on your device and never leaves it.
           </Text>
-          <Bullet text="Works fully offline" />
+          <Bullet text="Dictation works offline" />
           {cleanupLine ? <Bullet {...cleanupLine} /> : null}
           <Text className="mt-2 text-[12px] text-tertiaryLabel">
             One-time ~140–461 MB download, depending on language

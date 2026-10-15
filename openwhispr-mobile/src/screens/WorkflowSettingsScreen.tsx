@@ -18,6 +18,7 @@ import { OnDeviceModelSection } from '@/components/settings/OnDeviceModelSection
 import { useConfigToggle } from '@/hooks/useConfigToggle';
 import { useCustomPromptsStore } from '@/store/useCustomPromptsStore';
 import { resolveCustomPrompt } from '@/config/prompts/registry';
+import { useAuthStore } from '@/store/useAuthStore';
 import { useConfigStore } from '@/store/useConfigStore';
 import { useProcessingModeStore } from '@/store/useProcessingModeStore';
 import type { UserConfig } from '@/types';
@@ -29,17 +30,17 @@ import {
   removeProviderCredential,
   setProviderCredential,
 } from '@/services/providers/ProviderCredentials';
-import { MODE_LABELS, workflowSaveConfig } from '@/lib/inferenceModes';
+import { workflowSaveConfig } from '@/lib/inferenceModes';
 import { InferenceModePicker } from '@/components/settings/InferenceModePicker';
 import {
   LOCAL_MODE_DICTATION_NOTES,
   ON_DEVICE_MODE_NOTES,
-  PRIVATE_MODE_LOCKED,
   PRIVATE_MODE_LOCKED_REASON,
   ON_DEVICE_CLEANUP_UNSUPPORTED_NOTE,
   UNSET_PROVIDER_NOTES,
   WORKFLOW_LABELS,
   WORKFLOWS,
+  cloudAccessFor,
   parseWorkflow,
   unsetSelection,
 } from '@/lib/aiWorkflows';
@@ -291,11 +292,13 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
   const updateConfig = useConfigStore((state) => state.updateConfig);
   const setActiveMode = useProcessingModeStore((state) => state.setActiveMode);
   const activeMode = useProcessingModeStore((state) => state.activeMode);
-  const storedSelection = config?.inference?.[scope] ?? unsetSelection(scope, activeMode);
-  // Local Mode runs dictation, uploads and cleanup on this phone whatever is saved, so a saved mode
-  // it locks shows as On-Device (Automatic), which is what runs, and applies again when Local Mode is off.
+  const cloudAccess = useAuthStore((state) => cloudAccessFor(state.user));
+  const storedSelection =
+    config?.inference?.[scope] ?? unsetSelection(scope, activeMode, cloudAccess);
+  // Local Mode runs dictation on this phone whatever is saved, so a saved Cloud dictation (a guest
+  // held in Local Mode) shows as On-Device (Automatic), which is what runs.
   const lockedByPrivateMode =
-    activeMode === 'private' && !!PRIVATE_MODE_LOCKED[scope]?.includes(storedSelection.mode);
+    activeMode === 'private' && scope === 'dictation' && storedSelection.mode === 'openwhispr';
   const savedSelection: InferenceSelection = lockedByPrivateMode
     ? { mode: 'local' }
     : storedSelection;
@@ -349,40 +352,25 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
   // Nothing is shown as picked when the On-Device text workflow can never run on this iPhone.
   const pickedMode =
     !speechScope && onDeviceUnsupported && selection.mode === 'local' ? null : selection.mode;
-  const lockedChoice =
-    storedSelection.mode === 'providers' && storedSelection.providerId
-      ? providerDisplayName(storedSelection.providerId)
-      : MODE_LABELS[storedSelection.mode];
   const modeNote =
     (scope === 'cleanup' && selection.mode === 'local' && onDeviceUnsupported
       ? ON_DEVICE_CLEANUP_UNSUPPORTED_NOTE
-      : undefined) ??
-    (lockedByPrivateMode && ON_DEVICE_MODE_NOTES[scope]
-      ? `${ON_DEVICE_MODE_NOTES[scope]} Your ${lockedChoice} choice applies again when Local Mode is off.`
       : undefined) ??
     (activeMode === 'private' ? ON_DEVICE_MODE_NOTES[scope] : undefined) ??
     (activeMode === 'providers' && !config?.inference?.[scope]
       ? UNSET_PROVIDER_NOTES[scope]
       : undefined) ??
     (selection.mode === 'providers' && savedSelection.mode !== 'providers'
-      ? activeMode === 'private'
+      ? activeMode === 'private' && scope === 'dictation'
         ? 'Save to switch to Bring Your Own Key. This turns Local Mode off.'
         : 'Save to switch to Bring Your Own Key.'
       : undefined) ??
     (scope === 'dictation'
       ? LOCAL_MODE_DICTATION_NOTES[activeMode === 'private' ? 'on' : 'off']
       : undefined);
-  // A mode Local Mode never runs can't be picked here, except on the Dictation page, where picking
-  // it turns Local Mode off.
-  const modeUnavailable: Partial<Record<InferenceMode, string>> = {
-    ...Object.fromEntries(
-      (activeMode === 'private' && scope !== 'dictation'
-        ? (PRIVATE_MODE_LOCKED[scope] ?? [])
-        : []
-      ).map((mode) => [mode, PRIVATE_MODE_LOCKED_REASON]),
-    ),
-    ...(onDeviceUnsupported ? { local: onDeviceUnsupported } : {}),
-  };
+  const modeUnavailable: Partial<Record<InferenceMode, string>> = onDeviceUnsupported
+    ? { local: onDeviceUnsupported }
+    : {};
   // Keys are stored per provider (per server for Custom), so every workflow on it shares one.
   const keyOwner =
     provider?.id === 'custom' ? 'this server' : providerDisplayName(provider?.id ?? '');

@@ -40,8 +40,9 @@ jest.mock('@/lib/localReasoning', () => ({
 jest.mock('@/lib/permissions', () => ({
   isNoSpeechError: jest.fn(() => false),
 }));
+let mockUser: { id: string; isAnonymous: boolean } | null = { id: 'u', isAnonymous: false };
 jest.mock('@/store/useAuthStore', () => ({
-  useAuthStore: { getState: () => ({ user: { id: 'u', isAnonymous: false } }) },
+  useAuthStore: { getState: () => ({ user: mockUser }) },
 }));
 jest.mock('@/store/useConfigStore', () => ({
   useConfigStore: { getState: () => ({ config: mockConfig }) },
@@ -80,6 +81,7 @@ function transcribeOnDevice(
 beforeEach(() => {
   jest.clearAllMocks();
   mockActiveMode = 'private';
+  mockUser = { id: 'u', isAnonymous: false };
   mockConfig = {
     cleanupEnabled: true,
     defaultMode: 'private',
@@ -160,12 +162,12 @@ it('sends an On-Device upload outside Local Mode to the provider saved for clean
   expect(result.cleanupApplied).toBe(true);
 });
 
-// Local Mode moves every workflow on this phone, cleanup included.
+// Local Mode keeps dictation on this phone; cleanup runs what is saved for it.
 it.each([
-  ['OpenWhispr Cloud', { mode: 'openwhispr' }],
-  ['a provider', OPENAI_CLEANUP],
-  ['nothing saved', undefined],
-])('cleans in Local Mode on this phone when cleanup is set to %s', async (_label, cleanup) => {
+  ['OpenWhispr Cloud', { mode: 'openwhispr' }, { mode: 'openwhispr', scope: 'cleanup' }],
+  ['a provider', OPENAI_CLEANUP, { mode: 'providers', scope: 'cleanup', providerId: 'openai' }],
+  ['nothing, signed in', undefined, { mode: 'openwhispr', scope: 'cleanup' }],
+])('cleans a Local Mode dictation with %s saved for cleanup', async (_label, cleanup, route) => {
   mockConfig = {
     cleanupEnabled: true,
     defaultMode: 'private',
@@ -175,6 +177,23 @@ it.each([
   const result = await transcribeOnDevice();
 
   expect(mockReason).toHaveBeenCalledTimes(1);
+  expect((mockReason.mock.calls[0][0] as Record<string, unknown>).inferenceRoute).toMatchObject(
+    route,
+  );
+  expect(result.text).toBe('cleaned:um hello there');
+});
+
+// A separate Cloud pass needs a signed-in account, so an anonymous session cleans on this phone.
+it('cleans a Local Mode dictation on this phone with nothing saved and no account', async () => {
+  mockUser = { id: 'a', isAnonymous: true };
+  mockConfig = {
+    cleanupEnabled: true,
+    defaultMode: 'private',
+    inference: { dictation: { mode: 'local' } },
+  };
+
+  const result = await transcribeOnDevice();
+
   expect((mockReason.mock.calls[0][0] as Record<string, unknown>).inferenceRoute).toEqual({
     mode: 'local',
     scope: 'cleanup',
@@ -231,6 +250,7 @@ it.each([
 // Nobody chose On-Device cleanup here, and AI Models already says it is skipped.
 describe('in Local Mode with nothing of its own saved for cleanup', () => {
   beforeEach(() => {
+    mockUser = { id: 'a', isAnonymous: true };
     mockConfig = {
       cleanupEnabled: true,
       defaultMode: 'private',

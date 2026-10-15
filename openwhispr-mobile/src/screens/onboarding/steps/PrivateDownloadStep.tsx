@@ -163,7 +163,7 @@ export function PrivateDownloadStep() {
         onBack={goBack}
         title="Set up Local Mode"
         titleAccent="Local"
-        subtitle={`Local Mode runs entirely on your device. It needs a one-time ${
+        subtitle={`Local Mode transcribes on your device. It needs a one-time ${
           modelSize || 'model'
         } download, matched to your languages.`}
         ctaLabel={done ? 'Continue with Local Mode' : 'Continue · available when ready'}

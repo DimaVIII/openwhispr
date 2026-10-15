@@ -13,6 +13,10 @@ let mockActiveMode = 'cloud';
 const mockCredentialStatus = jest.fn().mockResolvedValue({ isConfigured: false });
 let mockConfig: Record<string, unknown> | null = null;
 let mockScope: string | undefined;
+let mockUser: { id: string; isAnonymous: boolean } | null = null;
+jest.mock('@/store/useAuthStore', () => ({
+  useAuthStore: (selector: (state: unknown) => unknown) => selector({ user: mockUser }),
+}));
 const mockPreventRemove = jest.fn();
 const mockDispatch = jest.fn();
 let mockStoredPrompt = '';
@@ -144,6 +148,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockConfig = null;
   mockScope = 'dictation';
+  mockUser = null;
   mockStoredPrompt = '';
   // A successful switch saves the mode, as the real helper does through the config store.
   mockSwitchMode.mockImplementation(async (scope: string, mode: string) => {
@@ -831,22 +836,42 @@ it('adds no pins when an existing user re-saves dictation with their own key', a
   expect(saved.inference.notes).toBeUndefined();
 });
 
-// Local Mode cleans on this phone whatever was saved before it was on.
+// Local Mode keeps dictation on this phone; uploads and cleanup run what is saved for them.
 it.each([
-  ['OpenWhispr Cloud', { mode: 'openwhispr' }],
-  ['OpenAI', { mode: 'providers', providerId: 'openai', modelId: 'gpt-5-mini' }],
-])('shows On-Device for a %s cleanup choice Local Mode locks', (label, cleanup) => {
-  mockConfig = { defaultMode: 'private', inference: { cleanup } };
+  ['cleanup', { mode: 'openwhispr' }, 'OpenWhispr Cloud'],
+  [
+    'cleanup',
+    { mode: 'providers', providerId: 'openai', modelId: 'gpt-5-mini' },
+    'Bring Your Own Key',
+  ],
+  ['upload', { mode: 'openwhispr' }, 'OpenWhispr Cloud'],
+  [
+    'upload',
+    { mode: 'providers', providerId: 'openai', modelId: 'whisper-1' },
+    'Bring Your Own Key',
+  ],
+])('shows the %s choice saved in Local Mode', (scope, selection, label) => {
+  mockConfig = { defaultMode: 'private', inference: { [scope]: selection } };
   mockActiveMode = 'private';
-  mockScope = 'cleanup';
+  mockScope = scope;
   render(<WorkflowSettingsScreen />);
-  expect(selectedMode()).toBe('On-Device');
-  expect(
-    screen.getByText(
-      `Local Mode cleans up transcripts on this iPhone. Your ${label} choice applies again when Local Mode is off.`,
-    ),
-  ).toBeTruthy();
-  expect(screen.queryByLabelText('API key')).toBeNull();
+  expect(selectedMode()).toBe(label);
+});
+
+// With nothing saved, Local Mode uploads to OpenWhispr Cloud with any session, and cleans there
+// only for a signed-in account.
+it.each([
+  ['upload', null, 'On-Device'],
+  ['upload', { id: 'a', isAnonymous: true }, 'OpenWhispr Cloud'],
+  ['cleanup', { id: 'a', isAnonymous: true }, 'On-Device'],
+  ['cleanup', { id: 'u', isAnonymous: false }, 'OpenWhispr Cloud'],
+])('shows %s with nothing saved in Local Mode for %j as %s', (scope, user, label) => {
+  mockUser = user;
+  mockConfig = { defaultMode: 'private' };
+  mockActiveMode = 'private';
+  mockScope = scope;
+  render(<WorkflowSettingsScreen />);
+  expect(selectedMode()).toBe(label);
 });
 
 it.each([
@@ -866,45 +891,6 @@ it.each([
   expect(screen.getByText(note)).toBeTruthy();
 });
 
-// Private mode runs uploads on this phone, so a saved choice it locks isn't shown as picked, or
-// offered for editing, but stays saved for when Private mode is off.
-it('shows On-Device for an upload choice Local Mode locks, and keeps that choice', () => {
-  mockConfig = {
-    defaultMode: 'private',
-    inference: { upload: { mode: 'providers', providerId: 'openai', modelId: 'whisper-1' } },
-  };
-  mockActiveMode = 'private';
-  mockScope = 'upload';
-  render(<WorkflowSettingsScreen />);
-  expect(selectedMode()).toBe('On-Device');
-  expect(
-    screen.getByText(
-      'Local Mode keeps uploads on this iPhone. Your OpenAI choice applies again when Local Mode is off.',
-    ),
-  ).toBeTruthy();
-  expect(screen.queryByLabelText('API key')).toBeNull();
-  // Tapping the Automatic row it shows must not replace the saved choice either.
-  expect(
-    screen.getByText('On-device models for upload, picked Automatic, choice locked'),
-  ).toBeTruthy();
-  fireEvent.press(screen.getByText('On-Device'));
-  expect(mockSwitchMode).not.toHaveBeenCalled();
-  expect(mockUpdateConfig).not.toHaveBeenCalled();
-});
-
-it('names a locked Cloud upload choice in the note', () => {
-  mockConfig = { defaultMode: 'private', inference: { upload: { mode: 'openwhispr' } } };
-  mockActiveMode = 'private';
-  mockScope = 'upload';
-  render(<WorkflowSettingsScreen />);
-  expect(selectedMode()).toBe('On-Device');
-  expect(
-    screen.getByText(
-      'Local Mode keeps uploads on this iPhone. Your OpenWhispr Cloud choice applies again when Local Mode is off.',
-    ),
-  ).toBeTruthy();
-});
-
 it('shows On-Device for a guest whose saved Cloud dictation Local Mode overrides', () => {
   mockConfig = { defaultMode: 'cloud', inference: { dictation: { mode: 'openwhispr' } } };
   mockActiveMode = 'private';
@@ -915,41 +901,47 @@ it('shows On-Device for a guest whose saved Cloud dictation Local Mode overrides
   expect(mockUpdateConfig).not.toHaveBeenCalled();
 });
 
-it('keeps the plain upload note when uploads already run on this phone', () => {
-  mockConfig = { defaultMode: 'private' };
-  mockActiveMode = 'private';
-  mockScope = 'upload';
-  render(<WorkflowSettingsScreen />);
-  expect(screen.getByText('Local Mode keeps uploads on this iPhone.')).toBeTruthy();
-});
-
 function modeDisabled(title: string): boolean {
   let row = screen.getByText(title).parent;
   while (row && !row.props.accessibilityState) row = row.parent;
   return !!row?.props.accessibilityState.disabled;
 }
 
-// A page can't offer a mode Local Mode would ignore, except Dictation's: picking OpenWhispr Cloud or
-// Bring Your Own Key there is how Local Mode is turned off.
+// Every page offers every mode in Local Mode; on Dictation's, picking OpenWhispr Cloud or Bring Your
+// Own Key is how Local Mode is turned off.
+it.each(['dictation', 'upload', 'cleanup', 'notes', 'agent'])(
+  'locks no mode for %s in Local Mode',
+  (scope) => {
+    mockConfig = { defaultMode: 'private' };
+    mockActiveMode = 'private';
+    mockScope = scope;
+    render(<WorkflowSettingsScreen />);
+    for (const title of ['OpenWhispr Cloud', 'On-Device', 'Bring Your Own Key'])
+      expect(modeDisabled(title)).toBe(false);
+  },
+);
+
+// Only Dictation's mode turns Local Mode off; saving a provider for uploads leaves it on.
 it.each([
-  ['dictation', [], ['OpenWhispr Cloud', 'On-Device', 'Bring Your Own Key']],
-  ['upload', ['OpenWhispr Cloud', 'Bring Your Own Key'], ['On-Device']],
-  ['cleanup', ['OpenWhispr Cloud', 'Bring Your Own Key'], ['On-Device']],
-  ['notes', [], ['OpenWhispr Cloud', 'On-Device', 'Bring Your Own Key']],
-  ['agent', [], ['OpenWhispr Cloud', 'On-Device', 'Bring Your Own Key']],
-])('locks the modes Local Mode never runs for %s', (scope, locked, open) => {
+  ['dictation', 'Save to switch to Bring Your Own Key. This turns Local Mode off.'],
+  ['upload', 'Save to switch to Bring Your Own Key.'],
+])('says what saving Bring Your Own Key does for %s in Local Mode', (scope, note) => {
   mockConfig = { defaultMode: 'private' };
   mockActiveMode = 'private';
   mockScope = scope;
   render(<WorkflowSettingsScreen />);
-  for (const title of locked) expect(modeDisabled(title)).toBe(true);
-  for (const title of open) expect(modeDisabled(title)).toBe(false);
-  // The agent page's Voice Assistant switch is off for the same reason.
+  enableProviders();
+  expect(screen.getByText(note)).toBeTruthy();
+});
+
+it('turns the voice assistant off in Local Mode', () => {
+  mockConfig = { defaultMode: 'private' };
+  mockActiveMode = 'private';
+  mockScope = 'agent';
+  render(<WorkflowSettingsScreen />);
   expect(
-    screen.queryAllByText(
-      'Off while Local Mode is on. Change Dictation in AI Models to turn it off.',
-    ),
-  ).toHaveLength(locked.length + (scope === 'agent' ? 1 : 0));
+    screen.getByText('Off while Local Mode is on. Change Dictation in AI Models to turn it off.'),
+  ).toBeTruthy();
 });
 
 it('turns Local Mode off when OpenWhispr Cloud is picked on the Dictation page', async () => {
@@ -968,10 +960,13 @@ it('locks no mode outside Local Mode', () => {
 
 // Dictation owns Local Mode, so its page says what On-Device does and how to leave it.
 it.each([
-  ['cloud', 'On-Device turns on Local Mode, which also keeps uploads and cleanup on this iPhone.'],
+  [
+    'cloud',
+    'On-Device turns on Local Mode: dictation stays on this iPhone and notes ask before leaving it.',
+  ],
   [
     'private',
-    'Local Mode is on, so uploads and cleanup also stay on this iPhone. Choose OpenWhispr Cloud or Bring Your Own Key to turn it off.',
+    'Local Mode is on: dictation stays on this iPhone and notes ask before leaving it. Choose OpenWhispr Cloud or Bring Your Own Key to turn it off.',
   ],
 ])('explains Local Mode on the Dictation page in %s mode', (mode, note) => {
   mockConfig = { defaultMode: mode };

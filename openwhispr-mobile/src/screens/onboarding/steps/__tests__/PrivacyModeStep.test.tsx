@@ -15,6 +15,10 @@ jest.mock('@/store/useConfigStore', () => ({
   useConfigStore: (selector: (state: unknown) => unknown) =>
     selector({ config: { inference: { cleanup: mockSavedCleanup } } }),
 }));
+let mockUser: { id: string; isAnonymous: boolean } | null = null;
+jest.mock('@/store/useAuthStore', () => ({
+  useAuthStore: (selector: (state: unknown) => unknown) => selector({ user: mockUser }),
+}));
 let mockReadiness: { status: string } = { status: 'ready' };
 jest.mock('@/lib/localReasoning', () => ({
   ...jest.requireActual('@/lib/localReasoning'),
@@ -48,6 +52,7 @@ beforeEach(() => {
   mockSelectedMode = null;
   mockReadiness = { status: 'ready' };
   mockSavedCleanup = undefined;
+  mockUser = null;
   jest.mocked(chooseOnboardingMode).mockResolvedValue(undefined);
   mockCancelActiveDownloads.mockResolvedValue(undefined);
 });
@@ -64,8 +69,8 @@ it('describes each mode in a few short lines', async () => {
   const screen = await renderStep();
   for (const text of [
     'Zero setup',
-    'Everything runs on your device. Nothing is ever uploaded.',
-    'Works fully offline',
+    'Dictation runs on your device and never leaves it.',
+    'Dictation works offline',
     'Faster transcription',
     'Higher quality',
     'Automatic cleanup & formatting',
@@ -128,12 +133,25 @@ describe('cleanup line', () => {
     expect(screen.queryByText(/Apple Intelligence|iPhone/)).toBeNull();
   });
 
-  // Local Mode cleans On-Device whatever is saved, so the line is the one for this phone.
-  it.each(['openwhispr', 'providers'])('ignores a saved %s cleanup', async (mode) => {
+  // Local Mode runs the cleanup saved for it, so a saved choice names where cleanup goes.
+  it.each([
+    ['openwhispr', 'Cleanup with OpenWhispr Cloud'],
+    ['providers', 'Cleanup with your saved provider'],
+  ])('names a saved %s cleanup', async (mode, line) => {
     mockSavedCleanup = { mode };
     const screen = await renderStep();
-    expect(screen.getByText('Cleanup with Apple Intelligence')).toBeTruthy();
-    expect(screen.queryByText(/saved provider/)).toBeNull();
+    expect(screen.getByText(line)).toBeTruthy();
+    expect(screen.queryByText(/Apple Intelligence/)).toBeNull();
+  });
+
+  // With nothing saved, Local Mode cleans on OpenWhispr Cloud for a signed-in account only.
+  it.each([
+    [{ id: 'u', isAnonymous: false }, 'Cleanup with OpenWhispr Cloud'],
+    [{ id: 'a', isAnonymous: true }, 'Cleanup with Apple Intelligence'],
+  ])('with nothing saved, cleans for %j with the line %s', async (user, line) => {
+    mockUser = user;
+    const screen = await renderStep();
+    expect(screen.getByText(line)).toBeTruthy();
   });
 
   // Neither says whether this iPhone can run it, so the card makes no claim.

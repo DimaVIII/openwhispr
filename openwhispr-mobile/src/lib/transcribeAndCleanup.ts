@@ -63,17 +63,15 @@ function rawTranscriptResult(transcription: TranscriptionResponse): DictationPro
   };
 }
 
-// The pinned route decides where cleanup runs. A local job pins a local one unless the
-// user saved a cleanup provider, which is only pinned from that saved choice; whether
-// On-Device cleanup runs is read live, like cleanupEnabled.
+// The pinned route decides where cleanup runs: a local job pins a local one unless the mode saved
+// for cleanup, or Local Mode's Cloud default, sends it off this iPhone (snapshotTextInference).
+// Whether a pinned On-Device cleanup still runs is read live, like cleanupEnabled.
 function cleansLocalTranscript(request: TranscriptionRequest): boolean {
-  if (request.cleanupRoute?.mode === 'providers') return true;
-  return (
-    request.cleanupRoute?.mode === 'local' &&
-    cleanupRunsOnDevice(
-      useConfigStore.getState().config,
-      useProcessingModeStore.getState().activeMode,
-    )
+  if (!request.cleanupRoute) return false;
+  if (request.cleanupRoute.mode !== 'local') return true;
+  return cleanupRunsOnDevice(
+    useConfigStore.getState().config,
+    useProcessingModeStore.getState().activeMode,
   );
 }
 
@@ -211,8 +209,8 @@ async function runSerialTranscribeAndCleanup(
   const originalText = transcription.text;
   lifecycle.onRawTranscript?.(originalText, transcription);
 
-  // Local/private transcripts leave the device only for the cleanup provider the
-  // user saved; otherwise they are cleaned by On-Device cleanup or not at all.
+  // A transcript made on this iPhone leaves it only for the cleanup route pinned for it;
+  // otherwise it is cleaned by On-Device cleanup or not at all.
   if (transcription.provider === 'local' && !cleansLocalTranscript(request)) {
     return rawTranscriptResult(transcription);
   }
