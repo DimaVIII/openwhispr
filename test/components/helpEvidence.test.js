@@ -178,6 +178,16 @@ test("current tool evidence combines citations without retaining settings snapsh
   assert.equal(evidence.sources.length, 1);
   assert.deepEqual(evidence.facts, []);
   assert.equal(evidence.readAt, "2026-10-07T12:00:00.000Z");
+  // A settings-only reply has nothing to list, so it shows no evidence block.
+  assert.equal(
+    extractHelpEvidence([
+      {
+        ...call({ kind: "product-help", sources: [], settingsRead: true }),
+        name: "get_openwhispr_context",
+      },
+    ]),
+    null
+  );
 });
 
 test("legacy facts use stable keys, omit private devices and unknown OS, and format human values", async (t) => {

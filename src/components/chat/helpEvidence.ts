@@ -103,6 +103,7 @@ export function extractHelpEvidence(toolCalls?: ToolCallInfo[]): HelpEvidenceDat
       return factKeys.has(key) ? [{ key, value: item.value }] : [];
     }
   );
+  if (!sources.length && !facts.length) return null;
   const readAt =
     typeof data.readAt === "string" &&
     /^\d{4}-\d{2}-\d{2}T/.test(data.readAt) &&
