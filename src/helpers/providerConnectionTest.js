@@ -156,8 +156,10 @@ function buildModelEndpoints(base) {
 
 // Where the app sends a custom server's audio: buildApiUrl(normalizeBaseUrl(url),
 // "/audio/transcriptions") in src/config/constants.ts and transcriptionRoute.ts.
+// buildApiUrl normalises its base again, which strips a suffix a trailing slash hid
+// from the first pass, so this address takes the same two passes.
 function buildTranscriptionEndpoint(base) {
-  const { path, query, hash } = splitUrlDecorators(normalizeBaseUrl(base));
+  const { path, query, hash } = splitUrlDecorators(normalizeBaseUrl(normalizeBaseUrl(base)));
   return joinUrlDecorators(`${path}/audio/transcriptions`, query, hash);
 }
 
@@ -408,8 +410,10 @@ async function testProviderConnection(config, fetchImpl = fetch) {
 }
 
 // OpenRouter's key route describes the key that called it. A management key (formerly a
-// provisioning key) only administers other keys and can never run a request.
+// provisioning key) only administers other keys and can never run a request. Only a 200
+// carries that description; any other 2xx has no key to read, so it keeps its status.
 async function describeOpenRouterKey(response) {
+  if (response.status !== 200) return describeStatusFailure(response.status, "openrouter");
   const key = (await readJson(response))?.data;
   if (!key?.is_management_key && !key?.is_provisioning_key) return null;
   return {

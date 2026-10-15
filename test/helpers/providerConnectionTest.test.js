@@ -632,6 +632,25 @@ test("any other OpenRouter key passes, with no model check", async () => {
   assert.equal(outage.errorCode, "providerStatus");
 });
 
+// The key route answers 200 with the key's description. Any other 2xx carries no key to
+// read, so an empty 204 must not pass as an ordinary key.
+test("only a 200 from the OpenRouter key route can pass", async () => {
+  const config = { provider: "openrouter", apiKey: "sk-or-key" };
+  for (const status of [204, 202]) {
+    const result = await testProviderConnection(config, async () => jsonResponse(status));
+    assert.deepEqual(
+      result,
+      {
+        success: false,
+        errorCode: "providerStatus",
+        error: `The provider returned status ${status}.`,
+        status,
+      },
+      String(status)
+    );
+  }
+});
+
 // A stand-in speech server with no model list. Its transcription address answers `status`,
 // and every request it gets is recorded with its body.
 async function speechServer(t, status) {
@@ -680,6 +699,18 @@ test("the transcription address is the one the app sends audio to", async (t) =>
     ["GET /v1/models", "POST /v1/audio/transcriptions"]
   );
   assert.equal(received[1].headers.authorization, undefined, "no key, no header");
+
+  // The full address with a trailing slash: the slash hides the suffix from one pass of
+  // normalizeBaseUrl, and the app's second pass is what strips it.
+  const typedInFull = await speechServer(t, 422);
+  const fullAddress = `${typedInFull.base}/v1/audio/transcriptions/`;
+  assert.deepEqual(await testProviderConnection(speech(fullAddress)), { success: true });
+  assert.deepEqual(
+    typedInFull.received
+      .filter((entry) => entry.method === "POST")
+      .map((entry) => `${entry.method} ${entry.url}`),
+    ["POST /v1/audio/transcriptions"]
+  );
 });
 
 test("the transcription address's answers keep their meaning", async (t) => {
