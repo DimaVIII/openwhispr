@@ -143,6 +143,7 @@ export default function AuthScreen({
   const nameRef = useRef<TextInputType>(null);
 
   useEffect(() => {
+    if (Platform.OS !== 'ios') return;
     AppleAuthentication.isAvailableAsync()
       .then(setIsAppleAvailable)
       .catch(() => setIsAppleAvailable(false));
@@ -285,7 +286,7 @@ export default function AuthScreen({
           <View>
             {!authMode && (
               <View style={styles.formGroup}>
-                {isAppleAvailable || Platform.OS === 'android' ? (
+                {Platform.OS === 'ios' && isAppleAvailable ? (
                   <ProviderButton
                     provider="apple"
                     label="Continue with Apple"

@@ -2,6 +2,14 @@
 
 Initially inspected read-only on 15 October 2026 through the authenticated browser session. The authorized app-creation follow-up below records subsequent provider changes separately. No purchase test has occurred. The later Expo checkpoint records authorized use of the Android public SDK keys; no private key is printed here.
 
+## 16 October 01:50 PDT — Play installation and additive backend mapping
+
+Google Play installation completed at 01:47 PDT on `emulator-5554`: production package `com.gizmolabs.openwhispr`, version 1.2.3 / code 5, installer `com.android.vending`. The dev package and its existing signed-in state remain separate. Play showed Installed / Open, and the app launched into onboarding. This supersedes the earlier listing-propagation gap. No purchase or recording was performed.
+
+The production sign-in screen exposed Continue with Apple. The next mobile source gates both that button and Apple availability probing to iOS, following the Android-only product direction. TypeScript, scoped lint, formatting and the two existing auth-route tests pass; those route tests mock the screen, so native rendering of the correction still needs the next signed build.
+
+[API draft PR #268](https://github.com/OpenWhispr/openwhispr-api/pull/268), source `53d8535`, adds optional `SUPERWALL_PLAY_PRO_PRODUCT_IDS` without replacing the existing write-only shared lists. Both RevenueCat and Superwall require confirmed Play store identity for this additional exact-ID mapping; existing Business precedence and sandbox restrictions are unchanged. All 1,904 API tests, schema check, TypeScript, scoped lint and formatting pass locally. Both the Android API key and the two RevenueCat monthly/annual identifiers are staged in Vercel production, but the API PR is not merged and no production deployment activated them. The additive change removes the need to recover the old write-only list. Actual Superwall webhook IDs still need provider evidence; editor suffixes were not blindly added.
+
 ## 16 October 01:40 PDT — private release and backend checkpoint
 
 Using Josh's superseding overnight authority, release 1 (`1.2.3 Android internal review`, bundle 5) was published at 01:29 PDT to the single-account **internal testing** track `4701027879952097526`. Play reports Active / Available to internal testers / Not reviewed. This is not a public release. The enrolled and license-testing account is `josh@openwhispr.com`; both the browser and emulator Play Store identity were verified. The enrollment page confirms **You're a tester**. The download link and emulator listing still return Not found at this checkpoint, so no Play installation or purchase is claimed.
