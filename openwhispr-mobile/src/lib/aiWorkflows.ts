@@ -32,7 +32,10 @@ export const ON_DEVICE_CLEANUP_UNSUPPORTED_NOTE =
 // Dictation owns Local Mode: On-Device dictation turns it on, and the other modes turn it off.
 const deviceLabel = Platform.OS === 'android' ? 'phone' : 'iPhone';
 export const LOCAL_MODE_DICTATION_NOTES = {
-  on: `Local Mode is on: dictation stays on this ${deviceLabel} and notes ask before leaving it. Choose OpenWhispr Cloud or Bring Your Own Key to turn it off.`,
+  on:
+    Platform.OS === 'android'
+      ? 'Local Mode keeps dictation on this phone. Turn it off in Models & processing to use Cloud, or choose Bring Your Own Key.'
+      : `Local Mode is on: dictation stays on this ${deviceLabel} and notes ask before leaving it. Choose OpenWhispr Cloud or Bring Your Own Key to turn it off.`,
   off: `On-Device turns on Local Mode: dictation stays on this ${deviceLabel} and notes ask before leaving it.`,
 };
 
