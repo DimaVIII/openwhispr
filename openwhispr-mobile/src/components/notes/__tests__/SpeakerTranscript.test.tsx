@@ -7,6 +7,9 @@ import { SpeakerRenameSheet } from '../SpeakerRenameSheet';
 import { SpeakerMergeSheet } from '../SpeakerMergeSheet';
 
 jest.mock('@/components/ui/Text', () => ({ Text: require('react-native').Text }));
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 54, right: 0, bottom: 24, left: 0 }),
+}));
 
 const speaker = (overrides: Partial<Speaker>): Speaker =>
   ({

@@ -64,7 +64,11 @@ export function NoteChatSheet({
   // immediately, so they step aside once the user starts typing rather than discard the draft.
   const showSuggestions = !hasMessages && !draft.trim() && suggestions.length > 0;
   const canUseSuggestion = canSend && !isProcessing;
-  const sheetHeight = Math.min(windowHeight * 0.82, windowHeight - insets.top - 8);
+  const isAndroid = Platform.OS === 'android';
+  const sheetHeight = Math.min(
+    isAndroid && keyboardHeight > 0 ? windowHeight : windowHeight * 0.82,
+    windowHeight - insets.top - 8,
+  );
   const bottomPad =
     keyboardHeight > 0 ? keyboardHeight + INPUT_KEYBOARD_GAP : Math.max(insets.bottom, 14);
 
@@ -96,12 +100,14 @@ export function NoteChatSheet({
               <Text accessibilityRole="header" className="text-[19px] font-bold text-label">
                 {copy('editor.askNote', 'Ask about this note')}
               </Text>
-              <Text className="mt-1 text-[13px] text-secondaryLabel">
-                {copy(
-                  'noteChat.privacy',
-                  "Answers use only this note. This chat is temporary and won't be saved.",
-                )}
-              </Text>
+              {!isAndroid ? (
+                <Text className="mt-1 text-[13px] text-secondaryLabel">
+                  {copy(
+                    'noteChat.privacy',
+                    "Answers use only this note. This chat is temporary and won't be saved.",
+                  )}
+                </Text>
+              ) : null}
             </View>
             {hasMessages ? (
               <Pressable
@@ -128,11 +134,21 @@ export function NoteChatSheet({
           {/* With the keyboard up the sheet is short, so an empty thread must not squeeze the chips. */}
           <ScrollView
             ref={scrollRef}
-            className={`flex-1 ${hasMessages ? 'min-h-[220px]' : ''}`}
+            className={`flex-1 ${hasMessages && !isAndroid ? 'min-h-[220px]' : ''}`}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
-            onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+            onContentSizeChange={() => {
+              if (hasMessages) scrollRef.current?.scrollToEnd({ animated: true });
+            }}
           >
+            {isAndroid ? (
+              <Text className="mb-3 text-[13px] text-secondaryLabel">
+                {copy(
+                  'noteChat.privacy',
+                  "Answers use only this note. This chat is temporary and won't be saved.",
+                )}
+              </Text>
+            ) : null}
             {hasMessages ? (
               <View className="gap-3 pb-3">
                 {messages.map((message) => {
