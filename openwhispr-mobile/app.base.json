@@ -106,6 +106,7 @@
       "./plugins/android-backup/withAndroidBackup",
       "./plugins/android-locales/withAndroidLocales",
       "./plugins/android-bundle-inputs/withAndroidBundleInputs",
+      "./plugins/android-billing/withAndroidBilling",
       "./plugins/android-inference/withAndroidInference",
       [
         "expo-splash-screen",
