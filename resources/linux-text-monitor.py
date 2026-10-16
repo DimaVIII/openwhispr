@@ -27,6 +27,10 @@ import base64
 
 TIMEOUT_SECONDS = 30
 MAX_OUTPUT_CHARS = 10240
+# libatspi gives every application it hasn't seen yet 15s to answer, so one
+# peer that stops answering (#1944) would hold the probe past the caller's
+# 1.6s kill. linux-fast-paste bounds its calls the same way.
+PROBE_ATSPI_CALL_TIMEOUT_MS = 500
 
 try:
     import gi
@@ -104,6 +108,8 @@ def main():
         sys.exit(1)
 
     Atspi.init()
+    if probe_editable:
+        Atspi.set_timeout(PROBE_ATSPI_CALL_TIMEOUT_MS, -1)
 
     # Get the focused accessible element
     desktop = Atspi.get_desktop(0)

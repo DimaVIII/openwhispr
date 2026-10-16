@@ -38,6 +38,10 @@
 #define TIMEOUT_SECONDS 30
 #define POLL_INTERVAL_MS 500
 #define MAX_OUTPUT_CHARS 10240
+/* libatspi gives every application it hasn't seen yet 15s to answer, so one
+ * peer that stops answering (#1944) would hold the probe past the caller's
+ * 1.6s kill. linux-fast-paste bounds its calls the same way. */
+#define PROBE_ATSPI_CALL_TIMEOUT_MS 500
 
 static volatile sig_atomic_t running = 1;
 static const char BASE64_TABLE[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -198,6 +202,7 @@ int main(int argc, char **argv) {
         fflush(stdout);
         return 1;
     }
+    if (probe_editable) atspi_set_timeout(PROBE_ATSPI_CALL_TIMEOUT_MS, -1);
 
     GError *error = NULL;
     AtspiAccessible *desktop = atspi_get_desktop(0);
