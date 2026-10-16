@@ -33,6 +33,7 @@ import {
 import { workflowSaveConfig } from '@/lib/inferenceModes';
 import { InferenceModePicker } from '@/components/settings/InferenceModePicker';
 import {
+  CLOUD_CLEANUP_NEEDS_ACCOUNT_NOTE,
   LOCAL_MODE_DICTATION_NOTES,
   ON_DEVICE_MODE_NOTES,
   PRIVATE_MODE_LOCKED_REASON,
@@ -41,6 +42,7 @@ import {
   WORKFLOW_LABELS,
   WORKFLOWS,
   cloudAccessFor,
+  cloudCleanupNeedsAccount,
   parseWorkflow,
   unsetSelection,
 } from '@/lib/aiWorkflows';
@@ -356,6 +358,11 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
     (scope === 'cleanup' && selection.mode === 'local' && onDeviceUnsupported
       ? ON_DEVICE_CLEANUP_UNSUPPORTED_NOTE
       : undefined) ??
+    (scope === 'cleanup' &&
+    selection.mode === 'openwhispr' &&
+    cloudCleanupNeedsAccount(config, activeMode, cloudAccess)
+      ? CLOUD_CLEANUP_NEEDS_ACCOUNT_NOTE
+      : undefined) ??
     (activeMode === 'private' ? ON_DEVICE_MODE_NOTES[scope] : undefined) ??
     (activeMode === 'providers' && !config?.inference?.[scope]
       ? UNSET_PROVIDER_NOTES[scope]
@@ -480,7 +487,10 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
       );
       return;
     }
-    if (mode === savedSelection.mode) {
+    // Tapping the shown mode saves it when nothing of the user's own is saved, since an unsaved
+    // default follows the mode and the account (unsetSelection), and a pin is released with them.
+    const ownChoice = !!config?.inference?.[scope] && !config.pinnedInference?.includes(scope);
+    if (mode === savedSelection.mode && ownChoice) {
       setSelection(savedSelection);
       return;
     }
@@ -594,7 +604,7 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
       const saved = await prepareSelection();
       if (!saved) return;
       await updateConfig(
-        workflowSaveConfig(useConfigStore.getState().config, scope, saved, activeMode),
+        workflowSaveConfig(useConfigStore.getState().config, scope, saved, activeMode, cloudAccess),
       );
       if (useConfigStore.getState().error) {
         showError('Unable to save your selection. Please try again.');

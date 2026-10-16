@@ -1,6 +1,6 @@
 import type { AuthUser } from '@/lib/authClient';
 import type { InferenceSelection } from '@/lib/mobileProviders';
-import { MODE_LABELS } from '@/lib/inferenceModes';
+import { localModeDefault, MODE_LABELS, type CloudAccess } from '@/lib/inferenceModes';
 import { isLocalModelKey, LOCAL_MODEL_TITLES } from '@/lib/localModelCatalog';
 import { providerDisplayName, type MobileInferenceScope } from '@/lib/mobileProviders';
 import type { ProcessingMode, UserConfig } from '@/types';
@@ -42,14 +42,28 @@ export const ON_DEVICE_MODE_NOTES: Partial<Record<MobileInferenceScope, string>>
 export const PRIVATE_MODE_LOCKED_REASON =
   'Off while Local Mode is on. Change Dictation in AI Models to turn it off.';
 
-// What a user can do on OpenWhispr Cloud, by the rules in accountAccess: any session transcribes
-// there, but a separate Cloud pass over text, such as cleaning a transcript made on this iPhone,
-// needs a signed-in account.
-export type CloudAccess = 'none' | 'session' | 'account';
+// Local Mode dictates on this iPhone, so cleaning with OpenWhispr Cloud is a separate Cloud pass,
+// which needs a signed-in account.
+export const CLOUD_CLEANUP_NEEDS_ACCOUNT_NOTE =
+  'In Local Mode, OpenWhispr Cloud cleans transcripts only for a signed-in account, so cleanup is skipped until you sign in.';
 
 export function cloudAccessFor(user: AuthUser | null): CloudAccess {
   if (!user) return 'none';
   return user.isAnonymous ? 'session' : 'account';
+}
+
+// OpenWhispr Cloud is saved for cleanup in Local Mode without an account to run it, so it is skipped
+// (snapshotTextInference). Unset cleanup only defaults to Cloud with an account (unsetSelection).
+export function cloudCleanupNeedsAccount(
+  config: UserConfig | null,
+  activeMode: ProcessingMode,
+  cloudAccess: CloudAccess,
+): boolean {
+  return (
+    activeMode === 'private' &&
+    config?.inference?.cleanup?.mode === 'openwhispr' &&
+    cloudAccess !== 'account'
+  );
 }
 
 // Cleanup runs On-Device when it is saved as On-Device, or in Local Mode when nothing is saved and
@@ -78,13 +92,7 @@ export function unsetSelection(
   activeMode: ProcessingMode,
   cloudAccess: CloudAccess = 'none',
 ): InferenceSelection {
-  if (activeMode === 'private') {
-    const onCloud =
-      scope === 'agent' ||
-      (scope === 'upload' && cloudAccess !== 'none') ||
-      (scope === 'cleanup' && cloudAccess === 'account');
-    return { mode: onCloud ? 'openwhispr' : 'local' };
-  }
+  if (activeMode === 'private') return { mode: localModeDefault(scope, cloudAccess) };
   if (activeMode === 'providers' && (scope === 'dictation' || UNSET_PROVIDER_NOTES[scope]))
     return { mode: 'providers' };
   return { mode: 'openwhispr' };
@@ -109,6 +117,8 @@ export function workflowSummary(
     if (!(config?.cleanupEnabled ?? true)) return 'Off';
     if (cleanupRunsOnDevice(config, activeMode, cloudAccess) && onDeviceUnavailable)
       return `Skipped · ${onDeviceUnavailable}`;
+    if (cloudCleanupNeedsAccount(config, activeMode, cloudAccess))
+      return 'Skipped · Needs an account';
   }
   const selection = config?.inference?.[scope] ?? unsetSelection(scope, activeMode, cloudAccess);
   // Local Mode runs dictation, note formatting and provider note chat on this phone first, whatever

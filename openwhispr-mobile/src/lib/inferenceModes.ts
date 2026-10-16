@@ -60,6 +60,24 @@ export const MODE_LABELS: Record<InferenceMode, string> = {
   local: 'On-Device',
 };
 
+// What a user can do on OpenWhispr Cloud, by the rules in accountAccess: any session transcribes
+// there, but a separate Cloud pass over text, such as cleaning a transcript made on this iPhone,
+// needs a signed-in account.
+export type CloudAccess = 'none' | 'session' | 'account';
+
+// What Local Mode runs for a workflow with nothing saved: OpenWhispr Cloud for note chat, and for
+// uploads and cleanup when the account can use it there; this iPhone otherwise.
+export function localModeDefault(
+  scope: MobileInferenceScope,
+  cloudAccess: CloudAccess,
+): InferenceMode {
+  const onCloud =
+    scope === 'agent' ||
+    (scope === 'upload' && cloudAccess !== 'none') ||
+    (scope === 'cleanup' && cloudAccess === 'account');
+  return onCloud ? 'openwhispr' : 'local';
+}
+
 type DictationModeConfig = Pick<
   UserConfig,
   'defaultMode' | 'inference' | 'pinnedInference' | 'privateModeReturn'
@@ -79,9 +97,11 @@ export function dictationModeConfig(
   config: UserConfig | null,
   mode: 'cloud' | 'private',
 ): DictationModeConfig {
-  // Leaving Bring Your Own Key releases the automatic pins, so those workflows follow the
-  // Cloud/On-Device choice again; selections the user saved themselves stay.
-  const pinned = config?.pinnedInference ?? [];
+  // Changing the mode releases the automatic pins, so those workflows follow the Cloud/On-Device
+  // choice again; selections the user saved themselves stay. Picking another on-device model, or
+  // replaying the same choice in onboarding, keeps them.
+  const modeChanged = config?.defaultMode !== mode;
+  const pinned = modeChanged ? (config?.pinnedInference ?? []) : [];
   const inference = Object.fromEntries(
     Object.entries(config?.inference ?? {}).filter(
       ([scope]) => !pinned.includes(scope as MobileInferenceScope),
@@ -97,7 +117,7 @@ export function dictationModeConfig(
           ? (config?.rememberedInference?.dictation?.local ?? { mode: 'local' })
           : { mode: 'openwhispr' },
     },
-    ...(config?.pinnedInference ? { pinnedInference: undefined } : {}),
+    ...(modeChanged && config?.pinnedInference ? { pinnedInference: undefined } : {}),
     // Only a switch from Bring Your Own Key sets where Private mode returns to (workflowSaveConfig).
     ...(config?.privateModeReturn ? { privateModeReturn: undefined } : {}),
   };
@@ -107,27 +127,37 @@ function providerDictationConfig(
   config: UserConfig | null,
   dictation: InferenceSelection,
   leavingMode: ProcessingMode,
+  cloudAccess: CloudAccess,
 ): DictationModeConfig {
   const inference = { ...config?.inference, dictation };
   const pinnedInference = [...(config?.pinnedInference ?? [])];
   // Leaving Private mode for the provider it was turned on from holds what that provider held,
-  // so the round trip ends where it started.
+  // so the round trip ends where it started, even over a workflow Local Mode held automatically.
+  const returning = leavingMode === 'private' && !!config?.privateModeReturn;
   const pins: [MobileInferenceScope, InferenceSelection][] =
     leavingMode === 'providers'
       ? []
-      : leavingMode === 'private' && config?.privateModeReturn
-        ? (Object.entries(config.privateModeReturn.pinned) as [
+      : returning
+        ? (Object.entries(config?.privateModeReturn?.pinned ?? {}) as [
             MobileInferenceScope,
             InferenceSelection,
           ][])
         : scopesToPin(leavingMode).map((scope) => [
             scope,
-            { mode: processingToInferenceMode(leavingMode) },
+            {
+              // Each holds what ran in the mode being left: uploads in Local Mode ran on
+              // OpenWhispr Cloud when there was a session.
+              mode:
+                leavingMode === 'private' && scope === 'upload'
+                  ? localModeDefault(scope, cloudAccess)
+                  : processingToInferenceMode(leavingMode),
+            },
           ]);
   for (const [scope, selection] of pins) {
-    if (inference[scope]) continue;
+    const heldAutomatically = pinnedInference.includes(scope);
+    if (inference[scope] && !(returning && heldAutomatically)) continue;
     inference[scope] = selection;
-    pinnedInference.push(scope);
+    if (!heldAutomatically) pinnedInference.push(scope);
   }
   return {
     defaultMode: 'providers',
@@ -148,12 +178,14 @@ function pinnedSelections(
   );
 }
 
-// The config a workflow page writes when the user saves `selection` for `scope`.
+// The config a workflow page writes when the user saves `selection` for `scope`. `cloudAccess` is
+// what the user has on OpenWhispr Cloud, which decides what ran for uploads in Local Mode.
 export function workflowSaveConfig(
   config: UserConfig | null,
   scope: MobileInferenceScope,
   selection: InferenceSelection,
   activeMode: ProcessingMode,
+  cloudAccess: CloudAccess = 'none',
 ): Partial<UserConfig> {
   const { providerId } = selection;
   const otherProviders = Object.fromEntries(
@@ -182,7 +214,7 @@ export function workflowSaveConfig(
     return {
       ...rememberedInference,
       ...(mode === 'providers'
-        ? providerDictationConfig(config, selection, activeMode)
+        ? providerDictationConfig(config, selection, activeMode, cloudAccess)
         : dictationModeConfig(config, mode)),
       ...(privateModeReturn || config?.privateModeReturn ? { privateModeReturn } : {}),
     };
@@ -194,4 +226,21 @@ export function workflowSaveConfig(
       ? { pinnedInference: config.pinnedInference.filter((pinned) => pinned !== scope) }
       : {}),
   };
+}
+
+// Before Local Mode used OpenWhispr Cloud for uploads and cleanup with nothing saved, it kept both
+// on this iPhone and ignored a Cloud choice saved for them. A config from then that is in Local
+// Mode holds both there as automatic pins, released like any other when the mode changes, so the
+// upgrade sends nothing to Cloud that was never sent before. An On-Device or provider choice stays.
+export function localModeUpgradeConfig(config: UserConfig): Partial<UserConfig> {
+  if (config.defaultMode !== 'private') return { localModeUpgraded: true };
+  const inference = { ...config.inference };
+  const pinnedInference = [...(config.pinnedInference ?? [])];
+  for (const scope of ['upload', 'cleanup'] as const) {
+    const saved = inference[scope];
+    if (saved && saved.mode !== 'openwhispr') continue;
+    inference[scope] = config.rememberedInference?.[scope]?.local ?? { mode: 'local' };
+    if (!pinnedInference.includes(scope)) pinnedInference.push(scope);
+  }
+  return { localModeUpgraded: true, inference, pinnedInference };
 }

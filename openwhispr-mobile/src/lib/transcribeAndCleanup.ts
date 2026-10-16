@@ -75,13 +75,16 @@ function cleansLocalTranscript(request: TranscriptionRequest): boolean {
   );
 }
 
-// Local Mode cleans On-Device with nothing of its own saved for cleanup. When Apple Intelligence
-// can't run, AI Models already says that cleanup is skipped, so it is skipped quietly rather than
-// warning on every transcript the user never asked to clean. The cached readiness outlives a fix in
-// iOS Settings, so it is checked again before skipping.
+// Local Mode cleans On-Device with nothing of its own saved for cleanup: unset, or held there
+// automatically (pinnedInference). When Apple Intelligence can't run, AI Models already says that
+// cleanup is skipped, so it is skipped quietly rather than warning on every transcript the user
+// never asked to clean. The cached readiness outlives a fix in iOS Settings, so it is checked again
+// before skipping.
 async function skipsLocalModeCleanup(request: TranscriptionRequest): Promise<boolean> {
   if (request.cleanupRoute?.mode !== 'local') return false;
-  if (useConfigStore.getState().config?.inference?.cleanup?.mode === 'local') return false;
+  const config = useConfigStore.getState().config;
+  if (config?.inference?.cleanup?.mode === 'local' && !config.pinnedInference?.includes('cleanup'))
+    return false;
   if ((await getLocalReasoningReadiness()).status === 'ready') return false;
   return (await getLocalReasoningReadiness({ refresh: true })).status !== 'ready';
 }

@@ -16,10 +16,26 @@ describe('workflowSummary for Text Cleanup', () => {
     expect(workflowSummary(config({}), 'cleanup', 'private', { cloudAccess })).toBe(label);
   });
 
-  it('runs a saved OpenWhispr Cloud cleanup in Local Mode', () => {
+  it('runs a saved OpenWhispr Cloud cleanup in Local Mode for a signed-in account', () => {
     const saved = config({ inference: { cleanup: { mode: 'openwhispr' } } });
-    expect(workflowSummary(saved, 'cleanup', 'private')).toBe('OpenWhispr Cloud');
+    expect(workflowSummary(saved, 'cleanup', 'private', { cloudAccess: 'account' })).toBe(
+      'OpenWhispr Cloud',
+    );
   });
+
+  // Local Mode dictates on this phone, so Cloud cleanup is a separate pass that needs an account.
+  it.each(['session', 'none'] as const)(
+    'skips a saved OpenWhispr Cloud cleanup in Local Mode with %s access',
+    (cloudAccess) => {
+      const saved = config({ inference: { cleanup: { mode: 'openwhispr' } } });
+      expect(workflowSummary(saved, 'cleanup', 'private', { cloudAccess })).toBe(
+        'Skipped · Needs an account',
+      );
+      expect(
+        workflowSummary({ ...saved, defaultMode: 'cloud' }, 'cleanup', 'cloud', { cloudAccess }),
+      ).toBe('OpenWhispr Cloud');
+    },
+  );
 
   it('is skipped in Local Mode when Apple Intelligence cannot run', () => {
     expect(

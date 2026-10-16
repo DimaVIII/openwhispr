@@ -3,7 +3,11 @@ import { router } from 'expo-router';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useConfigStore } from '@/store/useConfigStore';
 import { useProcessingModeStore } from '@/store/useProcessingModeStore';
-import { accountRequiredForCloud, showAccountRequiredAlert } from '@/lib/accountAccess';
+import {
+  accountRequiredForCloud,
+  requiresRealAccount,
+  showAccountRequiredAlert,
+} from '@/lib/accountAccess';
 import { workflowSaveConfig } from '@/lib/inferenceModes';
 import {
   getLocalReasoningReadiness,
@@ -54,8 +58,19 @@ export async function switchWorkflowMode(
   scope: MobileInferenceScope,
   mode: 'openwhispr' | 'local',
 ): Promise<ModeSwitchResult> {
-  if (mode === 'openwhispr' && accountRequiredForCloud(useAuthStore.getState().user)) {
+  const { user } = useAuthStore.getState();
+  if (mode === 'openwhispr' && accountRequiredForCloud(user)) {
     showAccountRequiredAlert(isSpeechScope(scope) ? 'cloud transcription' : 'cloud AI');
+    return 'refused';
+  }
+  // Local Mode dictates on this iPhone, so Cloud cleanup is a separate pass that needs an account.
+  if (
+    mode === 'openwhispr' &&
+    scope === 'cleanup' &&
+    useProcessingModeStore.getState().activeMode === 'private' &&
+    requiresRealAccount(user)
+  ) {
+    showAccountRequiredAlert('cloud cleanup');
     return 'refused';
   }
   if (mode === 'local') {

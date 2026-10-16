@@ -126,6 +126,7 @@ it('has no provider keys to remove on Android', async () => {
 
 it('shows what each workflow runs while Local Mode is on', async () => {
   mockActiveMode = 'private';
+  mockUser = { id: 'u', isAnonymous: false };
   mockConfig = {
     defaultMode: 'private',
     inference: {
@@ -140,6 +141,18 @@ it('shows what each workflow runs while Local Mode is on', async () => {
   expect(screen.getByText('OpenAI')).toBeTruthy();
   // Cleanup and note chat, which is OpenWhispr Cloud when unset.
   expect(screen.getAllByText('OpenWhispr Cloud')).toHaveLength(2);
+  await screen.findByText(/Status: Ready/);
+});
+
+it('says a saved Cloud cleanup is skipped in Local Mode without an account', async () => {
+  mockActiveMode = 'private';
+  mockUser = { id: 'a', isAnonymous: true };
+  mockConfig = {
+    defaultMode: 'private',
+    inference: { dictation: { mode: 'local' }, cleanup: { mode: 'openwhispr' } },
+  };
+  render(<AIModelsScreen />);
+  expect(screen.getByText('Skipped · Needs an account')).toBeTruthy();
   await screen.findByText(/Status: Ready/);
 });
 

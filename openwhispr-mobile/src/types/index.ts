@@ -20,6 +20,9 @@ export interface UserConfig {
   // off goes back to the last provider rather than to Cloud, with the workflows it held
   // (pinnedInference) held on the same selections again.
   privateModeReturn?: { pinned: Partial<Record<MobileInferenceScope, InferenceSelection>> };
+  // Set once a config follows Local Mode's OpenWhispr Cloud defaults for uploads and cleanup. New
+  // installs start with it; older configs get it from localModeUpgradeConfig at launch.
+  localModeUpgraded?: boolean;
   defaultMode: ProcessingMode;
   cleanupEnabled?: boolean;
   autoGenerateNoteTitle?: boolean;

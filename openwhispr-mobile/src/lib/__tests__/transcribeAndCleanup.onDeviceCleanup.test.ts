@@ -273,6 +273,22 @@ describe('in Local Mode with nothing of its own saved for cleanup', () => {
     },
   );
 
+  // The launch upgrade holds cleanup On-Device for a config from before Local Mode's Cloud
+  // defaults (localModeUpgradeConfig); the user still never chose it.
+  it('skips quietly when Local Mode holds cleanup On-Device automatically', async () => {
+    mockConfig = {
+      ...mockConfig,
+      inference: { dictation: { mode: 'local' }, cleanup: { mode: 'local' } },
+      pinnedInference: ['cleanup'],
+    };
+    mockReadiness.mockResolvedValue({ status: 'unsupportedDevice', tokenCounting: false });
+
+    const result = await transcribeOnDevice();
+
+    expect(mockReason).not.toHaveBeenCalled();
+    expect(result.transcription.cleanupWarning).toBeUndefined();
+  });
+
   it('cleans once a fresh readiness check finds Apple Intelligence ready', async () => {
     mockReadiness
       .mockResolvedValueOnce({ status: 'appleIntelligenceOff', tokenCounting: false })
@@ -283,6 +299,23 @@ describe('in Local Mode with nothing of its own saved for cleanup', () => {
     expect(mockReadiness).toHaveBeenCalledWith({ refresh: true });
     expect(result.text).toBe('cleaned:um hello there');
   });
+});
+
+// Cleaning a dictation made on this phone with Cloud is a separate pass that refuses anonymous
+// sessions, so it is never attempted, and AI Models says why (workflowSummary).
+it('keeps a Local Mode dictation raw, without a warning, for Cloud cleanup and no account', async () => {
+  mockUser = { id: 'a', isAnonymous: true };
+  mockConfig = {
+    cleanupEnabled: true,
+    defaultMode: 'private',
+    inference: { dictation: { mode: 'local' }, cleanup: { mode: 'openwhispr' } },
+  };
+
+  const result = await transcribeOnDevice();
+
+  expect(mockReason).not.toHaveBeenCalled();
+  expect(result.text).toBe('um hello there');
+  expect(result.transcription.cleanupWarning).toBeUndefined();
 });
 
 it('checks readiness again before refusing, so a fix in iOS Settings takes effect', async () => {

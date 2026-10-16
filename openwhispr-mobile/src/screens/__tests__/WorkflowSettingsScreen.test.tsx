@@ -461,8 +461,9 @@ it('defaults an unselected workflow to On-Device for a private-mode user', () =>
   expect(selectedMode()).toBe('On-Device');
 });
 
-// Local Mode cleans on this phone with nothing saved, so On-Device is what runs.
-it('shows On-Device cleanup for a Local Mode user who has not saved one', () => {
+// Local Mode cleans on this phone with nothing saved, so On-Device is what runs. Tapping it saves
+// it, since an unsaved default would move to Cloud once the user signs in.
+it('saves the On-Device cleanup a Local Mode user sees but has not saved', () => {
   mockConfig = { defaultMode: 'private' };
   mockActiveMode = 'private';
   mockScope = 'cleanup';
@@ -470,7 +471,35 @@ it('shows On-Device cleanup for a Local Mode user who has not saved one', () => 
   expect(selectedMode()).toBe('On-Device');
   expect(screen.getByText('Runs on Apple Intelligence on this iPhone.')).toBeTruthy();
   fireEvent.press(screen.getByText('On-Device'));
-  expect(mockSwitchMode).not.toHaveBeenCalled();
+  expect(mockSwitchMode).toHaveBeenCalledWith('cleanup', 'local');
+});
+
+it('saves an upload Local Mode holds on this phone automatically when it is tapped', () => {
+  mockConfig = {
+    defaultMode: 'private',
+    inference: { dictation: { mode: 'local' }, upload: { mode: 'local' } },
+    pinnedInference: ['upload'],
+  };
+  mockActiveMode = 'private';
+  mockScope = 'upload';
+  render(<WorkflowSettingsScreen />);
+  expect(selectedMode()).toBe('On-Device');
+  fireEvent.press(screen.getByText('On-Device'));
+  expect(mockSwitchMode).toHaveBeenCalledWith('upload', 'local');
+});
+
+it('says why a saved Cloud cleanup is skipped in Local Mode without an account', () => {
+  mockUser = { id: 'a', isAnonymous: true };
+  mockConfig = { defaultMode: 'private', inference: { cleanup: { mode: 'openwhispr' } } };
+  mockActiveMode = 'private';
+  mockScope = 'cleanup';
+  render(<WorkflowSettingsScreen />);
+  expect(selectedMode()).toBe('OpenWhispr Cloud');
+  expect(
+    screen.getByText(
+      'In Local Mode, OpenWhispr Cloud cleans transcripts only for a signed-in account, so cleanup is skipped until you sign in.',
+    ),
+  ).toBeTruthy();
 });
 
 it('keeps On-Device cleanup selected once a private-mode user has saved it', () => {
@@ -501,6 +530,22 @@ it('keeps uploads on this phone when dictation leaves Local Mode for Bring Your 
   expect(saved.inference.dictation.mode).toBe('providers');
   expect(saved.inference.upload).toEqual({ mode: 'local' });
   expect(mockSetActiveMode).toHaveBeenCalledWith('providers', true);
+});
+
+// Local Mode uploaded to OpenWhispr Cloud with nothing saved and a session, so that is held.
+it('keeps uploads on Cloud when a user with a session leaves Local Mode for a provider', async () => {
+  mockUser = { id: 'a', isAnonymous: true };
+  mockConfig = { defaultMode: 'private' };
+  mockActiveMode = 'private';
+  mockCredentialStatus.mockResolvedValue({ isConfigured: true });
+  render(<WorkflowSettingsScreen />);
+  enableProviders();
+  fireEvent.press(screen.getByText('Save'));
+  await waitFor(() => expect(mockUpdateConfig).toHaveBeenCalled());
+  expect(mockUpdateConfig.mock.calls[0][0]).toMatchObject({
+    inference: { upload: { mode: 'openwhispr' } },
+    pinnedInference: ['upload', 'notes', 'agent'],
+  });
 });
 
 it('keeps notes and chat on this phone when dictation leaves Local Mode for a provider', async () => {

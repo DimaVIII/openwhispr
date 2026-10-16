@@ -58,6 +58,26 @@ it('asks a signed-out user to sign in before switching to Cloud', async () => {
   expect(mockUpdateConfig).not.toHaveBeenCalled();
 });
 
+// Local Mode dictates on this phone, so Cloud cleanup is a separate pass that needs an account.
+it('asks an anonymous user to create an account before Cloud cleanup in Local Mode', async () => {
+  mockUser = { id: 'a', isAnonymous: true };
+  mockActiveMode = 'private';
+  mockConfig = { defaultMode: 'private', inference: { dictation: { mode: 'local' } } };
+  await expect(switchWorkflowMode('cleanup', 'openwhispr')).resolves.toBe('refused');
+  expect(alert).toHaveBeenCalledWith(
+    'Create an account',
+    'Create an account to use cloud cleanup with cloud processing.',
+    expect.any(Array),
+  );
+  expect(mockUpdateConfig).not.toHaveBeenCalled();
+});
+
+it('lets an anonymous user pick Cloud cleanup outside Local Mode, where Cloud dictates', async () => {
+  mockUser = { id: 'a', isAnonymous: true };
+  await expect(switchWorkflowMode('cleanup', 'openwhispr')).resolves.toBe('switched');
+  expect(alert).not.toHaveBeenCalled();
+});
+
 it('switches dictation to On-Device along with the app mode', async () => {
   await expect(switchWorkflowMode('dictation', 'local')).resolves.toBe('switched');
   expect(mockSetActiveMode).toHaveBeenCalledWith('private', true);

@@ -220,7 +220,7 @@ it.each([
   ['On-Device', { mode: 'local' }, { mode: 'local' }],
 ])('cleans a Local Mode recording with %s saved for cleanup there', (_label, cleanup, route) => {
   mockProcessing.activeMode = 'private';
-  mockUser = null;
+  mockUser = { id: 'u', isAnonymous: false };
   mockState.config.inference = { dictation: { mode: 'local' }, cleanup, agent: OPENAI_TEXT };
   const snapshot = snapshotTranscriptionJob('dictation');
   expect(snapshot.provider).toBe('local');
@@ -238,6 +238,23 @@ it.each([
   mockUser = user;
   mockState.config.inference = { dictation: { mode: 'local' } };
   expect(snapshotTranscriptionJob('dictation').cleanupRoute).toEqual({ mode, scope: 'cleanup' });
+});
+
+// Cloud cleaning a transcript made on this phone needs a signed-in account, whatever the mode, so
+// without one it is pinned here and left raw (cleanupRunsOnDevice is false for a Cloud choice).
+it.each([
+  ['an anonymous session', { id: 'a', isAnonymous: true }],
+  ['no session', null],
+])('keeps a saved Cloud cleanup of an On-Device transcript here for %s', (_label, user) => {
+  mockUser = user;
+  for (const mode of ['private', 'cloud'] as const) {
+    mockProcessing.activeMode = mode;
+    mockState.config.inference = { upload: { mode: 'local' }, cleanup: { mode: 'openwhispr' } };
+    expect(snapshotTranscriptionJob('upload').cleanupRoute).toEqual({
+      mode: 'local',
+      scope: 'cleanup',
+    });
+  }
 });
 
 // Uploads in Local Mode run what is saved for them, or OpenWhispr Cloud when there is a session.
