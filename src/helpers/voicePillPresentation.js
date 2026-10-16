@@ -425,9 +425,8 @@ export function resolveAssistantThinkingTransition(panelOpen) {
 }
 
 /**
- * A voice-assistant command spoken into an open panel thinks there while it is
- * processed. A streaming cancel also reports processing while it tears the
- * stream down, but nothing will answer it, so it must not start thinking.
+ * A streaming cancel reports processing while it tears the stream down, but
+ * nothing will answer it, so it must not start the open panel's thinking.
  */
 export function shouldBeginAssistantFollowUpThinking({
   isAssistantVoice,

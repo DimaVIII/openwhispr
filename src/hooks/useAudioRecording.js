@@ -49,7 +49,6 @@ export const useAudioRecording = (toast, options = {}) => {
   const [isPasting, setIsPasting] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [isAssistantVoice, setIsAssistantVoice] = useState(false);
-  const [isCancelling, setIsCancelling] = useState(false);
   const [isPreparing, setIsPreparing] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
   const [micCaptureStatus, setMicCaptureStatus] = useState("inactive");
@@ -64,6 +63,7 @@ export const useAudioRecording = (toast, options = {}) => {
   const dictationErrorGenerationRef = useRef(0);
   const wasRecordingRef = useRef(false);
   const pastesInFlightRef = useRef(0);
+  const cancellingRef = useRef(false);
   const wasMicUnavailableRef = useRef(false);
   const demoKindRef = useRef("dictation");
   const onDemoEventRef = useRef(options.onDemoEvent);
@@ -1091,12 +1091,14 @@ export const useAudioRecording = (toast, options = {}) => {
       // only the streaming cancel knows how to abandon it.
       if (state.isStreaming || state.isStreamingStartInProgress) {
         // The streaming cancel reports processing while it tears the stream
-        // down; set in the same batch so no render sees that as a command.
-        setIsCancelling(true);
+        // down; flagged first so no render reads that as a command. A ref, so
+        // clearing it can't re-run the follow-up effect while a pending paste
+        // still reports processing.
+        cancellingRef.current = true;
         try {
           return await audioManagerRef.current.cancelStreamingRecording();
         } finally {
-          setIsCancelling(false);
+          cancellingRef.current = false;
         }
       }
       return audioManagerRef.current.cancelRecording();
@@ -1155,7 +1157,7 @@ export const useAudioRecording = (toast, options = {}) => {
     isProcessing: isProcessing || (isPasting && !isRecording),
     isStreaming,
     isAssistantVoice,
-    isCancelling,
+    cancellingRef,
     isPreparing,
     isStopping,
     micCaptureStatus,

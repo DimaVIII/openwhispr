@@ -53,6 +53,16 @@ export default class FakeAudioManager {
   report(state) {
     this.callbacks.onStateChange?.(state);
   }
+  warmupStreamingConnection() {}
+  async saveTranscription() {
+    return true;
+  }
+  // Held open the way a paste waiting on held modifier keys stays pending.
+  safePaste() {
+    return new Promise((resolve) => {
+      this.finishPaste = () => resolve({ pasted: true });
+    });
+  }
   async stopStreamingRecording() {
     this.report({ isRecording: false, isProcessing: true, isStreaming: false });
     return true;
@@ -131,6 +141,10 @@ async function renderOpenPanelWithStreamingFollowUp(t) {
     const assistant = useAssistantPanel(panelOptions);
     const recording = useAudioRecording(toast, options);
     useAssistantFollowUpThinking(recording, assistant);
+    // As App.jsx does, so closing the panel cancels the follow-up.
+    React.useLayoutEffect(() => {
+      panelOptions.recordingControlsRef.current = recording;
+    });
     Object.assign(api, recording);
     Object.assign(panel, assistant);
     return null;
@@ -153,8 +167,8 @@ async function renderOpenPanelWithStreamingFollowUp(t) {
   return { api, panel, manager };
 }
 
-async function startFollowUp(manager, state = { isRecording: true, isStreaming: true }) {
-  manager.state = state;
+async function startFollowUp(manager) {
+  manager.state = { isRecording: true, isStreaming: true };
   await React.act(async () => {
     manager.report({ isRecording: true, isProcessing: false, isStreaming: true });
   });
@@ -173,7 +187,7 @@ test("cancelling a streaming voice-assistant follow-up never starts the open pan
     });
   });
   assert.equal(api.isProcessing, true);
-  assert.equal(api.isCancelling, true);
+  assert.equal(api.cancellingRef.current, true);
   assert.equal(panel.thinking, false);
 
   await React.act(async () => {
@@ -183,7 +197,7 @@ test("cancelling a streaming voice-assistant follow-up never starts the open pan
 
   assert.equal(panel.thinking, false);
   assert.equal(api.isProcessing, false);
-  assert.equal(api.isCancelling, false);
+  assert.equal(api.cancellingRef.current, false);
 });
 
 test("cancelling a streaming follow-up while its stream is still starting never starts thinking", async (t) => {
@@ -213,7 +227,7 @@ test("stopping a streaming voice-assistant follow-up still starts the open panel
 
   assert.equal(panel.thinking, true);
   assert.equal(api.isProcessing, true);
-  assert.equal(api.isCancelling, false);
+  assert.equal(api.cancellingRef.current, false);
 });
 
 test("the next follow-up still thinks after a cancelled one", async (t) => {
@@ -248,7 +262,7 @@ test("a streaming cancel that fails still lets the next follow-up think", async 
     manager.finishCancel();
     await assert.rejects(cancelled, /preview cleanup failed/);
   });
-  assert.equal(api.isCancelling, false);
+  assert.equal(api.cancellingRef.current, false);
   assert.equal(panel.thinking, false);
 
   manager.cancelError = null;
@@ -258,4 +272,60 @@ test("a streaming cancel that fails still lets the next follow-up think", async 
   });
 
   assert.equal(panel.thinking, true);
+});
+
+test("closing the panel mid follow-up cancels it and the panel stays closed", async (t) => {
+  const { api, panel, manager } = await renderOpenPanelWithStreamingFollowUp(t);
+
+  await React.act(async () => {
+    flushSync(() => {
+      panel.handleClose();
+    });
+  });
+  assert.equal(api.isProcessing, true);
+  assert.equal(panel.closing, true);
+  assert.equal(panel.thinking, false);
+
+  await React.act(async () => {
+    manager.finishCancel();
+    // Past the panel's content-fade fallback.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  });
+  assert.equal(api.isProcessing, false);
+  assert.equal(panel.openRef.current, false);
+  assert.equal(panel.thinking, false);
+});
+
+test("a paste still in flight when a follow-up is cancelled never starts thinking", async (t) => {
+  const { api, panel, manager } = await renderOpenPanelWithStreamingFollowUp(t);
+
+  // The previous dictation's paste is still waiting when the follow-up is cancelled.
+  let completed;
+  await React.act(async () => {
+    completed = manager.callbacks.onTranscriptionComplete({
+      success: true,
+      text: "earlier dictation",
+      source: "deepgram-streaming",
+    });
+  });
+  assert.equal(typeof manager.finishPaste, "function");
+
+  let cancelled;
+  await React.act(async () => {
+    cancelled = api.cancelRecording();
+  });
+  await React.act(async () => {
+    manager.finishCancel();
+    await cancelled;
+  });
+  // The pending paste still reports processing once the cancel is done.
+  assert.equal(api.isProcessing, true);
+  assert.equal(panel.thinking, false);
+
+  await React.act(async () => {
+    manager.finishPaste();
+    await completed;
+  });
+  assert.equal(api.isProcessing, false);
+  assert.equal(panel.thinking, false);
 });

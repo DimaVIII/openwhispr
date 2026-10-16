@@ -346,18 +346,18 @@ export function useAssistantPanel({
  * `assistant` the `useAssistantPanel` result.
  */
 export function useAssistantFollowUpThinking(recording, assistant) {
-  const { isAssistantVoice, isProcessing, isCancelling } = recording;
+  const { isAssistantVoice, isProcessing, cancellingRef } = recording;
   const { openRef, beginThinking } = assistant;
   useEffect(() => {
     if (
       shouldBeginAssistantFollowUpThinking({
         isAssistantVoice,
         isProcessing,
-        isCancelling,
+        isCancelling: cancellingRef.current,
         panelOpen: openRef.current,
       })
     ) {
       beginThinking();
     }
-  }, [isAssistantVoice, isProcessing, isCancelling, openRef, beginThinking]);
+  }, [isAssistantVoice, isProcessing, cancellingRef, openRef, beginThinking]);
 }
