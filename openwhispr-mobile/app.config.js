@@ -143,10 +143,13 @@ module.exports = () => {
     scheme: singleOrMany([environment.scheme, googleCalendar.iosRedirectScheme]),
     ios: {
       ...expo.ios,
-      associatedDomains: unique([
-        ...(expo.ios?.associatedDomains ?? []),
-        ...(affiliate ? [`applinks:${affiliate.domain}`] : []),
-      ]),
+      // Expo writes any associatedDomains array, even an empty one, as a new entitlement.
+      ...(affiliate && {
+        associatedDomains: unique([
+          ...(expo.ios?.associatedDomains ?? []),
+          `applinks:${affiliate.domain}`,
+        ]),
+      }),
       bundleIdentifier: environment.iosBundleIdentifier,
       entitlements: {
         ...(expo.ios?.entitlements ?? {}),

@@ -1,8 +1,11 @@
 import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { AccountCreatorLink } from '../AccountCreatorLink';
-import { useAffiliateStore } from '@/store/useAffiliateStore';
+import { AFFILIATE_ERRORS, useAffiliateStore } from '@/store/useAffiliateStore';
 import { getAffiliateClientConfig } from '@/lib/affiliateLink';
+import { requestTrackingForCreatorCode } from '@/lib/affiliateAttribution';
+import { useConfigStore } from '@/store/useConfigStore';
+import { Linking } from 'react-native';
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
   getItem: jest.fn(),
@@ -12,7 +15,9 @@ jest.mock('@/lib/apiClient', () => ({ ApiError: class ApiError extends Error {} 
 let mockFocusAccount: () => void;
 let mockBlurAccount: () => void;
 const mockAuth = { user: { id: 'user-a' }, sessionCookie: 'cookie-a' };
+const mockRouterPush = jest.fn();
 jest.mock('expo-router', () => ({
+  router: { push: (path: string) => mockRouterPush(path) },
   useFocusEffect: (effect: () => () => void) =>
     require('react').useEffect(() => {
       mockFocusAccount = effect;
@@ -23,7 +28,10 @@ jest.mock('expo-router', () => ({
 jest.mock('@/components/ui/Text', () => ({ Text: require('react-native').Text }));
 jest.mock('@/components/ui/SystemIcon', () => ({ SystemIcon: () => null }));
 jest.mock('@/lib/affiliateLink', () => ({ getAffiliateClientConfig: jest.fn(() => ({})) }));
-jest.mock('@/lib/affiliateAttribution', () => ({ checkAndClaimAffiliate: jest.fn() }));
+jest.mock('@/lib/affiliateAttribution', () => ({
+  checkAndClaimAffiliate: jest.fn(),
+  requestTrackingForCreatorCode: jest.fn(async () => {}),
+}));
 jest.mock('@/store/useAuthStore', () => ({
   useAuthStore: { getState: () => mockAuth },
 }));
@@ -43,6 +51,9 @@ beforeEach(() => {
   jest
     .mocked(getAffiliateClientConfig)
     .mockReturnValue({ domain: 'sandbox.dub.link', publishableKey: 'test' });
+  jest.mocked(useConfigStore.getState).mockReturnValue({
+    config: { usageAnalyticsEnabled: true },
+  } as ReturnType<typeof useConfigStore.getState>);
   useAffiliateStore.setState({
     link: '',
     saved: false,
@@ -115,28 +126,85 @@ it('keeps an unavailable offer inline and opens ordinary plans only by choice', 
   expect(viewPlans).toHaveBeenCalledTimes(1);
 });
 
-it.each([
-  'This creator link is unavailable.',
-  'Creator links are unavailable with your current tracking settings.',
-  'We couldn’t check your link.',
-])('retains failed input with retry and clearing: %s', async (error) => {
+it.each([AFFILIATE_ERRORS.tracking, AFFILIATE_ERRORS.analytics, AFFILIATE_ERRORS.check])(
+  'retains failed input with retry and clearing: %s',
+  async (error) => {
+    const check = jest.fn(async () => {
+      useAffiliateStore.setState({ error });
+      return 'invalid' as const;
+    });
+    const screen = render(<AccountCreatorLink onCheckOffer={check} onViewPlans={jest.fn()} />);
+    fireEvent.press(screen.getByText('Have a creator code?'));
+    fireEvent(screen.getByTestId('creator-input'), 'paste', link);
+    await waitFor(() => expect(screen.getByText('Try again')).toBeTruthy());
+    expect(screen.queryByText('Clear link')).toBeNull();
+    expect(screen.getByText(error)).toBeTruthy();
+    expect(useAffiliateStore.getState().link).toBe(link);
+    fireEvent.press(screen.getByText('Try again'));
+    await waitFor(() => expect(check).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      fireEvent(screen.getByTestId('creator-input'), 'changeText', '');
+    });
+    expect(useAffiliateStore.getState().link).toBe('');
+  },
+);
+
+it.each([AFFILIATE_ERRORS.input, AFFILIATE_ERRORS.unavailable, AFFILIATE_ERRORS.review])(
+  'offers no retry of the same entry for: %s',
+  async (error) => {
+    const check = jest.fn(async () => {
+      useAffiliateStore.setState({ error });
+      return 'invalid' as const;
+    });
+    const screen = render(<AccountCreatorLink onCheckOffer={check} onViewPlans={jest.fn()} />);
+    fireEvent.press(screen.getByText('Have a creator code?'));
+    fireEvent(screen.getByTestId('creator-input'), 'paste', link);
+    await waitFor(() => expect(screen.getByText(error)).toBeTruthy());
+    expect(screen.queryByText('Try again')).toBeNull();
+    await act(async () => {
+      fireEvent(screen.getByTestId('creator-input'), 'changeText', 'creator2');
+    });
+    expect(screen.queryByText(error)).toBeNull();
+  },
+);
+
+it('sends a tracking refusal to Settings and Usage Analytics off to Privacy & Data', async () => {
+  const openSettings = jest.spyOn(Linking, 'openSettings').mockResolvedValue();
   const check = jest.fn(async () => {
-    useAffiliateStore.setState({ error });
+    useAffiliateStore.setState({ error: AFFILIATE_ERRORS.tracking });
     return 'invalid' as const;
   });
   const screen = render(<AccountCreatorLink onCheckOffer={check} onViewPlans={jest.fn()} />);
   fireEvent.press(screen.getByText('Have a creator code?'));
   fireEvent(screen.getByTestId('creator-input'), 'paste', link);
-  await waitFor(() => expect(screen.getByText('Try again')).toBeTruthy());
-  expect(screen.queryByText('Clear link')).toBeNull();
-  expect(screen.getByText(error)).toBeTruthy();
-  expect(useAffiliateStore.getState().link).toBe(link);
-  fireEvent.press(screen.getByText('Try again'));
-  await waitFor(() => expect(check).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(screen.getByText('Open Settings')).toBeTruthy());
+  fireEvent.press(screen.getByText('Open Settings'));
+  expect(openSettings).toHaveBeenCalledTimes(1);
   await act(async () => {
-    fireEvent(screen.getByTestId('creator-input'), 'changeText', '');
+    useAffiliateStore.setState({ error: AFFILIATE_ERRORS.analytics });
   });
-  expect(useAffiliateStore.getState().link).toBe('');
+  fireEvent.press(screen.getByText('Open Privacy & Data'));
+  expect(mockRouterPush).toHaveBeenCalledWith('/(account)/privacy');
+});
+
+it('asks iOS for tracking before checking, but not with Usage Analytics off', async () => {
+  const check = jest.fn().mockResolvedValue('shown');
+  const screen = render(<AccountCreatorLink onCheckOffer={check} onViewPlans={jest.fn()} />);
+  fireEvent.press(screen.getByText('Have a creator code?'));
+  fireEvent(screen.getByTestId('creator-input'), 'paste', link);
+  await waitFor(() => expect(check).toHaveBeenCalledTimes(1));
+  expect(requestTrackingForCreatorCode).toHaveBeenCalledTimes(1);
+  expect(jest.mocked(requestTrackingForCreatorCode).mock.invocationCallOrder[0]).toBeLessThan(
+    check.mock.invocationCallOrder[0],
+  );
+  jest.mocked(useConfigStore.getState).mockReturnValue({
+    config: { usageAnalyticsEnabled: false },
+  } as ReturnType<typeof useConfigStore.getState>);
+  fireEvent.press(screen.getByText('Have a creator code?'));
+  fireEvent.press(screen.getByText('Have a creator code?'));
+  fireEvent(screen.getByTestId('creator-input'), 'submit', link);
+  await waitFor(() => expect(check).toHaveBeenCalledTimes(2));
+  expect(requestTrackingForCreatorCode).toHaveBeenCalledTimes(1);
 });
 
 it('does not submit an empty paste or a paste that completes after leaving Account', async () => {

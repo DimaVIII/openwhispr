@@ -1,6 +1,7 @@
 import { AppState, Linking } from 'react-native';
 import Purchases from 'react-native-purchases';
 import type { CustomCallback, CustomCallbackResult } from 'expo-superwall';
+import { requestTrackingForCreatorCode } from './affiliateAttribution';
 import { getAffiliateClientConfig, parseAffiliateInput } from './affiliateLink';
 import { loadAffiliateOffer, validAffiliateOffer, type AffiliateOffer } from './affiliateOffer';
 import { getBillingIdentity, isBillingIdentityCurrent } from './billingIdentity';
@@ -13,8 +14,8 @@ import { useAffiliateStore } from '@/store/useAffiliateStore';
 import { useConfigStore } from '@/store/useConfigStore';
 import { useUsageStore } from '@/store/useUsageStore';
 
-// Observed in the isolated native paywall. These are flat dictionary keys,
-// including their dots, not nested objects. Keep in sync with draft 271365.
+// Superwall callback variables are flat dictionary keys,
+// including their dots, not nested objects. Keep in sync with the paywall.
 export const CREATOR_INPUT_KEY = 'node.o9Et2gOJEgdSPj0nV1CkE.value';
 export const CREATOR_PLAN_KEY = 'products.selectedIndex';
 export const CREATOR_PRODUCT_KEY = 'products.secondary.identifier';
@@ -22,6 +23,8 @@ export const CREATOR_TOKEN_KEY = 'callbacks.creatorCodeApply.data.offerToken';
 const PRICE_KEY = 'callbacks.creatorCodeApply.data.priceText';
 const RENEWAL_KEY = 'callbacks.creatorCodeApply.data.renewalText';
 const REQUEST_TIMEOUT_MS = 20_000;
+// RevenueCat and the backend can take a few seconds to see an offer-code purchase.
+const REDEMPTION_CHECK_DELAYS_MS = [0, 2_000, 5_000];
 let nextPresentation = 0;
 const failure = (
   message = 'We couldn’t check this code. Try again, or use the regular plan.',
@@ -41,10 +44,14 @@ export function formatAffiliateOffer(offer: AffiliateOffer) {
   };
 }
 
-/** One native presentation owns one private offer. Never return the Apple URL or code. */
+/**
+ * One native presentation owns one private offer. Never return the Apple URL or code.
+ * Apple redeems the offer outside Superwall, so a confirmed redemption is reported
+ * through `onRedeemed` rather than as a Superwall purchase.
+ */
 export function createAffiliatePaywallSession(
   isPresented: () => boolean,
-  dismiss: () => Promise<void>,
+  onRedeemed: (productId: string) => void,
   initialOffer?: AffiliateOffer,
 ) {
   const openingAuth = useAuthStore.getState();
@@ -59,11 +66,12 @@ export function createAffiliatePaywallSession(
     initialOffer && identity && validAffiliateOffer(initialOffer, initialOffer.country)
       ? initialOffer
       : null;
-  const initialParams = offer
+  const initialDisplay = offer && formatAffiliateOffer(offer);
+  const initialParams = initialDisplay
     ? {
         creator_offer_ready: true,
-        creator_offer_price: formatAffiliateOffer(offer).priceText,
-        creator_offer_renewal: formatAffiliateOffer(offer).renewalText,
+        creator_offer_price: initialDisplay.priceText,
+        creator_offer_renewal: initialDisplay.renewalText,
         creator_offer_token: offerToken,
       }
     : {
@@ -76,7 +84,7 @@ export function createAffiliatePaywallSession(
   let billing = false;
   let leftApp = false;
   let handoffPending = false;
-  let reconciling = false;
+  let redeemingProductId: string | null = null;
   const alive = () => {
     const auth = useAuthStore.getState();
     if (
@@ -99,25 +107,35 @@ export function createAffiliatePaywallSession(
     const status = await getTrackingAuthorizationStatus();
     return eligible() && (status === 'authorized' || status === 'notSupported');
   };
+  // Keeps Use code locked until the purchase is confirmed or the checks run out,
+  // so a single-use code that was already redeemed can't be opened again.
+  const confirmRedemption = async (productId: string) => {
+    try {
+      for (const delay of REDEMPTION_CHECK_DELAYS_MS) {
+        if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
+        if (!alive()) return;
+        await reconcileStoreBilling().catch(() => {
+          /* Ordinary restore/reconciliation remains available on a later visit. */
+        });
+        if (!alive()) return;
+        await useUsageStore.getState().load(true);
+        if (alive() && useUsageStore.getState().usage?.isSubscribed) {
+          onRedeemed(productId);
+          return;
+        }
+      }
+    } finally {
+      handoffPending = false;
+    }
+  };
   const subscription = AppState.addEventListener('change', (state) => {
     if (!billing || !alive()) return;
     if (state === 'background') leftApp = true;
-    if (state !== 'active' || !leftApp || reconciling) return;
+    if (state !== 'active' || !leftApp || !redeemingProductId) return;
     leftApp = false;
-    handoffPending = false;
-    reconciling = true;
-    reconcileStoreBilling()
-      .then(async () => {
-        if (!alive()) return;
-        await useUsageStore.getState().load(true);
-        if (alive() && useUsageStore.getState().usage?.isSubscribed) await dismiss();
-      })
-      .catch(() => {
-        /* Ordinary restore/reconciliation remains available on a later visit. */
-      })
-      .finally(() => {
-        reconciling = false;
-      });
+    const productId = redeemingProductId;
+    redeemingProductId = null;
+    confirmRedemption(productId).catch(() => {});
   });
   const close = () => {
     active = false;
@@ -143,12 +161,18 @@ export function createAffiliatePaywallSession(
       return failure();
     if (callback.name !== 'creatorCodeApply' && callback.name !== 'creatorOfferRedeem')
       return failure();
-    if (callback.name === 'creatorOfferRedeem' && handoffPending) return failure();
+    if (callback.name === 'creatorOfferRedeem' && handoffPending)
+      return failure('We’re still checking your purchase. Try again in a moment.');
     busy = true;
     const version = ++generation;
     const current = () => eligible() && generation === version;
     let timer: ReturnType<typeof setTimeout>;
     const work = async (): Promise<CustomCallbackResult> => {
+      if (
+        callback.name === 'creatorCodeApply' &&
+        isUsageAnalyticsAllowed(useConfigStore.getState().config)
+      )
+        await requestTrackingForCreatorCode();
       if (!(await permission()) || !current())
         return failure(
           'Creator codes are unavailable with your current tracking settings. You can use the regular plan.',
@@ -210,7 +234,6 @@ export function createAffiliatePaywallSession(
         (await Purchases.getAppUserID()) !== identity?.billingUserId
       )
         return failure();
-      if (!current()) return failure();
       const products = await Purchases.getProducts([held.productId]);
       const product = products.find((item) => item.identifier === held.productId);
       if (
@@ -228,19 +251,21 @@ export function createAffiliatePaywallSession(
       useUsageStore.getState().beginBillingSession();
       billing = true;
       handoffPending = true;
+      redeemingProductId = held.productId;
       try {
         await Linking.openURL(held.redemptionUrl);
       } catch (error) {
         handoffPending = false;
+        redeemingProductId = null;
         throw error;
       }
       return current() ? { status: 'success' } : failure();
     };
     const timeout = new Promise<CustomCallbackResult>((resolve) => {
       timer = setTimeout(() => {
+        // The offer already on screen stays redeemable; only this request is abandoned.
         if (generation === version) {
           generation += 1;
-          offer = null;
           busy = false;
         }
         resolve(failure());

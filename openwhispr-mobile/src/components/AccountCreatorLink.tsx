@@ -1,19 +1,42 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Keyboard, Pressable, View } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { AccessibilityInfo, Keyboard, Linking, Pressable, View } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
 import { SettingsRow } from '@/components/ui/SettingsSection';
 import { SystemIcon } from '@/components/ui/SystemIcon';
 import { Text } from '@/components/ui/Text';
 import { CreatorLinkInput } from '../../modules/creator-link-input/src';
+import { requestTrackingForCreatorCode } from '@/lib/affiliateAttribution';
 import { getAffiliateClientConfig } from '@/lib/affiliateLink';
 import { AppFont } from '@/lib/fonts';
-import { useAffiliateStore } from '@/store/useAffiliateStore';
+import { isUsageAnalyticsAllowed } from '@/lib/usageAnalytics';
+import { AFFILIATE_ERRORS, useAffiliateStore } from '@/store/useAffiliateStore';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useConfigStore } from '@/store/useConfigStore';
 
 export type CreatorOfferResult = 'shown' | 'unavailable' | 'invalid' | 'cancelled';
 
 const UNAVAILABLE_TEXT =
   'Your creator is saved, but we couldn’t verify an available offer right now.';
+
+// A setting the user can change before trying again.
+const SETTINGS_ACTIONS: Partial<Record<string, { label: string; open: () => void }>> = {
+  [AFFILIATE_ERRORS.tracking]: {
+    label: 'Open Settings',
+    open: () => {
+      Linking.openSettings().catch(() => {});
+    },
+  },
+  [AFFILIATE_ERRORS.analytics]: {
+    label: 'Open Privacy & Data',
+    open: () => router.push('/(account)/privacy'),
+  },
+};
+// Retrying the same entry can't fix these; editing the field clears them.
+const EDIT_ERRORS: readonly string[] = [
+  AFFILIATE_ERRORS.input,
+  AFFILIATE_ERRORS.unavailable,
+  AFFILIATE_ERRORS.review,
+];
 
 export function AccountCreatorLink({
   onCheckOffer,
@@ -64,6 +87,9 @@ export function AccountCreatorLink({
         return;
       }
       Keyboard.dismiss();
+      if (isUsageAnalyticsAllowed(useConfigStore.getState().config))
+        await requestTrackingForCreatorCode();
+      if (!isCurrent()) return;
       const result = await onCheckOffer();
       if (isCurrent()) setPhase(result === 'unavailable' ? 'unavailable' : 'idle');
     } catch {
@@ -78,6 +104,8 @@ export function AccountCreatorLink({
 
   const busy = phase === 'checking' || checking;
   const feedback = localError ?? error;
+  const settingsAction = feedback ? SETTINGS_ACTIONS[feedback] : undefined;
+  const canRetry = !(feedback && EDIT_ERRORS.includes(feedback));
   // accessibilityLiveRegion is Android-only; VoiceOver needs an explicit announcement,
   // and only for feedback that is on screen.
   const announcement =
@@ -156,17 +184,28 @@ export function AccountCreatorLink({
           )}
           {!busy && (saved || feedback) && (
             <View className="mt-1">
-              <Pressable
-                accessibilityRole="button"
-                className="min-h-11 justify-center"
-                onPress={() => {
-                  checkOffer();
-                }}
-              >
-                <Text className="text-[15px] text-brand">
-                  {feedback || phase === 'unavailable' ? 'Try again' : 'Check offer'}
-                </Text>
-              </Pressable>
+              {settingsAction && (
+                <Pressable
+                  accessibilityRole="button"
+                  className="min-h-11 justify-center"
+                  onPress={settingsAction.open}
+                >
+                  <Text className="text-[15px] text-brand">{settingsAction.label}</Text>
+                </Pressable>
+              )}
+              {canRetry && (
+                <Pressable
+                  accessibilityRole="button"
+                  className="min-h-11 justify-center"
+                  onPress={() => {
+                    checkOffer();
+                  }}
+                >
+                  <Text className="text-[15px] text-brand">
+                    {feedback || phase === 'unavailable' ? 'Try again' : 'Check offer'}
+                  </Text>
+                </Pressable>
+              )}
               {phase === 'unavailable' && (
                 <>
                   <Pressable

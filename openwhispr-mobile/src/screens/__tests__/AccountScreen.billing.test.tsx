@@ -47,11 +47,13 @@ jest.mock('@/components/AccountCreatorLink', () => ({
     onViewPlans: () => void;
   }) => {
     const { Pressable, Text, View } = require('react-native');
+    const [result, setResult] = require('react').useState('');
     return (
       <View>
-        <Pressable onPress={onCheckOffer}>
+        <Pressable onPress={() => onCheckOffer().then(setResult)}>
           <Text>Submit creator link</Text>
         </Pressable>
+        <Text testID="creator-result">{result}</Text>
         <Pressable onPress={onViewPlans}>
           <Text>View plans</Text>
         </Pressable>
@@ -715,6 +717,19 @@ describe('Account creator offer intent', () => {
     });
     expect(loadAffiliateOffer).not.toHaveBeenCalled();
     expect(mockRegisterSuperwallGate).not.toHaveBeenCalled();
+  });
+  it.each([
+    [true, 'shown'],
+    [false, 'unavailable'],
+  ])('reports a creator paywall that presents=%s as %s', async (presents, expected) => {
+    jest.mocked(loadAffiliateOffer).mockResolvedValue({ productId: 'monthly' } as AffiliateOffer);
+    mockRegisterSuperwallGate.mockImplementation(async (options: { onPresent?: () => void }) => {
+      if (presents) options.onPresent?.();
+      return true;
+    });
+    const screen = render(<AccountScreen />);
+    fireEvent.press(screen.getByText('Submit creator link'));
+    await waitFor(() => expect(screen.getByTestId('creator-result').props.children).toBe(expected));
   });
   it.each([false, true])(
     'opens the shared paywall with a private offer for anonymous=%s and aborts on leaving Account',

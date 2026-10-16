@@ -48,6 +48,7 @@ beforeEach(async () => {
     .mockImplementation(() => ({ config }) as ReturnType<typeof useConfigStore.getState>);
   useAffiliateStore.setState({
     ownerId: 'anonymous-a',
+    ownerAnonymous: false,
     link: '',
     clickId: null,
     saved: false,
@@ -76,7 +77,7 @@ it('editing saves locally and only an explicit prepare claims it', async () => {
   expect(claim.mock.calls[0][2]).toBe('session-a');
 });
 
-it('navigation cancellation reaches the claim guard and releases checking for a later retry', async () => {
+it('navigation cancellation reaches the claim guard, and a claim the server accepted stays saved', async () => {
   let current = true;
   let finish!: (status: 'provisional') => void;
   claim.mockImplementationOnce(
@@ -93,8 +94,67 @@ it('navigation cancellation reaches the claim guard and releases checking for a 
   expect(claim.mock.calls[0][3]()).toBe(false);
   finish('provisional');
   expect(await pending).toBe(false);
-  expect(useAffiliateStore.getState()).toMatchObject({ saved: false, checking: false });
+  expect(useAffiliateStore.getState()).toMatchObject({ saved: true, checking: false });
   expect(await useAffiliateStore.getState().prepare()).toBe(true);
+  expect(claim).toHaveBeenCalledTimes(1);
+});
+
+it('drops a server answer that arrives after an account switch', async () => {
+  let finish!: (status: 'provisional') => void;
+  claim.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await useAffiliateStore.getState().edit('https://sandbox.dub.link/creator');
+  const pending = useAffiliateStore.getState().prepare();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  auth = { user: { id: 'account-b' }, sessionCookie: 'session-b', isInitialized: true };
+  finish('provisional');
+  expect(await pending).toBe(false);
+  expect(useAffiliateStore.getState().saved).toBe(false);
+});
+
+it('carries an unclaimed link from an anonymous session into the account it becomes', async () => {
+  auth = {
+    user: { id: 'anonymous-a', isAnonymous: true },
+    sessionCookie: 'session-a',
+    isInitialized: true,
+  } as typeof auth;
+  await useAffiliateStore.getState().edit('https://sandbox.dub.link/creator', true);
+  auth = { user: { id: 'account-b' }, sessionCookie: 'session-b', isInitialized: true };
+  await useAffiliateStore.getState().bindSession();
+  expect(useAffiliateStore.getState()).toMatchObject({
+    ownerId: 'account-b',
+    ownerAnonymous: false,
+    link: 'https://sandbox.dub.link/creator',
+    autoSubmit: true,
+    inboundOfferPending: true,
+  });
+});
+
+it('never carries a link between two real accounts, or a claimed one out of an anonymous session', async () => {
+  await useAffiliateStore.getState().edit('https://sandbox.dub.link/creator');
+  auth = { user: { id: 'account-b' }, sessionCookie: 'session-b', isInitialized: true };
+  await useAffiliateStore.getState().bindSession();
+  expect(useAffiliateStore.getState()).toMatchObject({ ownerId: 'account-b', link: '' });
+
+  auth = {
+    user: { id: 'anonymous-c', isAnonymous: true },
+    sessionCookie: 'session-c',
+    isInitialized: true,
+  } as typeof auth;
+  useAffiliateStore.setState({ ownerId: 'anonymous-c', ownerAnonymous: true });
+  await useAffiliateStore.getState().edit('https://sandbox.dub.link/creator');
+  expect(await useAffiliateStore.getState().prepare()).toBe(true);
+  auth = { user: { id: 'account-d' }, sessionCookie: 'session-d', isInitialized: true };
+  await useAffiliateStore.getState().bindSession();
+  expect(useAffiliateStore.getState()).toMatchObject({
+    ownerId: 'account-d',
+    link: '',
+    saved: false,
+  });
 });
 
 it('does not start collection if the caller has already left', async () => {

@@ -9,8 +9,19 @@ import { isUsageAnalyticsAllowed } from '@/lib/usageAnalytics';
 import { AffiliateInputError, getAffiliateClientConfig } from '@/lib/affiliateLink';
 
 const STORAGE_KEY = 'openwhispr_affiliate_candidate_v1';
+// Shown as-is; the Account row picks its follow-up action from which one it is.
+export const AFFILIATE_ERRORS = {
+  tracking: 'Creator links need tracking permission. You can allow it in Settings.',
+  analytics: 'Creator links are unavailable while Usage Analytics is off.',
+  input: 'Enter your exact creator code, or paste the original creator link.',
+  unavailable: 'This creator link is unavailable. Try another link.',
+  review: 'We couldn’t confirm this referral.',
+  check: 'We couldn’t check your link. Try again.',
+  save: 'We couldn’t save your link. Try again.',
+} as const;
 const candidateSchema = z.object({
   ownerId: z.string().nullable(),
+  ownerAnonymous: z.boolean().default(false),
   link: z.string().max(2048),
   clickId: z.string().nullable(),
   saved: z.boolean(),
@@ -20,6 +31,7 @@ const candidateSchema = z.object({
 type Candidate = z.infer<typeof candidateSchema>;
 const empty: Candidate = {
   ownerId: null,
+  ownerAnonymous: false,
   link: '',
   clickId: null,
   saved: false,
@@ -46,6 +58,7 @@ function persist(candidate: Candidate): Promise<void> {
 function snapshot(state: Candidate): Candidate {
   return {
     ownerId: state.ownerId,
+    ownerAnonymous: state.ownerAnonymous,
     link: state.link,
     clickId: state.clickId,
     saved: state.saved,
@@ -74,20 +87,24 @@ export const useAffiliateStore = create<AffiliateState>((set, get) => ({
     const auth = useAuthStore.getState();
     if (!get().hydrated || !auth.isInitialized) return;
     const ownerId = auth.user?.id ?? null;
+    const ownerAnonymous = auth.user?.isAnonymous === true;
     const state = get();
     if (state.ownerId === ownerId) return;
     revision += 1;
-    // Only a candidate captured before session creation can bind for the first time.
-    // Anonymous-to-account transfer belongs to the server's replayable link workflow.
+    // A candidate captured before session creation binds for the first time, and one
+    // not yet claimed follows its anonymous session into the account it becomes.
+    // A claimed one transfers through the server's replayable link workflow.
+    const carriesOver =
+      ownerId !== null && (state.ownerId === null || (state.ownerAnonymous && !state.saved));
     set(
-      state.ownerId === null && ownerId
-        ? { ownerId, checking: false }
-        : { ...empty, ownerId, checking: false, error: null },
+      carriesOver
+        ? { ownerId, ownerAnonymous, checking: false }
+        : { ...empty, ownerId, ownerAnonymous, checking: false, error: null },
     );
     try {
       await persist(snapshot(get()));
     } catch {
-      set({ error: 'We couldn’t save your link. Try again.' });
+      set({ error: AFFILIATE_ERRORS.save });
     }
   },
   edit: async (link, autoSubmit = false) => {
@@ -100,11 +117,12 @@ export const useAffiliateStore = create<AffiliateState>((set, get) => ({
       autoSubmit,
       inboundOfferPending: autoSubmit,
       ownerId: useAuthStore.getState().user?.id ?? null,
+      ownerAnonymous: useAuthStore.getState().user?.isAnonymous === true,
     });
     try {
       await persist(snapshot(get()));
     } catch {
-      set({ error: 'We couldn’t save your link. Try again.' });
+      set({ error: AFFILIATE_ERRORS.save });
     }
   },
   consumeInboundOffer: async (isCallerCurrent) => {
@@ -151,20 +169,20 @@ export const useAffiliateStore = create<AffiliateState>((set, get) => ({
     if (state.checking) return false;
     const auth = useAuthStore.getState();
     if (!isUsageAnalyticsAllowed(useConfigStore.getState().config)) {
-      set({ error: 'Creator links are unavailable while Usage Analytics is off.' });
+      set({ error: AFFILIATE_ERRORS.analytics });
       return false;
     }
     if (!auth.user || !auth.sessionCookie || state.ownerId !== auth.user.id) {
-      set({ error: 'We couldn’t check your link. Try again.' });
+      set({ error: AFFILIATE_ERRORS.check });
       return false;
     }
     const version = revision;
-    const isCurrent = () =>
-      isCallerCurrent() &&
+    const ownsCandidate = () =>
       revision === version &&
       useAuthStore.getState().user?.id === auth.user?.id &&
       useAuthStore.getState().sessionCookie === auth.sessionCookie &&
       isUsageAnalyticsAllowed(useConfigStore.getState().config);
+    const isCurrent = () => isCallerCurrent() && ownsCandidate();
     // A refused link stays refused: stop retrying an inbound one on every resume,
     // and don't claim it again for the onboarding offer.
     const stopAutoSubmit = async () => {
@@ -185,9 +203,11 @@ export const useAffiliateStore = create<AffiliateState>((set, get) => ({
           await persist(snapshot(get()));
         },
       );
-      if (!isCurrent()) return false;
+      // A claim the server accepted is saved even when its caller gave up waiting,
+      // so a retry finds it saved rather than trying to claim another creator.
+      if (!ownsCandidate()) return false;
       if (status === 'review') {
-        set({ error: 'We couldn’t confirm this referral.' });
+        if (isCallerCurrent()) set({ error: AFFILIATE_ERRORS.review });
         await stopAutoSubmit();
         return false;
       }
@@ -197,15 +217,15 @@ export const useAffiliateStore = create<AffiliateState>((set, get) => ({
     } catch (error) {
       if (!isCurrent()) return false;
       if (error instanceof AffiliateConsentError) {
-        set({ error: 'Creator links are unavailable with your current tracking settings.' });
+        set({ error: AFFILIATE_ERRORS.tracking });
       } else if (error instanceof AffiliateInputError) {
-        set({ error: 'Enter your exact creator code, or paste the original creator link.' });
+        set({ error: AFFILIATE_ERRORS.input });
         await stopAutoSubmit();
       } else if (error instanceof ApiError && error.status === 400) {
-        set({ error: 'This creator link is unavailable. Try another link.' });
+        set({ error: AFFILIATE_ERRORS.unavailable });
         await stopAutoSubmit();
       } else {
-        set({ error: 'We couldn’t check your link. Try again.' });
+        set({ error: AFFILIATE_ERRORS.check });
       }
       return false;
     } finally {

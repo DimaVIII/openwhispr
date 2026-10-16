@@ -3,7 +3,10 @@ import { fireEvent, render } from '@testing-library/react-native';
 import { View } from 'react-native';
 import { CreatorLinkInput } from '..';
 
-jest.mock('expo', () => ({ requireNativeView: () => require('react-native').View }));
+jest.mock('expo', () => ({
+  requireNativeView: () => require('react-native').View,
+  requireOptionalNativeModule: () => ({}),
+}));
 
 it('treats typing, completed paste and keyboard Go as different user actions', () => {
   const onChangeText = jest.fn();

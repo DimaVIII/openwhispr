@@ -149,7 +149,7 @@ it('releases a caller stuck behind a call that never settles, then still runs it
   mockPurchases.logIn.mockResolvedValue({} as never);
   const recording = recordRevenueCatPurchase('monthly');
   const next = identifyRevenueCatUser('billing-b');
-  await jest.advanceTimersByTimeAsync(30001);
+  await jest.advanceTimersByTimeAsync(90001);
   expect(await recording).toBe(false);
   expect(await next).toBe(false);
   expect(mockPurchases.logIn).not.toHaveBeenCalled();
@@ -174,6 +174,18 @@ it('starts a queued call’s deadline when it runs, not when it was queued', asy
   const reconciling = reconcileRevenueCatPurchases('billing-a', () => true);
   await jest.advanceTimersByTimeAsync(13001);
   expect(await recording).toBe(true);
+  expect(await reconciling).toBe(true);
+  jest.useRealTimers();
+});
+it('gives a slow purchase restore time to finish instead of the login deadline', async () => {
+  jest.clearAllMocks();
+  jest.useFakeTimers();
+  mockPurchases.logIn.mockResolvedValue({} as never);
+  mockPurchases.syncPurchasesForResult.mockImplementationOnce(
+    () => new Promise((resolve) => setTimeout(() => resolve({} as never), 30_000)),
+  );
+  const reconciling = reconcileRevenueCatPurchases('billing-a', () => true);
+  await jest.advanceTimersByTimeAsync(30_001);
   expect(await reconciling).toBe(true);
   jest.useRealTimers();
 });

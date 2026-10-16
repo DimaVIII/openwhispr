@@ -4,6 +4,7 @@ jest.mock('@/lib/affiliateOffer', () => ({
 }));
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 let mockAffiliateEnabled = false;
+let mockInboundPending = false;
 const mockPrepare = jest.fn();
 const mockConsumeInbound = jest.fn();
 jest.mock('@/lib/affiliateLink', () => ({
@@ -12,7 +13,13 @@ jest.mock('@/lib/affiliateLink', () => ({
 }));
 jest.mock('@/store/useAffiliateStore', () => ({
   useAffiliateStore: {
-    getState: () => ({ prepare: mockPrepare, consumeInboundOffer: mockConsumeInbound }),
+    getState: () => ({
+      prepare: mockPrepare,
+      consumeInboundOffer: mockConsumeInbound,
+      hydrate: async () => {},
+      bindSession: async () => {},
+      inboundOfferPending: mockInboundPending,
+    }),
   },
 }));
 jest.mock('../TrackingPermissionStep', () => ({
@@ -82,6 +89,7 @@ import { SUPERWALL_PLACEMENTS } from '@/lib/superwall';
 beforeEach(() => {
   jest.clearAllMocks();
   mockAffiliateEnabled = false;
+  mockInboundPending = false;
   mockPrepare.mockResolvedValue(true);
   mockConsumeInbound.mockResolvedValue(false);
   jest.mocked(loadAffiliateOffer).mockResolvedValue(null);
@@ -93,15 +101,24 @@ beforeEach(() => {
   mockGate = { isConfigured: true, state: { status: 'idle' } };
 });
 
-it('opens the shared paywall directly after existing consent, without claiming or allocating', async () => {
+it('keeps the usual order without an inbound creator link: no early tracking step, claim or allocation', async () => {
   mockAffiliateEnabled = true;
   const screen = render(<PaywallStep />);
+  await waitFor(() => expect(mockRegister).toHaveBeenCalledTimes(1));
+  expect(screen.queryByText('Existing tracking choice')).toBeNull();
+  expect(mockPrepare).not.toHaveBeenCalled();
+  expect(loadAffiliateOffer).not.toHaveBeenCalled();
+  expect(mockGoNext).toHaveBeenCalledTimes(1);
+});
+it('asks the existing tracking question first for an inbound creator link', async () => {
+  mockAffiliateEnabled = true;
+  mockInboundPending = true;
+  const screen = render(<PaywallStep />);
+  await waitFor(() => expect(screen.getByText('Existing tracking choice')).toBeTruthy());
   expect(mockRegister).not.toHaveBeenCalled();
   await act(async () => {
     fireEvent.press(screen.getByText('Existing tracking choice'));
   });
-  expect(mockPrepare).not.toHaveBeenCalled();
-  expect(loadAffiliateOffer).not.toHaveBeenCalled();
   expect(mockRegister).toHaveBeenCalledTimes(1);
   expect(mockGoNext).toHaveBeenCalledTimes(1);
 });
@@ -402,26 +419,31 @@ it('closing the shared paywall continues once with no second paywall or stock al
 
 it('seeds the shared Cloud paywall only for an explicit trusted inbound intent', async () => {
   mockAffiliateEnabled = true;
+  mockInboundPending = true;
   mockConsumeInbound.mockResolvedValue(true);
   const offer = { productId: 'monthly' } as Awaited<ReturnType<typeof loadAffiliateOffer>>;
   jest.mocked(loadAffiliateOffer).mockResolvedValue(offer);
   const screen = render(<PaywallStep />);
   expect(loadAffiliateOffer).not.toHaveBeenCalled();
-  await act(async () => fireEvent.press(screen.getByText('Existing tracking choice')));
+  const consent = await screen.findByText('Existing tracking choice');
+  await act(async () => fireEvent.press(consent));
   expect(loadAffiliateOffer).toHaveBeenCalledTimes(1);
   expect(mockRegister).toHaveBeenCalledWith(expect.objectContaining({ creatorOffer: offer }));
 });
 it('keeps ordinary Cloud purchasing available when an inbound offer is refused', async () => {
   mockAffiliateEnabled = true;
+  mockInboundPending = true;
   mockConsumeInbound.mockResolvedValue(true);
   jest.mocked(loadAffiliateOffer).mockResolvedValue(null);
   const screen = render(<PaywallStep />);
-  await act(async () => fireEvent.press(screen.getByText('Existing tracking choice')));
+  const consent = await screen.findByText('Existing tracking choice');
+  await act(async () => fireEvent.press(consent));
   expect(mockRegister).toHaveBeenCalledWith(expect.objectContaining({ creatorOffer: undefined }));
 });
 
 it('registers through the gate current after inbound preparation, not the one it started with', async () => {
   mockAffiliateEnabled = true;
+  mockInboundPending = true;
   let finishPreparation!: () => void;
   mockConsumeInbound.mockReturnValue(
     new Promise<boolean>((resolve) => {
@@ -429,7 +451,8 @@ it('registers through the gate current after inbound preparation, not the one it
     }),
   );
   const screen = render(<PaywallStep />);
-  await act(async () => fireEvent.press(screen.getByText('Existing tracking choice')));
+  const consent = await screen.findByText('Existing tracking choice');
+  await act(async () => fireEvent.press(consent));
   const configuredRegister = jest.fn().mockResolvedValue(true);
   mockGate = { ...mockGate, register: configuredRegister };
   screen.rerender(<PaywallStep />);
@@ -437,10 +460,10 @@ it('registers through the gate current after inbound preparation, not the one it
   expect(configuredRegister).toHaveBeenCalledTimes(1);
   expect(mockRegister).not.toHaveBeenCalled();
 });
-it('starts the Continue escape timer only once preparation has finished', async () => {
+it('lets Continue escape a slow creator preparation, which then never registers', async () => {
   jest.useFakeTimers();
   mockAffiliateEnabled = true;
-  mockRegister.mockReturnValue(new Promise<boolean>(() => {}));
+  mockInboundPending = true;
   let finishPreparation!: () => void;
   mockConsumeInbound.mockReturnValue(
     new Promise<boolean>((resolve) => {
@@ -448,12 +471,9 @@ it('starts the Continue escape timer only once preparation has finished', async 
     }),
   );
   const screen = render(<PaywallStep />);
-  await act(async () => fireEvent.press(screen.getByText('Existing tracking choice')));
-  await act(async () => {
-    jest.advanceTimersByTime(PAYWALL_ESCAPE_MS);
-  });
-  await act(async () => finishPreparation());
-  expect(mockRegister).toHaveBeenCalledTimes(1);
+  await act(async () => {});
+  const consent = await screen.findByText('Existing tracking choice');
+  await act(async () => fireEvent.press(consent));
   await act(async () => fireEvent.press(screen.getByText('Continue')));
   expect(mockGoNext).not.toHaveBeenCalled();
   await act(async () => {
@@ -461,12 +481,16 @@ it('starts the Continue escape timer only once preparation has finished', async 
   });
   await act(async () => fireEvent.press(screen.getByText('Continue')));
   expect(mockGoNext).toHaveBeenCalledTimes(1);
+  await act(async () => finishPreparation());
+  expect(mockRegister).not.toHaveBeenCalled();
 });
 it('still presents ordinary purchasing if consuming an optional inbound intent fails', async () => {
   mockAffiliateEnabled = true;
+  mockInboundPending = true;
   mockConsumeInbound.mockRejectedValueOnce(new Error('storage unavailable'));
   const screen = render(<PaywallStep />);
-  await act(async () => fireEvent.press(screen.getByText('Existing tracking choice')));
+  const consent = await screen.findByText('Existing tracking choice');
+  await act(async () => fireEvent.press(consent));
   expect(mockRegister).toHaveBeenCalledWith(expect.objectContaining({ creatorOffer: undefined }));
   expect(loadAffiliateOffer).not.toHaveBeenCalled();
 });
@@ -478,6 +502,7 @@ describe.each(['claim', 'offer'])('eligibility while waiting for %s', (phase) =>
     ['unknown', { usage: null, ownerKey: null }],
   ])('skips when usage becomes %s', async (_label, nextUsage) => {
     mockAffiliateEnabled = true;
+    mockInboundPending = true;
     let finishPreparation!: () => void;
     if (phase === 'claim') {
       mockConsumeInbound.mockReturnValue(
@@ -494,7 +519,8 @@ describe.each(['claim', 'offer'])('eligibility while waiting for %s', (phase) =>
       );
     }
     const screen = render(<PaywallStep />);
-    await act(async () => fireEvent.press(screen.getByText('Existing tracking choice')));
+    const consent = await screen.findByText('Existing tracking choice');
+    await act(async () => fireEvent.press(consent));
     mockUsageState = nextUsage;
     screen.rerender(<PaywallStep />);
     await act(async () => finishPreparation());

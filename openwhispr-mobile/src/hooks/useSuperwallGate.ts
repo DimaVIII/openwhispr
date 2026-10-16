@@ -11,14 +11,16 @@ export type SuperwallPurchaseCompletion = 'purchased' | 'restored';
 
 export type RegisterSuperwallGateOptions = {
   placement: SuperwallPlacement;
-  /** Verified app-owned offer from an explicit Account submission; never sent to Superwall. */
+  /** Verified app-owned offer from an explicit creator submission; never sent to Superwall. */
   creatorOffer?: AffiliateOffer;
   params?: Partial<SuperwallAttributes> & Record<string, unknown>;
   feature?: () => void;
   onAccessGrantedWithoutPurchase?: () => void;
   onPurchaseComplete?: (completion: SuperwallPurchaseCompletion) => void;
+  /** Called once the native paywall is on screen. */
+  onPresent?: () => void;
   requiresAccount?: boolean;
-  /** Cancels the optional onboarding offer when its screen is left. */
+  /** Cancels the registration when its screen is left. */
   signal?: AbortSignal;
 };
 

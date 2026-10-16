@@ -167,7 +167,7 @@ export default function AccountScreen() {
   }, [signOut, user]);
 
   const handleBillingPress = useCallback(
-    async (intent: 'plans' | 'creator' | 'standard' = 'plans'): Promise<CreatorOfferResult> => {
+    async (intent: 'plans' | 'creator' = 'plans'): Promise<CreatorOfferResult> => {
       if (affiliatePendingRef.current) return 'cancelled';
       affiliatePendingRef.current = true;
       try {
@@ -213,8 +213,12 @@ export default function AccountScreen() {
 
         const registration = new AbortController();
         billingRegistrationRef.current = registration;
+        let presented = false;
         await registerSuperwallGate({
           signal: registration.signal,
+          onPresent: () => {
+            presented = true;
+          },
           placement: SUPERWALL_PLACEMENTS.accountBillingOpen,
           creatorOffer,
           requiresAccount: creatorOffer ? false : undefined,
@@ -239,7 +243,9 @@ export default function AccountScreen() {
             });
           },
         });
-        return creatorOffer ? 'shown' : 'cancelled';
+        // A skipped or failed paywall never showed the offer, so keep the regular plans in reach.
+        if (!creatorOffer) return 'cancelled';
+        return presented ? 'shown' : 'unavailable';
       } finally {
         affiliatePendingRef.current = false;
       }
@@ -349,10 +355,10 @@ export default function AccountScreen() {
         <SettingsSection title="Subscription">
           {user && usage && !usage.isSubscribed && getAffiliateClientConfig() ? (
             <AccountCreatorLink
-              key={`${user.id}:${sessionCookie}`}
+              key={user.id}
               onCheckOffer={() => handleBillingPress('creator')}
               onViewPlans={() => {
-                handleBillingPress('standard').catch(() => {});
+                handleBillingPress().catch(() => {});
               }}
             />
           ) : null}

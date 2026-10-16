@@ -13,6 +13,7 @@ import {
 } from '../affiliatePaywall';
 import { loadAffiliateOffer } from '../affiliateOffer';
 import { getTrackingAuthorizationStatus } from '../trackingTransparency';
+import { reconcileStoreBilling } from '../billingReconciliation';
 let mockIdentity: { userId: string; sessionCookie: string; billingUserId: string } | null = {
   userId: 'buyer',
   sessionCookie: 'session',
@@ -208,7 +209,8 @@ it('refuses changed displayed price and a changed catalog before opening Apple',
   expect((await session.handle(redeem(result.data!))).status).toBe('failure');
   expect(Linking.openURL).not.toHaveBeenCalled();
 });
-it('rearms the billing resume guard when retrying after a cancelled Apple handoff', async () => {
+it('keeps Use code locked while checking a return, then rearms the guard for a retry', async () => {
+  jest.useFakeTimers();
   const session = start();
   const applied = await session.handle(apply());
   const request = redeem(applied.data!);
@@ -220,11 +222,35 @@ it('rearms the billing resume guard when retrying after a cancelled Apple handof
   // RootLayout consumes the shared guard on each return from external billing.
   mockUsage.endBillingSession();
   onAppState('active');
-  await new Promise<void>((resolve) => setImmediate(resolve));
+  await jest.advanceTimersByTimeAsync(1);
+  expect(await session.handle(request)).toEqual({
+    status: 'failure',
+    data: { message: 'We’re still checking your purchase. Try again in a moment.' },
+  });
+  await jest.advanceTimersByTimeAsync(7_001);
+  expect(reconcileStoreBilling).toHaveBeenCalledTimes(3);
 
   expect((await session.handle(request)).status).toBe('success');
   expect(Linking.openURL).toHaveBeenCalledTimes(2);
   expect(mockUsage.beginBillingSession).toHaveBeenCalledTimes(2);
+});
+it('reports a redemption confirmed on return as a purchase of the offered product', async () => {
+  jest.useFakeTimers();
+  const onRedeemed = jest.fn();
+  const session = createAffiliatePaywallSession(() => true, onRedeemed);
+  sessions.push(session);
+  const applied = await session.handle(apply());
+  const onAppState = jest.mocked(AppState.addEventListener).mock.calls.at(-1)![1];
+  expect((await session.handle(redeem(applied.data!))).status).toBe('success');
+  mockUsage.load.mockImplementation(async () => {
+    if (jest.mocked(reconcileStoreBilling).mock.calls.length === 2)
+      mockUsage.usage.isSubscribed = true;
+  });
+  onAppState('background');
+  onAppState('active');
+  await jest.advanceTimersByTimeAsync(2_001);
+  expect(onRedeemed).toHaveBeenCalledWith('monthly');
+  expect(reconcileStoreBilling).toHaveBeenCalledTimes(2);
 });
 it('does not return success for a different monthly product', async () => {
   jest.mocked(loadAffiliateOffer).mockResolvedValue({ ...offer, productId: 'other' });
@@ -288,6 +314,27 @@ it('keeps a seeded offer redeemable after a refused apply of another code', asyn
   const session = createAffiliatePaywallSession(() => true, jest.fn(), offer);
   sessions.push(session);
   expect((await session.handle(apply())).status).toBe('failure');
+  const request = {
+    name: 'creatorOfferRedeem',
+    variables: {
+      [CREATOR_PLAN_KEY]: 1,
+      [CREATOR_PRODUCT_KEY]: 'monthly',
+      ...Object.fromEntries(
+        Object.entries(session.initialParams).map(([key, value]) => [`params.${key}`, value]),
+      ),
+    },
+  };
+  expect((await session.handle(request)).status).toBe('success');
+  expect(Linking.openURL).toHaveBeenCalledWith(offer.redemptionUrl);
+});
+it('keeps a seeded offer redeemable after an apply times out', async () => {
+  jest.useFakeTimers();
+  mockCandidate.hydrate.mockImplementationOnce(() => new Promise<void>(() => {}));
+  const session = createAffiliatePaywallSession(() => true, jest.fn(), offer);
+  sessions.push(session);
+  const pending = session.handle(apply());
+  await jest.advanceTimersByTimeAsync(20_001);
+  expect((await pending).status).toBe('failure');
   const request = {
     name: 'creatorOfferRedeem',
     variables: {

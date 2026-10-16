@@ -62,12 +62,33 @@ export function PaywallStep() {
   const registrationRef = useRef<AbortController | null>(null);
   const [readyGraceElapsed, setReadyGraceElapsed] = useState(false);
   const [presenting, setPresenting] = useState(false);
-  const [registering, setRegistering] = useState(false);
   const [skipping, setSkipping] = useState(false);
   const [escapeElapsed, setEscapeElapsed] = useState(false);
   const affiliateEnabled = Boolean(getAffiliateClientConfig());
-  const [consentChecked, setConsentChecked] = useState(!affiliateEnabled);
+  // Only a trusted inbound creator link brings the tracking question forward, so
+  // its offer can be checked; everyone else meets it at its usual step after signup.
+  const [inboundCreator, setInboundCreator] = useState<boolean | null>(
+    affiliateEnabled ? null : false,
+  );
+  const [consentChecked, setConsentChecked] = useState(false);
   const completeConsent = useCallback(async () => setConsentChecked(true), []);
+  const consentReady = inboundCreator === false || (inboundCreator === true && consentChecked);
+  const userId = user?.id;
+  useEffect(() => {
+    if (!affiliateEnabled) return;
+    let active = true;
+    (async () => {
+      await useAffiliateStore.getState().hydrate();
+      await useAffiliateStore.getState().bindSession();
+    })()
+      .catch(() => {})
+      .finally(() => {
+        if (active) setInboundCreator(useAffiliateStore.getState().inboundOfferPending);
+      });
+    return () => {
+      active = false;
+    };
+  }, [affiliateEnabled, userId]);
 
   const [advanceError, setAdvanceError] = useState<string | null>(null);
   const advance = useCallback(async (): Promise<void> => {
@@ -99,10 +120,10 @@ export function PaywallStep() {
   }, [isConfigured]);
 
   useEffect(() => {
-    if (!registering) return;
+    if (!presenting) return;
     const timer = setTimeout(() => setEscapeElapsed(true), PAYWALL_ESCAPE_MS);
     return () => clearTimeout(timer);
-  }, [registering]);
+  }, [presenting]);
 
   useEffect(() => {
     // Once presented, stay presented: `register` is rebuilt whenever the gate
@@ -122,7 +143,7 @@ export function PaywallStep() {
       return;
     }
 
-    if (!consentChecked) return;
+    if (!consentReady) return;
 
     if (!isConfigured && !readyGraceElapsed) return;
     hasPresentedRef.current = true;
@@ -150,8 +171,6 @@ export function PaywallStep() {
       } catch {
         // Optional referral storage must not skip ordinary purchasing.
       }
-      // Continue's escape timer counts from here, not from before preparation.
-      setRegistering(true);
       if (!isCurrent()) return;
       const latestUsage = useUsageStore.getState();
       if (
@@ -177,7 +196,7 @@ export function PaywallStep() {
   }, [
     advance,
     affiliateEnabled,
-    consentChecked,
+    consentReady,
     isConfigured,
     isConfirmedFree,
     readyGraceElapsed,
@@ -207,7 +226,7 @@ export function PaywallStep() {
     );
   }
 
-  if (affiliateEnabled && !consentChecked && user && isConfirmedFree)
+  if (inboundCreator && !consentChecked && user && isConfirmedFree)
     return <TrackingPermissionStep onComplete={completeConsent} />;
 
   return (

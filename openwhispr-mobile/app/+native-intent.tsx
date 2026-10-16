@@ -1,5 +1,5 @@
-import { captureAffiliateArrival } from '@/lib/affiliateLink';
+import { captureAffiliateArrival, isAffiliateDomainLink } from '@/lib/affiliateLink';
 
 export function redirectSystemPath({ path }: { path: string; initial: boolean }) {
-  return captureAffiliateArrival(path) ? '/' : path;
+  return captureAffiliateArrival(path) || isAffiliateDomainLink(path) ? '/' : path;
 }

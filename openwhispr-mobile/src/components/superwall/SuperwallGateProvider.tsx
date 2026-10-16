@@ -32,6 +32,7 @@ type PendingGate = {
   feature?: () => void;
   onAccessGrantedWithoutPurchase?: () => void;
   onPurchaseComplete?: (completion: SuperwallPurchaseCompletion) => void;
+  onPresent?: () => void;
   featureRan: boolean;
   accessGrantedWithoutPurchaseReported: boolean;
   purchaseCompletionReported: boolean;
@@ -384,6 +385,7 @@ export function EnabledSuperwallGateProvider({ children }: Props) {
       setPresentationState({ status: 'presented', paywallInfo });
       if (gate && !presentationGatesRef.current.includes(gate)) {
         presentationGatesRef.current.push(gate);
+        gate.onPresent?.();
       }
       const placement = activePlacementRef.current;
       if (placement) logPaywallViewed(placement);
@@ -522,6 +524,25 @@ export function EnabledSuperwallGateProvider({ children }: Props) {
     });
   }, [dismiss]);
 
+  // Superwall only sees the paywall close after an Apple offer redemption, so the
+  // session reports the confirmed purchase and it completes like any other.
+  const completeCreatorRedemption = useCallback(
+    (gate: PendingGate, productId: string): void => {
+      if (gate.closed) return;
+      gate.terminalEventProcessed = true;
+      presentationGatesRef.current = presentationGatesRef.current.filter((item) => item !== gate);
+      if (pendingGateRef.current === gate) {
+        pendingGateRef.current = null;
+        activePlacementRef.current = null;
+      }
+      completeGate(gate, true, true, false);
+      reportPurchaseCompletion(gate, 'purchased');
+      logSubscription(productId, gate.placement);
+      dismissCancelledOffer();
+    },
+    [dismissCancelledOffer],
+  );
+
   const state = presentationState;
   const sessionCookie = useAuthStore((state) => state.sessionCookie);
   useEffect(() => {
@@ -546,6 +567,7 @@ export function EnabledSuperwallGateProvider({ children }: Props) {
       feature,
       onAccessGrantedWithoutPurchase,
       onPurchaseComplete,
+      onPresent,
       signal,
       requiresAccount = isTransactionalSuperwallPlacement(placement),
     }: RegisterSuperwallGateOptions): Promise<boolean> => {
@@ -647,6 +669,7 @@ export function EnabledSuperwallGateProvider({ children }: Props) {
           feature,
           onAccessGrantedWithoutPurchase,
           onPurchaseComplete,
+          onPresent,
           featureRan: false,
           accessGrantedWithoutPurchaseReported: false,
           purchaseCompletionReported: false,
@@ -656,7 +679,7 @@ export function EnabledSuperwallGateProvider({ children }: Props) {
         };
         gate.creatorSession = createAffiliatePaywallSession(
           () => !gate.closed && !gate.cancelled && presentationGatesRef.current.includes(gate),
-          dismiss,
+          (productId) => completeCreatorRedemption(gate, productId),
           creatorOffer,
         );
         pendingGateRef.current = gate;
@@ -747,9 +770,9 @@ export function EnabledSuperwallGateProvider({ children }: Props) {
       });
     },
     [
+      completeCreatorRedemption,
       configurationError,
       isConfigured,
-      dismiss,
       dismissCancelledOffer,
       finishPresentationGate,
       retireOffer,

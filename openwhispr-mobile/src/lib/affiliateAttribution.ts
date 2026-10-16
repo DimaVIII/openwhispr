@@ -1,10 +1,41 @@
-import dub from '@dub/react-native';
 import { api } from './apiClient';
 import { getAffiliateClientConfig, parseAffiliateInput } from './affiliateLink';
-import { getTrackingAuthorizationStatus } from './trackingTransparency';
+import { setAppsFlyerTrackingAuthorizationStatus } from './appsflyer';
+import {
+  getTrackingAuthorizationStatus,
+  requestTrackingAuthorization,
+} from './trackingTransparency';
 
 export type AffiliateClaimStatus = 'provisional' | 'pending' | 'registered' | 'review';
 export class AffiliateConsentError extends Error {}
+
+type DubOpen = { clickId?: string; link?: { domain?: string; key?: string } };
+
+// The one Dub call the app needs. Its SDK would add native clipboard and
+// install-referrer modules, and reads the clipboard when no URL is passed.
+async function trackDubOpen(
+  config: { domain: string; publishableKey: string },
+  deepLink: string,
+  signal: AbortSignal,
+): Promise<DubOpen> {
+  const response = await fetch('https://api.dub.co/track/open', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${config.publishableKey}`,
+    },
+    body: JSON.stringify({ dubDomain: config.domain, deepLink }),
+    signal,
+  });
+  if (!response.ok) throw new Error('We couldn’t check your link. Try again.');
+  return (await response.json()) as DubOpen;
+}
+
+// An explicit creator-code submission is the moment to ask, if iOS hasn't asked yet.
+export async function requestTrackingForCreatorCode(): Promise<void> {
+  if ((await getTrackingAuthorizationStatus()) !== 'notDetermined') return;
+  setAppsFlyerTrackingAuthorizationStatus(await requestTrackingAuthorization());
+}
 
 async function requireTrackingPermission(): Promise<void> {
   const status = await getTrackingAuthorizationStatus();
@@ -51,9 +82,7 @@ export async function checkAndClaimAffiliate(
     if (!clickId) {
       await bounded(requireTrackingPermission());
       assertCurrent();
-      dub.init(config);
-      // Always pass the explicit URL. Calling without one enables SDK clipboard/IP fallback.
-      const result = await bounded(dub.trackOpen(link));
+      const result = await bounded(trackDubOpen(config, link, controller.signal));
       assertCurrent();
       if (
         !result.clickId ||
@@ -76,7 +105,8 @@ export async function checkAndClaimAffiliate(
         options,
       ),
     );
-    assertCurrent();
+    // The server has acted on the claim by now, so report its answer even if the
+    // caller moved on; the store decides whether that answer still belongs to it.
     if (
       !result.data?.persisted ||
       !['provisional', 'pending', 'registered', 'review'].includes(result.data.status)

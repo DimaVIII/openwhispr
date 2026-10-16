@@ -10,7 +10,11 @@ let configured = false;
 let identityQueue: Promise<unknown> = Promise.resolve();
 
 const IDENTITY_CALL_TIMEOUT_MS = 10_000;
-const IDENTITY_QUEUE_WAIT_MS = 30_000;
+// Restoring purchases can take far longer than a login on a slow network or a
+// long purchase history, and reconciliation must not give up on it early.
+const PURCHASE_SYNC_TIMEOUT_MS = 60_000;
+// Longer than any one call's deadline, so ordinary queueing behind a sync never fails.
+const IDENTITY_QUEUE_WAIT_MS = 90_000;
 
 // Identity changes run one at a time and in order, so the last login or logout
 // always wins; queued work is never skipped. A call's own deadline starts when it
@@ -18,14 +22,16 @@ const IDENTITY_QUEUE_WAIT_MS = 30_000;
 // releases callers stuck behind a native call that never settles. Native calls
 // cannot be cancelled: a released call still runs, and holds the lock until it
 // settles.
-function withIdentity<T>(operation: () => Promise<T>): Promise<T> {
+function withIdentity<T>(
+  operation: () => Promise<T>,
+  timeoutMs = IDENTITY_CALL_TIMEOUT_MS,
+): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const tooLong = () =>
-      reject(new Error('Billing is taking too long. Retry or restart the app.'));
+    const tooLong = () => reject(new Error('RevenueCat identity call timed out'));
     const waiting = setTimeout(tooLong, IDENTITY_QUEUE_WAIT_MS);
     const run = () => {
       clearTimeout(waiting);
-      const timer = setTimeout(tooLong, IDENTITY_CALL_TIMEOUT_MS);
+      const timer = setTimeout(tooLong, timeoutMs);
       const work = Promise.resolve()
         .then(operation)
         .finally(() => clearTimeout(timer));
@@ -109,7 +115,7 @@ export async function reconcileRevenueCatPurchases(
       if (!isCurrent()) return false;
       await Purchases.syncPurchasesForResult();
       return isCurrent();
-    });
+    }, PURCHASE_SYNC_TIMEOUT_MS);
   } catch (error) {
     reportRevenueCatError('reconcile-purchases', error);
     return false;

@@ -13,6 +13,20 @@ it('captures a trusted creator on cold and warm starts', () => {
     expect(consumeAffiliateArrival()).toBe('https://try.openwhispr.com/creator');
   }
 });
+it('captures a short link a share sheet ended with a slash', () => {
+  expect(
+    redirectSystemPath({ path: 'https://try.openwhispr.com/creator/?via=x', initial: true }),
+  ).toBe('/');
+  expect(consumeAffiliateArrival()).toBe('https://try.openwhispr.com/creator?via=x');
+});
+it.each([
+  'https://try.openwhispr.com/',
+  'https://try.openwhispr.com/a/b',
+  'https://try.openwhispr.com/%E2%9C%93',
+])('opens Home for an unusable creator-domain link %s without capturing it', (path) => {
+  expect(redirectSystemPath({ path, initial: false })).toBe('/');
+  expect(consumeAffiliateArrival()).toBeNull();
+});
 it.each([
   'openwhispr://keyboard?text=test',
   'openwhispr://oauth/callback',

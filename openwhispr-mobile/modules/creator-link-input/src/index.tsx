@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { requireNativeView } from 'expo';
+import { requireNativeView, requireOptionalNativeModule } from 'expo';
 import {
   Platform,
+  PlatformColor,
   TextInput,
   useWindowDimensions,
   type NativeSyntheticEvent,
@@ -22,8 +23,9 @@ type Props = {
   onSubmit: (text: string) => void;
   onInvalidPaste: () => void;
 };
+// A JS update can reach a binary built before this module; use the plain field there.
 const NativeInput =
-  Platform.OS === 'ios'
+  Platform.OS === 'ios' && requireOptionalNativeModule('CreatorLinkInput')
     ? requireNativeView<
         ViewProps & {
           value: string;
@@ -60,7 +62,14 @@ export function CreatorLinkInput({
         keyboardType="url"
         returnKeyType="go"
         maxLength={2048}
-        style={{ minHeight: 50, padding: 12, fontFamily, fontSize: 16 }}
+        placeholderTextColor={PlatformColor('tertiaryLabel')}
+        style={{
+          minHeight: 50,
+          padding: 12,
+          fontFamily,
+          fontSize: 16,
+          color: PlatformColor('label'),
+        }}
       />
     );
   }

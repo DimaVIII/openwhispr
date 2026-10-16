@@ -44,7 +44,9 @@ export function resolveResumeAction(alreadyOnHome: boolean): ResumeDecision {
     return { resetToHome: false, refreshUsage: true };
   }
 
-  // Already on Home → skip the redundant replace that would slide Home over itself.
+  // A creator link just arrived: the app opened for it, so leave the screen alone.
   if (isAffiliateArrivalFresh()) return STAY;
+
+  // Already on Home → skip the redundant replace that would slide Home over itself.
   return { resetToHome: !alreadyOnHome, refreshUsage: false };
 }

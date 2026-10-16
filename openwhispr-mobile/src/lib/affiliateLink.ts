@@ -61,9 +61,23 @@ export function captureAffiliateArrival(value: string): boolean {
   const config = getAffiliateClientConfig();
   if (!config) return false;
   try {
-    arrival = parseAffiliateLink(value, config.domain).toString();
+    const url = new URL(value.trim());
+    // Share sheets can append a slash to a short link.
+    url.pathname = url.pathname.replace(/^(\/[^/]+)\/$/, '$1');
+    arrival = parseAffiliateLink(url.toString(), config.domain).toString();
     arrivedAt = Date.now();
     return true;
+  } catch {
+    return false;
+  }
+}
+
+// The creator domain has no app screens, so none of its links may open as a route.
+export function isAffiliateDomainLink(value: string): boolean {
+  const config = getAffiliateClientConfig();
+  if (!config) return false;
+  try {
+    return new URL(value).hostname === config.domain;
   } catch {
     return false;
   }

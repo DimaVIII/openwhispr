@@ -1,7 +1,18 @@
-const mockCreatorSessions: { handle: jest.Mock; close: jest.Mock }[] = [];
+const mockCreatorSessions: {
+  handle: jest.Mock;
+  close: jest.Mock;
+  onRedeemed: (productId: string) => void;
+}[] = [];
 jest.mock('@/lib/affiliatePaywall', () => ({
-  createAffiliatePaywallSession: () => {
-    const session = { handle: jest.fn(async () => ({ status: 'success' })), close: jest.fn() };
+  createAffiliatePaywallSession: (
+    _isPresented: () => boolean,
+    onRedeemed: (productId: string) => void,
+  ) => {
+    const session = {
+      handle: jest.fn(async () => ({ status: 'success' })),
+      close: jest.fn(),
+      onRedeemed,
+    };
     mockCreatorSessions.push(session);
     return session;
   },
@@ -131,6 +142,7 @@ function GateConsumer({
   feature,
   onAccessGrantedWithoutPurchase,
   onPurchaseComplete,
+  onPresent,
   label = 'register',
   signal,
   creatorOffer,
@@ -140,6 +152,7 @@ function GateConsumer({
   feature?: () => void;
   onAccessGrantedWithoutPurchase?: () => void;
   onPurchaseComplete?: (completion: SuperwallPurchaseCompletion) => void;
+  onPresent?: () => void;
   label?: string;
   signal?: AbortSignal;
   creatorOffer?: RegisterSuperwallGateOptions['creatorOffer'];
@@ -157,6 +170,7 @@ function GateConsumer({
             feature,
             onAccessGrantedWithoutPurchase,
             onPurchaseComplete,
+            onPresent,
             signal,
             creatorOffer,
             requiresAccount,
@@ -566,6 +580,57 @@ describe('SuperwallGateProvider', () => {
       SUPERWALL_PLACEMENTS.accountBillingOpen,
     );
     expect(mockLogSubscription).toHaveBeenCalledTimes(1);
+  });
+
+  it('completes a confirmed creator redemption as one purchase, then closes the paywall', async () => {
+    const onPurchaseComplete = jest.fn();
+    const onPresent = jest.fn();
+    const creatorOffer = { productId: 'monthly' } as NonNullable<
+      RegisterSuperwallGateOptions['creatorOffer']
+    >;
+    const screen = render(
+      <EnabledSuperwallGateProvider>
+        <GateConsumer
+          placement={SUPERWALL_PLACEMENTS.accountBillingOpen}
+          requiresAccount={false}
+          creatorOffer={creatorOffer}
+          onPurchaseComplete={onPurchaseComplete}
+          onPresent={onPresent}
+        />
+      </EnabledSuperwallGateProvider>,
+    );
+
+    fireEvent.press(screen.getByText('register'));
+    expect(onPresent).toHaveBeenCalledTimes(1);
+    await act(async () => mockCreatorSessions[0].onRedeemed('monthly'));
+    expect(screen.getByTestId('result').props.children).toBe('true');
+    expect(onPurchaseComplete).toHaveBeenCalledWith('purchased');
+    expect(mockLogSubscription).toHaveBeenCalledWith(
+      'monthly',
+      SUPERWALL_PLACEMENTS.accountBillingOpen,
+    );
+    expect(mockDismiss).toHaveBeenCalledTimes(1);
+
+    // Superwall then reports the programmatic close as an ordinary dismissal.
+    act(() => mockPlacementCallbacks.onDismiss?.({}, { type: 'declined' }));
+    await act(async () => mockCreatorSessions[0].onRedeemed('monthly'));
+    expect(onPurchaseComplete).toHaveBeenCalledTimes(1);
+    expect(mockLogSubscription).toHaveBeenCalledTimes(1);
+    fireEvent.press(screen.getByText('register'));
+    expect(mockRegisterPlacement).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not report a presentation for a paywall that is skipped', async () => {
+    mockShouldPresent = false;
+    const onPresent = jest.fn();
+    const screen = render(
+      <EnabledSuperwallGateProvider>
+        <GateConsumer placement={SUPERWALL_PLACEMENTS.accountBillingOpen} onPresent={onPresent} />
+      </EnabledSuperwallGateProvider>,
+    );
+    fireEvent.press(screen.getByText('register'));
+    act(() => mockPlacementCallbacks.onSkip?.({ type: 'Holdout', experiment: { id: 'x' } }));
+    expect(onPresent).not.toHaveBeenCalled();
   });
 
   it('reports a confirmed restoration', async () => {
