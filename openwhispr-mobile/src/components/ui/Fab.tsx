@@ -24,7 +24,8 @@ const SIZE = 56;
 const MINI_SIZE = 44;
 const MINI_ICON_SIZE = 22;
 const MINI_GAP = 12;
-const TAB_BAR_OFFSET = Platform.OS === 'ios' ? 110 : 70;
+// Android tabs reserve their own layout space; only iOS overlays the screen.
+const TAB_BAR_OFFSET = Platform.OS === 'ios' ? 110 : 0;
 const BOTTOM = TAB_BAR_OFFSET + 32;
 const FAB_RIGHT = 20;
 const MINI_RIGHT = FAB_RIGHT + (SIZE - MINI_SIZE) / 2;
