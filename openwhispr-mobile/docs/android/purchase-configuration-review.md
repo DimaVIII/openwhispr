@@ -2,6 +2,12 @@
 
 Initially inspected read-only on 15 October 2026 through the authenticated browser session. The authorized app-creation follow-up below records subsequent provider changes separately. A zero-charge Google Play license-test monthly purchase, accelerated renewal and cancellation are now verified; production access and successful restore remain open. The later Expo checkpoint records authorized use of the Android public SDK keys; no private key is printed here.
 
+## 16 October 05:13 PDT — server cause and Superwall lifecycle verified
+
+Read-only production logs for the actual review window identify the reconciliation failure: **RevenueCat android API key is not configured**, from deployment `dpl_67pG8wC9Bai7My3TLjpaiCD8zyNt` at `/api/billing/reconcile`. The staged key has not been activated by a production deployment. This is now a directly observed cause, rather than an inference from the generic client alert. No production deployment or sandbox-policy change was made.
+
+Superwall's current Android **Overview → Sandbox** shows the same review account's **Direct sub start (04:49 PDT), Renewal (04:54), Sub cancel (04:55), Sub expire (04:59)** for `com.openwhispr.pro:monthly`, with the Android Pro campaign on the first three events. The customer total is 18.16 and net proceeds 13.43 in sandbox accounting; these are not actual charges. Android Revenue Tracking is enabled and reports a recent receipt; both platform apps already share the OpenWhispr project. This confirms server event delivery and subscription classification in the overview, superseding the earlier suspected routing/classification failure. The older overview still labels the product Consumable / Unknown, and both customer subscription lists show no events; that dashboard inconsistency remains, but does not justify duplicate product records or changing shared integration tokens. No provider configuration was mutated during this investigation.
+
 ## 16 October 04:55 PDT — completed Play sandbox purchase
 
 Signed 1.2.4/code 9 installed through Google Play at 04:46:49 PDT, from runtime `fd97ec4ac`. Monthly ZAR149.99 and yearly ZAR1,499.99 render both after update and cold restart; Android Back dismisses the paywall. Superwall reports the installed SDK as 2.8.3 and app build 9.
