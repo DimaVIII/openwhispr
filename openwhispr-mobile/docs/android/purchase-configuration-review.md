@@ -1,6 +1,20 @@
 # Android purchase configuration review
 
-Initially inspected read-only on 15 October 2026 through the authenticated browser session. The authorized app-creation follow-up below records subsequent provider changes separately. No purchase transaction has completed; the later native test-card checkout and cancellation are recorded below. The later Expo checkpoint records authorized use of the Android public SDK keys; no private key is printed here.
+Initially inspected read-only on 15 October 2026 through the authenticated browser session. The authorized app-creation follow-up below records subsequent provider changes separately. A zero-charge Google Play license-test monthly purchase, accelerated renewal and cancellation are now verified; production access and successful restore remain open. The later Expo checkpoint records authorized use of the Android public SDK keys; no private key is printed here.
+
+## 16 October 04:55 PDT — completed Play sandbox purchase
+
+Signed 1.2.4/code 9 installed through Google Play at 04:46:49 PDT, from runtime `fd97ec4ac`. Monthly ZAR149.99 and yearly ZAR1,499.99 render both after update and cold restart; Android Back dismisses the paywall. Superwall reports the installed SDK as 2.8.3 and app build 9.
+
+The native monthly sheet explicitly identified **Test card, always approves**, a five-minute accelerated period and **You will not be charged**. Subscribe completed successfully. RevenueCat records `INITIAL_PURCHASE`, `environment: SANDBOX`, `store: PLAY_STORE`, `product_id: com.openwhispr.pro:monthly`, currency ZAR and entitlement `openWhispr Pro`, tied to the review billing identity. Its Google order identifier matches Superwall's SDK Transaction Complete event for `com.openwhispr.pro:monthly:sw-none`. No real charge or manual entitlement grant occurred. Google required a post-purchase authentication choice; **Yes, always** was selected for this emulator and Play Points enrollment was declined.
+
+RevenueCat also records the accelerated 11:53 UTC renewal and 11:55 UTC cancellation. Native Play reads **Canceled**, ending at 04:58 PDT; RevenueCat reads **Active · expires** at the same instant. The test subscription was cancelled after verification. Its sandbox catalog amounts are not actual money spent.
+
+The app preserves `access-pending` through cold restart, keeps its free allowance and suppresses another checkout. Both Refresh access and Restore reach **Failed to reconcile mobile billing**. This is not successful restore or purchase-to-server access. API draft #268 and the staged production variables remain undeployed; the production sandbox restriction is unchanged. Do not grant access locally or weaken that restriction to make the test pass.
+
+RevenueCat reports its Superwall webhook **Sent**. Superwall's SDK transaction event is confirmed, but its sandbox subscription list shows no events and its overview labels the webhook-form product as **Consumable / Unknown**. Treat that provider classification as unresolved, separate from RevenueCat's confirmed subscription. The documented integration forwards RevenueCat subscription events to Superwall; an SDK completion event alone does not establish that server subscription mapping ([Superwall revenue tracking](https://superwall.com/docs/dashboard/dashboard-settings/overview-settings-revenue-tracking)).
+
+Device testing exposed a recovery omission: `access-pending` and `checking` did not offer Google Play management or Help. The next client source extends both existing links to every unresolved billing state. Two new regression cases fail before and pass after; three billing suites / 32 tests, TypeScript and scoped lint (zero errors / five existing no-void warnings) pass. The signed code-9 evidence predates this small UI repair; its next native build requires separate verification.
 
 ## 16 October 03:58 PDT — native checkout and cached price defect
 

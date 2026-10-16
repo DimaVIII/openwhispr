@@ -167,7 +167,8 @@ export function PlanContent() {
               }}
             />
           )}
-          {(sources?.providerStore === 'play_store' || billingStatus === 'payment-pending') && (
+          {(sources?.providerStore === 'play_store' ||
+            (billingStatus && billingStatus !== 'idle')) && (
             <Row
               title={t('managePlay')}
               onPress={() => {
@@ -177,7 +178,7 @@ export function PlanContent() {
               }}
             />
           )}
-          {billingStatus === 'payment-pending' && (
+          {billingStatus && billingStatus !== 'idle' && (
             <Row title={t('support')} onPress={() => router.push('/(account)/help')} />
           )}
           {sources?.providerStore === 'app_store' && (

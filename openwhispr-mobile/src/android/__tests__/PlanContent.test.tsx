@@ -112,18 +112,22 @@ it('keeps unknown access out of checkout and offers a retry after loading fails'
   expect(screen.getByText('OpenWhispr Business')).toBeTruthy();
   expect(screen.queryByRole('button', { name: 'upgrade' })).toBeNull();
 });
-it('offers Play and help for an unresolved payment without launching another checkout', async () => {
-  render(<PlanContent />);
-  expect(screen.queryByRole('button', { name: 'upgrade' })).toBeNull();
-  fireEvent.press(screen.getByRole('button', { name: 'managePlay' }));
-  await waitFor(() =>
-    expect(Linking.openURL).toHaveBeenCalledWith(
-      'https://play.google.com/store/account/subscriptions',
-    ),
-  );
-  fireEvent.press(screen.getByRole('button', { name: 'support' }));
-  expect(router.push).toHaveBeenCalledWith('/(account)/help');
-});
+it.each(['payment-pending', 'access-pending', 'checking'] as const)(
+  'offers Play and help while %s without launching another checkout',
+  async (status) => {
+    useAndroidBillingStatus.setState({ accounts: { 'billing-a': status } });
+    render(<PlanContent />);
+    expect(screen.queryByRole('button', { name: 'upgrade' })).toBeNull();
+    fireEvent.press(screen.getByRole('button', { name: 'managePlay' }));
+    await waitFor(() =>
+      expect(Linking.openURL).toHaveBeenCalledWith(
+        'https://play.google.com/store/account/subscriptions',
+      ),
+    );
+    fireEvent.press(screen.getByRole('button', { name: 'support' }));
+    expect(router.push).toHaveBeenCalledWith('/(account)/help');
+  },
+);
 it('explains the unresolved payment after an empty restore', async () => {
   render(<PlanContent />);
   fireEvent.press(screen.getByRole('button', { name: 'restorePurchases' }));
