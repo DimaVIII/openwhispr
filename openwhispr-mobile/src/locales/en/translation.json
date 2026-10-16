@@ -455,6 +455,45 @@
       "attendeesLabel": "Attendees: {{name}}",
       "folderLabel": "Folder: {{name}}. Move note",
       "addToFolder": "Add to folder"
+    },
+    "noteChat": {
+      "dismiss": "Dismiss note chat",
+      "privacy": "Answers use only this note. This chat is temporary and won't be saved.",
+      "clearChat": "Clear chat",
+      "clear": "Clear",
+      "closeChat": "Close chat",
+      "thinking": "Thinking...",
+      "retryQuestion": "Retry chat question",
+      "retryAction": "Retry",
+      "sendsQuestion": "Sends this question",
+      "questionPlaceholder": "Ask a question...",
+      "noContent": "No note content to ask about",
+      "sendQuestion": "Send question",
+      "actionItems": "List action items",
+      "followupEmail": "Write follow-up email",
+      "decisions": "Key decisions",
+      "qa": "List Q&A",
+      "summarize": "Summarize",
+      "draftEmail": "Draft an email",
+      "askAnything": "Ask anything",
+      "opensChat": "Opens a chat about this note"
+    },
+    "speakerControls": {
+      "renameTitle": "Rename speaker",
+      "useName": "Use {{name}}",
+      "namePlaceholder": "Speaker name",
+      "cancelRename": "Cancel rename",
+      "saveName": "Save speaker name",
+      "mergeTitle": "Merge speaker",
+      "thisSpeaker": "This speaker",
+      "noTargets": "No other speakers to merge into.",
+      "mergeBody": "{{target}} survives. {{source}} disappears and its transcript moves into {{target}}.",
+      "unnamedWarning": "The surviving speaker does not have a custom name.",
+      "mergeInto": "Merge into {{name}}",
+      "cancelMerge": "Cancel merge",
+      "confirmMerge": "Confirm speaker merge",
+      "mergeAction": "Merge",
+      "renameAction": "Rename"
     }
   }
 }

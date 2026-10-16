@@ -1159,26 +1159,29 @@ export default function NoteEditorScreen() {
     }
   }, [copy, isRetryingTranscript, note, retryMeetingTranscription]);
 
-  const handleSpeakerPress = useCallback((block: TranscriptBlock) => {
-    if (block.speakerId == null) return;
-    setActiveSpeakerId(block.speakerId);
-    safeHaptics('selection');
-    if (block.speakerStatus === 'suggested') {
-      setSuggestionSheetVisible(true);
-      return;
-    }
-    Alert.alert(block.speakerName, undefined, [
-      {
-        text: 'Rename',
-        onPress: () => setRenameSheetVisible(true),
-      },
-      {
-        text: 'Merge',
-        onPress: () => setMergeSheetVisible(true),
-      },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
-  }, []);
+  const handleSpeakerPress = useCallback(
+    (block: TranscriptBlock) => {
+      if (block.speakerId == null) return;
+      setActiveSpeakerId(block.speakerId);
+      safeHaptics('selection');
+      if (block.speakerStatus === 'suggested') {
+        setSuggestionSheetVisible(true);
+        return;
+      }
+      Alert.alert(block.speakerName, undefined, [
+        {
+          text: copy('speakerControls.renameAction', 'Rename'),
+          onPress: () => setRenameSheetVisible(true),
+        },
+        {
+          text: copy('speakerControls.mergeAction', 'Merge'),
+          onPress: () => setMergeSheetVisible(true),
+        },
+        { text: copy('cancel', 'Cancel'), style: 'cancel' },
+      ]);
+    },
+    [copy],
+  );
 
   const handleConfirmSuggestion = useCallback(() => {
     if (activeSpeakerId == null) return;
@@ -1640,8 +1643,8 @@ export default function NoteEditorScreen() {
           }}
           testID="note-ask-pill"
           accessibilityRole="button"
-          accessibilityLabel="Ask anything"
-          accessibilityHint="Opens a chat about this note"
+          accessibilityLabel={copy('noteChat.askAnything', 'Ask anything')}
+          accessibilityHint={copy('noteChat.opensChat', 'Opens a chat about this note')}
           style={{
             position: 'absolute',
             left: 20,
@@ -1661,7 +1664,9 @@ export default function NoteEditorScreen() {
                 size={17}
                 color="secondaryLabel"
               />
-              <Text className="text-[17px] font-medium text-label">Ask anything</Text>
+              <Text className="text-[17px] font-medium text-label">
+                {copy('noteChat.askAnything', 'Ask anything')}
+              </Text>
             </View>
           </Glass.Interactive>
         </Pressable>

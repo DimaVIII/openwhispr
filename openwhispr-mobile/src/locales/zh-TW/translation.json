@@ -455,6 +455,45 @@
       "attendeesLabel": "與會者：{{name}}",
       "folderLabel": "資料夾：{{name}}。移動筆記",
       "addToFolder": "加入資料夾"
+    },
+    "noteChat": {
+      "dismiss": "關閉筆記聊天",
+      "privacy": "回答僅根據此筆記。此聊天是暫時的，不會儲存。",
+      "clearChat": "清空聊天",
+      "clear": "清空",
+      "closeChat": "關閉聊天",
+      "thinking": "思考中...",
+      "retryQuestion": "重試問題",
+      "retryAction": "重試",
+      "sendsQuestion": "傳送此問題",
+      "questionPlaceholder": "提出問題...",
+      "noContent": "沒有可供提問的筆記內容",
+      "sendQuestion": "傳送問題",
+      "actionItems": "列出待辦事項",
+      "followupEmail": "撰寫後續郵件",
+      "decisions": "關鍵決策",
+      "qa": "列出問答",
+      "summarize": "摘要",
+      "draftEmail": "草擬郵件",
+      "askAnything": "隨時提問",
+      "opensChat": "開啟關於此筆記的聊天"
+    },
+    "speakerControls": {
+      "renameTitle": "重新命名說話者",
+      "useName": "使用{{name}}",
+      "namePlaceholder": "說話者姓名",
+      "cancelRename": "取消重新命名",
+      "saveName": "儲存說話者姓名",
+      "mergeTitle": "合併說話者",
+      "thisSpeaker": "此說話者",
+      "noTargets": "沒有其他可合併的說話者。",
+      "mergeBody": "將保留{{target}}。{{source}}將被移除，其逐字稿內容將轉移至{{target}}。",
+      "unnamedWarning": "保留的說話者沒有自訂姓名。",
+      "mergeInto": "合併至{{name}}",
+      "cancelMerge": "取消合併",
+      "confirmMerge": "確認合併說話者",
+      "mergeAction": "合併",
+      "renameAction": "重新命名"
     }
   }
 }

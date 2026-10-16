@@ -455,6 +455,45 @@
       "attendeesLabel": "الحضور: {{name}}",
       "folderLabel": "المجلد: {{name}}. نقل الملاحظة",
       "addToFolder": "إضافة إلى مجلد"
+    },
+    "noteChat": {
+      "dismiss": "إغلاق محادثة الملاحظة",
+      "privacy": "تستند الإجابات إلى هذه الملاحظة فقط. هذه المحادثة مؤقتة ولن تُحفظ.",
+      "clearChat": "مسح المحادثة",
+      "clear": "مسح",
+      "closeChat": "إغلاق المحادثة",
+      "thinking": "جارٍ التفكير...",
+      "retryQuestion": "إعادة محاولة السؤال",
+      "retryAction": "إعادة المحاولة",
+      "sendsQuestion": "يرسل هذا السؤال",
+      "questionPlaceholder": "اطرح سؤالًا...",
+      "noContent": "لا يوجد محتوى للسؤال عنه",
+      "sendQuestion": "إرسال السؤال",
+      "actionItems": "سرد المهام",
+      "followupEmail": "كتابة رسالة متابعة",
+      "decisions": "القرارات الرئيسية",
+      "qa": "سرد الأسئلة والأجوبة",
+      "summarize": "تلخيص",
+      "draftEmail": "صياغة رسالة",
+      "askAnything": "اسأل ما تشاء",
+      "opensChat": "يفتح محادثة حول هذه الملاحظة"
+    },
+    "speakerControls": {
+      "renameTitle": "إعادة تسمية المتحدث",
+      "useName": "استخدام {{name}}",
+      "namePlaceholder": "اسم المتحدث",
+      "cancelRename": "إلغاء إعادة التسمية",
+      "saveName": "حفظ اسم المتحدث",
+      "mergeTitle": "دمج المتحدث",
+      "thisSpeaker": "هذا المتحدث",
+      "noTargets": "لا يوجد متحدثون آخرون للدمج معهم.",
+      "mergeBody": "سيبقى {{target}}. سيُحذف {{source}} ويُنقل نصه إلى {{target}}.",
+      "unnamedWarning": "المتحدث الذي سيبقى ليس له اسم مخصص.",
+      "mergeInto": "دمج في {{name}}",
+      "cancelMerge": "إلغاء الدمج",
+      "confirmMerge": "تأكيد دمج المتحدث",
+      "mergeAction": "دمج",
+      "renameAction": "إعادة تسمية"
     }
   }
 }

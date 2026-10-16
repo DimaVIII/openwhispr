@@ -455,6 +455,45 @@
       "attendeesLabel": "Participants : {{name}}",
       "folderLabel": "Dossier : {{name}}. Déplacer la note",
       "addToFolder": "Ajouter à un dossier"
+    },
+    "noteChat": {
+      "dismiss": "Fermer le chat de la note",
+      "privacy": "Les réponses utilisent uniquement cette note. Ce chat est temporaire et ne sera pas enregistré.",
+      "clearChat": "Effacer le chat",
+      "clear": "Effacer",
+      "closeChat": "Fermer le chat",
+      "thinking": "Réflexion...",
+      "retryQuestion": "Réessayer la question",
+      "retryAction": "Réessayer",
+      "sendsQuestion": "Envoie cette question",
+      "questionPlaceholder": "Posez une question...",
+      "noContent": "Aucun contenu sur lequel poser une question",
+      "sendQuestion": "Envoyer la question",
+      "actionItems": "Lister les tâches",
+      "followupEmail": "Rédiger un e-mail de suivi",
+      "decisions": "Décisions clés",
+      "qa": "Questions et réponses",
+      "summarize": "Résumer",
+      "draftEmail": "Rédiger un e-mail",
+      "askAnything": "Posez une question",
+      "opensChat": "Ouvre un chat sur cette note"
+    },
+    "speakerControls": {
+      "renameTitle": "Renommer l’intervenant",
+      "useName": "Utiliser {{name}}",
+      "namePlaceholder": "Nom de l’intervenant",
+      "cancelRename": "Annuler le changement de nom",
+      "saveName": "Enregistrer le nom",
+      "mergeTitle": "Fusionner les intervenants",
+      "thisSpeaker": "Cet intervenant",
+      "noTargets": "Aucun autre intervenant avec lequel fusionner.",
+      "mergeBody": "{{target}} est conservé. {{source}} est supprimé et sa transcription est transférée à {{target}}.",
+      "unnamedWarning": "L’intervenant conservé n’a pas de nom personnalisé.",
+      "mergeInto": "Fusionner avec {{name}}",
+      "cancelMerge": "Annuler la fusion",
+      "confirmMerge": "Confirmer la fusion",
+      "mergeAction": "Fusionner",
+      "renameAction": "Renommer"
     }
   }
 }

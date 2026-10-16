@@ -455,6 +455,45 @@
       "attendeesLabel": "Teilnehmende: {{name}}",
       "folderLabel": "Ordner: {{name}}. Notiz verschieben",
       "addToFolder": "Zum Ordner hinzufügen"
+    },
+    "noteChat": {
+      "dismiss": "Notizchat schließen",
+      "privacy": "Antworten beziehen sich nur auf diese Notiz. Dieser Chat ist vorübergehend und wird nicht gespeichert.",
+      "clearChat": "Chat leeren",
+      "clear": "Leeren",
+      "closeChat": "Chat schließen",
+      "thinking": "Denke nach...",
+      "retryQuestion": "Frage erneut versuchen",
+      "retryAction": "Erneut versuchen",
+      "sendsQuestion": "Sendet diese Frage",
+      "questionPlaceholder": "Stelle eine Frage...",
+      "noContent": "Kein Notizinhalt für Fragen vorhanden",
+      "sendQuestion": "Frage senden",
+      "actionItems": "Aufgaben auflisten",
+      "followupEmail": "Folge-E-Mail schreiben",
+      "decisions": "Wichtige Entscheidungen",
+      "qa": "Fragen und Antworten",
+      "summarize": "Zusammenfassen",
+      "draftEmail": "E-Mail entwerfen",
+      "askAnything": "Frag etwas",
+      "opensChat": "Öffnet einen Chat zu dieser Notiz"
+    },
+    "speakerControls": {
+      "renameTitle": "Sprecher umbenennen",
+      "useName": "{{name}} verwenden",
+      "namePlaceholder": "Sprechername",
+      "cancelRename": "Umbenennen abbrechen",
+      "saveName": "Sprechernamen speichern",
+      "mergeTitle": "Sprecher zusammenführen",
+      "thisSpeaker": "Dieser Sprecher",
+      "noTargets": "Keine anderen Sprecher zum Zusammenführen.",
+      "mergeBody": "{{target}} bleibt erhalten. {{source}} wird entfernt und dessen Transkript wird {{target}} zugeordnet.",
+      "unnamedWarning": "Der verbleibende Sprecher hat keinen eigenen Namen.",
+      "mergeInto": "Mit {{name}} zusammenführen",
+      "cancelMerge": "Zusammenführen abbrechen",
+      "confirmMerge": "Zusammenführen bestätigen",
+      "mergeAction": "Zusammenführen",
+      "renameAction": "Umbenennen"
     }
   }
 }

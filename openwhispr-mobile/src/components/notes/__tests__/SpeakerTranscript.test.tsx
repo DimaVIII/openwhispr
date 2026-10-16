@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { fireEvent, render } from '@testing-library/react-native';
 import type { Speaker } from '@/data/types';
 import type { TranscriptBlock } from '@/lib/diarization/transcriptDisplay';
@@ -178,4 +179,97 @@ describe('SpeakerMergeSheet', () => {
 
     expect(onMerge).toHaveBeenCalledWith(10, 12);
   });
+});
+let mockLanguage = 'en';
+jest.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    i18n: { resolvedLanguage: mockLanguage },
+    t: (key: string, options: Record<string, unknown> = {}) => {
+      const resources =
+        mockLanguage === 'ar'
+          ? require('@/locales/ar/translation.json').android
+          : require('@/locales/en/translation.json').android;
+      const value =
+        key.split('.').reduce((node: any, part: string) => node?.[part], resources) ??
+        options.defaultValue ??
+        key;
+      return String(value).replace(/\{\{(\w+)\}\}/g, (_, name) => String(options[name] ?? ''));
+    },
+  }),
+}));
+
+it('preserves an edited speaker name across Android language changes and only saves explicit valid input', () => {
+  const original = Platform.OS;
+  Platform.OS = 'android';
+  try {
+    const save = jest.fn();
+    const cancel = jest.fn();
+    const props = {
+      visible: true,
+      initialName: 'Alice',
+      onSave: save,
+      onCancel: cancel,
+      suggestions: [{ label: 'Sam Lee' }],
+    };
+    const view = render(<SpeakerRenameSheet {...props} />);
+    fireEvent.changeText(view.getByTestId('speaker-rename-input'), ' Literal Alicia ');
+    mockLanguage = 'ar';
+    view.rerender(<SpeakerRenameSheet {...props} />);
+    expect(view.getByPlaceholderText('اسم المتحدث').props.value).toBe(' Literal Alicia ');
+    fireEvent.press(view.getByLabelText('إلغاء إعادة التسمية'));
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(save).not.toHaveBeenCalled();
+    fireEvent.changeText(view.getByTestId('speaker-rename-input'), '   ');
+    fireEvent.press(view.getByLabelText('حفظ اسم المتحدث'));
+    expect(save).not.toHaveBeenCalled();
+    fireEvent.changeText(view.getByTestId('speaker-rename-input'), ' Literal Alicia ');
+    fireEvent.press(view.getByLabelText('حفظ اسم المتحدث'));
+    expect(save).toHaveBeenLastCalledWith('Literal Alicia');
+    fireEvent.press(view.getByLabelText('استخدام Sam Lee'));
+    expect(save).toHaveBeenLastCalledWith('Sam Lee');
+  } finally {
+    Platform.OS = original;
+    mockLanguage = 'en';
+  }
+});
+
+it('preserves the chosen merge target through Android language changes and requires confirmation', () => {
+  const original = Platform.OS;
+  Platform.OS = 'android';
+  try {
+    const source = speaker({ id: 10, displayName: 'Alice' });
+    const speakers = [
+      source,
+      speaker({ id: 11, displayName: 'Bob', sortOrder: 1 }),
+      speaker({ id: 12, displayName: 'Charlie', sortOrder: 2 }),
+    ];
+    const merge = jest.fn();
+    const cancel = jest.fn();
+    const props = {
+      visible: true,
+      sourceSpeaker: source,
+      speakers,
+      onMerge: merge,
+      onCancel: cancel,
+    };
+    const view = render(<SpeakerMergeSheet {...props} />);
+    fireEvent.press(view.getByTestId('speaker-merge-target-12'));
+    mockLanguage = 'ar';
+    view.rerender(<SpeakerMergeSheet {...props} />);
+    expect(view.getByLabelText('دمج في Charlie').props.accessibilityState.selected).toBe(true);
+    expect(view.queryByTestId('speaker-merge-target-10')).toBeNull();
+    expect(view.getByText('سيبقى Charlie. سيُحذف Alice ويُنقل نصه إلى Charlie.')).toBeTruthy();
+    fireEvent.press(view.getByLabelText('إلغاء الدمج'));
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(merge).not.toHaveBeenCalled();
+    fireEvent.press(view.getByLabelText('تأكيد دمج المتحدث'));
+    expect(merge).toHaveBeenCalledWith(10, 12);
+    view.rerender(<SpeakerMergeSheet {...props} speakers={[source]} />);
+    expect(view.getByText('لا يوجد متحدثون آخرون للدمج معهم.')).toBeTruthy();
+    fireEvent.press(view.getByLabelText('تأكيد دمج المتحدث'));
+    expect(merge).toHaveBeenCalledTimes(1);
+  } finally {
+    Platform.OS = original;
+    mockLanguage = 'en';
+  }
 });

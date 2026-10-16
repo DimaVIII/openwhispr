@@ -1,3 +1,4 @@
+import { useAndroidCopy } from '@/hooks/useAndroidCopy';
 import { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, TextInput, View } from 'react-native';
 import { Text } from '@/components/ui/Text';
@@ -24,6 +25,7 @@ export function SpeakerRenameSheet({
   onCancel,
   onSave,
 }: SpeakerRenameSheetProps) {
+  const { copy } = useAndroidCopy();
   const [name, setName] = useState(initialName);
   const trimmed = name.trim();
 
@@ -42,7 +44,7 @@ export function SpeakerRenameSheet({
           testID="speaker-rename-sheet"
         >
           <Text accessibilityRole="header" className="text-lg font-semibold text-label">
-            Rename speaker
+            {copy('speakerControls.renameTitle', 'Rename speaker')}
           </Text>
           {suggestions.length > 0 ? (
             <View className="flex-row flex-wrap gap-2" testID="speaker-rename-suggestions">
@@ -52,7 +54,9 @@ export function SpeakerRenameSheet({
                   onPress={() => onSave(suggestion.label)}
                   className="max-w-[180px] rounded-full bg-tertiarySystemFill px-3 py-1.5"
                   accessibilityRole="button"
-                  accessibilityLabel={`Use ${suggestion.label}`}
+                  accessibilityLabel={copy('speakerControls.useName', `Use ${suggestion.label}`, {
+                    name: suggestion.label,
+                  })}
                   testID={`speaker-rename-suggestion-${index}`}
                   style={({ pressed }) => ({ opacity: pressed ? 0.75 : 1 })}
                 >
@@ -68,32 +72,44 @@ export function SpeakerRenameSheet({
             onChangeText={setName}
             autoFocus
             selectTextOnFocus
-            placeholder="Speaker name"
+            placeholder={copy('speakerControls.namePlaceholder', 'Speaker name')}
             placeholderTextColor={iosColor('tertiaryLabel')}
-            className="h-12 rounded-lg border border-separator bg-secondarySystemBackground px-3 text-base text-label"
+            className={
+              Platform.OS === 'android'
+                ? 'min-h-12 rounded-lg border border-separator bg-secondarySystemBackground px-3 py-2 text-base text-label'
+                : 'h-12 rounded-lg border border-separator bg-secondarySystemBackground px-3 text-base text-label'
+            }
             style={{ fontFamily: AppFont.regular }}
             testID="speaker-rename-input"
           />
           <View className="flex-row gap-3">
             <Pressable
               onPress={onCancel}
-              className="h-11 flex-1 items-center justify-center rounded-lg bg-tertiarySystemFill"
+              className={
+                Platform.OS === 'android'
+                  ? 'min-h-12 flex-1 items-center justify-center rounded-lg bg-tertiarySystemFill px-3 py-3'
+                  : 'h-11 flex-1 items-center justify-center rounded-lg bg-tertiarySystemFill'
+              }
               accessibilityRole="button"
-              accessibilityLabel="Cancel rename"
+              accessibilityLabel={copy('speakerControls.cancelRename', 'Cancel rename')}
               testID="speaker-rename-cancel"
             >
-              <Text className="text-[15px] font-medium text-label">Cancel</Text>
+              <Text className="text-[15px] font-medium text-label">{copy('cancel', 'Cancel')}</Text>
             </Pressable>
             <Pressable
               onPress={() => onSave(trimmed)}
               disabled={!trimmed}
-              className="h-11 flex-1 items-center justify-center rounded-lg bg-brand"
+              className={
+                Platform.OS === 'android'
+                  ? 'min-h-12 flex-1 items-center justify-center rounded-lg bg-brand px-3 py-3'
+                  : 'h-11 flex-1 items-center justify-center rounded-lg bg-brand'
+              }
               accessibilityRole="button"
-              accessibilityLabel="Save speaker name"
+              accessibilityLabel={copy('speakerControls.saveName', 'Save speaker name')}
               testID="speaker-rename-save"
               style={({ pressed }) => ({ opacity: !trimmed ? 0.4 : pressed ? 0.75 : 1 })}
             >
-              <Text className="text-[15px] font-semibold text-white">Save</Text>
+              <Text className="text-[15px] font-semibold text-white">{copy('save', 'Save')}</Text>
             </Pressable>
           </View>
         </View>

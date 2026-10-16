@@ -455,6 +455,45 @@
       "attendeesLabel": "参加者：{{name}}",
       "folderLabel": "フォルダ：{{name}}。ノートを移動",
       "addToFolder": "フォルダに追加"
+    },
+    "noteChat": {
+      "dismiss": "ノートのチャットを閉じる",
+      "privacy": "回答にはこのノートのみを使用します。このチャットは一時的で、保存されません。",
+      "clearChat": "チャットを消去",
+      "clear": "消去",
+      "closeChat": "チャットを閉じる",
+      "thinking": "考え中...",
+      "retryQuestion": "質問を再試行",
+      "retryAction": "再試行",
+      "sendsQuestion": "この質問を送信します",
+      "questionPlaceholder": "質問を入力...",
+      "noContent": "質問できるノートの内容がありません",
+      "sendQuestion": "質問を送信",
+      "actionItems": "タスクを一覧表示",
+      "followupEmail": "フォローアップメールを書く",
+      "decisions": "主な決定事項",
+      "qa": "質問と回答を一覧表示",
+      "summarize": "要約",
+      "draftEmail": "メールを下書き",
+      "askAnything": "質問する",
+      "opensChat": "このノートについてのチャットを開きます"
+    },
+    "speakerControls": {
+      "renameTitle": "話者名を変更",
+      "useName": "{{name}}を使用",
+      "namePlaceholder": "話者名",
+      "cancelRename": "名前の変更をキャンセル",
+      "saveName": "話者名を保存",
+      "mergeTitle": "話者を統合",
+      "thisSpeaker": "この話者",
+      "noTargets": "統合できる他の話者がいません。",
+      "mergeBody": "{{target}}が残ります。{{source}}は削除され、その文字起こしは{{target}}に移動します。",
+      "unnamedWarning": "残る話者にはカスタム名がありません。",
+      "mergeInto": "{{name}}に統合",
+      "cancelMerge": "統合をキャンセル",
+      "confirmMerge": "話者の統合を確認",
+      "mergeAction": "統合",
+      "renameAction": "名前を変更"
     }
   }
 }

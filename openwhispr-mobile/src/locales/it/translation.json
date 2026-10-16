@@ -455,6 +455,45 @@
       "attendeesLabel": "Partecipanti: {{name}}",
       "folderLabel": "Cartella: {{name}}. Sposta nota",
       "addToFolder": "Aggiungi a cartella"
+    },
+    "noteChat": {
+      "dismiss": "Chiudi chat della nota",
+      "privacy": "Le risposte usano solo questa nota. Questa chat è temporanea e non verrà salvata.",
+      "clearChat": "Cancella chat",
+      "clear": "Cancella",
+      "closeChat": "Chiudi chat",
+      "thinking": "Elaborazione...",
+      "retryQuestion": "Riprova la domanda",
+      "retryAction": "Riprova",
+      "sendsQuestion": "Invia questa domanda",
+      "questionPlaceholder": "Fai una domanda...",
+      "noContent": "Nessun contenuto su cui fare domande",
+      "sendQuestion": "Invia domanda",
+      "actionItems": "Elenca attività",
+      "followupEmail": "Scrivi e-mail di riepilogo",
+      "decisions": "Decisioni principali",
+      "qa": "Elenca domande e risposte",
+      "summarize": "Riassumi",
+      "draftEmail": "Scrivi un’e-mail",
+      "askAnything": "Fai una domanda",
+      "opensChat": "Apre una chat su questa nota"
+    },
+    "speakerControls": {
+      "renameTitle": "Rinomina interlocutore",
+      "useName": "Usa {{name}}",
+      "namePlaceholder": "Nome dell’interlocutore",
+      "cancelRename": "Annulla rinomina",
+      "saveName": "Salva nome dell’interlocutore",
+      "mergeTitle": "Unisci interlocutori",
+      "thisSpeaker": "Questo interlocutore",
+      "noTargets": "Nessun altro interlocutore con cui unire.",
+      "mergeBody": "{{target}} viene mantenuto. {{source}} viene rimosso e la sua trascrizione passa a {{target}}.",
+      "unnamedWarning": "L’interlocutore mantenuto non ha un nome personalizzato.",
+      "mergeInto": "Unisci a {{name}}",
+      "cancelMerge": "Annulla unione",
+      "confirmMerge": "Conferma unione degli interlocutori",
+      "mergeAction": "Unisci",
+      "renameAction": "Rinomina"
     }
   }
 }

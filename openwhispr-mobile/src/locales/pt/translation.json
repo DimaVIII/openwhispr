@@ -455,6 +455,45 @@
       "attendeesLabel": "Participantes: {{name}}",
       "folderLabel": "Pasta: {{name}}. Mover nota",
       "addToFolder": "Adicionar à pasta"
+    },
+    "noteChat": {
+      "dismiss": "Fechar chat da nota",
+      "privacy": "As respostas usam apenas esta nota. Este chat é temporário e não será salvo.",
+      "clearChat": "Limpar chat",
+      "clear": "Limpar",
+      "closeChat": "Fechar chat",
+      "thinking": "Pensando...",
+      "retryQuestion": "Tentar a pergunta novamente",
+      "retryAction": "Tentar novamente",
+      "sendsQuestion": "Envia esta pergunta",
+      "questionPlaceholder": "Faça uma pergunta...",
+      "noContent": "Não há conteúdo para perguntar",
+      "sendQuestion": "Enviar pergunta",
+      "actionItems": "Listar tarefas",
+      "followupEmail": "Escrever e-mail de acompanhamento",
+      "decisions": "Decisões principais",
+      "qa": "Listar perguntas e respostas",
+      "summarize": "Resumir",
+      "draftEmail": "Escrever um e-mail",
+      "askAnything": "Pergunte o que quiser",
+      "opensChat": "Abre um chat sobre esta nota"
+    },
+    "speakerControls": {
+      "renameTitle": "Renomear falante",
+      "useName": "Usar {{name}}",
+      "namePlaceholder": "Nome do falante",
+      "cancelRename": "Cancelar renomeação",
+      "saveName": "Salvar nome do falante",
+      "mergeTitle": "Mesclar falantes",
+      "thisSpeaker": "Este falante",
+      "noTargets": "Não há outros falantes para mesclar.",
+      "mergeBody": "{{target}} será mantido. {{source}} será removido e sua transcrição será transferida para {{target}}.",
+      "unnamedWarning": "O falante mantido não tem um nome personalizado.",
+      "mergeInto": "Mesclar com {{name}}",
+      "cancelMerge": "Cancelar mesclagem",
+      "confirmMerge": "Confirmar mesclagem de falantes",
+      "mergeAction": "Mesclar",
+      "renameAction": "Renomear"
     }
   }
 }

@@ -455,6 +455,45 @@
       "attendeesLabel": "Asistentes: {{name}}",
       "folderLabel": "Carpeta: {{name}}. Mover nota",
       "addToFolder": "Añadir a carpeta"
+    },
+    "noteChat": {
+      "dismiss": "Cerrar chat de la nota",
+      "privacy": "Las respuestas usan solo esta nota. Este chat es temporal y no se guardará.",
+      "clearChat": "Borrar chat",
+      "clear": "Borrar",
+      "closeChat": "Cerrar chat",
+      "thinking": "Pensando...",
+      "retryQuestion": "Reintentar pregunta",
+      "retryAction": "Reintentar",
+      "sendsQuestion": "Envía esta pregunta",
+      "questionPlaceholder": "Haz una pregunta...",
+      "noContent": "No hay contenido sobre el que preguntar",
+      "sendQuestion": "Enviar pregunta",
+      "actionItems": "Listar tareas",
+      "followupEmail": "Escribir correo de seguimiento",
+      "decisions": "Decisiones clave",
+      "qa": "Listar preguntas y respuestas",
+      "summarize": "Resumir",
+      "draftEmail": "Redactar un correo",
+      "askAnything": "Pregunta lo que quieras",
+      "opensChat": "Abre un chat sobre esta nota"
+    },
+    "speakerControls": {
+      "renameTitle": "Renombrar hablante",
+      "useName": "Usar {{name}}",
+      "namePlaceholder": "Nombre del hablante",
+      "cancelRename": "Cancelar cambio de nombre",
+      "saveName": "Guardar nombre del hablante",
+      "mergeTitle": "Combinar hablantes",
+      "thisSpeaker": "Este hablante",
+      "noTargets": "No hay otros hablantes con los que combinar.",
+      "mergeBody": "{{target}} se conserva. {{source}} se elimina y su transcripción pasa a {{target}}.",
+      "unnamedWarning": "El hablante que se conserva no tiene un nombre personalizado.",
+      "mergeInto": "Combinar con {{name}}",
+      "cancelMerge": "Cancelar combinación",
+      "confirmMerge": "Confirmar combinación de hablantes",
+      "mergeAction": "Combinar",
+      "renameAction": "Renombrar"
     }
   }
 }

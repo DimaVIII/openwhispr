@@ -455,6 +455,45 @@
       "attendeesLabel": "参会者：{{name}}",
       "folderLabel": "文件夹：{{name}}。移动笔记",
       "addToFolder": "添加到文件夹"
+    },
+    "noteChat": {
+      "dismiss": "关闭笔记聊天",
+      "privacy": "回答仅基于此笔记。此聊天是临时的，不会保存。",
+      "clearChat": "清空聊天",
+      "clear": "清空",
+      "closeChat": "关闭聊天",
+      "thinking": "思考中...",
+      "retryQuestion": "重试问题",
+      "retryAction": "重试",
+      "sendsQuestion": "发送此问题",
+      "questionPlaceholder": "提出问题...",
+      "noContent": "没有可供提问的笔记内容",
+      "sendQuestion": "发送问题",
+      "actionItems": "列出待办事项",
+      "followupEmail": "撰写跟进邮件",
+      "decisions": "关键决策",
+      "qa": "列出问答",
+      "summarize": "总结",
+      "draftEmail": "起草邮件",
+      "askAnything": "随时提问",
+      "opensChat": "打开有关此笔记的聊天"
+    },
+    "speakerControls": {
+      "renameTitle": "重命名说话人",
+      "useName": "使用{{name}}",
+      "namePlaceholder": "说话人姓名",
+      "cancelRename": "取消重命名",
+      "saveName": "保存说话人姓名",
+      "mergeTitle": "合并说话人",
+      "thisSpeaker": "此说话人",
+      "noTargets": "没有其他可合并的说话人。",
+      "mergeBody": "将保留{{target}}。{{source}}将被移除，其转录内容将转移到{{target}}。",
+      "unnamedWarning": "保留的说话人没有自定义姓名。",
+      "mergeInto": "合并到{{name}}",
+      "cancelMerge": "取消合并",
+      "confirmMerge": "确认合并说话人",
+      "mergeAction": "合并",
+      "renameAction": "重命名"
     }
   }
 }
