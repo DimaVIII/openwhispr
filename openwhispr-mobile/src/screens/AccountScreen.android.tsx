@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
@@ -9,6 +10,10 @@ export default function AndroidAccount() {
   const { t } = useTranslation();
   const user = useAuthStore((s) => s.user);
   const subscribed = useUsageStore((s) => s.usage?.isSubscribed);
+  const loadUsage = useUsageStore((s) => s.load);
+  useEffect(() => {
+    if (user && !user.isAnonymous) loadUsage();
+  }, [user, loadUsage]);
   return (
     <Page title={t('account')} back>
       <Text accessibilityRole="header" style={styles.title}>
@@ -23,7 +28,9 @@ export default function AndroidAccount() {
         <Row
           icon="Sparkles"
           title={t('plansAndBilling')}
-          detail={t(subscribed ? 'cloudUnlimited' : 'proBody')}
+          detail={
+            subscribed === undefined ? undefined : t(subscribed ? 'cloudUnlimited' : 'proBody')
+          }
           onPress={() => router.push('/android-pro')}
         />
       </Section>
