@@ -219,3 +219,20 @@ export const resolveSegmentSpeakerName = (
   const mapped = segment.speaker ? speakerMappings?.[segment.speaker] : undefined;
   return mapped || segment.speakerName;
 };
+
+// Which side of the transcript a bubble sits on follows the name its chip shows,
+// so a stretch the user reassigned moves with its new name. An in-person meeting
+// is diarized on the mic without knowing which voice is the note taker, so its
+// numbered clusters, the user's own included, sit with the other speakers until
+// one is named "You". A remote call stores the mic as "you".
+export const isSelfSideSegment = (
+  segment: TranscriptSegment,
+  speakerMappings: Record<string, string> | undefined,
+  youLabel: string
+): boolean => {
+  const name = resolveSegmentSpeakerName(segment, speakerMappings);
+  if (name) return name.trim().toLowerCase() === youLabel.toLowerCase();
+  if (segment.speaker === "you") return true;
+  if (segment.speaker) return false;
+  return segment.source === "mic";
+};

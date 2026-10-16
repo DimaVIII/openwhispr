@@ -9,6 +9,7 @@ import { cn } from "../lib/utils";
 import { MAX_SPEAKER_COUNT } from "../../constants/speakerDetection.json";
 import type { TranscriptSegment } from "../../stores/meetingRecordingStore";
 import {
+  isSelfSideSegment,
   isTranscriptSpeakerLocked,
   resolveSegmentSpeakerName,
   type TranscriptSpeakerStatus,
@@ -859,13 +860,7 @@ export function MeetingTranscriptChat({
     );
   }
 
-  const isSelfSide = (segment: TranscriptSegment): boolean => {
-    const mapped = segment.speaker ? speakerMappings?.[segment.speaker] : undefined;
-    if (mapped) return mapped.trim().toLowerCase() === t("notes.speaker.you").toLowerCase();
-    if (segment.speaker === "you") return true;
-    if (segment.speakerName) return false;
-    return segment.source === "mic";
-  };
+  const youLabel = t("notes.speaker.you");
 
   const showAssumedHint =
     !isDiarizing &&
@@ -969,7 +964,7 @@ export function MeetingTranscriptChat({
             {virtualizer.getVirtualItems().map((virtualItem) => {
               const i = virtualItem.index;
               const segment = segments[i];
-              const selfSide = isSelfSide(segment);
+              const selfSide = isSelfSideSegment(segment, speakerMappings, youLabel);
               const isSystemSpeaker = !!segment.speaker && !selfSide;
               const { key, activeName } = rowMeta[i];
               return (

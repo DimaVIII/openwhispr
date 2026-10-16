@@ -88,3 +88,18 @@ test("live partials render alongside the settled rows", async () => {
   assert.ok(html.includes("still talking"));
   assert.ok(html.includes("hello from mic"));
 });
+
+test("an in-person meeting draws numbered mic speakers on the other side", async () => {
+  const html = await renderChat({
+    segments: [
+      { id: "p1", text: "first person", source: "mic", timestamp: 1, speaker: "speaker_0" },
+      { id: "p2", text: "second person", source: "mic", timestamp: 2, speaker: "speaker_1" },
+      { id: "p3", text: "not diarized", source: "mic", timestamp: 3 },
+    ],
+  });
+  const otherSide = html.split("bg-surface-2 border border-border/70 text-foreground").length - 1;
+  const selfSide = html.split("bg-primary/90 text-primary-foreground").length - 1;
+  assert.equal(otherSide, 2, "both numbered speakers sit on the other side");
+  assert.equal(selfSide, 1, "a mic line without a speaker stays on the user's side");
+  assert.ok(html.includes("Speaker 1") && html.includes("Speaker 2"));
+});

@@ -1,0 +1,71 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+
+const load = () => import("../../src/utils/transcriptSpeakerState.ts");
+
+const YOU = "You";
+
+const userLocked = (segment, speakerName) => ({
+  ...segment,
+  speakerName,
+  speakerLocked: true,
+  speakerLockSource: "user",
+  speakerStatus: "locked",
+});
+
+test("a remote call keeps the mic on the user's side", async () => {
+  const { isSelfSideSegment } = await load();
+  assert.equal(isSelfSideSegment({ source: "mic", speaker: "you" }, {}, YOU), true);
+  assert.equal(isSelfSideSegment({ source: "system", speaker: "speaker_0" }, {}, YOU), false);
+});
+
+test("an in-person meeting puts numbered mic clusters on the other side", async () => {
+  const { isSelfSideSegment } = await load();
+  assert.equal(isSelfSideSegment({ source: "mic", speaker: "speaker_0" }, {}, YOU), false);
+  assert.equal(isSelfSideSegment({ source: "mic", speaker: "speaker_1" }, {}, YOU), false);
+});
+
+test("an undiarized mic stays on the user's side", async () => {
+  const { isSelfSideSegment } = await load();
+  assert.equal(isSelfSideSegment({ source: "mic" }, undefined, YOU), true);
+  assert.equal(isSelfSideSegment({ source: "system" }, undefined, YOU), false);
+});
+
+test("naming a cluster You moves it to the user's side", async () => {
+  const { isSelfSideSegment } = await load();
+  assert.equal(
+    isSelfSideSegment({ source: "mic", speaker: "speaker_1" }, { speaker_1: " you " }, YOU),
+    true
+  );
+  assert.equal(
+    isSelfSideSegment({ source: "system", speaker: "speaker_0" }, { speaker_0: "You" }, YOU),
+    true
+  );
+  assert.equal(isSelfSideSegment({ source: "mic", speaker: "you" }, { you: "Alice" }, YOU), false);
+});
+
+test("a recognized name decides the side like the chip does", async () => {
+  const { isSelfSideSegment } = await load();
+  assert.equal(isSelfSideSegment({ source: "mic", speakerName: "Alice" }, {}, YOU), false);
+  // A voice profile named You recognizes the user without writing a mapping.
+  assert.equal(
+    isSelfSideSegment({ source: "mic", speaker: "speaker_0", speakerName: "You" }, {}, YOU),
+    true
+  );
+  assert.equal(
+    isSelfSideSegment(
+      { source: "mic", speaker: "speaker_0", speakerName: "You" },
+      { speaker_0: "Alice" },
+      YOU
+    ),
+    false
+  );
+});
+
+test("a reassigned stretch follows its new name over the cluster mapping", async () => {
+  const { isSelfSideSegment } = await load();
+  const cluster = { source: "mic", speaker: "speaker_0" };
+  assert.equal(isSelfSideSegment(userLocked(cluster, "Bob"), { speaker_0: "You" }, YOU), false);
+  assert.equal(isSelfSideSegment(userLocked(cluster, "You"), { speaker_0: "Alice" }, YOU), true);
+  assert.equal(isSelfSideSegment(userLocked(cluster, "You"), {}, YOU), true);
+});
