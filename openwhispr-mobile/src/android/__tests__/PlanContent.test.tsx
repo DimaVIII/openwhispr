@@ -8,7 +8,20 @@ import { PlanContent } from '../PlanContent';
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
 jest.mock('@/components/ui/Text', () => ({ Text: require('react-native').Text }));
 jest.mock('@/lib/superwall', () => ({ SUPERWALL_PLACEMENTS: { accountBillingOpen: 'billing' } }));
-jest.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+jest.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string, values?: Record<string, string>) => {
+      const english = require('../../locales/en/translation.json').android;
+      if (key === 'cloudAllowance' || key === 'cloudUnlimited') {
+        return (english[key] ?? key).replace(
+          /{{(\w+)}}/g,
+          (_: string, name: string) => values?.[name] ?? '',
+        );
+      }
+      return key;
+    },
+  }),
+}));
 jest.mock('@/store/useAuthStore', () => ({
   useAuthStore: require('zustand').create(() => ({ user: { id: 'a', isAnonymous: false } })),
 }));
@@ -99,4 +112,32 @@ it('does not show Play management for a free account without a pending payment',
   render(<PlanContent />);
   expect(screen.queryByRole('button', { name: 'managePlay' })).toBeNull();
   expect(screen.getByRole('button', { name: 'upgrade' })).toBeTruthy();
+});
+
+it('shows unlimited cloud words for the subscribed API sentinel', () => {
+  useUsageStore.setState({
+    usage: {
+      ...useUsageStore.getState().usage!,
+      isSubscribed: true,
+      plan: 'business',
+      limit: -1,
+      wordsRemaining: -1,
+    },
+  });
+  render(<PlanContent />);
+  expect(screen.getByText('Unlimited words')).toBeTruthy();
+  expect(screen.getByText('OpenWhispr Business')).toBeTruthy();
+  expect(screen.queryByText('proBody')).toBeNull();
+  expect(screen.queryByText('proNote')).toBeNull();
+  expect(screen.queryByText(/-1/)).toBeNull();
+});
+it.each([2000, 0])('keeps the finite free allowance when %s words remain', (wordsRemaining) => {
+  useUsageStore.setState({
+    usage: { ...useUsageStore.getState().usage!, wordsRemaining },
+  });
+  render(<PlanContent />);
+  expect(
+    screen.getByText(`${wordsRemaining.toLocaleString()} of 2,000 words available`),
+  ).toBeTruthy();
+  expect(screen.queryByText('Unlimited words')).toBeNull();
 });

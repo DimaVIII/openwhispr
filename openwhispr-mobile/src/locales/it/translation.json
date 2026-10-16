@@ -225,6 +225,8 @@
     "managePlay": "Abbonamenti Google Play",
     "manageWeb": "Fatturazione web",
     "cloudAllowance": "{{remaining}} parole disponibili su {{limit}}",
+    "cloudUnlimited": "Parole illimitate",
+    "plansAndBilling": "Piani e fatturazione",
     "meetingLeaveTitle": "Uscire da questa registrazione?",
     "meetingLeaveBody": "Interrompi e salva la trascrizione, oppure annulla la trascrizione e conserva l’audio nella nota.",
     "meetingKeepRecording": "Continua a registrare",

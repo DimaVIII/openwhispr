@@ -225,6 +225,8 @@
     "managePlay": "Google Play訂閱",
     "manageWeb": "網頁帳單",
     "cloudAllowance": "可用{{remaining}}詞，共{{limit}}詞",
+    "cloudUnlimited": "不限詞數",
+    "plansAndBilling": "方案與帳單",
     "meetingLeaveTitle": "離開此次錄音？",
     "meetingLeaveBody": "停止並儲存轉錄，或取消轉錄並將音訊保留在筆記中。",
     "meetingKeepRecording": "繼續錄音",

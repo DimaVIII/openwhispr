@@ -43,21 +43,29 @@ export function PlanContent() {
   return (
     <>
       <Text accessibilityRole="header" style={styles.title}>
-        {usage?.isSubscribed ? usage.plan : t('proTitle')}
+        {usage?.isSubscribed
+          ? usage.plan === 'business'
+            ? 'OpenWhispr Business'
+            : usage.plan === 'pro'
+              ? 'OpenWhispr Pro'
+              : t('plansAndBilling')
+          : t('proTitle')}
       </Text>
-      <Text style={styles.body}>{t('proBody')}</Text>
+      {!usage?.isSubscribed && <Text style={styles.body}>{t('proBody')}</Text>}
       {usage && (
         <Card>
           <Text style={styles.heading}>{t('cloud')}</Text>
           <Text style={styles.body}>
-            {t('cloudAllowance', {
-              remaining: usage.wordsRemaining.toLocaleString(),
-              limit: usage.limit.toLocaleString(),
-            })}
+            {usage.isSubscribed
+              ? t('cloudUnlimited')
+              : t('cloudAllowance', {
+                  remaining: usage.wordsRemaining.toLocaleString(),
+                  limit: usage.limit.toLocaleString(),
+                })}
           </Text>
         </Card>
       )}
-      <Text style={styles.caption}>{t('proNote')}</Text>
+      {!usage?.isSubscribed && <Text style={styles.caption}>{t('proNote')}</Text>}
       {billingStatus && billingStatus !== 'idle' && (
         <Card>
           <Text accessibilityLiveRegion="polite" style={styles.body}>

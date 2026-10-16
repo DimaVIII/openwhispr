@@ -1,12 +1,14 @@
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
+import { useUsageStore } from '@/store/useUsageStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { Page, Section, Row, styles } from '@/android/ui';
 
 export default function AndroidAccount() {
   const { t } = useTranslation();
   const user = useAuthStore((s) => s.user);
+  const subscribed = useUsageStore((s) => s.usage?.isSubscribed);
   return (
     <Page title={t('account')} back>
       <Text accessibilityRole="header" style={styles.title}>
@@ -20,8 +22,8 @@ export default function AndroidAccount() {
         />
         <Row
           icon="Sparkles"
-          title={t('upgrade')}
-          detail={t('proBody')}
+          title={t('plansAndBilling')}
+          detail={t(subscribed ? 'cloudUnlimited' : 'proBody')}
           onPress={() => router.push('/android-pro')}
         />
       </Section>

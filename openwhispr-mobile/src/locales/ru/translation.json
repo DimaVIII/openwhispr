@@ -225,6 +225,8 @@
     "managePlay": "Подписки Google Play",
     "manageWeb": "Оплата на сайте",
     "cloudAllowance": "Доступно {{remaining}} из {{limit}} слов",
+    "cloudUnlimited": "Неограниченное количество слов",
+    "plansAndBilling": "Тарифы и оплата",
     "meetingLeaveTitle": "Выйти из записи?",
     "meetingLeaveBody": "Остановите запись и сохраните расшифровку или отмените расшифровку и оставьте аудио в заметке.",
     "meetingKeepRecording": "Продолжить запись",

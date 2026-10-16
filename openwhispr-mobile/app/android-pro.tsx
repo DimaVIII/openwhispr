@@ -4,7 +4,7 @@ import { ProContent } from '@/android/Onboarding';
 export default function ProScreen() {
   const { t } = useTranslation();
   return (
-    <Page title={t('upgrade')} back>
+    <Page title={t('plansAndBilling')} back>
       <ProContent />
     </Page>
   );

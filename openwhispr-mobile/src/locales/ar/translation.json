@@ -225,6 +225,8 @@
     "managePlay": "اشتراكات Google Play",
     "manageWeb": "الفوترة عبر الويب",
     "cloudAllowance": "{{remaining}} من {{limit}} كلمة متاحة",
+    "cloudUnlimited": "كلمات غير محدودة",
+    "plansAndBilling": "الخطط والفوترة",
     "meetingLeaveTitle": "هل تريد مغادرة هذا التسجيل؟",
     "meetingLeaveBody": "أوقف التسجيل واحفظ النص، أو ألغِ التفريغ النصي واحتفظ بالصوت في ملاحظتك.",
     "meetingKeepRecording": "متابعة التسجيل",
