@@ -489,7 +489,7 @@ it('exposes named Android role actions directly while preserving their permissio
         onResendInvitation={jest.fn()}
       />,
     );
-    const actions = (MenuView as jest.Mock).mock.lastCall[0].actions as MenuAction[];
+    const actions = (MenuView as unknown as jest.Mock).mock.lastCall[0].actions as MenuAction[];
     expect(actions.slice(0, 2).map((action) => action.id)).toEqual([
       'grant-1:editor',
       'grant-1:viewer',

@@ -776,7 +776,7 @@ it('provides named native Android choices instead of unsupported blank inline su
   mockController.state = { share: { ...share, visibility: 'link' }, access, invitations: [] };
   try {
     const screen = render(<NoteShareSheet {...props} />);
-    const actions = (MenuView as jest.Mock).mock.lastCall[0].actions as MenuAction[];
+    const actions = (MenuView as unknown as jest.Mock).mock.lastCall[0].actions as MenuAction[];
     expect(actions.map((action) => action.id)).toEqual([
       'visibility:link',
       'visibility:domain',
@@ -789,7 +789,7 @@ it('provides named native Android choices instead of unsupported blank inline su
     expect(mockController.setVisibility).not.toHaveBeenCalled();
     Platform.OS = 'ios';
     screen.rerender(<NoteShareSheet {...props} />);
-    const iosActions = (MenuView as jest.Mock).mock.lastCall[0].actions as MenuAction[];
+    const iosActions = (MenuView as unknown as jest.Mock).mock.lastCall[0].actions as MenuAction[];
     expect(iosActions.map((action) => action.id)).toEqual(['visibility', 'link']);
   } finally {
     Platform.OS = original;
