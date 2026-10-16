@@ -394,7 +394,21 @@
       "syncTap": "Tap to sync now.",
       "upgradeTap": "Tap to upgrade.",
       "unknownError": "unknown error",
-      "dismiss": "Dismiss"
+      "dismiss": "Dismiss",
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "previous7": "Previous 7 Days",
+      "previous30": "Previous 30 Days",
+      "untitled": "Untitled",
+      "noAdditionalText": "No additional text",
+      "moveToFolder": "Move to folder",
+      "moveNote": "Move note",
+      "noNotes": "No notes here yet",
+      "firstNote": "Create your first note to start writing",
+      "createNote": "Create note",
+      "voiceProfiles": "Voice profiles",
+      "teachVoice": "Teach OpenWhispr your voice",
+      "voiceCount": "Voices: {{count}}"
     }
   }
 }

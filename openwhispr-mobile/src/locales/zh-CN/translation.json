@@ -394,7 +394,21 @@
       "syncTap": "点按立即同步。",
       "upgradeTap": "点按以升级。",
       "unknownError": "未知错误",
-      "dismiss": "关闭"
+      "dismiss": "关闭",
+      "today": "今天",
+      "yesterday": "昨天",
+      "previous7": "过去 7 天",
+      "previous30": "过去 30 天",
+      "untitled": "无标题",
+      "noAdditionalText": "没有其他文本",
+      "moveToFolder": "移至文件夹",
+      "moveNote": "移动笔记",
+      "noNotes": "这里还没有笔记",
+      "firstNote": "创建第一条笔记，开始写作",
+      "createNote": "创建笔记",
+      "voiceProfiles": "声纹档案",
+      "teachVoice": "让 OpenWhispr 认识你的声音",
+      "voiceCount": "声音数量：{{count}}"
     }
   }
 }

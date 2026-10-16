@@ -394,7 +394,21 @@
       "syncTap": "اضغط للمزامنة الآن.",
       "upgradeTap": "اضغط للترقية.",
       "unknownError": "خطأ غير معروف",
-      "dismiss": "إغلاق"
+      "dismiss": "إغلاق",
+      "today": "اليوم",
+      "yesterday": "أمس",
+      "previous7": "آخر 7 أيام",
+      "previous30": "آخر 30 يومًا",
+      "untitled": "بدون عنوان",
+      "noAdditionalText": "لا يوجد نص إضافي",
+      "moveToFolder": "نقل إلى مجلد",
+      "moveNote": "نقل الملاحظة",
+      "noNotes": "لا توجد ملاحظات هنا بعد",
+      "firstNote": "أنشئ ملاحظتك الأولى لبدء الكتابة",
+      "createNote": "إنشاء ملاحظة",
+      "voiceProfiles": "ملفات التعريف الصوتية",
+      "teachVoice": "علّم OpenWhispr التعرّف على صوتك",
+      "voiceCount": "الأصوات: {{count}}"
     }
   }
 }

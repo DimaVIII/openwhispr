@@ -1,4 +1,5 @@
-import { View } from 'react-native';
+import { useAndroidCopy } from '@/hooks/useAndroidCopy';
+import { Platform, View } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { CloudOff } from 'lucide-react-native';
 import { GroupedList } from './GroupedList';
@@ -29,9 +30,17 @@ export function NoteRow({
   onMove,
   tinted = false,
 }: NoteRowProps) {
-  const title = note.title || 'Untitled';
-  const preview = (note.content || 'No additional text').replace(/\s+/g, ' ').trim();
-  const timeLabel = formatNoteRowTime(note.updatedAt, bucket);
+  const { copy, language } = useAndroidCopy();
+  const title = note.title || copy('library.untitled', 'Untitled');
+  const preview = (note.content || copy('library.noAdditionalText', 'No additional text'))
+    .replace(/\s+/g, ' ')
+    .trim();
+  const timeLabel = formatNoteRowTime(
+    note.updatedAt,
+    bucket,
+    Platform.OS === 'android' ? language : undefined,
+    copy('library.yesterday', 'Yesterday'),
+  );
 
   return (
     <SwipeableCard

@@ -394,7 +394,21 @@
       "syncTap": "點按立即同步。",
       "upgradeTap": "點按以升級。",
       "unknownError": "未知錯誤",
-      "dismiss": "關閉"
+      "dismiss": "關閉",
+      "today": "今天",
+      "yesterday": "昨天",
+      "previous7": "過去 7 天",
+      "previous30": "過去 30 天",
+      "untitled": "未命名",
+      "noAdditionalText": "沒有其他文字",
+      "moveToFolder": "移至資料夾",
+      "moveNote": "移動筆記",
+      "noNotes": "這裡還沒有筆記",
+      "firstNote": "建立第一則筆記，開始寫作",
+      "createNote": "建立筆記",
+      "voiceProfiles": "聲紋檔案",
+      "teachVoice": "讓 OpenWhispr 認識你的聲音",
+      "voiceCount": "聲音數量：{{count}}"
     }
   }
 }

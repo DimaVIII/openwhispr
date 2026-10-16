@@ -17,7 +17,7 @@ import { SectionHeader } from '@/components/notes/SectionHeader';
 import { NewFolderSheet } from '@/components/notes/NewFolderSheet';
 import { SpacesSection } from '@/components/notes/SpacesSection';
 import { SystemIcon } from '@/components/ui/SystemIcon';
-import { groupNotesByDate } from '@/lib/groupNotesByDate';
+import { useNoteBuckets } from '@/hooks/useNoteBuckets';
 import { safeHaptics } from '@/lib/utils';
 import { confirmDestructive } from '@/lib/alerts';
 import { SyncStatusLabel } from '@/components/notes/SyncStatusLabel';
@@ -63,7 +63,7 @@ export default function FoldersScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trimmedQuery, isSearching, folderCounts]);
 
-  const buckets = useMemo(() => groupNotesByDate(searchResults), [searchResults]);
+  const buckets = useNoteBuckets(searchResults);
 
   useEffect(() => {
     if (!isInitialized) initialize();

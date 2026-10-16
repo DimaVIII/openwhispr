@@ -1,3 +1,4 @@
+import { useAndroidCopy } from '@/hooks/useAndroidCopy';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
@@ -47,6 +48,7 @@ export function MoveToFolderSheet({
   onPickSpace,
 }: MoveToFolderSheetProps) {
   const { t } = useTranslation('android');
+  const { copy } = useAndroidCopy();
   const [creating, setCreating] = useState(false);
   const [folderName, setFolderName] = useState('');
   useEffect(() => {
@@ -57,7 +59,10 @@ export function MoveToFolderSheet({
   }, [visible]);
   const insets = useSafeAreaInsets();
   const targets = folders.filter((f) => f.id !== excludeFolderId && !f.deletedAt);
-  const title = activeSpaceId == null ? 'Move to Folder' : 'Move Note';
+  const title =
+    activeSpaceId == null
+      ? copy('library.moveToFolder', 'Move to Folder')
+      : copy('library.moveNote', 'Move Note');
 
   const handleCreate = () => {
     if (Platform.OS === 'android') {
@@ -95,10 +100,17 @@ export function MoveToFolderSheet({
     >
       <View className="flex-1 bg-systemBackground">
         <View className="flex-row items-center justify-between px-6 pb-4 pt-8">
-          <Text accessibilityRole="header" className="text-[22px] font-bold text-label">
+          <Text
+            accessibilityRole="header"
+            className={
+              Platform.OS === 'android'
+                ? 'min-w-0 flex-1 text-[22px] font-bold text-label'
+                : 'text-[22px] font-bold text-label'
+            }
+          >
             {title}
           </Text>
-          <GlassIconButton onPress={onClose} accessibilityLabel="Close">
+          <GlassIconButton onPress={onClose} accessibilityLabel={copy('close', 'Close')}>
             <SystemIcon name="xmark" mdName="X" size={15} color="secondaryLabel" />
           </GlassIconButton>
         </View>
@@ -141,7 +153,7 @@ export function MoveToFolderSheet({
                 <GroupedList.Row
                   onPress={handleCreate}
                   accessibilityRole="button"
-                  accessibilityLabel="Create new folder"
+                  accessibilityLabel={copy('createFolder', 'Create new folder')}
                   leadingIconSlot={
                     <SystemIcon
                       name="folder.badge.plus"
@@ -151,7 +163,9 @@ export function MoveToFolderSheet({
                     />
                   }
                 >
-                  <Text className="text-[17px] font-medium text-link">Create New Folder</Text>
+                  <Text className="text-[17px] font-medium text-link">
+                    {copy('createFolder', 'Create New Folder')}
+                  </Text>
                 </GroupedList.Row>
               </GroupedList>
 
@@ -173,7 +187,7 @@ export function MoveToFolderSheet({
               {spaces.length > 0 && (
                 <View className="gap-2">
                   <Text className="px-1 text-[13px] uppercase tracking-wider text-secondaryLabel">
-                    Spaces
+                    {copy('library.spaces', 'Spaces')}
                   </Text>
                   <GroupedList>
                     {spaces.map((space) => (

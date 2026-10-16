@@ -394,7 +394,21 @@
       "syncTap": "タップして今すぐ同期。",
       "upgradeTap": "タップしてアップグレード。",
       "unknownError": "不明なエラー",
-      "dismiss": "閉じる"
+      "dismiss": "閉じる",
+      "today": "今日",
+      "yesterday": "昨日",
+      "previous7": "過去7日間",
+      "previous30": "過去30日間",
+      "untitled": "無題",
+      "noAdditionalText": "追加のテキストはありません",
+      "moveToFolder": "フォルダに移動",
+      "moveNote": "ノートを移動",
+      "noNotes": "まだノートがありません",
+      "firstNote": "最初のノートを作成して書き始めましょう",
+      "createNote": "ノートを作成",
+      "voiceProfiles": "音声プロファイル",
+      "teachVoice": "OpenWhisprにあなたの声を覚えさせる",
+      "voiceCount": "音声数：{{count}}"
     }
   }
 }

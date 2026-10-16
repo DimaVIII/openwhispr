@@ -394,7 +394,21 @@
       "syncTap": "Tocca per sincronizzare ora.",
       "upgradeTap": "Tocca per passare a Pro.",
       "unknownError": "errore sconosciuto",
-      "dismiss": "Chiudi"
+      "dismiss": "Chiudi",
+      "today": "Oggi",
+      "yesterday": "Ieri",
+      "previous7": "Ultimi 7 giorni",
+      "previous30": "Ultimi 30 giorni",
+      "untitled": "Senza titolo",
+      "noAdditionalText": "Nessun altro testo",
+      "moveToFolder": "Sposta nella cartella",
+      "moveNote": "Sposta nota",
+      "noNotes": "Non ci sono ancora note",
+      "firstNote": "Crea la tua prima nota per iniziare a scrivere",
+      "createNote": "Crea nota",
+      "voiceProfiles": "Profili vocali",
+      "teachVoice": "Insegna la tua voce a OpenWhispr",
+      "voiceCount": "Voci: {{count}}"
     }
   }
 }

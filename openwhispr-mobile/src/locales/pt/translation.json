@@ -394,7 +394,21 @@
       "syncTap": "Toque para sincronizar agora.",
       "upgradeTap": "Toque para fazer upgrade.",
       "unknownError": "erro desconhecido",
-      "dismiss": "Fechar"
+      "dismiss": "Fechar",
+      "today": "Hoje",
+      "yesterday": "Ontem",
+      "previous7": "Últimos 7 dias",
+      "previous30": "Últimos 30 dias",
+      "untitled": "Sem título",
+      "noAdditionalText": "Sem texto adicional",
+      "moveToFolder": "Mover para pasta",
+      "moveNote": "Mover nota",
+      "noNotes": "Ainda não há notas aqui",
+      "firstNote": "Crie sua primeira nota para começar a escrever",
+      "createNote": "Criar nota",
+      "voiceProfiles": "Perfis de voz",
+      "teachVoice": "Ensine sua voz ao OpenWhispr",
+      "voiceCount": "Vozes: {{count}}"
     }
   }
 }
