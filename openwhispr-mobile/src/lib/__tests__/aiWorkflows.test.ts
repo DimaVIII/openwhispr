@@ -29,7 +29,7 @@ describe('workflowSummary for Text Cleanup', () => {
     (cloudAccess) => {
       const saved = config({ inference: { cleanup: { mode: 'openwhispr' } } });
       expect(workflowSummary(saved, 'cleanup', 'private', { cloudAccess })).toBe(
-        'Skipped · Needs an account',
+        'Skipped · Sign in',
       );
       expect(
         workflowSummary({ ...saved, defaultMode: 'cloud' }, 'cleanup', 'cloud', { cloudAccess }),

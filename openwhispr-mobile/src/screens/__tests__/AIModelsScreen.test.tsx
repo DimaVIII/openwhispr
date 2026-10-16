@@ -152,7 +152,7 @@ it('says a saved Cloud cleanup is skipped in Local Mode without an account', asy
     inference: { dictation: { mode: 'local' }, cleanup: { mode: 'openwhispr' } },
   };
   render(<AIModelsScreen />);
-  expect(screen.getByText('Skipped · Needs an account')).toBeTruthy();
+  expect(screen.getByText('Skipped · Sign in')).toBeTruthy();
   await screen.findByText(/Status: Ready/);
 });
 

@@ -117,8 +117,7 @@ export function workflowSummary(
     if (!(config?.cleanupEnabled ?? true)) return 'Off';
     if (cleanupRunsOnDevice(config, activeMode, cloudAccess) && onDeviceUnavailable)
       return `Skipped · ${onDeviceUnavailable}`;
-    if (cloudCleanupNeedsAccount(config, activeMode, cloudAccess))
-      return 'Skipped · Needs an account';
+    if (cloudCleanupNeedsAccount(config, activeMode, cloudAccess)) return 'Skipped · Sign in';
   }
   const selection = config?.inference?.[scope] ?? unsetSelection(scope, activeMode, cloudAccess);
   // Local Mode runs dictation, note formatting and provider note chat on this phone first, whatever
