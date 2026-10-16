@@ -110,7 +110,11 @@ export function NoteShareInviteField({
             : 'py-1 text-[15px] text-label'
         }
         style={INPUT_STYLE}
-        placeholder={placeholder}
+        placeholder={
+          searchable
+            ? copy('noteAccess.searchPlaceholder', 'Add people or emails')
+            : copy('noteAccess.email', 'Invite by email')
+        }
         placeholderTextColor={PLACEHOLDER_COLOR}
         autoCapitalize="none"
         autoCorrect={false}
@@ -141,7 +145,7 @@ export function NoteShareInviteField({
         leadingIconSlot={<RowIcon name="envelope" mdName="Mail" />}
       >
         <Text
-          numberOfLines={1}
+          numberOfLines={Platform.OS === 'android' ? undefined : 1}
           className={busy ? 'text-[15px] text-tertiaryLabel' : 'text-[15px] text-link'}
         >
           {copy('noteAccess.invite', `Invite ${query}`, { email: query })}
@@ -166,12 +170,15 @@ export function NoteShareInviteField({
         }
       >
         <Text
-          numberOfLines={1}
+          numberOfLines={Platform.OS === 'android' ? undefined : 1}
           className={busy ? 'text-[15px] text-tertiaryLabel' : 'text-[15px] text-label'}
         >
           {name}
         </Text>
-        <Text numberOfLines={1} className="text-[12px] text-secondaryLabel">
+        <Text
+          numberOfLines={Platform.OS === 'android' ? undefined : 1}
+          className="text-[12px] text-secondaryLabel"
+        >
           {principal.name && principal.email ? principal.email : labels[principal.type]}
         </Text>
       </GroupedList.Row>,

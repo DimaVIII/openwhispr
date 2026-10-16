@@ -122,18 +122,28 @@ interface PersonRowProps {
 function PersonRow({ avatar, name, detail, trailing }: PersonRowProps) {
   return (
     <GroupedList.Row leadingIconSlot={avatar}>
-      <View className="flex-row items-center gap-3">
-        <View className="min-w-0 flex-1">
-          <Text numberOfLines={1} className="text-[15px] font-medium text-label">
+      <View className={Platform.OS === 'android' ? 'min-w-0 gap-2' : 'flex-row items-center gap-3'}>
+        <View className={Platform.OS === 'android' ? 'min-w-0' : 'min-w-0 flex-1'}>
+          <Text
+            numberOfLines={Platform.OS === 'android' ? undefined : 1}
+            className="text-[15px] font-medium text-label"
+          >
             {name}
           </Text>
           {detail ? (
-            <Text numberOfLines={1} className="text-[12px] text-secondaryLabel">
+            <Text
+              numberOfLines={Platform.OS === 'android' ? undefined : 1}
+              className="text-[12px] text-secondaryLabel"
+            >
               {detail}
             </Text>
           ) : null}
         </View>
-        {trailing}
+        {Platform.OS === 'android' ? (
+          <View className="max-w-full self-start">{trailing}</View>
+        ) : (
+          trailing
+        )}
       </View>
     </GroupedList.Row>
   );

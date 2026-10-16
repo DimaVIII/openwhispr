@@ -535,7 +535,8 @@
         "space": "Hérité de l’espace d’équipe",
         "folder": "Hérité du dossier",
         "workspace": "Hérité de l’espace de travail"
-      }
+      },
+      "searchPlaceholder": "Rechercher…"
     }
   }
 }

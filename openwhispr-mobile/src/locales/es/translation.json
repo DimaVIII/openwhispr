@@ -535,7 +535,8 @@
         "space": "Heredado del espacio de equipo",
         "folder": "Heredado de la carpeta",
         "workspace": "Heredado del espacio de trabajo"
-      }
+      },
+      "searchPlaceholder": "Buscar…"
     }
   }
 }

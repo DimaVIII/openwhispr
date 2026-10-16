@@ -535,7 +535,8 @@
         "space": "繼承自團隊空間",
         "folder": "繼承自資料夾",
         "workspace": "繼承自工作區"
-      }
+      },
+      "searchPlaceholder": "搜尋…"
     }
   }
 }

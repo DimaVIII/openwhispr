@@ -535,7 +535,8 @@
         "space": "继承自团队空间",
         "folder": "继承自文件夹",
         "workspace": "继承自工作区"
-      }
+      },
+      "searchPlaceholder": "搜索…"
     }
   }
 }

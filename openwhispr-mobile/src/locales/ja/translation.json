@@ -535,7 +535,8 @@
         "space": "チームスペースから継承",
         "folder": "フォルダから継承",
         "workspace": "ワークスペースから継承"
-      }
+      },
+      "searchPlaceholder": "検索…"
     }
   }
 }

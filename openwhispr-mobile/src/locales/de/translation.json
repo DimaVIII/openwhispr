@@ -535,7 +535,8 @@
         "space": "Vom Teambereich geerbt",
         "folder": "Vom Ordner geerbt",
         "workspace": "Vom Arbeitsbereich geerbt"
-      }
+      },
+      "searchPlaceholder": "Suchen…"
     }
   }
 }
