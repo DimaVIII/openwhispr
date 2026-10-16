@@ -2,6 +2,14 @@
 
 This is a requirements audit against the 15 October 2026 goal brief, including the Android-only correction. It is not a completion certificate. The [implementation plan](premium-experience-plan.md) preserves the chronological checkpoints; [acceptance](acceptance.md) distinguishes baseline checks from later builds. A checked implementation item does not establish physical-device or provider acceptance.
 
+## 16 October 09:44 PDT — v43 separates team names and member counts
+
+V43 moves Android team member counts below their names, gives folder names constrained wrapping space, and replaces the Arabic branded Notes label with **الملاحظات**. Shared iOS row layout is preserved. Two existing focused suites / nine tests, TypeScript and scoped lint (zero warnings/errors) pass; the native ARM64 build passes in 1m26s. The full **297 suites / 3,445 tests** also pass (86.275 seconds). Generated native build outputs were removed after preserving the verified APK. The private packet contains 76 unchanged original captures with matching source/embedded hashes; the new Notes cards were inspected in Chrome without horizontal overflow.
+
+**V43 is installed** with retained/device APK SHA-256 `a40d7c1161e03a6584e76f26884b6564da89dc5e48060b675489d36543a84e49` (167,665,801 bytes). Original screenshots show separate name/member lines in English and Arabic and readable rows after scrolling at **320dp / 200% text**. The Arabic Notes tab wraps fully rather than truncating; other long Arabic tab labels also wrap. Existing folders remain Personal7/Meetings2. System-default locale, density420 and font1.0 are restored; Home stays34words/7dictations and Local Mode/cleanup stay true. No recording, purchase or data mutation occurred.
+
+Setting Arabic immediately after installation initially left an English-rendered screen despite Android reporting `[ar]`; cold restart applied Arabic. Together with the earlier live display-change stall, this leaves live configuration transitions unresolved. Cold Arabic layout and large-text proof are valid but do not close warm-transition acceptance. Shared-screen English labels/member wording still need localization. Play code12 remains unchanged. Private `v43-install-verification.json`, `v43-restored-display.json` and original `v43-*.png` captures retain scope.
+
 ## 16 October 09:37 PDT — v42 follows Android app-language direction
 
 V41 rendered Arabic words inside an English-direction layout. V42 initializes React Native layout direction from Android's current app configuration before the React host starts and updates it on configuration changes. Android directional arrows/chevrons now follow RTL; default text alignment follows the logical start while explicit alignment is preserved. The installed RN 0.83 fallback reads a locale unrelated to the selected per-app language. The generated Kotlin lifecycle hooks were verified after Expo prebuild; template drift fails explicitly instead of silently omitting them.

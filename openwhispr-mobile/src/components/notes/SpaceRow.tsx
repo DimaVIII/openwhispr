@@ -1,4 +1,4 @@
-import { View } from 'react-native';
+import { Platform, View } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { GroupedList } from './GroupedList';
 import { SystemIcon } from '@/components/ui/SystemIcon';
@@ -26,12 +26,14 @@ export function SpaceRow({ space, onPress }: SpaceRowProps) {
         )
       }
     >
-      <View className="flex-row items-center justify-between">
-        <Text className="text-[17px] font-medium text-label" numberOfLines={1}>
-          {space.name}
-        </Text>
-        <View className="flex-row items-center gap-2">
-          <Text className="text-[15px] text-tertiaryLabel">{memberLabel}</Text>
+      {Platform.OS === 'android' ? (
+        <View className="flex-row items-center gap-3">
+          <View className="min-w-0 flex-1 gap-1">
+            <Text className="text-[17px] font-medium text-label" numberOfLines={2}>
+              {space.name}
+            </Text>
+            <Text className="text-[15px] text-tertiaryLabel">{memberLabel}</Text>
+          </View>
           <SystemIcon
             name="chevron.right"
             mdName="ChevronRight"
@@ -39,7 +41,22 @@ export function SpaceRow({ space, onPress }: SpaceRowProps) {
             color="quaternaryLabel"
           />
         </View>
-      </View>
+      ) : (
+        <View className="flex-row items-center justify-between">
+          <Text className="text-[17px] font-medium text-label" numberOfLines={1}>
+            {space.name}
+          </Text>
+          <View className="flex-row items-center gap-2">
+            <Text className="text-[15px] text-tertiaryLabel">{memberLabel}</Text>
+            <SystemIcon
+              name="chevron.right"
+              mdName="ChevronRight"
+              size={13}
+              color="quaternaryLabel"
+            />
+          </View>
+        </View>
+      )}
     </GroupedList.Row>
   );
 }
