@@ -6975,12 +6975,7 @@ class IPCHandlers {
                     policyHeaders: withPolicyHeaders(authHeader),
                     multipartFields,
                   });
-                  result = {
-                    text,
-                    source: "openwhispr",
-                    model: "cloud",
-                    ...(warning ? { warning } : {}),
-                  };
+                  result = { text, source: "openwhispr", model: "cloud", warning };
                 } else {
                   const { body, boundary } = buildMultipartBody(
                     buffer,

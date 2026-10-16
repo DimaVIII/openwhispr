@@ -1652,7 +1652,7 @@ declare global {
         transcription?: TranscriptionItem;
         warning?: string;
         error?: string;
-        code?: TranscriptionErrorCode | "NO_SPEECH_DETECTED" | "INVALID_RESPONSE";
+        code?: string;
         messageKey?: string;
       }>;
       updateTranscriptionText: (

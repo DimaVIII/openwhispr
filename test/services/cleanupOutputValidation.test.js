@@ -105,7 +105,7 @@ test("cleanup validates completed provider output using the request's prompt set
     }
   );
 
-  await t.test("history retry keeps the raw row and reports rejected cleanup", async () => {
+  await t.test("history retry keeps the raw row on rejected cleanup, flags partials", async () => {
     setCustomPrompt("");
     useSettingsStore.setState({
       cleanupMode: "local",
