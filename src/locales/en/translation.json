@@ -54,6 +54,10 @@
       "speakerDetection": {
         "title": "Identify and label speakers",
         "description": "When off, transcripts show \"You\" and \"Others\""
+      },
+      "appSpeakerLabels": {
+        "title": "Name speakers from Zoom",
+        "description": "Labels voices with the participant names and active speaker shown in the Zoom desktop app. Uses the Accessibility permission and works with Identify and label speakers on."
       }
     }
   },

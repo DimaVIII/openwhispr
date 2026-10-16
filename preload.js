@@ -921,6 +921,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   ),
 
   // Meeting transcription (streaming, dual-channel)
+  isMeetingAppSpeakerLabelsAvailable: () =>
+    ipcRenderer.invoke("meeting-app-speaker-labels-available"),
   meetingTranscriptionPrepare: (options) =>
     ipcRenderer.invoke("meeting-transcription-prepare", options),
   meetingTranscriptionStart: (options) =>
@@ -942,6 +944,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
   ),
   onMeetingSpeakersMerged: registerListener(
     "meeting-speakers-merged",
+    (callback) => (_event, data) => callback(data)
+  ),
+  onMeetingSpeakerNamed: registerListener(
+    "meeting-speaker-named",
     (callback) => (_event, data) => callback(data)
   ),
   onMeetingSessionSpeakerConfigUpdated: registerListener(

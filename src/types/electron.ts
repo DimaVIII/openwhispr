@@ -3248,6 +3248,7 @@ declare global {
       getMD5Hash: (text: string) => Promise<string>;
 
       // Meeting transcription (streaming, dual-channel)
+      isMeetingAppSpeakerLabelsAvailable?: () => Promise<boolean>;
       meetingTranscriptionPrepare?: (options: {
         provider?: string;
         model?: string;
@@ -3261,6 +3262,7 @@ declare global {
         sessionId: string;
         autoEndEligible: boolean;
         aecEnabled?: boolean;
+        appSpeakerLabelsEnabled?: boolean;
       }) => Promise<
         {
           success: boolean;
@@ -3312,6 +3314,9 @@ declare global {
             similarity: number;
           }>
         ) => void
+      ) => () => void;
+      onMeetingSpeakerNamed?: (
+        callback: (data: { speakerId: string; displayName: string }) => void
       ) => () => void;
       onMeetingSessionSpeakerConfigUpdated?: (
         callback: (config: { enabled: boolean; expectedCount: number }) => void

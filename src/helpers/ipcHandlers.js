@@ -129,6 +129,9 @@ const { supportsLiveSpeakerIdentification } = require("./liveSpeakerIdPolicy");
 const MeetingEchoLeakDetector = require("./meetingEchoLeakDetector");
 const createMeetingSystemAudioWatchdog = require("./meetingSystemAudioWatchdog");
 const createMeetingSystemAudioHandover = require("./meetingSystemAudioHandover");
+const MeetingSpeakerListener = require("./meetingSpeakerListener");
+const { MEETING_SPEAKER_STATE_LAG_MS } = MeetingSpeakerListener;
+const { createMeetingSpeakerFusion } = require("./meetingSpeakerFusion");
 const {
   partitionPendingMicFinals,
   isRiskyMicDuplicateProfile,
@@ -7968,6 +7971,7 @@ class IPCHandlers {
     let meetingStartedAt = null;
     let meetingSendCounts = { mic: 0, system: 0 };
     const meetingEchoLeakDetector = new MeetingEchoLeakDetector();
+    const meetingSpeakerListener = new MeetingSpeakerListener();
     let meetingReconnectPromise = null;
     let meetingFatalErrorSent = false;
     let meetingReconnectCount = 0;
@@ -7995,6 +7999,7 @@ class IPCHandlers {
     let meetingLiveSpeakerState = null;
     let meetingLiveSpeakerStartedAt = null;
     let meetingReclusterTimer = null;
+    let meetingAppSpeakerFusion = null;
 
     let meetingLocalMode = false;
     let meetingLocalBuffers = { mic: [], system: [] };
@@ -8242,6 +8247,68 @@ class IPCHandlers {
       return false;
     };
 
+    // Opt-in: names voices from the meeting app's own speaking indicator. The
+    // helper's startup isn't awaited (speaker labels must never hold up or fail
+    // the recording), and its states only reach the fusion made for this
+    // session, so a helper that starts late can't feed the next one.
+    const startMeetingAppSpeakerLabels = () => {
+      meetingAppSpeakerFusion = null;
+      if (
+        meetingConnectionOptions?.appSpeakerLabelsEnabled !== true ||
+        !meetingSpeakerListener.isAvailable()
+      ) {
+        return;
+      }
+
+      const fusion = createMeetingSpeakerFusion({ lagMs: MEETING_SPEAKER_STATE_LAG_MS });
+      meetingAppSpeakerFusion = fusion;
+      meetingSpeakerListener
+        .start({
+          onState: (state) => fusion.recordAppState(state),
+          onError: (error) => {
+            debugLogger.warn(
+              "Meeting app speaker listener stopped",
+              { error: error.message },
+              "speaker"
+            );
+          },
+        })
+        .then(() => {
+          debugLogger.info("Meeting app speaker labels started", {}, "speaker");
+        })
+        .catch((error) => {
+          if (meetingAppSpeakerFusion !== fusion) return;
+          meetingAppSpeakerFusion = null;
+          debugLogger.warn(
+            "Meeting app speaker labels unavailable",
+            { error: error.message, code: error.code },
+            "speaker"
+          );
+        });
+    };
+
+    const stopMeetingAppSpeakerLabels = async () => {
+      const fusion = meetingAppSpeakerFusion;
+      meetingAppSpeakerFusion = null;
+      if (fusion) {
+        debugLogger.info("Meeting app speaker labels stopped", fusion.summarize(), "speaker");
+      }
+      await meetingSpeakerListener.stop().catch(() => {});
+    };
+
+    // The meeting app named a voice the identifier could only number. Segments
+    // already confirmed for that voice don't take later identifications, so
+    // they're renamed here; the identifier carries the name from now on.
+    const applyMeetingAppSpeakerName = (win, { speakerId, displayName }) => {
+      liveSpeakerIdentifier.mapSpeaker(speakerId, null, displayName);
+      for (const seg of meetingDiarizationSegments) {
+        if (seg.source === "system" && seg.speaker === speakerId) {
+          applyConfirmedSpeaker(seg, { speakerName: displayName });
+        }
+      }
+      win.webContents.send("meeting-speaker-named", { speakerId, displayName });
+    };
+
     const stopLiveSpeakerIdentification = async () => {
       if (!meetingLiveSpeakerActive) {
         return null;
@@ -8254,6 +8321,9 @@ class IPCHandlers {
 
       meetingLiveSpeakerActive = false;
       meetingLiveSpeakerState = await liveSpeakerIdentifier.stop();
+      // After the identifier: its stop flushes the last utterance, which the
+      // fusion can still name before the saved state is read.
+      await stopMeetingAppSpeakerLabels();
       return meetingLiveSpeakerState;
     };
 
@@ -8284,7 +8354,7 @@ class IPCHandlers {
 
             bindOneOnOneAttendeeToSpeaker(identification.speakerId);
 
-            const displayName = meetingOneOnOneAttendee
+            let displayName = meetingOneOnOneAttendee
               ? meetingOneOnOneAttendee.displayName
               : identification.displayName;
 
@@ -8296,6 +8366,16 @@ class IPCHandlers {
               startTime,
               meetingLiveSpeakerStartedAt + identification.endTime * 1000
             );
+            const appSpeakerName = meetingAppSpeakerFusion?.observeIdentification({
+              speakerId: identification.speakerId,
+              displayName,
+              startTime,
+              endTime,
+            });
+            if (appSpeakerName) {
+              displayName = appSpeakerName.displayName;
+              applyMeetingAppSpeakerName(win, appSpeakerName);
+            }
             const enrichedIdentification = {
               ...identification,
               displayName,
@@ -8341,11 +8421,13 @@ class IPCHandlers {
 
       if (started) {
         meetingLiveSpeakerActive = true;
+        startMeetingAppSpeakerLabels();
         meetingReclusterTimer = setInterval(async () => {
           if (!meetingLiveSpeakerActive || !win || win.isDestroyed()) return;
 
           const merges = await liveSpeakerIdentifier.recluster();
           if (!merges.length) return;
+          meetingAppSpeakerFusion?.applyMerges(merges);
 
           for (const { keep, remove, displayName } of merges) {
             for (const seg of meetingDiarizationSegments) {
@@ -9048,6 +9130,12 @@ class IPCHandlers {
         this._dictationConnectPromise = null;
       }
     };
+
+    // Settings hides the meeting-app speaker labels toggle in builds without
+    // the helper (it isn't part of compile:native yet) and off macOS.
+    ipcMain.handle("meeting-app-speaker-labels-available", () =>
+      meetingSpeakerListener.isAvailable()
+    );
 
     // Pre-warm: fetch tokens + connect WebSockets before user hits record
     ipcMain.handle("meeting-transcription-prepare", async (event, options = {}) => {

@@ -54,6 +54,10 @@
       "speakerDetection": {
         "title": "Identifier et étiqueter les intervenants",
         "description": "Lorsque désactivé, les transcriptions affichent « Vous » et « Autres »"
+      },
+      "appSpeakerLabels": {
+        "title": "Nommer les intervenants depuis Zoom",
+        "description": "Étiquette les voix avec les noms des participants et l'intervenant actif affichés dans l'app Zoom pour ordinateur. Utilise l'autorisation Accessibilité et fonctionne avec « Identifier et étiqueter les intervenants » activé."
       }
     }
   },

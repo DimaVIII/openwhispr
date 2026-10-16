@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Cloud, Key, Cpu, Network } from "../icons";
 import { useSettingsStore } from "../../stores/settingsStore";
@@ -28,6 +28,46 @@ export function MeetingSpeakerDetectionRow() {
       description={t("settings.meeting.speakerDetection.description")}
     >
       <Toggle checked={speakerDiarizationEnabled} onChange={setSpeakerDiarizationEnabled} />
+    </SettingsRow>
+  );
+}
+
+// Hidden off macOS and in builds without the meeting-app helper. It names the
+// voices speaker detection finds, so it does nothing while that's off.
+function MeetingAppSpeakerLabelsRow() {
+  const { t } = useTranslation();
+  const speakerDiarizationEnabled = useSettingsStore((s) => s.speakerDiarizationEnabled);
+  const meetingAppSpeakerLabelsEnabled = useSettingsStore((s) => s.meetingAppSpeakerLabelsEnabled);
+  const setMeetingAppSpeakerLabelsEnabled = useSettingsStore(
+    (s) => s.setMeetingAppSpeakerLabelsEnabled
+  );
+  const [available, setAvailable] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    window.electronAPI
+      ?.isMeetingAppSpeakerLabelsAvailable?.()
+      .then((result) => {
+        if (!cancelled) setAvailable(result === true);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!available) return null;
+
+  return (
+    <SettingsRow
+      label={t("settings.meeting.appSpeakerLabels.title")}
+      description={t("settings.meeting.appSpeakerLabels.description")}
+    >
+      <Toggle
+        checked={meetingAppSpeakerLabelsEnabled}
+        onChange={setMeetingAppSpeakerLabelsEnabled}
+        disabled={!speakerDiarizationEnabled}
+      />
     </SettingsRow>
   );
 }
@@ -203,6 +243,7 @@ export function MeetingTranscriptionPanel() {
       {effectiveTranscriptionMode === "providers" && renderTranscriptionPicker("cloud")}
       {effectiveTranscriptionMode === "local" && renderTranscriptionPicker("local")}
       <MeetingSpeakerDetectionRow />
+      <MeetingAppSpeakerLabelsRow />
       <MeetingEchoCancellationRow />
     </div>
   );

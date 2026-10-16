@@ -54,6 +54,10 @@
       "speakerDetection": {
         "title": "辨識並標記發言者",
         "description": "關閉後，逐字稿會顯示「你」和「其他人」"
+      },
+      "appSpeakerLabels": {
+        "title": "從 Zoom 取得發言者名稱",
+        "description": "使用 Zoom 桌面應用程式顯示的參與者名稱與目前發言者來標記聲音。需要輔助使用權限，並在開啟「辨識並標記發言者」時生效。"
       }
     }
   },

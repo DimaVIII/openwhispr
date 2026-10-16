@@ -943,6 +943,7 @@ export async function startRecording(args: StartRecordingArgs): Promise<boolean>
         sessionId,
         autoEndEligible: args.autoEndEligible,
         aecEnabled: getSettings().meetingAecEnabled,
+        appSpeakerLabelsEnabled: getSettings().meetingAppSpeakerLabelsEnabled,
       });
       const micCapturePromise = getMeetingMicConstraints().then(async (constraints) => {
         if (!isCurrentStart()) return null;
@@ -1218,6 +1219,35 @@ export async function startRecording(args: StartRecordingArgs): Promise<boolean>
         }
       });
       if (mergeCleanup) ipcCleanups.push(mergeCleanup);
+
+      // The meeting app named a voice after its first segments were confirmed,
+      // which applySpeakerIdentification leaves alone, so rename them here.
+      const namedCleanup = window.electronAPI?.onMeetingSpeakerNamed?.(
+        ({ speakerId, displayName }) => {
+          if (activeRecordingSessionId !== sessionId || speakerLocks.has(speakerId)) return;
+
+          const next = useMeetingRecordingStore
+            .getState()
+            .segments.map((segment) =>
+              segment.speaker === speakerId && !segment.speakerLocked
+                ? normalizeTranscriptSegment({ ...segment, speakerName: displayName })
+                : segment
+            );
+          segmentsRefValue = next;
+          useMeetingRecordingStore.setState({ segments: next });
+
+          for (const identification of speakerIdentifications) {
+            if (identification.speakerId === speakerId) identification.displayName = displayName;
+          }
+          if (recentSystemSpeaker?.speakerId === speakerId) {
+            recentSystemSpeaker.speakerName = displayName;
+          }
+          if (systemPartialSpeakerIdValue === speakerId) {
+            setSystemPartialSpeakerIdentity(speakerId, displayName);
+          }
+        }
+      );
+      if (namedCleanup) ipcCleanups.push(namedCleanup);
 
       const errorCleanup = window.electronAPI?.onMeetingTranscriptionError?.((err) => {
         if (activeRecordingSessionId !== sessionId) return;

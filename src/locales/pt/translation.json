@@ -54,6 +54,10 @@
       "speakerDetection": {
         "title": "Identificar e rotular participantes",
         "description": "Quando desativado, as transcrições mostram \"Você\" e \"Outros\""
+      },
+      "appSpeakerLabels": {
+        "title": "Nomear participantes pelo Zoom",
+        "description": "Rotula as vozes com os nomes dos participantes e quem está falando no app Zoom para desktop. Usa a permissão de Acessibilidade e funciona com \"Identificar e rotular participantes\" ativado."
       }
     }
   },

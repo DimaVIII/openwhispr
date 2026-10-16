@@ -294,6 +294,7 @@ const BOOLEAN_SETTINGS = new Set([
   "noteRecordingSileroEnabled",
   "meetingSileroEnabled",
   "meetingAecEnabled",
+  "meetingAppSpeakerLabelsEnabled",
   "isSignedIn",
   "autoPasteEnabled",
   "keepTranscriptionInClipboard",
@@ -909,6 +910,7 @@ export interface SettingsState
   noteRecordingSileroEnabled: boolean;
   meetingSileroEnabled: boolean;
   meetingAecEnabled: boolean;
+  meetingAppSpeakerLabelsEnabled: boolean;
   whisperVadThreshold: number;
   whisperVadMinSpeechDurationMs: number;
   whisperVadMinSilenceDurationMs: number;
@@ -1227,6 +1229,7 @@ export interface SettingsState
   setNoteRecordingSileroEnabled: (value: boolean) => void;
   setMeetingSileroEnabled: (value: boolean) => void;
   setMeetingAecEnabled: (value: boolean) => void;
+  setMeetingAppSpeakerLabelsEnabled: (value: boolean) => void;
   setWhisperVadThreshold: (value: number) => void;
   setWhisperVadMinSpeechDurationMs: (value: number) => void;
   setWhisperVadMinSilenceDurationMs: (value: number) => void;
@@ -1675,6 +1678,9 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   // Acoustic echo cancellation for meetings is opt-in: on headsets there's no
   // echo to cancel and it can suppress the mic entirely. See ipcHandlers AEC gate.
   meetingAecEnabled: readBoolean("meetingAecEnabled", false),
+  // Reads the meeting app's accessibility tree during recordings; opt-in while
+  // the adapters are being calibrated. See meetingSpeakerFusion.js.
+  meetingAppSpeakerLabelsEnabled: readBoolean("meetingAppSpeakerLabelsEnabled", false),
   whisperVadThreshold: clampVadValue("threshold", readString("whisperVadThreshold", "0.5")),
   whisperVadMinSpeechDurationMs: clampVadValue(
     "minSpeechDurationMs",
@@ -2484,6 +2490,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
     }
   },
   setMeetingAecEnabled: createBooleanSetter("meetingAecEnabled"),
+  setMeetingAppSpeakerLabelsEnabled: createBooleanSetter("meetingAppSpeakerLabelsEnabled"),
   setWhisperVadThreshold: (value: number) => {
     const next = clampVadValue("threshold", value);
     if (isBrowser) localStorage.setItem("whisperVadThreshold", String(next));

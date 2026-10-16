@@ -54,6 +54,10 @@
       "speakerDetection": {
         "title": "Sprecher erkennen und beschriften",
         "description": "Wenn deaktiviert, zeigen Transkripte „Du“ und „Andere“"
+      },
+      "appSpeakerLabels": {
+        "title": "Sprecher aus Zoom benennen",
+        "description": "Beschriftet Stimmen mit den Teilnehmernamen und dem aktiven Sprecher aus der Zoom-Desktop-App. Nutzt die Bedienungshilfen-Berechtigung und funktioniert mit „Sprecher erkennen und beschriften“."
       }
     }
   },
