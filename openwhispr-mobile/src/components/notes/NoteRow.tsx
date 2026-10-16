@@ -54,6 +54,22 @@ export function NoteRow({
         onLongPress={onLongPress}
         accessibilityRole="button"
         accessibilityLabel={`${title}, ${timeLabel}, ${preview}`}
+        accessibilityActions={
+          Platform.OS === 'android'
+            ? [
+                ...(onMove ? [{ name: 'move', label: copy('moveAction', 'Move') }] : []),
+                { name: 'delete', label: copy('deleteAction', 'Delete') },
+              ]
+            : undefined
+        }
+        onAccessibilityAction={
+          Platform.OS === 'android'
+            ? ({ nativeEvent }) => {
+                if (nativeEvent.actionName === 'move') onMove?.();
+                else if (nativeEvent.actionName === 'delete') onDelete();
+              }
+            : undefined
+        }
         contentInsetLeft={16}
       >
         <View className="gap-0.5">

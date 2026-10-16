@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Pressable, Dimensions } from 'react-native';
+import { View, StyleSheet, Pressable, Dimensions, Platform } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
@@ -83,6 +83,17 @@ export function SwipeableCard({
     });
 
   const handleDeletePress = () => {
+    if (Platform.OS === 'android') {
+      // The caller may ask for confirmation or fail to delete. Keep the row in
+      // place until its data is actually removed; Cancel must not leave a hole.
+      translateX.value = withTiming(0, {
+        duration: 200,
+        easing: Easing.out(Easing.cubic),
+      });
+      setIsRevealed(false);
+      onDelete();
+      return;
+    }
     translateX.value = withTiming(
       -SCREEN_WIDTH,
       { duration: 250, easing: Easing.in(Easing.cubic) },
