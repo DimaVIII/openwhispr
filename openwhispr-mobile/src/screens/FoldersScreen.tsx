@@ -1,3 +1,4 @@
+import { useAndroidCopy } from '@/hooks/useAndroidCopy';
 import { useTranslation } from 'react-i18next';
 import { AccountButton } from '@/android/ui';
 import { useEffect, useState, useCallback, useMemo } from 'react';
@@ -31,6 +32,7 @@ const FAB_ACTIONS: FabAction[] = [
 
 export default function FoldersScreen() {
   const { t } = useTranslation('android');
+  const { copy } = useAndroidCopy();
   const {
     folders,
     folderCounts,
@@ -107,12 +109,17 @@ export default function FoldersScreen() {
 
   const handleDeleteNote = useCallback(
     (id: number) => {
-      confirmDestructive('Delete Note', 'This note will be deleted permanently.', () => {
-        safeHaptics('warning');
-        deleteNote(id);
-      });
+      confirmDestructive(
+        copy('library.deleteNote', 'Delete Note'),
+        copy('library.deleteNoteBody', 'This note will be deleted permanently.'),
+        () => {
+          safeHaptics('warning');
+          deleteNote(id);
+        },
+        { cancelLabel: copy('cancel', 'Cancel'), destructiveLabel: copy('deleteAction', 'Delete') },
+      );
     },
-    [deleteNote],
+    [deleteNote, copy],
   );
 
   const handleNewFolder = useCallback(() => {
@@ -148,6 +155,7 @@ export default function FoldersScreen() {
                 t('deleteFolder'),
                 t('deleteFolderBody', { name: folderName, count: folderCounts[folderId] ?? 0 }),
                 () => deleteFolderSafe(folderId),
+                { cancelLabel: t('cancel'), destructiveLabel: t('deleteAction') },
               ),
           },
           { text: t('cancel'), style: 'cancel' },
@@ -199,7 +207,7 @@ export default function FoldersScreen() {
     <View className="flex-1 bg-systemBackground">
       <NotesTopBar
         rightSlots={Platform.OS === 'android' ? <AccountButton /> : undefined}
-        title={isSearching ? 'Search' : 'Folders'}
+        title={isSearching ? copy('library.search', 'Search') : copy('library.folders', 'Folders')}
         searchValue={searchValue}
         onSearchChange={setSearchValue}
       />
@@ -226,7 +234,9 @@ export default function FoldersScreen() {
                     color="quaternaryLabel"
                   />
                   <Text className="text-[15px] text-tertiaryLabel">
-                    {`No results for "${trimmedQuery}"`}
+                    {copy('library.noResults', `No results for "${trimmedQuery}"`, {
+                      query: trimmedQuery,
+                    })}
                   </Text>
                 </View>
               </GroupedList.Row>
@@ -252,7 +262,7 @@ export default function FoldersScreen() {
           )
         ) : (
           <>
-            <SectionHeader label="Private Space" />
+            <SectionHeader label={copy('library.privateSpace', 'Private Space')} />
             <GroupedList>
               {folders.map((folder) => (
                 <FolderRow
@@ -277,7 +287,7 @@ export default function FoldersScreen() {
       <Fab
         icon="plus"
         mdIcon="Plus"
-        accessibilityLabel="Create"
+        accessibilityLabel={copy('library.create', 'Create')}
         actions={
           Platform.OS === 'android'
             ? FAB_ACTIONS.map((action) => ({

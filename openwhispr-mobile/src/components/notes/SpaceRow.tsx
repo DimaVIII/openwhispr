@@ -1,3 +1,4 @@
+import { useAndroidCopy } from '@/hooks/useAndroidCopy';
 import { Platform, View } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { GroupedList } from './GroupedList';
@@ -10,8 +11,13 @@ type SpaceRowProps = {
 };
 
 export function SpaceRow({ space, onPress }: SpaceRowProps) {
+  const { copy } = useAndroidCopy();
   const memberCount = space.memberCount ?? 0;
-  const memberLabel = `${memberCount} ${memberCount === 1 ? 'member' : 'members'}`;
+  const memberLabel = copy(
+    'library.memberCount',
+    `${memberCount} ${memberCount === 1 ? 'member' : 'members'}`,
+    { count: memberCount },
+  );
 
   return (
     <GroupedList.Row

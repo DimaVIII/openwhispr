@@ -1,3 +1,4 @@
+import { useAndroidCopy } from '@/hooks/useAndroidCopy';
 import { Platform, View } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { GroupedList } from './GroupedList';
@@ -23,12 +24,16 @@ export function FolderRow({
   onPress,
   onLongPress,
 }: FolderRowProps) {
+  const { copy } = useAndroidCopy();
+  const countLabel = copy('library.noteCount', `${count} ${count === 1 ? 'note' : 'notes'}`, {
+    count,
+  });
   return (
     <GroupedList.Row
       onPress={onPress}
       onLongPress={onLongPress}
       accessibilityRole="button"
-      accessibilityLabel={`${label}, ${count} ${count === 1 ? 'note' : 'notes'}`}
+      accessibilityLabel={`${label}, ${countLabel}`}
       leadingIconSlot={<SystemIcon name={sfName} mdName={mdName} size={22} color={iconColor} />}
     >
       <View

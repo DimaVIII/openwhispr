@@ -41,6 +41,7 @@ it('preserves dirty fields until discard is explicitly confirmed', () => {
   expect(screen.getByLabelText('Trigger').props.value).toBe('signoff');
   expect(confirmDestructive).toHaveBeenCalledWith('Discard changes?', expect.any(String), close, {
     destructiveLabel: 'Discard',
+    cancelLabel: 'Cancel',
   });
   (confirmDestructive as jest.Mock).mock.calls[0][2]();
   expect(close).toHaveBeenCalledTimes(1);

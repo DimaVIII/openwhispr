@@ -1,3 +1,4 @@
+import { useAndroidCopy } from '@/hooks/useAndroidCopy';
 import { type ReactNode } from 'react';
 import {
   KeyboardAvoidingView,
@@ -65,6 +66,7 @@ export function FormSheet({
   destructiveAction,
   children,
 }: FormSheetProps) {
+  const { copy } = useAndroidCopy();
   const insets = useSafeAreaInsets();
   const keyboardHeight = useKeyboardHeight(visible);
   const { dragGesture, sheetStyle } = useSheetDragToDismiss(visible, onClose);
@@ -86,7 +88,7 @@ export function FormSheet({
     >
       <GestureHandlerRootView style={{ flex: 1 }}>
         <Pressable
-          accessibilityLabel="Dismiss"
+          accessibilityLabel={copy('library.dismiss', 'Dismiss')}
           onPress={onClose}
           className="absolute inset-0 bg-black/40"
         />
@@ -127,7 +129,11 @@ export function FormSheet({
                         <Text className="mt-1 text-[13px] text-secondaryLabel">{subtitle}</Text>
                       ) : null}
                     </View>
-                    <GlassIconButton onPress={onClose} accessibilityLabel="Close" size={30}>
+                    <GlassIconButton
+                      onPress={onClose}
+                      accessibilityLabel={copy('close', 'Close')}
+                      size={30}
+                    >
                       <SystemIcon name="xmark" mdName="X" size={13} color="secondaryLabel" />
                     </GlassIconButton>
                   </View>

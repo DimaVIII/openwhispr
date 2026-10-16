@@ -11,10 +11,10 @@ export function confirmDestructive(
   title: string,
   message: string,
   onConfirm: ConfirmCallback,
-  options?: { destructiveLabel?: string },
+  options?: { destructiveLabel?: string; cancelLabel?: string },
 ): void {
   Alert.alert(title, message, [
-    { text: 'Cancel', style: 'cancel' },
+    { text: options?.cancelLabel ?? 'Cancel', style: 'cancel' },
     {
       text: options?.destructiveLabel ?? 'Delete',
       style: 'destructive',
