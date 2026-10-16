@@ -1281,11 +1281,11 @@ export default function NoteEditorScreen() {
   return (
     <KeyboardAvoidingView
       className="bg-systemBackground"
-      // Native flex lets height avoidance disable growth; NativeWind flex-1
-      // expands to flexGrow/flexBasis and keeps the footer behind Android's IME.
       style={{ flex: 1 }}
-      behavior={Platform.OS === 'android' ? 'height' : undefined}
-      enabled={Platform.OS === 'android'}
+      behavior={Platform.OS === 'android' ? 'padding' : undefined}
+      // Android's hide event reports the visible window (excluding system bars).
+      // Ignore that residual inset once the keyboard is hidden.
+      enabled={Platform.OS === 'android' && keyboardHeight > 0}
     >
       {shareVisible ? (
         <NoteShareSheet
