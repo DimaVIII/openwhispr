@@ -11,6 +11,7 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  useWindowDimensions,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -134,6 +135,8 @@ const transcriptStatusText = (status: string): string => {
 export default function NoteEditorScreen() {
   const { t } = useTranslation('android');
   const { copy, language } = useAndroidCopy();
+  const { width, fontScale } = useWindowDimensions();
+  const stackBodyTabs = Platform.OS === 'android' && width / fontScale < 240;
   const { id } = useLocalSearchParams<{ id: string }>();
   const noteId = parseInt(id ?? '', 10);
   const router = useRouter();
@@ -1401,7 +1404,9 @@ export default function NoteEditorScreen() {
 
           {bodyTabs.length > 1 ? (
             <View
-              className="mb-4 flex-row bg-tertiarySystemFill p-0.5"
+              className={
+                'mb-4 bg-tertiarySystemFill p-0.5 ' + (stackBodyTabs ? 'flex-col' : 'flex-row')
+              }
               style={{ borderRadius: 12, borderCurve: 'continuous' }}
             >
               {bodyTabs.map((tab) => {
@@ -1411,7 +1416,11 @@ export default function NoteEditorScreen() {
                     key={tab}
                     testID={`note-tab-${tab}`}
                     accessibilityRole="tab"
-                    accessibilityState={{ selected: active }}
+                    accessibilityState={{
+                      selected: active,
+                      disabled:
+                        Platform.OS === 'android' && (isStarting || isRecording || isProcessing),
+                    }}
                     disabled={
                       Platform.OS === 'android' && (isStarting || isRecording || isProcessing)
                     }
@@ -1420,14 +1429,18 @@ export default function NoteEditorScreen() {
                       setViewMode(tab);
                     }}
                     className={
-                      'flex-1 flex-row items-center justify-center gap-1 py-1.5 ' +
+                      'flex-row items-center justify-center gap-1 py-1.5 ' +
+                      (stackBodyTabs ? '' : 'flex-1 ') +
+                      (Platform.OS === 'android' ? 'min-h-12 px-2 ' : '') +
                       (active ? 'bg-brand' : 'bg-transparent')
                     }
                     style={{ borderRadius: 10, borderCurve: 'continuous' }}
                   >
                     <Text
                       className={
-                        'text-[13px] font-medium ' + (active ? 'text-white' : 'text-secondaryLabel')
+                        'text-[13px] font-medium ' +
+                        (Platform.OS === 'android' ? 'min-w-0 shrink text-center ' : '') +
+                        (active ? 'text-white' : 'text-secondaryLabel')
                       }
                     >
                       {copy(
