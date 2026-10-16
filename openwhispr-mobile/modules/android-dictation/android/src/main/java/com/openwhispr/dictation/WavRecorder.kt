@@ -1,9 +1,6 @@
 package com.openwhispr.dictation
 
 import android.content.Context
-import android.media.AudioFormat
-import android.media.AudioRecord
-import android.media.MediaRecorder
 import java.io.File
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
@@ -14,19 +11,30 @@ import java.util.concurrent.Future
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.abs
 
-class WavRecorder(
-  private val context: Context,
+class WavRecorder internal constructor(
+  private val cacheDirectory: File,
   private val sampleRate: Int = 16000,
   private val destinationFile: File? = null,
   private val maximumSeconds: Int = 300,
   private val onFrame: ((ByteArray, Long) -> Unit)? = null,
   private val onFailure: ((Exception) -> Unit)? = null,
+  private val createInput: (Int) -> PcmInput,
 ) {
+  constructor(
+    context: Context,
+    sampleRate: Int = 16000,
+    destinationFile: File? = null,
+    maximumSeconds: Int = 300,
+    onFrame: ((ByteArray, Long) -> Unit)? = null,
+    onFailure: ((Exception) -> Unit)? = null,
+  ) : this(context.cacheDir, sampleRate, destinationFile, maximumSeconds, onFrame, onFailure,
+    { rate -> MicrophoneInput(rate) })
+
   companion object { private val microphoneInUse = AtomicBoolean(false) }
   private var ownsMicrophone = false
   private val executor = Executors.newSingleThreadExecutor()
   @Volatile private var recording = false
-  private var recorder: AudioRecord? = null
+  private var recorder: PcmInput? = null
   private var task: Future<*>? = null
   private var file: File? = null
   private var peak = 0
@@ -37,15 +45,15 @@ class WavRecorder(
     check(microphoneInUse.compareAndSet(false, true)) { "Finish your current recording first." }
     ownsMicrophone = true
     try {
-    val size = maxOf(4096, AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT))
-    val audio = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, sampleRate,
-      AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, size)
-    check(audio.state == AudioRecord.STATE_INITIALIZED) { audio.release(); "Microphone could not start." }
-    val destination = destinationFile ?: File(context.cacheDir, "dictation-${System.nanoTime()}.wav")
+    val audio = createInput(sampleRate)
+    val size = audio.bufferSize
+    check(audio.initialized) { audio.release(); "Microphone could not start." }
+    recorder = audio
+    val destination = destinationFile ?: File(cacheDirectory, "dictation-${System.nanoTime()}.wav")
     check(!destination.exists()) { "Recording file already exists." }
-    file = destination; recorder = audio; peak = 0; samples = 0
-    audio.startRecording()
-    check(audio.recordingState == AudioRecord.RECORDSTATE_RECORDING) { "Microphone could not start." }
+    file = destination; peak = 0; samples = 0
+    audio.start()
+    check(audio.recording) { "Microphone could not start." }
     recording = true
     task = executor.submit {
       try {
@@ -62,7 +70,7 @@ class WavRecorder(
           val buffer = ShortArray(size / 2)
           try {
             while (recording && samples < sampleRate.toLong() * maximumSeconds) {
-              val count = audio.read(buffer, 0, buffer.size)
+              val count = audio.read(buffer)
               if (count < 0 && !recording) break
               check(count >= 0) { "Microphone interrupted ($count)." }
               if (count == 0) continue
