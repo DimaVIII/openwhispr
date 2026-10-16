@@ -564,6 +564,68 @@ beforeEach(() => {
 });
 
 describe('NoteEditorScreen generated meeting context', () => {
+  it('saves Android generated notes without the model Markdown wrapper', async () => {
+    const originalPlatform = Platform.OS;
+    Platform.OS = 'android';
+    mockNote = note({
+      noteType: 'personal',
+      content: 'Synthetic large text editing check.',
+      calendarEventId: null,
+      participants: null,
+    });
+    mockSegments = [];
+    mockSpeakers = [];
+    mockConfigState.config.autoGenerateNoteTitle = true;
+    (ReasoningService.processText as jest.Mock).mockResolvedValueOnce({
+      text: '```markdown\n# Synthetic large text editing check\n\n## Saved at 200 text\n\n```',
+      model: 'test',
+    });
+    try {
+      const { getByTestId } = render(<NoteEditorScreen />);
+      await act(async () => fireEvent.press(getByTestId('run-action-1')));
+      await waitFor(() =>
+        expect(mockUpdateNote).toHaveBeenCalledWith(
+          7,
+          expect.objectContaining({
+            enhancedContent: '# Synthetic large text editing check\n\n## Saved at 200 text',
+          }),
+        ),
+      );
+      expect(generateNoteTitle).toHaveBeenCalledWith(
+        '# Synthetic large text editing check\n\n## Saved at 200 text',
+        expect.anything(),
+      );
+    } finally {
+      Platform.OS = originalPlatform;
+    }
+  });
+
+  it.each([
+    ['android', 0],
+    ['ios', 1],
+  ] as const)(
+    'preserves wrapped output on %s for action default=%s',
+    async (platform, isDefault) => {
+      const originalPlatform = Platform.OS;
+      Platform.OS = platform;
+      mockActionsState.actions = [defaultAction({ isDefault })];
+      const text = '```markdown\n# Literal Markdown example\n```';
+      (ReasoningService.processText as jest.Mock).mockResolvedValueOnce({ text, model: 'test' });
+      try {
+        const { getByTestId } = render(<NoteEditorScreen />);
+        await act(async () => fireEvent.press(getByTestId('run-action-1')));
+        await waitFor(() =>
+          expect(mockUpdateNote).toHaveBeenCalledWith(
+            7,
+            expect.objectContaining({ enhancedContent: text }),
+          ),
+        );
+      } finally {
+        Platform.OS = originalPlatform;
+      }
+    },
+  );
+
   it('sends calendar context for the default Generate Notes action and stores that input hash', async () => {
     const { getByTestId } = render(<NoteEditorScreen />);
 

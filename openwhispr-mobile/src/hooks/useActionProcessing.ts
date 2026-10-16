@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
+import { Platform } from 'react-native';
 import { ReasoningService } from '@/services/reasoning/ReasoningService';
 import { useConfigStore } from '@/store/useConfigStore';
 import { generateNoteTitle } from '@/utils/generateTitle';
@@ -9,6 +10,7 @@ import {
 } from '@/lib/notes/generateNotesPrompt';
 import type { Action } from '@/data';
 import type { ReasoningRoutingOptions } from '@/types';
+import { unwrapGeneratedMarkdown } from '@/lib/notes/unwrapGeneratedMarkdown';
 
 export type ProcessingState = 'idle' | 'processing' | 'success';
 
@@ -61,15 +63,20 @@ export function useActionProcessing({ onSuccess, onError }: UseActionProcessingO
 
         if (cancelledRef.current || options.isCurrent?.() === false) return;
 
+        const enhancedContent =
+          Platform.OS === 'android' && isDefaultGenerateNotesAction(action)
+            ? unwrapGeneratedMarkdown(result.text)
+            : result.text;
+
         let generatedTitle: string | undefined;
         if (cfg?.autoGenerateNoteTitle ?? true) {
-          const title = await generateNoteTitle(result.text, options.routing);
+          const title = await generateNoteTitle(enhancedContent, options.routing);
           if (cancelledRef.current || options.isCurrent?.() === false) return;
           if (title) generatedTitle = title;
         }
 
         setState('success');
-        onSuccess(result.text, action.prompt, generatedTitle);
+        onSuccess(enhancedContent, action.prompt, generatedTitle);
 
         setTimeout(() => {
           setState('idle');
