@@ -32,7 +32,10 @@ export function AttendeesSheet({
       onRequestClose={onClose}
     >
       <View className="flex-1 bg-systemBackground">
-        <View className="flex-row items-center justify-between px-6 pb-4 pt-8">
+        <View
+          className="flex-row items-center justify-between px-6 pb-4 pt-8"
+          style={Platform.OS === 'android' ? { paddingTop: insets.top + 20 } : undefined}
+        >
           <Text
             accessibilityRole="header"
             className={
