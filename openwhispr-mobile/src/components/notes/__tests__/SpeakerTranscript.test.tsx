@@ -273,3 +273,44 @@ it('preserves the chosen merge target through Android language changes and requi
     mockLanguage = 'en';
   }
 });
+
+it('keeps a suggested speaker name literal and only confirms through the translated action', () => {
+  const { VoiceprintSuggestionSheet } = require('../VoiceprintSuggestionSheet');
+  const original = Platform.OS;
+  Platform.OS = 'android';
+  const confirm = jest.fn();
+  const reject = jest.fn();
+  const rename = jest.fn();
+  const merge = jest.fn();
+  const cancel = jest.fn();
+  const props = {
+    visible: true,
+    speakerName: 'Literal Alice?',
+    onConfirm: confirm,
+    onReject: reject,
+    onRename: rename,
+    onMerge: merge,
+    onCancel: cancel,
+  };
+  try {
+    const view = render(<VoiceprintSuggestionSheet {...props} />);
+    mockLanguage = 'ar';
+    view.rerender(<VoiceprintSuggestionSheet {...props} />);
+    expect(view.getByText('Literal Alice?')).toBeTruthy();
+    expect(confirm).not.toHaveBeenCalled();
+    fireEvent.press(view.getByText('تأكيد'));
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(reject).not.toHaveBeenCalled();
+    fireEvent.press(view.getByText('رفض'));
+    expect(reject).toHaveBeenCalledTimes(1);
+    fireEvent.press(view.getByText('إعادة تسمية'));
+    expect(rename).toHaveBeenCalledTimes(1);
+    fireEvent.press(view.getByText('دمج'));
+    expect(merge).toHaveBeenCalledTimes(1);
+    fireEvent.press(view.getByText('إلغاء'));
+    expect(cancel).toHaveBeenCalledTimes(1);
+  } finally {
+    Platform.OS = original;
+    mockLanguage = 'en';
+  }
+});

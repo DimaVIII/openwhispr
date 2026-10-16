@@ -135,6 +135,9 @@ const transcriptStatusText = (status: string): string => {
 export default function NoteEditorScreen() {
   const { t } = useTranslation('android');
   const { copy, language } = useAndroidCopy();
+  // Async failures use the currently displayed language without replacing the running operation.
+  const copyRef = useRef(copy);
+  copyRef.current = copy;
   const { width, fontScale } = useWindowDimensions();
   const stackBodyTabs = Platform.OS === 'android' && width / fontScale < 240;
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -287,7 +290,7 @@ export default function NoteEditorScreen() {
   const [shareVisible, setShareVisible] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatOverNoteMessage[]>([]);
   const [chatDraft, setChatDraft] = useState('');
-  const [chatError, setChatError] = useState<string | null>(null);
+  const [chatError, setChatError] = useState<string | { generic: true } | null>(null);
   const [chatLastQuestion, setChatLastQuestion] = useState('');
   const [isChatProcessing, setIsChatProcessing] = useState(false);
   const [isRetryingTranscript, setIsRetryingTranscript] = useState(false);
@@ -576,11 +579,17 @@ export default function NoteEditorScreen() {
         if (error instanceof SpeakerProfileOwnerAlreadyExistsError) {
           // A profile this screen didn't know about: reloading hides the banner.
           loadVoiceProfiles();
-          Alert.alert(...VOICE_ALREADY_TAUGHT_ALERT);
+          Alert.alert(
+            copyRef.current('editorFeedback.voiceAlreadyTitle', VOICE_ALREADY_TAUGHT_ALERT[0]),
+            copyRef.current('editorFeedback.voiceAlreadyBody', VOICE_ALREADY_TAUGHT_ALERT[1]),
+          );
         } else {
           Alert.alert(
-            "Couldn't save your voice",
-            'Read a short script instead to teach OpenWhispr your voice.',
+            copyRef.current('editorFeedback.voiceSaveTitle', "Couldn't save your voice"),
+            copyRef.current(
+              'editorFeedback.voiceSaveBody',
+              'Read a short script instead to teach OpenWhispr your voice.',
+            ),
           );
         }
         return false;
@@ -762,7 +771,12 @@ export default function NoteEditorScreen() {
 
   const handleEnhanceError = useCallback((message: string, error: unknown) => {
     if (handleAccountRequiredError(error, 'AI actions', { cloudOnly: true })) return;
-    Alert.alert('Action failed', message);
+    Alert.alert(
+      copyRef.current('editorFeedback.actionFailed', 'Action failed'),
+      error instanceof Error
+        ? message
+        : copyRef.current('editorFeedback.enhancementFailed', 'Enhancement failed'),
+    );
   }, []);
 
   const { state: processingState, runAction } = useActionProcessing({
@@ -804,7 +818,10 @@ export default function NoteEditorScreen() {
       }
       return;
     }
-    Alert.alert('Dictation failed', error.message);
+    Alert.alert(
+      copyRef.current('editorFeedback.dictationFailed', 'Dictation failed'),
+      error.message,
+    );
   }, []);
 
   useFocusEffect(
@@ -875,7 +892,15 @@ export default function NoteEditorScreen() {
           }),
         },
         format,
-      ).catch(() => Alert.alert('Export failed', 'Could not export this note. Please try again.'));
+      ).catch(() =>
+        Alert.alert(
+          copyRef.current('editorFeedback.exportFailed', 'Export failed'),
+          copyRef.current(
+            'editorFeedback.exportNoteFailed',
+            'Could not export this note. Please try again.',
+          ),
+        ),
+      );
     },
     [bodyTabInput, flushEnhancedSave, getNoteById, noteId, transcriptBlocks, viewMode],
   );
@@ -892,7 +917,10 @@ export default function NoteEditorScreen() {
     if (!generatedContent?.trim()) return;
     safeHaptics('light');
     Clipboard.setStringAsync(generatedContent).catch(() => {
-      Alert.alert('Copy failed', 'Could not copy the generated notes.');
+      Alert.alert(
+        copyRef.current('editorFeedback.copyFailed', 'Copy failed'),
+        copyRef.current('editorFeedback.copyNotesFailed', 'Could not copy the generated notes.'),
+      );
     });
   }, [flushEnhancedSave, getNoteById, noteId]);
 
@@ -906,7 +934,13 @@ export default function NoteEditorScreen() {
         },
         format,
       ).catch(() =>
-        Alert.alert('Export failed', 'Could not export this transcript. Please try again.'),
+        Alert.alert(
+          copyRef.current('editorFeedback.exportFailed', 'Export failed'),
+          copyRef.current(
+            'editorFeedback.exportTranscriptFailed',
+            'Could not export this transcript. Please try again.',
+          ),
+        ),
       );
     },
     [transcriptBlocks],
@@ -957,8 +991,8 @@ export default function NoteEditorScreen() {
           return;
         }
         Alert.alert(
-          'Local AI unavailable',
-          `${getLocalReasoningUnavailableMessage(readiness)} Note Formatting is set to On-Device, so this note stays on your phone.`,
+          copyRef.current('editorFeedback.localUnavailable', 'Local AI unavailable'),
+          `${Platform.OS === 'android' ? copyRef.current('editorFeedback.downloadLocal', 'Download a local text model in Account → Models to use on-device AI.') : getLocalReasoningUnavailableMessage(readiness)} ${copyRef.current('editorFeedback.localNoteStays', 'Note Formatting is set to On-Device, so this note stays on your phone.')}`,
         );
         return;
       }
@@ -977,6 +1011,7 @@ export default function NoteEditorScreen() {
         if (!isCurrent()) return;
         const runElsewhereOnce = (): void => run({ ...routing, allowCloudFallback: true });
         promptLocalReasoningFallback({
+          copy: copyRef.current,
           readiness,
           signedIn: !!user,
           onEnableLocal: () => run(routing),
@@ -1008,8 +1043,17 @@ export default function NoteEditorScreen() {
 
       if (requiresCloudConfirmation) {
         confirmCloudOnce(
-          `${action.name} sends this note to cloud AI for this request. Your note privacy and sync settings will not change.`,
+          copyRef.current(
+            'editorFeedback.cloudActionBody',
+            `${action.name} sends this note to cloud AI for this request. Your note privacy and sync settings will not change.`,
+            { action: action.name },
+          ),
           () => gateAndRun({ ...routing, allowCloudFallback: true }),
+          {
+            title: copyRef.current('editorFeedback.cloudTitle', 'Use cloud AI?'),
+            cancel: copyRef.current('cancel', 'Cancel'),
+            confirm: copyRef.current('editorFeedback.cloudOnce', 'Use Cloud Once'),
+          },
         );
         return;
       }
@@ -1038,10 +1082,16 @@ export default function NoteEditorScreen() {
         return;
       }
       confirmDestructive(
-        'Replace enhanced notes?',
-        'Running this action replaces the current enhanced notes, including any edits.',
+        copyRef.current('editorFeedback.replaceTitle', 'Replace enhanced notes?'),
+        copyRef.current(
+          'editorFeedback.replaceBody',
+          'Running this action replaces the current enhanced notes, including any edits.',
+        ),
         () => runActionWithRouting(action, isCurrent),
-        { destructiveLabel: 'Replace' },
+        {
+          destructiveLabel: copyRef.current('editorFeedback.replaceAction', 'Replace'),
+          cancelLabel: copyRef.current('cancel', 'Cancel'),
+        },
       );
     },
     [captureAIContext, flushEnhancedSave, getNoteById, noteId, runActionWithRouting],
@@ -1059,7 +1109,13 @@ export default function NoteEditorScreen() {
       const context = chatContextRef.current.trim();
       if (!trimmedQuestion || chatAbortRef.current) return;
       if (!context) {
-        Alert.alert('Nothing to ask about', 'Add note content or finish the transcript first.');
+        Alert.alert(
+          copyRef.current('editorFeedback.nothingTitle', 'Nothing to ask about'),
+          copyRef.current(
+            'editorFeedback.nothingBody',
+            'Add note content or finish the transcript first.',
+          ),
+        );
         return;
       }
 
@@ -1125,7 +1181,7 @@ export default function NoteEditorScreen() {
         ]);
       } catch (error) {
         if (controller.signal.aborted || !isCurrent()) return;
-        setChatError(error instanceof Error ? error.message : 'Chat failed');
+        setChatError(error instanceof Error ? error.message : { generic: true });
       } finally {
         if (chatAbortRef.current === controller) {
           chatAbortRef.current = null;
@@ -1170,8 +1226,16 @@ export default function NoteEditorScreen() {
 
       if (requiresCloudConfirmation && chatMode !== 'local') {
         confirmCloudOnce(
-          'Chat sends this note context to your selected AI service for this request. Your note privacy and sync settings will not change.',
+          copyRef.current(
+            'editorFeedback.cloudChatBody',
+            'Chat sends this note context to your selected AI service for this request. Your note privacy and sync settings will not change.',
+          ),
           () => gateAndRun(true),
+          {
+            title: copyRef.current('editorFeedback.cloudTitle', 'Use cloud AI?'),
+            cancel: copyRef.current('cancel', 'Cancel'),
+            confirm: copyRef.current('editorFeedback.cloudOnce', 'Use Cloud Once'),
+          },
         );
         return;
       }
@@ -1191,7 +1255,13 @@ export default function NoteEditorScreen() {
 
   const handleAskNote = useCallback(() => {
     if (!chatContextRef.current.trim()) {
-      Alert.alert('Nothing to ask about', 'Add note content or finish the transcript first.');
+      Alert.alert(
+        copyRef.current('editorFeedback.nothingTitle', 'Nothing to ask about'),
+        copyRef.current(
+          'editorFeedback.nothingBody',
+          'Add note content or finish the transcript first.',
+        ),
+      );
       return;
     }
     setChatVisible(true);
@@ -1345,7 +1415,9 @@ export default function NoteEditorScreen() {
   if (!note && !isNaN(noteId)) {
     return (
       <View className="flex-1 items-center justify-center">
-        <Text className="text-tertiaryLabel">Note not found</Text>
+        <Text className="text-tertiaryLabel">
+          {copy('editorFeedback.noteNotFound', 'Note not found')}
+        </Text>
       </View>
     );
   }
@@ -1795,7 +1867,13 @@ export default function NoteEditorScreen() {
         messages={chatMessages}
         draft={chatDraft}
         isProcessing={isChatProcessing}
-        error={chatError}
+        error={
+          typeof chatError === 'string'
+            ? chatError
+            : chatError
+              ? copy('editorFeedback.chatFailed', 'Chat failed')
+              : null
+        }
         canSend={!!chatContextText.trim()}
         suggestions={chatSuggestions}
         onDraftChange={setChatDraft}

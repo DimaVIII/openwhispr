@@ -2087,3 +2087,92 @@ describe('Android delayed AI consent', () => {
     expect(ReasoningService.chatOverNote).not.toHaveBeenCalled();
   });
 });
+
+describe('Android editor consent language', () => {
+  const originalPlatform = Platform.OS;
+  let alert: jest.SpyInstance;
+  beforeEach(() => {
+    Platform.OS = 'android';
+    mockEditorLanguage = 'ar';
+    alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+  });
+  afterEach(() => {
+    Platform.OS = originalPlatform;
+    mockEditorLanguage = 'en';
+    alert.mockRestore();
+  });
+  it('requires translated replacement confirmation before running the exact selected action', async () => {
+    mockNote = note({ enhancedContent: 'Do not replace before consent' });
+    mockNotesState.notes = [mockNote];
+    const view = render(<NoteEditorScreen />);
+    await act(async () => fireEvent.press(view.getByTestId('run-action-1')));
+    expect(ReasoningService.processText).not.toHaveBeenCalled();
+    const [title, , buttons] = alert.mock.calls[0];
+    expect(title).toBe('استبدال الملاحظات المحسّنة؟');
+    expect(buttons[0]).toMatchObject({ text: 'إلغاء', style: 'cancel' });
+    await act(async () =>
+      buttons.find((button: { text: string }) => button.text === 'استبدال').onPress(),
+    );
+    expect(ReasoningService.processText).toHaveBeenCalledTimes(1);
+    expect(mockUpdateNote).toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({ enhancedContent: 'Generated calendar-aware notes' }),
+    );
+  });
+  it('requires translated one-time cloud consent for private chat without changing privacy', async () => {
+    mockNote = note({ isPrivate: 1 });
+    mockNotesState.notes = [mockNote];
+    (ReasoningService.chatOverNote as jest.Mock).mockResolvedValueOnce({
+      text: 'Literal answer',
+      model: 'test',
+    });
+    const view = render(<NoteEditorScreen />);
+    fireEvent.changeText(view.getByTestId('chat-draft'), 'Literal question');
+    await act(async () => fireEvent.press(view.getByTestId('chat-send')));
+    expect(ReasoningService.chatOverNote).not.toHaveBeenCalled();
+    const [title, body, buttons] = alert.mock.calls[0];
+    expect(title).toBe('استخدام الذكاء الاصطناعي السحابي؟');
+    expect(body).toContain('لن تتغيّر إعدادات خصوصية الملاحظة أو مزامنتها.');
+    expect(buttons[0].text).toBe('إلغاء');
+    await act(async () =>
+      buttons
+        .find((button: { text: string }) => button.text === 'استخدام السحابة مرة واحدة')
+        .onPress(),
+    );
+    expect(ReasoningService.chatOverNote).toHaveBeenCalledWith(
+      expect.objectContaining({
+        question: 'Literal question',
+        routing: { isPrivateNote: true, allowCloudFallback: true },
+      }),
+    );
+    expect(mockNote.isPrivate).toBe(1);
+    expect(mockUpdateConfig).not.toHaveBeenCalled();
+  });
+  it('translates the action-failure heading while keeping the provider error literal', async () => {
+    (ReasoningService.processText as jest.Mock).mockRejectedValueOnce(
+      new Error('Provider detail: 123'),
+    );
+    const view = render(<NoteEditorScreen />);
+    await act(async () => fireEvent.press(view.getByTestId('run-action-1')));
+    expect(alert).toHaveBeenCalledWith('فشل الإجراء', 'Provider detail: 123');
+  });
+  it('uses the current language for a delayed failure without restarting the request', async () => {
+    mockEditorLanguage = 'en';
+    let reject!: (reason: unknown) => void;
+    (ReasoningService.processText as jest.Mock).mockImplementationOnce(
+      () =>
+        new Promise((_, fail) => {
+          reject = fail;
+        }),
+    );
+    const view = render(<NoteEditorScreen />);
+    await act(async () => fireEvent.press(view.getByTestId('run-action-1')));
+    expect(ReasoningService.processText).toHaveBeenCalledTimes(1);
+    mockEditorLanguage = 'ar';
+    view.rerender(<NoteEditorScreen />);
+    await act(async () => reject(new Error('Literal delayed provider detail')));
+    expect(alert).toHaveBeenCalledWith('فشل الإجراء', 'Literal delayed provider detail');
+    expect(ReasoningService.processText).toHaveBeenCalledTimes(1);
+    expect(mockUpdateNote).not.toHaveBeenCalled();
+  });
+});

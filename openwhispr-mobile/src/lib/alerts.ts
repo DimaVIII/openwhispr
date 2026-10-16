@@ -46,11 +46,15 @@ export function confirmAccountDeletion(deleteAccount: () => Promise<void>): void
   );
 }
 
-export function confirmCloudOnce(message: string, onConfirm: ConfirmCallback): void {
-  Alert.alert('Use cloud AI?', message, [
-    { text: 'Cancel', style: 'cancel' },
+export function confirmCloudOnce(
+  message: string,
+  onConfirm: ConfirmCallback,
+  labels?: { title: string; cancel: string; confirm: string },
+): void {
+  Alert.alert(labels?.title ?? 'Use cloud AI?', message, [
+    { text: labels?.cancel ?? 'Cancel', style: 'cancel' },
     {
-      text: 'Use Cloud Once',
+      text: labels?.confirm ?? 'Use Cloud Once',
       onPress: () => {
         runConfirm(onConfirm);
       },
