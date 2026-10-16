@@ -54,7 +54,10 @@ export function TranscriptSheet({
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
-      <View className="flex-1 bg-systemBackground">
+      <View
+        className="flex-1 bg-systemBackground"
+        style={Platform.OS === 'android' ? { paddingTop: insets.top } : undefined}
+      >
         <View
           className={
             Platform.OS === 'android'
