@@ -24,10 +24,13 @@ jest.mock('@/store/useConfigStore', () => ({
 }));
 
 import {
+  canRunLocalReasoning,
   clearLocalReasoningReadinessCache,
   getLocalReasoningReadiness,
   getLocalReasoningUnavailableMessage,
+  isLocalReasoningUnsupported,
   shouldUseLocalReasoning,
+  toLocalReasoningError,
 } from '../localReasoning';
 import { AppleLLM } from '@/lib/appleLLM';
 
@@ -101,4 +104,74 @@ it('explains Apple Intelligence being off without assuming the request is a note
   });
   expect(message).toContain('Apple Intelligence is turned off');
   expect(message).not.toMatch(/note/i);
+});
+
+it.each([
+  ['deviceNotEligible', 'unsupportedDevice'],
+  ['unsupportedOS', 'unsupportedOS'],
+])(
+  'reports an iPhone that cannot run Apple Intelligence (%s) as unsupported',
+  async (native, status) => {
+    mockAppleAvailability.mockResolvedValue({ status: native, tokenCounting: false });
+
+    const readiness = await getLocalReasoningReadiness();
+
+    expect(readiness.status).toBe(status);
+    expect(isLocalReasoningUnsupported(readiness)).toBe(true);
+  },
+);
+
+it.each(['ready', 'disabled', 'appleIntelligenceOff', 'modelNotReady', 'unavailable'] as const)(
+  'does not treat %s as an unsupported iPhone, since it can change',
+  (status) => {
+    expect(isLocalReasoningUnsupported({ status, tokenCounting: false })).toBe(false);
+  },
+);
+
+// Off in iOS Settings or still preparing its model, the iPhone still runs Apple Intelligence.
+it.each([
+  ['ready', true],
+  ['appleIntelligenceOff', true],
+  ['modelNotReady', true],
+  ['disabled', false],
+  ['unavailable', false],
+  ['unsupportedDevice', false],
+  ['unsupportedOS', false],
+] as const)('reports whether this iPhone runs Apple Intelligence when %s', (status, runs) => {
+  expect(canRunLocalReasoning({ status, tokenCounting: false })).toBe(runs);
+});
+
+it.each([
+  [
+    'unsupportedDevice',
+    'On-Device AI needs an iPhone with Apple Intelligence (iPhone 15 Pro or later).',
+  ],
+  ['unsupportedOS', 'On-Device AI needs iOS 26 or later on an iPhone with Apple Intelligence.'],
+] as const)('says what an unsupported iPhone needs (%s)', (status, message) => {
+  expect(getLocalReasoningUnavailableMessage({ status, tokenCounting: false })).toBe(message);
+});
+
+describe('toLocalReasoningError', () => {
+  it('reads an aborted request as cancelled', () => {
+    const aborted = Object.assign(new Error('cancelled'), { name: 'AbortError' });
+    expect(toLocalReasoningError(aborted)).toMatchObject({
+      code: 'APPLE_LLM_CANCELLED',
+      retryable: false,
+    });
+  });
+
+  it('keeps the native cancellation code', () => {
+    const cancelled = Object.assign(new Error('cancelled'), { code: 'APPLE_LLM_CANCELLED' });
+    expect(toLocalReasoningError(cancelled)).toMatchObject({ code: 'APPLE_LLM_CANCELLED' });
+  });
+
+  it.each(['APPLE_LLM_GUARDRAIL', 'APPLE_LLM_RATE_LIMITED', 'APPLE_LLM_CONTEXT_LIMIT'])(
+    'marks %s as not worth retrying',
+    (code) => {
+      expect(toLocalReasoningError(Object.assign(new Error('x'), { code }))).toMatchObject({
+        code,
+        retryable: false,
+      });
+    },
+  );
 });

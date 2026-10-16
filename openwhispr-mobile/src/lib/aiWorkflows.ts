@@ -1,5 +1,6 @@
+import type { AuthUser } from '@/lib/authClient';
 import type { InferenceSelection } from '@/lib/mobileProviders';
-import { MODE_LABELS } from '@/lib/inferenceModes';
+import { localModeDefault, MODE_LABELS, type CloudAccess } from '@/lib/inferenceModes';
 import { isLocalModelKey, LOCAL_MODEL_TITLES } from '@/lib/localModelCatalog';
 import { providerDisplayName, type MobileInferenceScope } from '@/lib/mobileProviders';
 import type { ProcessingMode, UserConfig } from '@/types';
@@ -21,41 +22,77 @@ export const UNSET_PROVIDER_NOTES: Partial<Record<MobileInferenceScope, string>>
     'Not saved yet. The voice assistant is skipped until you save a selection; note chat uses OpenWhispr Cloud.',
 };
 
-// On-Device mode skips cleanup until On-Device is saved for it, so the unset page picks nothing.
-export const UNSET_ON_DEVICE_CLEANUP_NOTE =
-  'Not saved yet. On-Device mode skips cleanup until you choose On-Device.';
+// On-Device cleanup on an iPhone that can never run Apple Intelligence.
+export const ON_DEVICE_CLEANUP_UNSUPPORTED_NOTE =
+  "This iPhone can't run On-Device cleanup, so it's skipped. OpenWhispr Cloud can clean up your transcripts.";
 
-// What On-Device mode means for each workflow other than dictation.
-export const ON_DEVICE_MODE_NOTES: Partial<Record<MobileInferenceScope, string>> = {
-  upload:
-    'On-Device mode keeps this on your iPhone. Your choice applies when dictation leaves On-Device.',
-  notes:
-    'On-Device mode formats notes on this iPhone and asks before sending one to your choice here.',
-  cleanup:
-    'On-Device cleanup runs on this iPhone. Any other choice is skipped until dictation leaves On-Device, so the transcript never leaves this phone.',
-  agent:
-    'In On-Device mode the voice assistant is off, and note chat asks before sending a note off this iPhone.',
+// Dictation owns Local Mode: On-Device dictation turns it on, and the other modes turn it off.
+export const LOCAL_MODE_DICTATION_NOTES = {
+  on: 'Local Mode is on: dictation stays on this iPhone and notes ask before leaving it. Choose OpenWhispr Cloud or Bring Your Own Key to turn it off.',
+  off: 'On-Device turns on Local Mode: dictation stays on this iPhone and notes ask before leaving it.',
 };
 
-// A local transcript is cleaned only when cleanup is saved as On-Device; unset or any
-// other choice would take it off the phone, so it stays raw.
-export function cleanupSavedOnDevice(config: UserConfig | null): boolean {
-  return config?.inference?.cleanup?.mode === 'local';
+// What Local Mode means for note formatting and chat, which run on this iPhone first.
+export const ON_DEVICE_MODE_NOTES: Partial<Record<MobileInferenceScope, string>> = {
+  notes: 'Local Mode formats notes on this iPhone and asks before sending one to your choice here.',
+  agent:
+    'In Local Mode the voice assistant is off, and note chat asks before sending a note off this iPhone.',
+};
+
+export const PRIVATE_MODE_LOCKED_REASON =
+  'Off while Local Mode is on. Change Dictation in AI Models to turn it off.';
+
+// Local Mode dictates on this iPhone, so cleaning with OpenWhispr Cloud is a separate Cloud pass,
+// which needs a signed-in account.
+export const CLOUD_CLEANUP_NEEDS_ACCOUNT_NOTE =
+  'In Local Mode, OpenWhispr Cloud cleans transcripts only for a signed-in account, so cleanup is skipped until you sign in.';
+
+export function cloudAccessFor(user: AuthUser | null): CloudAccess {
+  if (!user) return 'none';
+  return user.isAnonymous ? 'session' : 'account';
+}
+
+// OpenWhispr Cloud is saved for cleanup in Local Mode without an account to run it, so it is skipped
+// (snapshotTextInference). Unset cleanup only defaults to Cloud with an account (unsetSelection).
+export function cloudCleanupNeedsAccount(
+  config: UserConfig | null,
+  activeMode: ProcessingMode,
+  cloudAccess: CloudAccess,
+): boolean {
+  return (
+    activeMode === 'private' &&
+    config?.inference?.cleanup?.mode === 'openwhispr' &&
+    cloudAccess !== 'account'
+  );
+}
+
+// Cleanup runs On-Device when it is saved as On-Device, or in Local Mode when nothing is saved and
+// OpenWhispr Cloud can't clean (unsetSelection).
+export function cleanupRunsOnDevice(
+  config: UserConfig | null,
+  activeMode: ProcessingMode,
+  cloudAccess: CloudAccess = 'none',
+): boolean {
+  return (
+    (config?.inference?.cleanup ?? unsetSelection('cleanup', activeMode, cloudAccess)).mode ===
+    'local'
+  );
 }
 
 export function parseWorkflow(value: unknown): MobileInferenceScope | null {
   return WORKFLOWS.find((scope) => scope === value) ?? null;
 }
 
-// What a workflow with no saved selection runs: On-Device mode keeps everything
-// local except note chat, which uses OpenWhispr Cloud when unset in every mode, and
-// Bring Your Own Key dictation waits for a provider before cleanup or the agent.
+// What a workflow with no saved selection runs. Local Mode keeps dictation and note formatting on
+// this iPhone, and uses OpenWhispr Cloud for uploads and cleanup when the account can, else this
+// iPhone. Note chat uses OpenWhispr Cloud when unset in every mode, and Bring Your Own Key
+// dictation waits for a provider before cleanup or the agent.
 export function unsetSelection(
   scope: MobileInferenceScope,
   activeMode: ProcessingMode,
+  cloudAccess: CloudAccess = 'none',
 ): InferenceSelection {
-  if (activeMode === 'private')
-    return scope === 'agent' ? { mode: 'openwhispr' } : { mode: 'local' };
+  if (activeMode === 'private') return { mode: localModeDefault(scope, cloudAccess) };
   if (activeMode === 'providers' && (scope === 'dictation' || UNSET_PROVIDER_NOTES[scope]))
     return { mode: 'providers' };
   return { mode: 'openwhispr' };
@@ -68,29 +105,30 @@ export function workflowSummary(
   {
     keyMissing = false,
     onDeviceUnavailable,
+    cloudAccess = 'none',
   }: {
     keyMissing?: boolean;
     // Why Apple Intelligence can't run right now, when it can't.
     onDeviceUnavailable?: string;
+    cloudAccess?: CloudAccess;
   } = {},
 ): string {
   if (scope === 'cleanup') {
     if (!(config?.cleanupEnabled ?? true)) return 'Off';
-    if (cleanupSavedOnDevice(config) && onDeviceUnavailable)
-      return `${MODE_LABELS.local} · ${onDeviceUnavailable}`;
+    if (cleanupRunsOnDevice(config, activeMode, cloudAccess) && onDeviceUnavailable)
+      return `Skipped · ${onDeviceUnavailable}`;
+    if (cloudCleanupNeedsAccount(config, activeMode, cloudAccess)) return 'Skipped · Sign in';
   }
-  // On-Device mode runs everything on this phone first, whatever is saved. Cleanup runs
-  // only when set to On-Device, and only note chat set to OpenWhispr, or not set, goes
-  // straight to Cloud.
-  if (activeMode === 'private') {
-    if (scope === 'cleanup' && !cleanupSavedOnDevice(config)) return 'Skipped';
-    const chatOnCloud = (config?.inference?.agent?.mode ?? 'openwhispr') === 'openwhispr';
-    if (scope === 'agent' && chatOnCloud) return MODE_LABELS.openwhispr;
-  }
-  const selection = config?.inference?.[scope] ?? unsetSelection(scope, activeMode);
+  const selection = config?.inference?.[scope] ?? unsetSelection(scope, activeMode, cloudAccess);
+  // Local Mode runs dictation, note formatting and provider note chat on this phone first, whatever
+  // is saved; note chat set to OpenWhispr, or not set, goes straight to Cloud. Uploads and cleanup
+  // run what is saved for them.
+  if (activeMode === 'private' && scope === 'agent' && selection.mode === 'openwhispr')
+    return MODE_LABELS.openwhispr;
   if (selection.mode === 'local' && isLocalModelKey(selection.modelId))
     return LOCAL_MODEL_TITLES[selection.modelId];
-  if (activeMode === 'private') return MODE_LABELS.local;
+  if (activeMode === 'private' && scope !== 'upload' && scope !== 'cleanup')
+    return MODE_LABELS.local;
   if (selection.mode !== 'providers') return MODE_LABELS[selection.mode];
   if (!selection.providerId) return 'Not set';
   const name = providerDisplayName(selection.providerId);

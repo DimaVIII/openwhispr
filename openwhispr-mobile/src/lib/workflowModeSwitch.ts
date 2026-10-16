@@ -3,14 +3,18 @@ import { router } from 'expo-router';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useConfigStore } from '@/store/useConfigStore';
 import { useProcessingModeStore } from '@/store/useProcessingModeStore';
-import { accountRequiredForCloud, showAccountRequiredAlert } from '@/lib/accountAccess';
+import {
+  accountRequiredForCloud,
+  requiresRealAccount,
+  showAccountRequiredAlert,
+} from '@/lib/accountAccess';
 import { workflowSaveConfig } from '@/lib/inferenceModes';
 import {
   getLocalReasoningReadiness,
   getLocalReasoningUnavailableMessage,
 } from '@/lib/localReasoning';
 import type { LocalModelKey } from '@/lib/localModelCatalog';
-import type { InferenceSelection, MobileInferenceScope } from '@/lib/mobileProviders';
+import { type InferenceSelection, type MobileInferenceScope } from '@/lib/mobileProviders';
 import { getPrivateModeReadiness, getPrivateModeUnavailableMessage } from '@/lib/privateMode';
 
 type SpeechScope = 'dictation' | 'upload';
@@ -33,7 +37,7 @@ async function transcriptionModelReady(): Promise<ModeSwitchResult | null> {
     return 'refused';
   }
   // Nothing to run yet: open the model list, where every on-device model can be
-  // downloaded, as the Home toggle does.
+  // downloaded.
   if (readiness.status === 'missing') {
     router.push('/(account)/model-download');
     return 'needs-model';
@@ -48,14 +52,25 @@ async function appleIntelligenceReady(): Promise<boolean> {
   return false;
 }
 
-// Applies OpenWhispr Cloud or On-Device to a workflow as soon as it is tapped, after the same
-// sign-in and model checks the Home toggle runs.
+// Applies OpenWhispr Cloud or On-Device to a workflow as soon as it is tapped, after its sign-in
+// and model checks. Dictation carries the app mode with it: On-Device turns Local Mode on.
 export async function switchWorkflowMode(
   scope: MobileInferenceScope,
   mode: 'openwhispr' | 'local',
 ): Promise<ModeSwitchResult> {
-  if (mode === 'openwhispr' && accountRequiredForCloud(useAuthStore.getState().user)) {
+  const { user } = useAuthStore.getState();
+  if (mode === 'openwhispr' && accountRequiredForCloud(user)) {
     showAccountRequiredAlert(isSpeechScope(scope) ? 'cloud transcription' : 'cloud AI');
+    return 'refused';
+  }
+  // Local Mode dictates on this iPhone, so Cloud cleanup is a separate pass that needs an account.
+  if (
+    mode === 'openwhispr' &&
+    scope === 'cleanup' &&
+    useProcessingModeStore.getState().activeMode === 'private' &&
+    requiresRealAccount(user)
+  ) {
+    showAccountRequiredAlert('cloud cleanup');
     return 'refused';
   }
   if (mode === 'local') {
@@ -79,7 +94,7 @@ export async function switchWorkflowMode(
 }
 
 // Saves the on-device model for a workflow; undefined means Automatic. The pick is also
-// remembered so switching back to On-Device, from here or the Home toggle, restores it.
+// remembered so switching back to On-Device restores it.
 export async function pickLocalModel(
   scope: SpeechScope,
   model: LocalModelKey | undefined,

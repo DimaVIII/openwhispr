@@ -18,6 +18,7 @@ import { OnDeviceModelSection } from '@/components/settings/OnDeviceModelSection
 import { useConfigToggle } from '@/hooks/useConfigToggle';
 import { useCustomPromptsStore } from '@/store/useCustomPromptsStore';
 import { resolveCustomPrompt } from '@/config/prompts/registry';
+import { useAuthStore } from '@/store/useAuthStore';
 import { useConfigStore } from '@/store/useConfigStore';
 import { useProcessingModeStore } from '@/store/useProcessingModeStore';
 import type { UserConfig } from '@/types';
@@ -32,19 +33,35 @@ import {
 import { workflowSaveConfig } from '@/lib/inferenceModes';
 import { InferenceModePicker } from '@/components/settings/InferenceModePicker';
 import {
+  CLOUD_CLEANUP_NEEDS_ACCOUNT_NOTE,
+  LOCAL_MODE_DICTATION_NOTES,
   ON_DEVICE_MODE_NOTES,
-  UNSET_ON_DEVICE_CLEANUP_NOTE,
+  PRIVATE_MODE_LOCKED_REASON,
+  ON_DEVICE_CLEANUP_UNSUPPORTED_NOTE,
   UNSET_PROVIDER_NOTES,
   WORKFLOW_LABELS,
   WORKFLOWS,
+  cloudAccessFor,
+  cloudCleanupNeedsAccount,
   parseWorkflow,
   unsetSelection,
 } from '@/lib/aiWorkflows';
 import { isLocalModelKey } from '@/lib/localModelCatalog';
-import { getDictationAgentName, isDictationAgentEnabled } from '@/lib/dictationAgent';
+import {
+  getDictationAgentName,
+  isDictationAgentEnabled,
+  isNoteChatEnabled,
+  voiceAssistantToggleConfig,
+} from '@/lib/dictationAgent';
+import { safeHaptics } from '@/lib/utils';
 import { SystemIcon, type LucideIconName } from '@/components/ui/SystemIcon';
 import { switchWorkflowMode } from '@/lib/workflowModeSwitch';
 import { getPrivateModeReadiness } from '@/lib/privateMode';
+import {
+  getLocalReasoningReadiness,
+  getLocalReasoningUnavailableMessage,
+  isLocalReasoningUnsupported,
+} from '@/lib/localReasoning';
 import {
   discoverProviderModels,
   testProviderConnection,
@@ -152,30 +169,73 @@ function CleanupSettings({ enabled }: { enabled: boolean }): React.JSX.Element {
   );
 }
 
-function AssistantSettings({ enabled }: { enabled: boolean }): React.JSX.Element {
-  const toggleAssistant = useConfigToggle('dictationAgentEnabled');
-  const agentName = useConfigStore((state) =>
-    state.config ? getDictationAgentName(state.config) : undefined,
-  );
+// Note chat and the voice assistant share this workflow's model but switch on and off apart, so
+// Private mode can turn the voice assistant off while note chat keeps working.
+function AssistantSettings(): React.JSX.Element {
+  const config = useConfigStore((state) => state.config);
+  const updateConfig = useConfigStore((state) => state.updateConfig);
+  const privateMode = useProcessingModeStore((state) => state.activeMode === 'private');
+  const toggleNoteChat = useConfigToggle('noteChatEnabled');
+  const chatEnabled = config ? isNoteChatEnabled(config) : true;
+  const voiceEnabled = config ? isDictationAgentEnabled(config) : true;
+  const agentName = config ? getDictationAgentName(config) : undefined;
   return (
-    <WorkflowSwitchCard
-      title="Enable Chat & Voice Assistant"
-      description="Chat with your notes, and say your assistant’s name to give it commands."
-      icon="bubble.left.and.bubble.right"
-      mdIcon="MessagesSquare"
-      enabled={enabled}
-      onToggle={toggleAssistant}
-      offNote="Note chat and the voice assistant are off."
-    >
-      <SettingsRow
-        iconStyle="line"
-        icon="person.wave.2"
-        mdIcon="UserRoundCog"
-        title="Voice Assistant"
-        subtitle={agentName}
-        onPress={() => router.push('/(account)/dictation-agent')}
-      />
-    </WorkflowSwitchCard>
+    <>
+      <SettingsSection>
+        <SettingsRow
+          iconStyle="line"
+          icon="bubble.left.and.bubble.right"
+          mdIcon="MessagesSquare"
+          title="Note Chat"
+          description="Ask questions about your notes and get answers from them."
+          rightElement={
+            <SettingsSwitch
+              accessibilityLabel="Note Chat"
+              value={chatEnabled}
+              onValueChange={toggleNoteChat}
+            />
+          }
+          showChevron={false}
+        />
+        <SettingsRow
+          iconStyle="line"
+          icon="person.wave.2"
+          mdIcon="UserRoundCog"
+          title="Voice Assistant"
+          description={
+            privateMode
+              ? PRIVATE_MODE_LOCKED_REASON
+              : 'Say your assistant’s name while dictating to give it commands.'
+          }
+          disabled={privateMode}
+          rightElement={
+            <SettingsSwitch
+              accessibilityLabel="Voice Assistant"
+              value={voiceEnabled && !privateMode}
+              disabled={privateMode}
+              onValueChange={(enabled) => {
+                safeHaptics('light');
+                void updateConfig(voiceAssistantToggleConfig(config, enabled));
+              }}
+            />
+          }
+          showChevron={false}
+        />
+        {voiceEnabled && !privateMode ? (
+          <SettingsRow
+            iconStyle="line"
+            icon="slider.horizontal.3"
+            mdIcon="SlidersHorizontal"
+            title="Voice Assistant Settings"
+            subtitle={agentName}
+            onPress={() => router.push('/(account)/dictation-agent')}
+          />
+        ) : null}
+      </SettingsSection>
+      {chatEnabled || voiceEnabled ? null : (
+        <SectionFooter>Note chat and the voice assistant are off.</SectionFooter>
+      )}
+    </>
   );
 }
 
@@ -234,10 +294,16 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
   const updateConfig = useConfigStore((state) => state.updateConfig);
   const setActiveMode = useProcessingModeStore((state) => state.setActiveMode);
   const activeMode = useProcessingModeStore((state) => state.activeMode);
-  const savedSelection = config?.inference?.[scope] ?? unsetSelection(scope, activeMode);
-  // On-Device mode skips an unsaved cleanup, so the On-Device default must not look picked.
-  const cleanupUnsaved =
-    scope === 'cleanup' && activeMode === 'private' && !config?.inference?.cleanup;
+  const cloudAccess = useAuthStore((state) => cloudAccessFor(state.user));
+  const storedSelection =
+    config?.inference?.[scope] ?? unsetSelection(scope, activeMode, cloudAccess);
+  // Local Mode runs dictation on this phone whatever is saved, so a saved Cloud dictation (a guest
+  // held in Local Mode) shows as On-Device (Automatic), which is what runs.
+  const lockedByPrivateMode =
+    activeMode === 'private' && scope === 'dictation' && storedSelection.mode === 'openwhispr';
+  const savedSelection: InferenceSelection = lockedByPrivateMode
+    ? { mode: 'local' }
+    : storedSelection;
   // Tracks the saved selection, except while a Bring Your Own Key draft is being set up.
   const [selection, setSelection] = useState<InferenceSelection>(savedSelection);
   const remembered = useRef<Record<string, InferenceSelection>>({});
@@ -265,25 +331,63 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
   const modelId = selection.modelId ?? defaultModelId(provider);
   const providerId = provider?.id;
   const models = provider?.models.length ? provider.models : discoveredModels;
-  const shownMode =
-    cleanupUnsaved && selection.mode === savedSelection.mode ? null : selection.mode;
+  const speechScope = scope === 'dictation' || scope === 'upload' ? scope : null;
+  // On-Device text workflows run on Apple Intelligence, which some iPhones can never run.
+  const [onDeviceUnsupported, setOnDeviceUnsupported] = useState<string | null>(null);
+  useEffect(() => {
+    if (speechScope) return undefined;
+    let cancelled = false;
+    getLocalReasoningReadiness()
+      .then((readiness) => {
+        if (cancelled) return;
+        setOnDeviceUnsupported(
+          isLocalReasoningUnsupported(readiness)
+            ? getLocalReasoningUnavailableMessage(readiness)
+            : null,
+        );
+      })
+      .catch(() => undefined);
+    return (): void => {
+      cancelled = true;
+    };
+  }, [speechScope]);
+  // Nothing is shown as picked when the On-Device text workflow can never run on this iPhone.
+  const pickedMode =
+    !speechScope && onDeviceUnsupported && selection.mode === 'local' ? null : selection.mode;
   const modeNote =
-    (shownMode === null ? UNSET_ON_DEVICE_CLEANUP_NOTE : undefined) ??
+    (scope === 'cleanup' && selection.mode === 'local' && onDeviceUnsupported
+      ? ON_DEVICE_CLEANUP_UNSUPPORTED_NOTE
+      : undefined) ??
+    (scope === 'cleanup' &&
+    selection.mode === 'openwhispr' &&
+    cloudCleanupNeedsAccount(config, activeMode, cloudAccess)
+      ? CLOUD_CLEANUP_NEEDS_ACCOUNT_NOTE
+      : undefined) ??
     (activeMode === 'private' ? ON_DEVICE_MODE_NOTES[scope] : undefined) ??
     (activeMode === 'providers' && !config?.inference?.[scope]
       ? UNSET_PROVIDER_NOTES[scope]
       : undefined) ??
     (selection.mode === 'providers' && savedSelection.mode !== 'providers'
-      ? 'Save to switch to Bring Your Own Key.'
+      ? activeMode === 'private' && scope === 'dictation'
+        ? 'Save to switch to Bring Your Own Key. This turns Local Mode off.'
+        : 'Save to switch to Bring Your Own Key.'
+      : undefined) ??
+    (scope === 'dictation'
+      ? LOCAL_MODE_DICTATION_NOTES[activeMode === 'private' ? 'on' : 'off']
       : undefined);
-  const speechScope = scope === 'dictation' || scope === 'upload' ? scope : null;
+  const modeUnavailable: Partial<Record<InferenceMode, string>> = onDeviceUnsupported
+    ? { local: onDeviceUnsupported }
+    : {};
   // Keys are stored per provider (per server for Custom), so every workflow on it shares one.
   const keyOwner =
     provider?.id === 'custom' ? 'this server' : providerDisplayName(provider?.id ?? '');
-  // Text Cleanup and Chat & Voice Assistant can be switched off; then they use no key.
+  // Text Cleanup, and note chat with the voice assistant, can be switched off; then they use no key.
   const switchedOff = (workflow: MobileInferenceScope): boolean =>
     (workflow === 'cleanup' && !(config?.cleanupEnabled ?? true)) ||
-    (workflow === 'agent' && !!config && !isDictationAgentEnabled(config));
+    (workflow === 'agent' &&
+      !!config &&
+      !isNoteChatEnabled(config) &&
+      !isDictationAgentEnabled(config));
   const workflowOff = switchedOff(scope);
   const sharedWith = WORKFLOWS.filter((other) => {
     const saved = config?.inference?.[other];
@@ -383,7 +487,10 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
       );
       return;
     }
-    if (mode === savedSelection.mode && !cleanupUnsaved) {
+    // Tapping the shown mode saves it when nothing of the user's own is saved, since an unsaved
+    // default follows the mode and the account (unsetSelection), and a pin is released with them.
+    const ownChoice = !!config?.inference?.[scope] && !config.pinnedInference?.includes(scope);
+    if (mode === savedSelection.mode && ownChoice) {
       setSelection(savedSelection);
       return;
     }
@@ -497,7 +604,7 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
       const saved = await prepareSelection();
       if (!saved) return;
       await updateConfig(
-        workflowSaveConfig(useConfigStore.getState().config, scope, saved, activeMode),
+        workflowSaveConfig(useConfigStore.getState().config, scope, saved, activeMode, cloudAccess),
       );
       if (useConfigStore.getState().error) {
         showError('Unable to save your selection. Please try again.');
@@ -651,13 +758,14 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
         keyboardDismissMode="interactive"
       >
         {scope === 'cleanup' ? <CleanupSettings enabled={!workflowOff} /> : null}
-        {scope === 'agent' ? <AssistantSettings enabled={!workflowOff} /> : null}
+        {scope === 'agent' ? <AssistantSettings /> : null}
         {workflowOff ? null : (
           <>
             <InferenceModePicker
               scope={speechScope ? 'speech' : 'text'}
-              selectedMode={shownMode}
+              selectedMode={pickedMode}
               onSelect={chooseMode}
+              unavailable={modeUnavailable}
             />
             {modeNote ? <SectionFooter>{modeNote}</SectionFooter> : null}
             {selection.mode === 'local' && speechScope ? (
@@ -666,9 +774,10 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
                 picked={
                   isLocalModelKey(savedSelection.modelId) ? savedSelection.modelId : undefined
                 }
+                lockedChoice={lockedByPrivateMode}
               />
             ) : null}
-            {shownMode === 'local' && !speechScope ? (
+            {selection.mode === 'local' && !speechScope && !onDeviceUnsupported ? (
               <SectionFooter>Runs on Apple Intelligence on this iPhone.</SectionFooter>
             ) : null}
             {selection.mode === 'providers' && provider ? (

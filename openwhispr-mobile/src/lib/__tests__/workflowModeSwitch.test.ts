@@ -7,6 +7,7 @@ const mockPrivateReadiness = jest.fn();
 const mockLocalReasoningReadiness = jest.fn();
 let mockConfig: Record<string, unknown> | null = null;
 let mockUser: Record<string, unknown> | null = { id: 'user-1' };
+let mockActiveMode = 'cloud';
 
 jest.mock('expo-router', () => ({ router: { push: (...args: unknown[]) => mockPush(...args) } }));
 jest.mock('@/store/useConfigStore', () => ({
@@ -15,7 +16,9 @@ jest.mock('@/store/useConfigStore', () => ({
   },
 }));
 jest.mock('@/store/useProcessingModeStore', () => ({
-  useProcessingModeStore: { getState: () => ({ setActiveMode: mockSetActiveMode }) },
+  useProcessingModeStore: {
+    getState: () => ({ activeMode: mockActiveMode, setActiveMode: mockSetActiveMode }),
+  },
 }));
 jest.mock('@/store/useAuthStore', () => ({
   useAuthStore: { getState: () => ({ user: mockUser }) },
@@ -37,6 +40,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockConfig = { defaultMode: 'cloud', inference: { dictation: { mode: 'openwhispr' } } };
   mockUser = { id: 'user-1' };
+  mockActiveMode = 'cloud';
   mockPrivateReadiness.mockResolvedValue({ status: 'ready', modelName: 'Parakeet v2' });
   mockLocalReasoningReadiness.mockResolvedValue({ status: 'ready', tokenCounting: false });
   alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
@@ -46,8 +50,32 @@ it('asks a signed-out user to sign in before switching to Cloud', async () => {
   mockUser = null;
   mockConfig = { defaultMode: 'private' };
   await expect(switchWorkflowMode('cleanup', 'openwhispr')).resolves.toBe('refused');
-  expect(alert).toHaveBeenCalledWith('Sign in required', expect.any(String), expect.any(Array));
+  expect(alert).toHaveBeenCalledWith(
+    'Sign in required',
+    'Sign in to use cloud AI with cloud processing, or set Dictation to On-Device in Account → AI Models.',
+    expect.any(Array),
+  );
   expect(mockUpdateConfig).not.toHaveBeenCalled();
+});
+
+// Local Mode dictates on this phone, so Cloud cleanup is a separate pass that needs an account.
+it('asks an anonymous user to create an account before Cloud cleanup in Local Mode', async () => {
+  mockUser = { id: 'a', isAnonymous: true };
+  mockActiveMode = 'private';
+  mockConfig = { defaultMode: 'private', inference: { dictation: { mode: 'local' } } };
+  await expect(switchWorkflowMode('cleanup', 'openwhispr')).resolves.toBe('refused');
+  expect(alert).toHaveBeenCalledWith(
+    'Create an account',
+    'Create an account to use cloud cleanup with cloud processing.',
+    expect.any(Array),
+  );
+  expect(mockUpdateConfig).not.toHaveBeenCalled();
+});
+
+it('lets an anonymous user pick Cloud cleanup outside Local Mode, where Cloud dictates', async () => {
+  mockUser = { id: 'a', isAnonymous: true };
+  await expect(switchWorkflowMode('cleanup', 'openwhispr')).resolves.toBe('switched');
+  expect(alert).not.toHaveBeenCalled();
 });
 
 it('switches dictation to On-Device along with the app mode', async () => {
@@ -148,5 +176,47 @@ describe('a workflow held on its old mode when dictation moved to your own key',
       inference: { upload: { mode: 'local', modelId: 'whisper-base' } },
       pinnedInference: ['notes'],
     });
+  });
+});
+
+// Dictation owns the app mode: On-Device turns Local Mode on, OpenWhispr Cloud turns it off.
+describe('switching dictation', () => {
+  it('to On-Device turns Local Mode on', async () => {
+    await expect(switchWorkflowMode('dictation', 'local')).resolves.toBe('switched');
+    expect(mockSetActiveMode).toHaveBeenCalledWith('private', true);
+    expect(mockUpdateConfig).toHaveBeenCalledWith({
+      defaultMode: 'private',
+      inference: { dictation: { mode: 'local' } },
+    });
+  });
+
+  it('to OpenWhispr Cloud turns Local Mode off', async () => {
+    mockActiveMode = 'private';
+    mockConfig = { defaultMode: 'private', inference: { dictation: { mode: 'local' } } };
+    await expect(switchWorkflowMode('dictation', 'openwhispr')).resolves.toBe('switched');
+    expect(mockSetActiveMode).toHaveBeenCalledWith('cloud', true);
+    expect(mockUpdateConfig).toHaveBeenCalledWith({
+      defaultMode: 'cloud',
+      inference: { dictation: { mode: 'openwhispr' } },
+    });
+  });
+
+  // Local Mode cleans On-Device whatever is saved for cleanup, so switching leaves the user's
+  // cleanup choice as it is.
+  it.each([
+    ['local', { mode: 'local' }],
+    ['local', { mode: 'openwhispr' }],
+    ['local', { mode: 'providers', providerId: 'openai', modelId: 'gpt-5-mini' }],
+    ['openwhispr', { mode: 'local' }],
+    ['openwhispr', { mode: 'openwhispr' }],
+  ] as const)('to %s keeps a saved %j cleanup', async (mode, cleanup) => {
+    const from = mode === 'local' ? 'cloud' : 'private';
+    mockActiveMode = from;
+    mockConfig = {
+      defaultMode: from,
+      inference: { dictation: { mode: mode === 'local' ? 'openwhispr' : 'local' }, cleanup },
+    };
+    await expect(switchWorkflowMode('dictation', mode)).resolves.toBe('switched');
+    expect(mockUpdateConfig.mock.calls[0][0].inference.cleanup).toEqual(cleanup);
   });
 });

@@ -28,6 +28,8 @@ type SettingsRowProps = {
   accessibilityState?: AccessibilityState;
   // Shown right after the description, such as a help button.
   descriptionAccessory?: React.ReactNode;
+  // Dims the icon and title and ignores taps; the description stays legible to say why.
+  disabled?: boolean;
 };
 
 export function SettingsRow({
@@ -45,14 +47,20 @@ export function SettingsRow({
   selected = false,
   accessibilityState,
   descriptionAccessory,
+  disabled = false,
 }: SettingsRowProps) {
   const isLine = iconStyle === 'line';
+  const dimmed = disabled ? 'opacity-40' : '';
   return (
     <Pressable
-      onPress={onPress}
+      onPress={disabled ? undefined : onPress}
       accessibilityRole={onPress ? 'button' : undefined}
-      disabled={!onPress && !rightElement}
-      accessibilityState={{ selected, ...accessibilityState }}
+      disabled={disabled || (!onPress && !rightElement)}
+      accessibilityState={{
+        selected,
+        ...accessibilityState,
+        disabled: disabled || accessibilityState?.disabled,
+      }}
       className={selected ? 'bg-brand/10 active:bg-brand/20' : 'active:bg-tertiarySystemFill'}
     >
       <View
@@ -63,7 +71,7 @@ export function SettingsRow({
         }
       >
         {isLine ? (
-          <View className="h-6 w-6 items-center justify-center">
+          <View className={`h-6 w-6 items-center justify-center ${dimmed}`}>
             <SystemIcon
               name={icon}
               mdName={mdIcon}
@@ -83,7 +91,7 @@ export function SettingsRow({
         <View className="flex-1">
           <Text
             numberOfLines={1}
-            className={destructive ? 'text-[17px] text-systemRed' : 'text-[17px] text-label'}
+            className={`${destructive ? 'text-[17px] text-systemRed' : 'text-[17px] text-label'} ${dimmed}`}
           >
             {title}
           </Text>

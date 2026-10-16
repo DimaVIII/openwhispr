@@ -1,4 +1,5 @@
 #define _GNU_SOURCE
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,6 +15,7 @@
 #include <fcntl.h>
 #include <linux/input.h>
 #include <math.h>
+#include <poll.h>
 #include <sys/ioctl.h>
 #include <time.h>
 #include <unistd.h>
@@ -25,6 +27,14 @@
 
 #ifdef HAVE_ATSPI
 #include <atspi/atspi.h>
+
+/* libatspi gives every application it hasn't seen yet 15s to answer, and every
+ * application is new to this short-lived process. One peer that stops
+ * answering (xdg-desktop-portal-gtk stuck at its fd limit, #1944) then stalls
+ * the whole walk past the caller's kill. Bound every call instead, so the walk
+ * skips that peer, still reaches the focused window, and stays inside the
+ * app's 1.2s selection and 2s target budgets. */
+#define ATSPI_CALL_TIMEOUT_MS 500
 #endif
 
 /* Paste key sequence. SHIFT_INSERT is the universal Linux paste shortcut —
@@ -359,13 +369,25 @@ static const char *terminal_classes[] = {
     "terminator", "xterm", "urxvt", "rxvt", "tilix", "terminology",
     "wezterm", "foot", "st", "yakuake", "ghostty", "guake", "tilda",
     "hyper", "tabby", "sakura", "warp", "termius", "waveterm",
-    "ptyxis", "kgx", "org.gnome.console", NULL
+    "ptyxis", "kgx", "org.gnome.console", "cosmicterm", "xst", "stterm", NULL
 };
+
+/* A short name like "st" would match inside unrelated names
+ * ("com.system76.CosmicEdit"), so it must be a whole word. */
+static int contains_terminal_name(const char *wm_class, const char *name) {
+    size_t len = strlen(name);
+    if (len > 2) return strcasestr(wm_class, name) != NULL;
+    for (const char *p = wm_class; (p = strcasestr(p, name)); p++) {
+        if ((p == wm_class || !isalnum((unsigned char)p[-1])) && !isalnum((unsigned char)p[len]))
+            return 1;
+    }
+    return 0;
+}
 
 static int is_terminal(const char *wm_class) {
     if (!wm_class) return 0;
     for (int i = 0; terminal_classes[i]; i++) {
-        if (strcasestr(wm_class, terminal_classes[i]))
+        if (contains_terminal_name(wm_class, terminal_classes[i]))
             return 1;
     }
     return 0;
@@ -402,8 +424,14 @@ static int check_parent_terminal(Display *dpy, Window win) {
 }
 
 #ifdef HAVE_ATSPI
+static int init_atspi(void) {
+    int status = atspi_init();
+    atspi_set_timeout(ATSPI_CALL_TIMEOUT_MS, -1);
+    return status;
+}
+
 static int detect_terminal_atspi(void) {
-    atspi_init();
+    if (init_atspi() != 0) return -1;
     AtspiAccessible *desktop = atspi_get_desktop(0);
     if (!desktop) return -1;
 
@@ -494,6 +522,7 @@ static int atspi_active_pid(AtspiAccessible *app) {
 }
 
 static int print_atspi_target(void) {
+    if (init_atspi() != 0) return 1;
     AtspiAccessible *app = NULL;
     AtspiAccessible *win = find_active_atspi_window(&app);
     int pid = app ? atspi_active_pid(app) : 0;
@@ -505,6 +534,7 @@ static int print_atspi_target(void) {
 }
 
 static int print_atspi_selection(void) {
+    if (init_atspi() != 0) return 1;
     AtspiAccessible *app = NULL;
     AtspiAccessible *win = find_active_atspi_window(&app);
     int pid = app ? atspi_active_pid(app) : 0;
@@ -790,9 +820,44 @@ static paste_mode_t resolve_paste_mode(int force_terminal, int force_shift_inser
     return is_term ? PASTE_MODE_CTRL_SHIFT_V : PASTE_MODE_CTRL_V;
 }
 
+#define WM_ROUND_TRIP_TIMEOUT_MS 100
+
+/* Mutter only follows a client's focus change once it has made an X request
+ * of its own since its last focus change. Converting the window manager's
+ * WM_Sn selection makes it answer with requests, and waiting for the answer
+ * orders them before ours. With no window manager, the X server answers. */
+static void round_trip_window_manager(Display *display, Window requestor)
+{
+    char selection[16];
+    snprintf(selection, sizeof(selection), "WM_S%d", DefaultScreen(display));
+    Atom property = XInternAtom(display, "_OPENWHISPR_WM_ROUND_TRIP", False);
+    XEvent event;
+    /* Drop replies that came after an earlier round trip gave up, so they can't
+     * stand in for this one (a reply later than this drain still can). */
+    while (XCheckTypedWindowEvent(display, requestor, SelectionNotify, &event)) {}
+    XConvertSelection(display, XInternAtom(display, selection, False),
+                      XInternAtom(display, "TARGETS", False), property, requestor,
+                      CurrentTime);
+    XFlush(display);
+    struct pollfd connection = { .fd = ConnectionNumber(display), .events = POLLIN };
+    while (!XCheckTypedWindowEvent(display, requestor, SelectionNotify, &event)) {
+        if (poll(&connection, 1, WM_ROUND_TRIP_TIMEOUT_MS) <= 0) return;
+    }
+    XDeleteProperty(display, requestor, property);
+}
+
+static int ignore_x_error(Display *display, XErrorEvent *error)
+{
+    (void)display;
+    (void)error;
+    return 0;
+}
+
 /* Shape only input, leaving transparent shadows/tooltips free to render.
  * Keeping the visible pill in the compositor's input region also works over
- * native Wayland apps, where XWayland cannot query a fresh global cursor. */
+ * native Wayland apps, where XWayland cannot query a fresh global cursor.
+ * "focus" takes keyboard focus: the window is override-redirect, so no window
+ * manager hands it focus on a click or an activation request. */
 static int serve_input_region(Window window)
 {
     if (window == None) return 1;
@@ -805,11 +870,29 @@ static int serve_input_region(Window window)
         XCloseDisplay(display);
         return 1;
     }
+    Window requestor = XCreateSimpleWindow(display, DefaultRootWindow(display),
+                                           0, 0, 1, 1, 0, 0, 0);
 
     char request[512];
     while (fgets(request, sizeof(request), stdin)) {
         if (strcmp(request, "full\n") == 0) {
             XShapeCombineMask(display, window, ShapeInput, 0, 0, None, ShapeSet);
+        } else if (strcmp(request, "focus\n") == 0) {
+            round_trip_window_manager(display, requestor);
+            XWindowAttributes attributes;
+            XErrorHandler previous = XSetErrorHandler(ignore_x_error);
+            if (XGetWindowAttributes(display, window, &attributes) &&
+                attributes.map_state == IsViewable) {
+                /* Leave first: a compositor can move keyboard focus to a native
+                 * Wayland app without moving X focus off this window, and
+                 * focusing it again then produces no FocusIn to follow. */
+                XSetInputFocus(display, PointerRoot, RevertToPointerRoot, CurrentTime);
+                XSetInputFocus(display, window, RevertToParent, CurrentTime);
+            }
+            /* An unmap racing the check must not end the server that owns the
+             * window's input region. */
+            XSync(display, False);
+            XSetErrorHandler(previous);
         } else {
             double viewport_width, viewport_height, x, y, width, height;
             if (sscanf(request, "%lf %lf %lf %lf %lf %lf", &viewport_width,

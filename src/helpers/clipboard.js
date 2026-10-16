@@ -6,6 +6,7 @@ const fs = require("fs");
 const os = require("os");
 const debugLogger = require("./debugLogger");
 const { getLinuxSessionInfo } = require("./linuxSession");
+const { getCosmicActiveAppId } = require("./cosmicToplevel");
 
 const CACHE_TTL_MS = 30000;
 
@@ -66,6 +67,9 @@ const LINUX_TERMINAL_CLASSES = [
   "ptyxis",
   "kgx",
   "org.gnome.console",
+  "cosmicterm",
+  "xst",
+  "stterm",
 ];
 
 // macOS reports localized app names rather than window classes, and iTerm2 has
@@ -79,6 +83,26 @@ function writeClipboardInRenderer(webContents, text) {
   }
   const escaped = JSON.stringify(text);
   return webContents.executeJavaScript(`navigator.clipboard.writeText(${escaped})`);
+}
+
+// wl-copy exits only once the compositor has taken the selection, a round trip a
+// loaded or cold system can stretch past 50 ms. Where wl-copy is required (#2621), a
+// write killed early holds the paste back, so it gets the other clipboard tools' 200 ms.
+const WL_COPY_TIMEOUT_MS = 200;
+
+// Linux refuses a single argument of 128 KiB or more (MAX_ARG_STRLEN). Reading stdin
+// costs wl-copy a temp file and a `cat`, so only text that long goes that way, typed so
+// wl-copy doesn't run xdg-mime to sniff it.
+const MAX_ARG_BYTES = 128 * 1024;
+
+function spawnWlCopy(flags, text) {
+  if (Buffer.byteLength(text) < MAX_ARG_BYTES) {
+    return spawnSync("wl-copy", [...flags, "--", text], { timeout: WL_COPY_TIMEOUT_MS });
+  }
+  return spawnSync("wl-copy", [...flags, "--type", "text/plain"], {
+    input: text,
+    timeout: WL_COPY_TIMEOUT_MS,
+  });
 }
 
 class ClipboardManager {
@@ -119,6 +143,21 @@ class ClipboardManager {
     return isWayland;
   }
 
+  // Where wl-copy is required, a missing one holds back every paste, so its
+  // absence is probed again there instead of read from the cache: a wl-copy
+  // installed after a held-back paste is used by the next one.
+  _wlCopyExists() {
+    if (
+      this.commandAvailabilityCache.get("wl-copy")?.exists === false &&
+      getLinuxSessionInfo().requiresWlCopy
+    ) {
+      this.commandAvailabilityCache.delete("wl-copy");
+    }
+    return this.commandExists("wl-copy");
+  }
+
+  // True when wl-copy wrote the Wayland clipboard; every other path only reaches
+  // XWayland's.
   _writeClipboardWayland(text, webContents) {
     const { isKde } = getLinuxSessionInfo();
 
@@ -133,7 +172,7 @@ class ClipboardManager {
           });
           if (result.status === 0) {
             clipboard.writeText(text);
-            return;
+            return false;
           }
         } catch {}
       }
@@ -145,21 +184,21 @@ class ClipboardManager {
           });
           if (result.status === 0) {
             clipboard.writeText(text);
-            return;
+            return false;
           }
         } catch {}
       }
       // Last resort: Electron's clipboard.writeText should work on XWayland
       clipboard.writeText(text);
-      return;
+      return false;
     }
 
-    if (this.commandExists("wl-copy")) {
+    if (this._wlCopyExists()) {
       try {
-        const result = spawnSync("wl-copy", ["--", text], { timeout: 50 });
+        const result = spawnWlCopy([], text);
         if (result.status === 0) {
           clipboard.writeText(text);
-          return;
+          return true;
         }
       } catch {}
     }
@@ -169,22 +208,24 @@ class ClipboardManager {
     }
 
     clipboard.writeText(text);
+    return false;
   }
 
   // PRIMARY selection (X11's "highlight to copy") is what terminals like alacritty,
   // foot, konsole, xterm, and st bind Shift+Insert to. Mirror the transcription
   // there so Shift+Insert pastes reliably regardless of which selection the
   // terminal uses. Falls through wl-copy → xclip → xsel → Electron's selection
-  // target so we cover Wayland, X11, and XWayland setups.
+  // target so we cover Wayland, X11, and XWayland setups. True when wl-copy wrote
+  // the Wayland primary selection.
   _writePrimarySelection(text) {
-    if (process.platform !== "linux") return;
+    if (process.platform !== "linux") return false;
 
     const { isWayland } = getLinuxSessionInfo();
 
     if (isWayland && this.commandExists("wl-copy")) {
       try {
-        const result = spawnSync("wl-copy", ["--primary", "--", text], { timeout: 50 });
-        if (result.status === 0) return;
+        const result = spawnWlCopy(["--primary"], text);
+        if (result.status === 0) return true;
       } catch {}
     }
 
@@ -194,7 +235,7 @@ class ClipboardManager {
           input: text,
           timeout: 200,
         });
-        if (result.status === 0) return;
+        if (result.status === 0) return false;
       } catch {}
     }
 
@@ -204,13 +245,14 @@ class ClipboardManager {
           input: text,
           timeout: 200,
         });
-        if (result.status === 0) return;
+        if (result.status === 0) return false;
       } catch {}
     }
 
     try {
       clipboard.writeText(text, "selection");
     } catch {}
+    return false;
   }
 
   _readPrimarySelection() {
@@ -245,11 +287,25 @@ class ClipboardManager {
     return null;
   }
 
-  // Accepts a Linux window class or a macOS app name.
+  // `--type text` so a copied image never comes back as raw bytes.
+  _readWaylandClipboardText() {
+    if (!this._isWayland() || !this.commandExists("wl-paste")) return null;
+    try {
+      const result = spawnSync("wl-paste", ["--no-newline", "--type", "text"], { timeout: 200 });
+      if (result.status === 0) return result.stdout.toString();
+    } catch {}
+    return null;
+  }
+
+  // Accepts a Linux window class or a macOS app name. A short name like "st" would
+  // match inside unrelated names ("com.system76.CosmicEdit"), so it must be a whole word.
   isTerminalSignature(signature) {
     if (!signature) return false;
     const normalized = String(signature).toLowerCase();
-    return TERMINAL_SIGNATURES.some((term) => normalized.includes(term));
+    const words = normalized.split(/[^a-z0-9]+/);
+    return TERMINAL_SIGNATURES.some((term) =>
+      term.length > 2 ? normalized.includes(term) : words.includes(term)
+    );
   }
 
   isLinuxTerminalWindowClass(windowClass) {
@@ -823,7 +879,10 @@ class ClipboardManager {
     }
     if (keys.length > 0) return { type: "formats", data };
 
-    return { type: "text", data: text };
+    // The app runs on XWayland, and the compositor refuses its reads of a native
+    // Wayland app's clipboard while a Wayland window is focused (KWin does). Saving
+    // that empty read would make the restore wipe the user's clipboard (#2055).
+    return { type: "text", data: this._readWaylandClipboardText() ?? text };
   }
 
   _restoreClipboard(original) {
@@ -955,13 +1014,16 @@ class ClipboardManager {
         this.safeLog("💾 Saved original clipboard:", originalClipboard.type);
       }
 
+      // Apps paste the clipboard; terminals given Shift+Insert (niri always sends it)
+      // paste the primary selection.
+      const waylandWrites = { clipboard: false, primary: false };
       if (platform === "linux") {
         if (this._isWayland()) {
-          this._writeClipboardWayland(text, webContents);
+          waylandWrites.clipboard = this._writeClipboardWayland(text, webContents);
         } else {
           clipboard.writeText(text);
         }
-        this._writePrimarySelection(text);
+        waylandWrites.primary = this._writePrimarySelection(text);
       } else {
         clipboard.writeText(text);
       }
@@ -1017,6 +1079,19 @@ class ClipboardManager {
           expectedClipboardText: text,
           targetWindow: options.targetWindow,
         });
+      } else if (
+        getLinuxSessionInfo().requiresWlCopy &&
+        !(waylandWrites.clipboard && waylandWrites.primary)
+      ) {
+        // Wayland apps here read only what wl-copy wrote: a selection it didn't write
+        // is stale, and a chord could paste it. The text stays unrestored.
+        const reason = this.commandExists("wl-copy") ? "wl-copy-failed" : "wl-copy-missing";
+        debugLogger.warn(
+          "Wayland selections not written, leaving the text unpasted",
+          { reason, written: waylandWrites },
+          "clipboard"
+        );
+        pasteResult = { pasted: false, reason, restoreComplete: Promise.resolve() };
       } else {
         pasteResult = await this.pasteLinux(originalClipboard, {
           ...options,
@@ -1468,7 +1543,7 @@ class ClipboardManager {
   }
 
   async pasteLinux(originalClipboard, options = {}) {
-    const { isWayland, xwaylandAvailable, isGnome, isKde, isWlroots, isHyprland } =
+    const { isWayland, xwaylandAvailable, isGnome, isKde, isWlroots, isHyprland, isCosmic } =
       getLinuxSessionInfo();
     const webContents = options.webContents;
     const originalPrimary = options.originalPrimary ?? null;
@@ -1534,8 +1609,11 @@ class ClipboardManager {
 
     // Pre-detect the target window BEFORE our window takes focus or blurs,
     // so the fast-paste binary and fallback tools know where to send keystrokes.
+    // COSMIC's XWayland keeps naming the last X11 window while a native Wayland
+    // window has focus, so xdotool would name the wrong target there.
+    const xdotoolSeesTarget = xdotoolExists && !(isWayland && (!xwaylandAvailable || isCosmic));
     const preDetectTargetWindow = () => {
-      if (!xdotoolExists || (isWayland && !xwaylandAvailable)) return null;
+      if (!xdotoolSeesTarget) return null;
       try {
         const result = spawnSync("xdotool", ["getactivewindow"]);
         return result.status === 0 ? result.stdout.toString().trim() || null : null;
@@ -1545,7 +1623,7 @@ class ClipboardManager {
     };
 
     const preDetectWindowClass = (windowId) => {
-      if (!xdotoolExists || (isWayland && !xwaylandAvailable)) return null;
+      if (!xdotoolSeesTarget) return null;
       try {
         const args = windowId
           ? ["getwindowclassname", windowId]
@@ -1561,7 +1639,7 @@ class ClipboardManager {
     // xdotool, leaving WM_CLASS detection blind. Fall back to the owning process
     // name from /proc/<pid>/comm so terminal-aware paste keys still get chosen.
     const preDetectWindowPid = (windowId) => {
-      if (!xdotoolExists || (isWayland && !xwaylandAvailable)) return null;
+      if (!xdotoolSeesTarget) return null;
       try {
         const args = windowId ? ["getwindowpid", windowId] : ["getactivewindow", "getwindowpid"];
         const result = spawnSync("xdotool", args, { timeout: 1000 });
@@ -1626,6 +1704,13 @@ class ClipboardManager {
       }
     }
 
+    if (!detectedWindowClass && isCosmic) {
+      detectedWindowClass = await getCosmicActiveAppId();
+      if (detectedWindowClass) {
+        debugLogger.debug("COSMIC window class detected", { detectedWindowClass }, "clipboard");
+      }
+    }
+
     const detectedWindowPid = preDetectWindowPid(targetWindowId);
     const detectedWindowComm = preDetectWindowComm(detectedWindowPid);
     const detectedIsElectron = preDetectIsElectron(detectedWindowPid);
@@ -1638,6 +1723,9 @@ class ClipboardManager {
     const windowSignals = [detectedWindowClass, detectedWindowComm].filter(Boolean);
     const signalsMatch = (needle) => windowSignals.some((signal) => signal.includes(needle));
     const detectedIsKonsole = signalsMatch("konsole");
+    const isTerminalTarget = windowSignals.some((signal) =>
+      this.isLinuxTerminalWindowClass(signal)
+    );
 
     // Shift+Insert is the universal Linux paste shortcut — works in terminals and
     // GUI apps, and (unlike Ctrl+V) is not intercepted by TUI agents like Codex,
@@ -1645,10 +1733,12 @@ class ClipboardManager {
     // can't be classified, or for Konsole which silently drops simulated Ctrl+Shift+V.
     // Electron apps (VS Code, Cursor) host TUI terminals too, so route them to
     // Shift+Insert on any desktop environment, even when their class is detected.
+    // COSMIC names the focused app but not its process, so Electron apps look like any
+    // other window there: only a known terminal leaves Shift+Insert.
     const useShiftInsert =
-      detectedIsKonsole || detectedIsElectron || (isWayland && windowSignals.length === 0);
-    const isTerminalTarget =
-      windowSignals.length > 0 && LINUX_TERMINAL_CLASSES.some((term) => signalsMatch(term));
+      detectedIsKonsole ||
+      detectedIsElectron ||
+      (isWayland && (windowSignals.length === 0 || (isCosmic && !isTerminalTarget)));
     const hyprlandShortcut = useShiftInsert
       ? { modifiers: "SHIFT", key: "Insert" }
       : isTerminalTarget
@@ -1687,7 +1777,9 @@ class ClipboardManager {
       else if (isTerminalTarget) args.push("--terminal");
     };
 
-    if (isWayland && isWlroots && wtypeExists) {
+    // cosmic-comp has the virtual keyboard too, and wtype is the only way to give a
+    // terminal there its Ctrl+Shift+V: the uinput fallback below is always Shift+Insert.
+    if (isWayland && wtypeExists && (isWlroots || (isCosmic && isTerminalTarget))) {
       try {
         await this._runLinuxPasteCommand("wtype", wtypeArgs, "wtype");
         this.safeLog("✅ Paste successful using wtype");
@@ -1778,7 +1870,11 @@ class ClipboardManager {
         const tryPortalPaste = async () => {
           try {
             await this._runPortalPaste(linuxFastPaste, {
-              shiftInsert: useShiftInsert,
+              // KWin resolves portal keysyms in the active layout only: on a
+              // non-Latin layout there is no XK_v, so Ctrl+V arrives as Ctrl alone
+              // while the helper still exits 0 (#2055). Insert is in every layout,
+              // but Warp binds paste to Ctrl+Shift+V only.
+              shiftInsert: useShiftInsert || (isKde && !signalsMatch("warp")),
               terminal: isTerminalTarget,
             });
             this.safeLog("✅ Paste successful using linux-fast-paste --portal (RemoteDesktop)");
@@ -2313,12 +2409,17 @@ Would you like to open System Settings now?`;
     return clipboard.readText();
   }
 
+  // `xwaylandOnly`: where wl-copy is required (#2621), a write it didn't make reaches
+  // native Wayland apps only while an OpenWhispr window has focus.
   async writeClipboard(text, webContents = null) {
     if (process.platform === "linux" && this._isWayland()) {
-      this._writeClipboardWayland(text, webContents);
-    } else {
-      clipboard.writeText(text);
+      const wroteWayland = this._writeClipboardWayland(text, webContents);
+      return {
+        success: true,
+        xwaylandOnly: !wroteWayland && getLinuxSessionInfo().requiresWlCopy,
+      };
     }
+    clipboard.writeText(text);
     return { success: true };
   }
 
@@ -2348,8 +2449,16 @@ Would you like to open System Settings now?`;
       };
     }
 
-    const { isWayland, xwaylandAvailable, isGnome, isKde, isWlroots, isHyprland } =
-      getLinuxSessionInfo();
+    const {
+      isWayland,
+      xwaylandAvailable,
+      isGnome,
+      isKde,
+      isWlroots,
+      isHyprland,
+      isCosmic,
+      requiresWlCopy,
+    } = getLinuxSessionInfo();
     const linuxFastPaste = this.resolveLinuxFastPasteBinary();
     const hasNativeBinary = !!linuxFastPaste;
     let portalKeysymAvailable = false;
@@ -2369,7 +2478,9 @@ Would you like to open System Settings now?`;
 
     const tools = [];
     const hasHyprlandShortcut = isWayland && isHyprland && this.commandExists("hyprctl");
-    const hasWtype = isWayland && isWlroots && this.commandExists("wtype");
+    // On COSMIC wtype only pastes into terminals, so it is reported for the setup
+    // guidance but never listed as a paste tool or method there.
+    const hasWtype = isWayland && (isWlroots || isCosmic) && this.commandExists("wtype");
     const canUseYdotool = this.commandExists("ydotool") && this._isYdotoolDaemonRunning();
     const canUseXdotool = !isWayland || xwaylandAvailable;
 
@@ -2404,7 +2515,7 @@ Would you like to open System Settings now?`;
     let method = null;
     if (!isWayland) {
       method = nativeBinaryUsable ? "xtest" : tools[0] || null;
-    } else if (hasWtype) {
+    } else if (hasWtype && isWlroots) {
       method = "wtype";
     } else if (hasHyprlandShortcut) {
       method = "hyprland-sendshortcut";
@@ -2427,6 +2538,8 @@ Would you like to open System Settings now?`;
       hasUinput,
       hasWtype,
       isWlroots,
+      isCosmic,
+      wlCopyMissing: requiresWlCopy && !this._wlCopyExists(),
       tools,
       recommendedInstall,
     };
