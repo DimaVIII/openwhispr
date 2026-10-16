@@ -586,7 +586,11 @@ class SelectionManager {
     const verdict = await this.textEditMonitor?.isFocusedEditable?.(
       pid ? { ...target, pid } : target
     );
-    debugLogger.debug("Editable caret probe", { kind: target.kind, pid, verdict }, "clipboard");
+    debugLogger.debug(
+      "Editable caret probe",
+      { kind: target.kind, pid: target.pid ?? pid, verdict },
+      "clipboard"
+    );
     if (verdict === "editable") return { status: "editable", target };
     // An empty copy cannot distinguish a caret from an integrated terminal or
     // a page without an input; it can also hide a selection matching the clipboard.
@@ -599,7 +603,7 @@ class SelectionManager {
   // target. null for other target kinds, or when the process can't be read.
   async _linuxTargetPid(target) {
     if (target.kind === "atspi-pid") return target.id;
-    if (target.kind === "hyprland-window") return target.pid ?? null;
+    if (target.kind === "hyprland-window") return target.pid;
     if (target.kind === "x11-window") return this._readWindowPid("xdotool", target.id);
     if (target.kind === "kde-window") return this._readWindowPid("kdotool", target.id);
     return null;

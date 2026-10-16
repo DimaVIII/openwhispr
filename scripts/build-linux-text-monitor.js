@@ -50,9 +50,8 @@ function downloadedHash(hash) {
 }
 
 /**
- * A downloaded binary stands only while there is no way to compile, since it
- * may predate the source. A binary with no recorded hash is of unknown origin
- * and is rebuilt.
+ * A downloaded binary stands only while there is no way to compile. A binary
+ * with no recorded hash is of unknown origin and is rebuilt.
  */
 function isBinaryUpToDate({ binaryExists, sourceExists, savedHash, currentHash, canCompile }) {
   if (!binaryExists) return false;
@@ -63,9 +62,8 @@ function isBinaryUpToDate({ binaryExists, sourceExists, savedHash, currentHash, 
 }
 
 /**
- * Compiling comes first, since a release can predate the source. With headers
- * installed, a failed compile is a broken source, which CI must not paper over
- * with that release.
+ * With headers installed, a failed compile is a broken source, which CI must
+ * not paper over with a release.
  */
 function obtainSteps({ canCompile, inCI }) {
   if (!canCompile) return ["download"];
