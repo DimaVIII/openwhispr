@@ -348,7 +348,9 @@ export function useAssistantPanel({
 export function useAssistantFollowUpThinking(recording, assistant) {
   const { isAssistantVoice, isProcessing, cancellingRef } = recording;
   const { openRef, beginThinking } = assistant;
-  useEffect(() => {
+  // A layout effect reads the cancel flag in the processing commit itself; a
+  // passive one runs after a paint, when the teardown may already have cleared it.
+  useLayoutEffect(() => {
     if (
       shouldBeginAssistantFollowUpThinking({
         isAssistantVoice,

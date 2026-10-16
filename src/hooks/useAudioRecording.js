@@ -1091,9 +1091,9 @@ export const useAudioRecording = (toast, options = {}) => {
       // only the streaming cancel knows how to abandon it.
       if (state.isStreaming || state.isStreamingStartInProgress) {
         // The streaming cancel reports processing while it tears the stream
-        // down; flagged first so no render reads that as a command. A ref, so
-        // clearing it can't re-run the follow-up effect while a pending paste
-        // still reports processing.
+        // down; flagged first so the follow-up thinking effect doesn't read
+        // that as a command. A ref, so clearing it can't re-run that effect
+        // while a pending paste still reports processing.
         cancellingRef.current = true;
         try {
           return await audioManagerRef.current.cancelStreamingRecording();

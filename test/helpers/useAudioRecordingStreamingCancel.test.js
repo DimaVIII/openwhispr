@@ -329,3 +329,22 @@ test("a paste still in flight when a follow-up is cancelled never starts thinkin
   assert.equal(api.isProcessing, false);
   assert.equal(panel.thinking, false);
 });
+
+test("a cancel whose teardown ends before the processing commit's passive effects never starts thinking", async (t) => {
+  const { api, panel, manager } = await renderOpenPanelWithStreamingFollowUp(t);
+  // Outside act, as the cancel hotkey's IPC runs: React yields to paint after
+  // the processing commit, before its passive effects.
+  globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+
+  const cancelled = api.cancelRecording();
+  await Promise.resolve();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(api.isProcessing, true);
+  manager.finishCancel();
+  await cancelled;
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+  assert.equal(api.isProcessing, false);
+  assert.equal(panel.thinking, false);
+});
