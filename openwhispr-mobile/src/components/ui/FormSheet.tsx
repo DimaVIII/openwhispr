@@ -1,5 +1,13 @@
 import { type ReactNode } from 'react';
-import { Modal, Platform, Pressable, ScrollView, View, type ViewStyle } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  View,
+  type ViewStyle,
+} from 'react-native';
 import { GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -99,65 +107,73 @@ export function FormSheet({
           ]}
           className="bg-systemBackground"
         >
-          <View style={{ flex: 1, paddingBottom: bottomPad }} className="px-5 pt-3.5">
-            <GestureDetector gesture={dragGesture}>
-              <View>
-                <View className="mb-2 self-center h-1.5 w-9 rounded-full bg-quaternaryLabel" />
-                <View className="flex-row items-start justify-between">
-                  <View className="flex-1 pr-3">
-                    <Text accessibilityRole="header" className="text-[19px] font-bold text-label">
-                      {title}
-                    </Text>
-                    {subtitle ? (
-                      <Text className="mt-1 text-[13px] text-secondaryLabel">{subtitle}</Text>
-                    ) : null}
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === 'android' ? 'padding' : undefined}
+            enabled={Platform.OS === 'android' && keyboardHeight > 0}
+            // KAV measures within the sheet; keyboard coordinates start at the screen top.
+            keyboardVerticalOffset={insets.top + SHEET_TOP_PEEK}
+          >
+            <View style={{ flex: 1, paddingBottom: bottomPad }} className="px-5 pt-3.5">
+              <GestureDetector gesture={dragGesture}>
+                <View>
+                  <View className="mb-2 self-center h-1.5 w-9 rounded-full bg-quaternaryLabel" />
+                  <View className="flex-row items-start justify-between">
+                    <View className="flex-1 pr-3">
+                      <Text accessibilityRole="header" className="text-[19px] font-bold text-label">
+                        {title}
+                      </Text>
+                      {subtitle ? (
+                        <Text className="mt-1 text-[13px] text-secondaryLabel">{subtitle}</Text>
+                      ) : null}
+                    </View>
+                    <GlassIconButton onPress={onClose} accessibilityLabel="Close" size={30}>
+                      <SystemIcon name="xmark" mdName="X" size={13} color="secondaryLabel" />
+                    </GlassIconButton>
                   </View>
-                  <GlassIconButton onPress={onClose} accessibilityLabel="Close" size={30}>
-                    <SystemIcon name="xmark" mdName="X" size={13} color="secondaryLabel" />
-                  </GlassIconButton>
                 </View>
-              </View>
-            </GestureDetector>
+              </GestureDetector>
 
-            <ScrollView
-              className="mt-4 flex-1"
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
-              {children}
-            </ScrollView>
+              <ScrollView
+                className="mt-4 flex-1"
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                {children}
+              </ScrollView>
 
-            <Pressable
-              onPress={onSubmit}
-              disabled={!canSubmit}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: !canSubmit }}
-              style={[canSubmit ? SUBMIT_SHADOW : null, { borderCurve: 'continuous' }]}
-              className={`active:opacity-90 relative min-h-[52px] py-3 items-center justify-center rounded-full ${
-                canSubmit ? 'bg-link' : 'bg-quaternarySystemFill'
-              }`}
-            >
-              {canSubmit ? <GradientGlassSurface /> : null}
-              <Text
-                className={`text-[16px] font-semibold ${
-                  canSubmit ? 'text-white' : 'text-tertiaryLabel'
+              <Pressable
+                onPress={onSubmit}
+                disabled={!canSubmit}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: !canSubmit }}
+                style={[canSubmit ? SUBMIT_SHADOW : null, { borderCurve: 'continuous' }]}
+                className={`active:opacity-90 relative min-h-[52px] py-3 items-center justify-center rounded-full ${
+                  canSubmit ? 'bg-link' : 'bg-quaternarySystemFill'
                 }`}
               >
-                {submitLabel}
-              </Text>
-            </Pressable>
-
-            {destructiveAction ? (
-              <Pressable
-                onPress={destructiveAction.onPress}
-                className="active:opacity-60 mt-2.5 min-h-12 items-center justify-center"
-              >
-                <Text className="text-[16px] font-semibold text-systemRed">
-                  {destructiveAction.label}
+                {canSubmit ? <GradientGlassSurface /> : null}
+                <Text
+                  className={`text-[16px] font-semibold ${
+                    canSubmit ? 'text-white' : 'text-tertiaryLabel'
+                  }`}
+                >
+                  {submitLabel}
                 </Text>
               </Pressable>
-            ) : null}
-          </View>
+
+              {destructiveAction ? (
+                <Pressable
+                  onPress={destructiveAction.onPress}
+                  className="active:opacity-60 mt-2.5 min-h-12 items-center justify-center"
+                >
+                  <Text className="text-[16px] font-semibold text-systemRed">
+                    {destructiveAction.label}
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
+          </KeyboardAvoidingView>
         </Animated.View>
       </GestureHandlerRootView>
     </Modal>
