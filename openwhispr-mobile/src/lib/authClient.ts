@@ -5,6 +5,7 @@ import * as Application from 'expo-application';
 import Constants from 'expo-constants';
 import * as SecureStore from 'expo-secure-store';
 import { fetch } from 'expo/fetch';
+import { Platform } from 'react-native';
 import { getClientVersionHeader } from './apiClient';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://api.openwhispr.com';
@@ -126,9 +127,79 @@ export async function clearSession(): Promise<void> {
   ]);
 }
 
-export async function getSession(): Promise<AuthUser | null> {
-  const { data } = await client.getSession();
-  return mapUser(data?.user);
+function isTransientSessionFailure(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const status = 'status' in error ? error.status : undefined;
+  if (typeof status === 'number') return status === 0 || status >= 500;
+  return (
+    error instanceof TypeError ||
+    ('name' in error && (error.name === 'AbortError' || error.name === 'TimeoutError'))
+  );
+}
+
+async function getCachedAndroidUser(): Promise<AuthUser | null> {
+  // Expo already stores this server-issued session in SecureStore. Use it only
+  // for startup identity during a transport outage, never as paid-access proof.
+  try {
+    const cookie = currentCookie();
+    if (!cookie) return null;
+    const raw = await SecureStore.getItemAsync(SESSION_DATA_STORAGE_KEY);
+    if (!raw) return null;
+    const cached = JSON.parse(raw);
+    if (typeof cached?.user?.id !== 'string' || typeof cached.user.email !== 'string') return null;
+    const user = mapUser(cached?.user);
+    const session = cached?.session;
+    if (
+      !user ||
+      typeof session?.id !== 'string' ||
+      !session.id ||
+      session.userId !== user.id ||
+      typeof session.token !== 'string' ||
+      !session.token ||
+      typeof session.expiresAt !== 'string' ||
+      !(new Date(session.expiresAt).getTime() > Date.now())
+    ) {
+      return null;
+    }
+    const tokens = cookie
+      .split(';')
+      .map((part) => part.trim())
+      .filter((part) => /^(?:__Secure-)?better-auth\.session_token=/.test(part))
+      .map((part) => decodeURIComponent(part.slice(part.indexOf('=') + 1)).split('.')[0]);
+    // A stale cache from another login must never select the wrong local workspace.
+    return cookie === currentCookie() && tokens.length === 1 && tokens[0] === session.token
+      ? user
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function getSession(
+  options: { allowOfflineCache?: boolean } = {},
+): Promise<AuthUser | null> {
+  const allowCache = Platform.OS === 'android' && options.allowOfflineCache === true;
+  try {
+    const { data, error } = await client.getSession();
+    if (allowCache && error && isTransientSessionFailure(error)) return getCachedAndroidUser();
+    const user = mapUser(data?.user);
+    if (allowCache && !user && (!error || error.status === 401 || error.status === 403)) {
+      await SecureStore.deleteItemAsync(SESSION_DATA_STORAGE_KEY).catch(() => undefined);
+    }
+    return user;
+  } catch (error) {
+    if (allowCache && isTransientSessionFailure(error)) return getCachedAndroidUser();
+    if (
+      allowCache &&
+      error &&
+      typeof error === 'object' &&
+      'status' in error &&
+      (error.status === 401 || error.status === 403)
+    ) {
+      await SecureStore.deleteItemAsync(SESSION_DATA_STORAGE_KEY).catch(() => undefined);
+    }
+    throw error;
+  }
 }
 
 export async function signInWithEmail(email: string, password: string): Promise<AuthResult> {

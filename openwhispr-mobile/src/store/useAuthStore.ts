@@ -81,7 +81,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
         });
         return;
       }
-      const user = await getSession();
+      const user = await getSession({ allowOfflineCache: Platform.OS === 'android' });
       if (user) {
         await claimNoteShares(user);
         const sessionCookie = await getStoredSession();
