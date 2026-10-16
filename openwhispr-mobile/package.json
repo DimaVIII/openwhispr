@@ -25,7 +25,7 @@
     "test:security": "node --test scripts/__tests__/node-forge.test.js",
     "test:watch": "jest --watch",
     "postinstall": "patch-package --error-on-fail && npm run test:security && npm run download:brand-fonts",
-    "eas-build-pre-install": "bundle install"
+    "eas-build-pre-install": "if [ \"$EAS_BUILD_PLATFORM\" = \"ios\" ]; then bundle install; fi"
   },
   "engines": {
     "node": "24.x"
