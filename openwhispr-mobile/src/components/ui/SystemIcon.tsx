@@ -2,6 +2,7 @@ import React from 'react';
 import { I18nManager, type ColorValue } from 'react-native';
 import { Image } from 'expo-image';
 import * as LucideIcons from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { BRAND, iosColor } from '@/config/colors';
 
 const IS_IOS = process.env.EXPO_OS === 'ios';
@@ -57,7 +58,11 @@ export function SystemIcon({ name, mdName, size = 18, color = 'label' }: SystemI
 
 export function AndroidSystemIcon({ name, mdName, size = 18, color = 'label' }: SystemIconProps) {
   const tint = resolveColor(color);
-  const rtl = I18nManager.isRTL;
+  const { i18n } = useTranslation();
+  // RN caches I18nManager.isRTL for the lifetime of the JS runtime. Android can
+  // recreate its activity for an app-language change while retaining that runtime.
+  const language = i18n.resolvedLanguage || i18n.language;
+  const rtl = language ? i18n.dir(language) === 'rtl' : I18nManager.isRTL;
 
   if (!mdName) {
     if (__DEV__) console.warn(`SystemIcon "${name}" missing mdName for Android fallback.`);
