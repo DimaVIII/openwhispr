@@ -494,6 +494,48 @@
       "confirmMerge": "Confirmar combinación de hablantes",
       "mergeAction": "Combinar",
       "renameAction": "Renombrar"
+    },
+    "noteAccess": {
+      "person": "Persona",
+      "email": "Correo electrónico",
+      "team": "Equipo",
+      "space": "Espacio de equipo",
+      "folder": "Carpeta",
+      "workspace": "Espacio de trabajo",
+      "editor": "Editor",
+      "viewer": "Lector",
+      "makeEditorTitle": "¿Hacer editor a {{name}}?",
+      "editorBody": "Los editores pueden modificar esta nota y gestionar con quién se comparte.",
+      "makeEditor": "Hacer editor",
+      "unnamedGroup": "Grupo sin nombre",
+      "removeAccess": "Quitar acceso",
+      "resend": "Reenviar invitación",
+      "revokeInvitation": "Revocar invitación",
+      "pending": "Pendiente",
+      "paused": "En pausa",
+      "changeAccess": "Cambiar acceso de {{name}}",
+      "removeTitle": "¿Quitar acceso?",
+      "removeBody": "{{name}} perderá el acceso concedido a esta nota.",
+      "remove": "Quitar",
+      "pendingInvitation": "Invitación pendiente",
+      "revokeTitle": "¿Revocar invitación?",
+      "revokeBody": "{{email}} perderá el acceso que le dio esta invitación.",
+      "revoke": "Revocar",
+      "people": "Personas con acceso",
+      "owner": "Propietario",
+      "pausedBody": "El acceso de las personas añadidas y las invitaciones están en pausa hasta que vuelvas a compartir esta nota.",
+      "addPeople": "Añadir personas o correos",
+      "inviteEmail": "Invitar por correo",
+      "searchError": "Búsqueda no disponible. Inténtalo de nuevo.",
+      "invite": "Invitar a {{email}}",
+      "sendsEmail": "Envía una invitación por correo",
+      "grantAccess": "Conceder acceso a {{name}}",
+      "inherited": {
+        "team": "Heredado del equipo",
+        "space": "Heredado del espacio de equipo",
+        "folder": "Heredado de la carpeta",
+        "workspace": "Heredado del espacio de trabajo"
+      }
     }
   }
 }

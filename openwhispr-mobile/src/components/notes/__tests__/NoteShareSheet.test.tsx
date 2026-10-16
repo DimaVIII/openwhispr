@@ -34,6 +34,12 @@ const mockRegisterGate = jest.fn(() => Promise.resolve(true));
 const mockSpaces: { id: number; kind: string }[] = [];
 let mockUsage: { isSubscribed: boolean } | null = null;
 
+jest.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    i18n: { resolvedLanguage: 'en' },
+    t: (key: string, options: { defaultValue?: string } = {}) => options.defaultValue ?? key,
+  }),
+}));
 jest.mock('@/hooks/useNoteSharing', () => ({
   INVALID_EMAIL_ERROR: 'Enter a valid email address.',
   useNoteSharing: () => mockController,

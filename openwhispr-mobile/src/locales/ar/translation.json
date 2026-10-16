@@ -494,6 +494,48 @@
       "confirmMerge": "تأكيد دمج المتحدث",
       "mergeAction": "دمج",
       "renameAction": "إعادة تسمية"
+    },
+    "noteAccess": {
+      "person": "شخص",
+      "email": "بريد إلكتروني",
+      "team": "فريق",
+      "space": "مساحة الفريق",
+      "folder": "مجلد",
+      "workspace": "مساحة العمل",
+      "editor": "محرر",
+      "viewer": "مشاهد",
+      "makeEditorTitle": "جعل {{name}} محررًا؟",
+      "editorBody": "يمكن للمحررين تعديل هذه الملاحظة وإدارة من تتم مشاركتها معه.",
+      "makeEditor": "تعيين كمحرر",
+      "unnamedGroup": "مجموعة بلا اسم",
+      "removeAccess": "إزالة الوصول",
+      "resend": "إعادة إرسال الدعوة",
+      "revokeInvitation": "سحب الدعوة",
+      "pending": "قيد الانتظار",
+      "paused": "متوقف مؤقتًا",
+      "changeAccess": "تغيير وصول {{name}}",
+      "removeTitle": "إزالة الوصول؟",
+      "removeBody": "سيفقد {{name}} الوصول الممنوح إلى هذه الملاحظة.",
+      "remove": "إزالة",
+      "pendingInvitation": "دعوة معلقة",
+      "revokeTitle": "سحب الدعوة؟",
+      "revokeBody": "سيفقد {{email}} الوصول الذي منحته هذه الدعوة.",
+      "revoke": "سحب الدعوة",
+      "people": "الأشخاص الذين لديهم وصول",
+      "owner": "المالك",
+      "pausedBody": "يتوقف وصول الأشخاص الذين أضفتهم والدعوات مؤقتًا حتى تشارك هذه الملاحظة مجددًا.",
+      "addPeople": "إضافة أشخاص أو عناوين بريد",
+      "inviteEmail": "الدعوة بالبريد الإلكتروني",
+      "searchError": "البحث غير متاح. حاول مجددًا.",
+      "invite": "دعوة {{email}}",
+      "sendsEmail": "يرسل دعوة بالبريد الإلكتروني",
+      "grantAccess": "منح الوصول إلى {{name}}",
+      "inherited": {
+        "team": "موروث من الفريق",
+        "space": "موروث من مساحة الفريق",
+        "folder": "موروث من المجلد",
+        "workspace": "موروث من مساحة العمل"
+      }
     }
   }
 }

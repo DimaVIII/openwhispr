@@ -494,6 +494,48 @@
       "confirmMerge": "Conferma unione degli interlocutori",
       "mergeAction": "Unisci",
       "renameAction": "Rinomina"
+    },
+    "noteAccess": {
+      "person": "Persona",
+      "email": "E-mail",
+      "team": "Team",
+      "space": "Spazio del team",
+      "folder": "Cartella",
+      "workspace": "Spazio di lavoro",
+      "editor": "Editor",
+      "viewer": "Lettore",
+      "makeEditorTitle": "Rendere {{name}} editor?",
+      "editorBody": "Gli editor possono modificare questa nota e gestire con chi viene condivisa.",
+      "makeEditor": "Rendi editor",
+      "unnamedGroup": "Gruppo senza nome",
+      "removeAccess": "Rimuovi accesso",
+      "resend": "Invia di nuovo l’invito",
+      "revokeInvitation": "Revoca invito",
+      "pending": "In attesa",
+      "paused": "In pausa",
+      "changeAccess": "Modifica l’accesso di {{name}}",
+      "removeTitle": "Rimuovere l’accesso?",
+      "removeBody": "{{name}} perderà l’accesso concesso a questa nota.",
+      "remove": "Rimuovi",
+      "pendingInvitation": "Invito in attesa",
+      "revokeTitle": "Revocare l’invito?",
+      "revokeBody": "{{email}} perderà l’accesso concesso da questo invito.",
+      "revoke": "Revoca",
+      "people": "Persone con accesso",
+      "owner": "Proprietario",
+      "pausedBody": "L’accesso delle persone aggiunte e gli inviti sono sospesi finché non condividi di nuovo questa nota.",
+      "addPeople": "Aggiungi persone o e-mail",
+      "inviteEmail": "Invita via e-mail",
+      "searchError": "Ricerca non disponibile. Riprova.",
+      "invite": "Invita {{email}}",
+      "sendsEmail": "Invia un invito via e-mail",
+      "grantAccess": "Concedi accesso a {{name}}",
+      "inherited": {
+        "team": "Ereditato dal team",
+        "space": "Ereditato dallo spazio del team",
+        "folder": "Ereditato dalla cartella",
+        "workspace": "Ereditato dallo spazio di lavoro"
+      }
     }
   }
 }

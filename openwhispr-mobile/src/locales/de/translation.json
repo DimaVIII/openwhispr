@@ -494,6 +494,48 @@
       "confirmMerge": "Zusammenführen bestätigen",
       "mergeAction": "Zusammenführen",
       "renameAction": "Umbenennen"
+    },
+    "noteAccess": {
+      "person": "Person",
+      "email": "E-Mail",
+      "team": "Team",
+      "space": "Teambereich",
+      "folder": "Ordner",
+      "workspace": "Arbeitsbereich",
+      "editor": "Bearbeiter",
+      "viewer": "Betrachter",
+      "makeEditorTitle": "{{name}} zum Bearbeiter machen?",
+      "editorBody": "Bearbeiter können diese Notiz ändern und verwalten, mit wem sie geteilt wird.",
+      "makeEditor": "Zum Bearbeiter machen",
+      "unnamedGroup": "Unbenannte Gruppe",
+      "removeAccess": "Zugriff entfernen",
+      "resend": "Einladung erneut senden",
+      "revokeInvitation": "Einladung widerrufen",
+      "pending": "Ausstehend",
+      "paused": "Pausiert",
+      "changeAccess": "Zugriff für {{name}} ändern",
+      "removeTitle": "Zugriff entfernen?",
+      "removeBody": "{{name}} verliert den für diese Notiz gewährten Zugriff.",
+      "remove": "Entfernen",
+      "pendingInvitation": "Ausstehende Einladung",
+      "revokeTitle": "Einladung widerrufen?",
+      "revokeBody": "{{email}} verliert den durch diese Einladung gewährten Zugriff.",
+      "revoke": "Widerrufen",
+      "people": "Personen mit Zugriff",
+      "owner": "Eigentümer",
+      "pausedBody": "Hinzugefügte Personen und Einladungen sind pausiert, bis du diese Notiz erneut teilst.",
+      "addPeople": "Personen oder E-Mails hinzufügen",
+      "inviteEmail": "Per E-Mail einladen",
+      "searchError": "Suche nicht verfügbar. Versuche es erneut.",
+      "invite": "{{email}} einladen",
+      "sendsEmail": "Sendet eine Einladung per E-Mail",
+      "grantAccess": "{{name}} Zugriff gewähren",
+      "inherited": {
+        "team": "Vom Team geerbt",
+        "space": "Vom Teambereich geerbt",
+        "folder": "Vom Ordner geerbt",
+        "workspace": "Vom Arbeitsbereich geerbt"
+      }
     }
   }
 }

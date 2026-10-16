@@ -494,6 +494,48 @@
       "confirmMerge": "确认合并说话人",
       "mergeAction": "合并",
       "renameAction": "重命名"
+    },
+    "noteAccess": {
+      "person": "人员",
+      "email": "电子邮件",
+      "team": "团队",
+      "space": "团队空间",
+      "folder": "文件夹",
+      "workspace": "工作区",
+      "editor": "编辑者",
+      "viewer": "查看者",
+      "makeEditorTitle": "将 {{name}} 设为编辑者？",
+      "editorBody": "编辑者可以修改此笔记，并管理与谁共享。",
+      "makeEditor": "设为编辑者",
+      "unnamedGroup": "未命名群组",
+      "removeAccess": "移除访问权限",
+      "resend": "重新发送邀请",
+      "revokeInvitation": "撤销邀请",
+      "pending": "待处理",
+      "paused": "已暂停",
+      "changeAccess": "更改 {{name}} 的访问权限",
+      "removeTitle": "移除访问权限？",
+      "removeBody": "{{name}} 将失去此笔记授予的访问权限。",
+      "remove": "移除",
+      "pendingInvitation": "待接受的邀请",
+      "revokeTitle": "撤销邀请？",
+      "revokeBody": "{{email}} 将失去此邀请授予的访问权限。",
+      "revoke": "撤销",
+      "people": "有访问权限的人员",
+      "owner": "所有者",
+      "pausedBody": "已添加人员的访问权限和邀请会暂停，直到你再次共享此笔记。",
+      "addPeople": "添加人员或邮箱",
+      "inviteEmail": "通过邮件邀请",
+      "searchError": "搜索不可用，请重试。",
+      "invite": "邀请 {{email}}",
+      "sendsEmail": "发送电子邮件邀请",
+      "grantAccess": "授予 {{name}} 访问权限",
+      "inherited": {
+        "team": "继承自团队",
+        "space": "继承自团队空间",
+        "folder": "继承自文件夹",
+        "workspace": "继承自工作区"
+      }
     }
   }
 }

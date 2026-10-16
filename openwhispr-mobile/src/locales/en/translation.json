@@ -494,6 +494,48 @@
       "confirmMerge": "Confirm speaker merge",
       "mergeAction": "Merge",
       "renameAction": "Rename"
+    },
+    "noteAccess": {
+      "person": "Person",
+      "email": "Email",
+      "team": "Team",
+      "space": "Team space",
+      "folder": "Folder",
+      "workspace": "Workspace",
+      "editor": "Editor",
+      "viewer": "Viewer",
+      "makeEditorTitle": "Make {{name}} an editor?",
+      "editorBody": "Editors can change this note and manage who it is shared with.",
+      "makeEditor": "Make editor",
+      "unnamedGroup": "Unnamed group",
+      "removeAccess": "Remove access",
+      "resend": "Resend invitation",
+      "revokeInvitation": "Revoke invitation",
+      "pending": "Pending",
+      "paused": "Paused",
+      "changeAccess": "Change access for {{name}}",
+      "removeTitle": "Remove access?",
+      "removeBody": "{{name}} will lose the access granted on this note.",
+      "remove": "Remove",
+      "pendingInvitation": "Pending invitation",
+      "revokeTitle": "Revoke invitation?",
+      "revokeBody": "{{email}} will lose the access this invitation gave them.",
+      "revoke": "Revoke",
+      "people": "People with access",
+      "owner": "Owner",
+      "pausedBody": "People you added and invitations are paused until you share this note again.",
+      "addPeople": "Add people or emails",
+      "inviteEmail": "Invite by email",
+      "searchError": "Search unavailable. Try again.",
+      "invite": "Invite {{email}}",
+      "sendsEmail": "Sends an email invitation",
+      "grantAccess": "Grant access to {{name}}",
+      "inherited": {
+        "team": "Inherited from team",
+        "space": "Inherited from team space",
+        "folder": "Inherited from folder",
+        "workspace": "Inherited from workspace"
+      }
     }
   }
 }

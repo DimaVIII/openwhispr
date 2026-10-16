@@ -494,6 +494,48 @@
       "confirmMerge": "確認合併說話者",
       "mergeAction": "合併",
       "renameAction": "重新命名"
+    },
+    "noteAccess": {
+      "person": "人員",
+      "email": "電子郵件",
+      "team": "團隊",
+      "space": "團隊空間",
+      "folder": "資料夾",
+      "workspace": "工作區",
+      "editor": "編輯者",
+      "viewer": "檢視者",
+      "makeEditorTitle": "將 {{name}} 設為編輯者？",
+      "editorBody": "編輯者可以修改此筆記，並管理與誰分享。",
+      "makeEditor": "設為編輯者",
+      "unnamedGroup": "未命名群組",
+      "removeAccess": "移除存取權限",
+      "resend": "重新傳送邀請",
+      "revokeInvitation": "撤銷邀請",
+      "pending": "待處理",
+      "paused": "已暫停",
+      "changeAccess": "變更 {{name}} 的存取權限",
+      "removeTitle": "移除存取權限？",
+      "removeBody": "{{name}} 將失去此筆記授予的存取權限。",
+      "remove": "移除",
+      "pendingInvitation": "待接受的邀請",
+      "revokeTitle": "撤銷邀請？",
+      "revokeBody": "{{email}} 將失去此邀請授予的存取權限。",
+      "revoke": "撤銷",
+      "people": "有存取權限的人員",
+      "owner": "擁有者",
+      "pausedBody": "已新增人員的存取權限和邀請會暫停，直到你再次分享此筆記。",
+      "addPeople": "新增人員或電子郵件",
+      "inviteEmail": "透過電子郵件邀請",
+      "searchError": "搜尋無法使用，請重試。",
+      "invite": "邀請 {{email}}",
+      "sendsEmail": "傳送電子郵件邀請",
+      "grantAccess": "授予 {{name}} 存取權限",
+      "inherited": {
+        "team": "繼承自團隊",
+        "space": "繼承自團隊空間",
+        "folder": "繼承自資料夾",
+        "workspace": "繼承自工作區"
+      }
     }
   }
 }

@@ -494,6 +494,48 @@
       "confirmMerge": "Confirmar mesclagem de falantes",
       "mergeAction": "Mesclar",
       "renameAction": "Renomear"
+    },
+    "noteAccess": {
+      "person": "Pessoa",
+      "email": "E-mail",
+      "team": "Equipe",
+      "space": "Espaço da equipe",
+      "folder": "Pasta",
+      "workspace": "Espaço de trabalho",
+      "editor": "Editor",
+      "viewer": "Leitor",
+      "makeEditorTitle": "Tornar {{name}} editor?",
+      "editorBody": "Editores podem alterar esta nota e gerenciar com quem ela é compartilhada.",
+      "makeEditor": "Tornar editor",
+      "unnamedGroup": "Grupo sem nome",
+      "removeAccess": "Remover acesso",
+      "resend": "Reenviar convite",
+      "revokeInvitation": "Revogar convite",
+      "pending": "Pendente",
+      "paused": "Pausado",
+      "changeAccess": "Alterar acesso de {{name}}",
+      "removeTitle": "Remover acesso?",
+      "removeBody": "{{name}} perderá o acesso concedido a esta nota.",
+      "remove": "Remover",
+      "pendingInvitation": "Convite pendente",
+      "revokeTitle": "Revogar convite?",
+      "revokeBody": "{{email}} perderá o acesso concedido por este convite.",
+      "revoke": "Revogar",
+      "people": "Pessoas com acesso",
+      "owner": "Proprietário",
+      "pausedBody": "O acesso das pessoas adicionadas e os convites ficam pausados até você compartilhar esta nota novamente.",
+      "addPeople": "Adicionar pessoas ou e-mails",
+      "inviteEmail": "Convidar por e-mail",
+      "searchError": "Busca indisponível. Tente novamente.",
+      "invite": "Convidar {{email}}",
+      "sendsEmail": "Envia um convite por e-mail",
+      "grantAccess": "Conceder acesso a {{name}}",
+      "inherited": {
+        "team": "Herdado da equipe",
+        "space": "Herdado do espaço da equipe",
+        "folder": "Herdado da pasta",
+        "workspace": "Herdado do espaço de trabalho"
+      }
     }
   }
 }

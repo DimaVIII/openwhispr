@@ -494,6 +494,48 @@
       "confirmMerge": "Confirmer la fusion",
       "mergeAction": "Fusionner",
       "renameAction": "Renommer"
+    },
+    "noteAccess": {
+      "person": "Personne",
+      "email": "E-mail",
+      "team": "Équipe",
+      "space": "Espace d’équipe",
+      "folder": "Dossier",
+      "workspace": "Espace de travail",
+      "editor": "Éditeur",
+      "viewer": "Lecteur",
+      "makeEditorTitle": "Nommer {{name}} éditeur ?",
+      "editorBody": "Les éditeurs peuvent modifier cette note et gérer les personnes avec qui elle est partagée.",
+      "makeEditor": "Nommer éditeur",
+      "unnamedGroup": "Groupe sans nom",
+      "removeAccess": "Retirer l’accès",
+      "resend": "Renvoyer l’invitation",
+      "revokeInvitation": "Révoquer l’invitation",
+      "pending": "En attente",
+      "paused": "En pause",
+      "changeAccess": "Modifier l’accès de {{name}}",
+      "removeTitle": "Retirer l’accès ?",
+      "removeBody": "{{name}} perdra l’accès accordé à cette note.",
+      "remove": "Retirer",
+      "pendingInvitation": "Invitation en attente",
+      "revokeTitle": "Révoquer l’invitation ?",
+      "revokeBody": "{{email}} perdra l’accès accordé par cette invitation.",
+      "revoke": "Révoquer",
+      "people": "Personnes ayant accès",
+      "owner": "Propriétaire",
+      "pausedBody": "L’accès des personnes ajoutées et les invitations sont suspendus jusqu’au prochain partage de cette note.",
+      "addPeople": "Ajouter des personnes ou e-mails",
+      "inviteEmail": "Inviter par e-mail",
+      "searchError": "Recherche indisponible. Réessayez.",
+      "invite": "Inviter {{email}}",
+      "sendsEmail": "Envoie une invitation par e-mail",
+      "grantAccess": "Accorder l’accès à {{name}}",
+      "inherited": {
+        "team": "Hérité de l’équipe",
+        "space": "Hérité de l’espace d’équipe",
+        "folder": "Hérité du dossier",
+        "workspace": "Hérité de l’espace de travail"
+      }
     }
   }
 }

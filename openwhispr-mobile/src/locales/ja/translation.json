@@ -494,6 +494,48 @@
       "confirmMerge": "話者の統合を確認",
       "mergeAction": "統合",
       "renameAction": "名前を変更"
+    },
+    "noteAccess": {
+      "person": "ユーザー",
+      "email": "メール",
+      "team": "チーム",
+      "space": "チームスペース",
+      "folder": "フォルダ",
+      "workspace": "ワークスペース",
+      "editor": "編集者",
+      "viewer": "閲覧者",
+      "makeEditorTitle": "{{name}} を編集者にしますか？",
+      "editorBody": "編集者はこのノートを変更し、共有相手を管理できます。",
+      "makeEditor": "編集者にする",
+      "unnamedGroup": "名前のないグループ",
+      "removeAccess": "アクセス権を削除",
+      "resend": "招待を再送信",
+      "revokeInvitation": "招待を取り消す",
+      "pending": "保留中",
+      "paused": "一時停止中",
+      "changeAccess": "{{name}} のアクセス権を変更",
+      "removeTitle": "アクセス権を削除しますか？",
+      "removeBody": "{{name}} はこのノートに付与されたアクセス権を失います。",
+      "remove": "削除",
+      "pendingInvitation": "保留中の招待",
+      "revokeTitle": "招待を取り消しますか？",
+      "revokeBody": "{{email}} はこの招待で付与されたアクセス権を失います。",
+      "revoke": "取り消す",
+      "people": "アクセスできるユーザー",
+      "owner": "所有者",
+      "pausedBody": "このノートを再び共有するまで、追加したユーザーのアクセス権と招待は一時停止されます。",
+      "addPeople": "ユーザーやメールを追加",
+      "inviteEmail": "メールで招待",
+      "searchError": "検索できません。もう一度お試しください。",
+      "invite": "{{email}} を招待",
+      "sendsEmail": "メールで招待を送信します",
+      "grantAccess": "{{name}} にアクセス権を付与",
+      "inherited": {
+        "team": "チームから継承",
+        "space": "チームスペースから継承",
+        "folder": "フォルダから継承",
+        "workspace": "ワークスペースから継承"
+      }
     }
   }
 }
