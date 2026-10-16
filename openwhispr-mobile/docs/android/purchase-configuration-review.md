@@ -16,6 +16,8 @@ RevenueCat reports its Superwall webhook **Sent**. Superwall's SDK transaction e
 
 Device testing exposed a recovery omission: `access-pending` and `checking` did not offer Google Play management or Help. The next client source extends both existing links to every unresolved billing state. Two new regression cases fail before and pass after; three billing suites / 32 tests, TypeScript and scoped lint (zero errors / five existing no-void warnings) pass. The signed code-9 evidence predates this small UI repair; its next native build requires separate verification.
 
+Follow-up at 05:03 PDT: RevenueCat records final expiration (11:59 UTC history, 11:58 UTC effective) and **Inactive · expired**. Code 9 still retains access-pending, so expiry does not resolve the unverified server attempt. The recovery-link repair is committed as `4568a7c43`, passes the native build and is installed as development v38. Signed code 10 (`91cc43c3-a00d-461f-936e-977a0b33e77e`) is running from the same source; the real pending-state link check awaits that Play update.
+
 ## 16 October 03:58 PDT — native checkout and cached price defect
 
 Play code 8 / 1.2.4 is installed through `com.android.vending` (03:57:48 PDT). Its signed bundle passed validation and signature checks before internal publication. A separate free app review account was created through normal signup; the pre-existing Business session is preserved in the development package.
