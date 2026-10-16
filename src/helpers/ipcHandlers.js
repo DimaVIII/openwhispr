@@ -3250,6 +3250,9 @@ class IPCHandlers {
           mainWindow.showInactive();
         } else {
           mainWindow.blur();
+          // On Linux blur() leaves X focus on the pill, where the assistant panel
+          // took it, so the paste would land in the panel.
+          if (process.platform === "linux") this.windowManager.returnLinuxKeyboardFocus();
           await new Promise((resolve) => setTimeout(resolve, 80));
         }
       }
@@ -3323,8 +3326,8 @@ class IPCHandlers {
       // Promise cannot cross Electron's IPC boundary, though, and renderer
       // callers need to know whether text was pasted, but not the delayed
       // clipboard restoration promise. Successful platform paths predate the
-      // explicit `pasted` outcome; only the clipboard-only fallback and a paste
-      // held back for still-held modifiers (which carries a `reason`) set false.
+      // explicit `pasted` outcome; only the clipboard-only fallback and a held-back
+      // paste (held modifiers or a missing or failed wl-copy, which carries a `reason`) set false.
       return {
         success: true,
         pasted,

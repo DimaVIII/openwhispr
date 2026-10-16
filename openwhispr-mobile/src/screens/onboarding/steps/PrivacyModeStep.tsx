@@ -1,4 +1,3 @@
-import { LOCAL_MODE_LABEL } from '@/lib/processingModeLabels';
 import { useEffect, useState, type ReactElement, type ReactNode } from 'react';
 import { Platform, Pressable, ScrollView, View } from 'react-native';
 import { Text } from '@/components/ui/Text';
@@ -7,8 +6,10 @@ import { SystemIcon } from '@/components/ui/SystemIcon';
 import { OpenWhisprMark } from '@/components/ui/OpenWhisprMark';
 import { BRAND } from '@/config/colors';
 import { useOnboardingStep } from '@/hooks/useOnboardingStep';
+import { cloudAccessFor, unsetSelection } from '@/lib/aiWorkflows';
 import { canRunLocalReasoning, getLocalReasoningReadiness } from '@/lib/localReasoning';
 import { chooseOnboardingMode } from '@/lib/onboardingMode';
+import { useAuthStore } from '@/store/useAuthStore';
 import { useConfigStore } from '@/store/useConfigStore';
 import { useModelDownloadStore } from '@/store/useModelDownloadStore';
 import { useOnboardingStore } from '@/store/useOnboardingStore';
@@ -18,20 +19,21 @@ type ModeChoice = 'cloud' | 'private';
 
 type CleanupLine = { included: boolean; text: string; hint?: string };
 
-// What Private Mode's cleanup does on this phone, matching what choosing it saves
-// (chooseOnboardingMode): a cleanup provider saved earlier keeps cleaning, and otherwise it's
-// Apple Intelligence or nothing. On an iPhone nothing is shown until the check answers.
+// What cleanup does in Local Mode: the mode saved for cleanup, or with nothing saved, OpenWhispr
+// Cloud for a signed-in account and Apple Intelligence or nothing otherwise (unsetSelection). On an
+// iPhone the On-Device line waits for the readiness check.
 function privateCleanupLine(
   readiness: LocalReasoningReadiness | null,
-  savedCleanup: InferenceMode | undefined,
+  cleanup: InferenceMode,
 ): CleanupLine | null {
-  if (savedCleanup === 'providers') {
+  if (cleanup === 'providers') {
     return {
       included: true,
       text: 'Cleanup with your saved provider',
       hint: 'Your transcription is sent to the provider you chose in AI Models.',
     };
   }
+  if (cleanup === 'openwhispr') return { included: true, text: 'Cleanup with OpenWhispr Cloud' };
   if (Platform.OS !== 'ios') {
     return {
       included: false,
@@ -84,8 +86,12 @@ export function PrivacyModeStep(): ReactElement {
       cancelled = true;
     };
   }, []);
-  const savedCleanup = useConfigStore((state) => state.config?.inference?.cleanup?.mode);
-  const cleanupLine = privateCleanupLine(readiness, savedCleanup);
+  const cloudAccess = useAuthStore((state) => cloudAccessFor(state.user));
+  const savedCleanup = useConfigStore((state) => state.config?.inference?.cleanup);
+  const cleanupLine = privateCleanupLine(
+    readiness,
+    (savedCleanup ?? unsetSelection('cleanup', 'private', cloudAccess)).mode,
+  );
 
   const handleContinue = async (): Promise<void> => {
     if (choice === 'private') {
@@ -125,15 +131,15 @@ export function PrivacyModeStep(): ReactElement {
           <Bullet text="Automatic cleanup & formatting" />
         </ModeCard>
         <ModeCard
-          title={`${LOCAL_MODE_LABEL}`}
+          title="Local Mode"
           icon={<SystemIcon name="lock.fill" mdName="Lock" size={18} color="brand" />}
           selected={choice === 'private'}
           onSelect={() => setChoice('private')}
         >
           <Text className="mt-1 text-[14px] leading-[19px] text-secondaryLabel">
-            Everything runs on your device. Nothing is ever uploaded.
+            Dictation runs on your device and never leaves it.
           </Text>
-          <Bullet text="Works fully offline" />
+          <Bullet text="Dictation works offline" />
           {cleanupLine ? <Bullet {...cleanupLine} /> : null}
           <Text className="mt-2 text-[12px] text-tertiaryLabel">
             One-time ~140–461 MB download, depending on language

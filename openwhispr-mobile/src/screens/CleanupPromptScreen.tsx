@@ -1,6 +1,5 @@
-import { LOCAL_MODE_LABEL } from '@/lib/processingModeLabels';
 import React, { useCallback, useState } from 'react';
-import { Keyboard, Pressable, TextInput, View } from 'react-native';
+import { Platform, Keyboard, Pressable, TextInput, View } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { SettingsScreen } from '@/components/ui/SettingsScreen';
 import { SettingsSection } from '@/components/ui/SettingsSection';
@@ -37,12 +36,14 @@ export default function CleanupPromptScreen() {
   const baseline = override ?? DEFAULT_CLEANUP_PROMPT;
   const [draft, setDraft] = useState(baseline);
 
-  // On-Device transcripts are cleaned only by On-Device cleanup or a saved provider, and
   // Bring Your Own Key skips cleanup until it has a selection.
   const inactiveNotice = !cleanupEnabled
     ? 'Text Cleanup is off. Your prompt is saved and applies once you turn it on.'
-    : activeMode === 'private' && cleanupMode !== 'local' && cleanupMode !== 'providers'
-      ? `${LOCAL_MODE_LABEL} skips cleanup unless it is set to On-Device or Bring Your Own Key. Your prompt is saved and applies when it runs.`
+    : Platform.OS === 'android' &&
+        activeMode === 'private' &&
+        cleanupMode !== 'local' &&
+        cleanupMode !== 'providers'
+      ? 'Local Mode skips cleanup unless it is set to On-Device or Bring Your Own Key. Your prompt is saved and applies when it runs.'
       : activeMode === 'providers' && !cleanupMode
         ? 'Bring Your Own Key skips cleanup until Text Cleanup has a selection. Your prompt is saved and applies once it does.'
         : null;

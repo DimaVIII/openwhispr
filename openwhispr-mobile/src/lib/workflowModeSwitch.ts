@@ -3,7 +3,11 @@ import { router } from 'expo-router';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useConfigStore } from '@/store/useConfigStore';
 import { useProcessingModeStore } from '@/store/useProcessingModeStore';
-import { accountRequiredForCloud, showAccountRequiredAlert } from '@/lib/accountAccess';
+import {
+  accountRequiredForCloud,
+  requiresRealAccount,
+  showAccountRequiredAlert,
+} from '@/lib/accountAccess';
 import { workflowSaveConfig } from '@/lib/inferenceModes';
 import {
   getLocalReasoningReadiness,
@@ -17,8 +21,6 @@ import {
   type MobileInferenceScope,
 } from '@/lib/mobileProviders';
 import { getPrivateModeReadiness, getPrivateModeUnavailableMessage } from '@/lib/privateMode';
-import { getProviderCredentialStatus } from '@/services/providers/ProviderCredentials';
-import { getProviderPolicy } from '@/services/providers/ProviderPolicy';
 
 type SpeechScope = 'dictation' | 'upload';
 
@@ -55,14 +57,25 @@ async function localTextModelReady(): Promise<boolean> {
   return false;
 }
 
-// Applies OpenWhispr Cloud or On-Device to a workflow as soon as it is tapped, after the same
-// sign-in and model checks Private mode runs.
+// Applies OpenWhispr Cloud or On-Device to a workflow as soon as it is tapped, after its sign-in
+// and model checks. Dictation carries the app mode with it: On-Device turns Local Mode on.
 export async function switchWorkflowMode(
   scope: MobileInferenceScope,
   mode: 'openwhispr' | 'local',
 ): Promise<ModeSwitchResult> {
-  if (mode === 'openwhispr' && accountRequiredForCloud(useAuthStore.getState().user)) {
+  const { user } = useAuthStore.getState();
+  if (mode === 'openwhispr' && accountRequiredForCloud(user)) {
     showAccountRequiredAlert(isSpeechScope(scope) ? 'cloud transcription' : 'cloud AI');
+    return 'refused';
+  }
+  // Local Mode dictates on this iPhone, so Cloud cleanup is a separate pass that needs an account.
+  if (
+    mode === 'openwhispr' &&
+    scope === 'cleanup' &&
+    useProcessingModeStore.getState().activeMode === 'private' &&
+    requiresRealAccount(user)
+  ) {
+    showAccountRequiredAlert('cloud cleanup');
     return 'refused';
   }
   if (mode === 'local') {
@@ -99,6 +112,10 @@ function returnProvider(config: UserConfig | null): InferenceSelection | undefin
 // A provider whose key was removed, or that the organization no longer allows, can't take
 // dictation back. A policy still loading doesn't count against it.
 async function providerUsable(selection: InferenceSelection): Promise<boolean> {
+  const { getProviderCredentialStatus } =
+    require('@/services/providers/ProviderCredentials') as typeof import('@/services/providers/ProviderCredentials');
+  const { getProviderPolicy } =
+    require('@/services/providers/ProviderPolicy') as typeof import('@/services/providers/ProviderPolicy');
   const resolved = resolveMobileInferenceRoute({
     scope: 'dictation',
     selection,
@@ -129,7 +146,7 @@ export async function setPrivateMode(enabled: boolean): Promise<ModeSwitchResult
 }
 
 // Saves the on-device model for a workflow; undefined means Automatic. The pick is also
-// remembered so switching back to On-Device, from here or Private mode, restores it.
+// remembered so switching back to On-Device restores it.
 export async function pickLocalModel(
   scope: SpeechScope,
   model: LocalModelKey | undefined,

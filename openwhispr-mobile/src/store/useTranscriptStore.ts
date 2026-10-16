@@ -1,4 +1,4 @@
-import { LOCAL_MODE_LABEL } from '@/lib/processingModeLabels';
+import { Platform } from 'react-native';
 import { isProviderJobActive } from '@/lib/providerJobActivity';
 import { AppGroupStorage } from '../../modules/app-group-storage/src';
 import { create } from 'zustand';
@@ -356,11 +356,14 @@ export const useTranscriptStore = create<TranscriptState>((set, get) => {
         throw new Error('The original provider route is unavailable. Start a new transcription.');
       }
       const { activeMode } = useProcessingModeStore.getState();
+      const scope = current.requestContext === 'file' ? 'upload' : 'dictation';
       // Provider recordings keep their original route. Cloud and On-Device
-      // recordings follow the current mode, including the provider it now selects.
+      // recordings follow the current mode, including the provider it now selects;
+      // in Local Mode, uploads follow what is chosen for them.
       const rerouted =
-        current.provider !== 'byok' && activeMode === 'providers'
-          ? snapshotTranscriptionJob(current.requestContext === 'file' ? 'upload' : 'dictation')
+        current.provider !== 'byok' &&
+        (activeMode === 'providers' || (activeMode === 'private' && scope === 'upload'))
+          ? snapshotTranscriptionJob(scope)
           : undefined;
       const provider =
         rerouted?.provider ??
@@ -368,9 +371,13 @@ export const useTranscriptStore = create<TranscriptState>((set, get) => {
       const inferenceRoute = rerouted ? rerouted.inferenceRoute : current.inferenceRoute;
       const textRoutes =
         rerouted ?? (provider === current.provider ? current : snapshotTextInference(provider));
-      if (provider !== 'local' && activeMode === 'private') {
+      if (
+        provider !== 'local' &&
+        activeMode === 'private' &&
+        (Platform.OS === 'android' || scope === 'dictation')
+      ) {
         throw new Error(
-          `This recording used a remote provider. Turn off ${LOCAL_MODE_LABEL} in Account → AI Models to retry its original route.`,
+          `This recording used a remote provider. ${Platform.OS === 'android' ? 'Turn off Local Mode' : 'Change Dictation from On-Device'} in Account → AI Models to retry its original route.`,
         );
       }
       const retryCount = (current.retryCount ?? 0) + 1;

@@ -1,4 +1,3 @@
-import { LOCAL_MODE_LABEL } from '@/lib/processingModeLabels';
 import { create } from 'zustand';
 import * as FileSystem from 'expo-file-system/legacy';
 import { LocalWhisperService } from '../services/transcription/LocalWhisperService';
@@ -94,7 +93,8 @@ export const useModelDownloadStore = create<ModelDownloadState>((set, get) => {
         key,
         {
           status: 'error',
-          error: `Local Whisper is not available. Build the app with \`npx expo run:ios\` to enable ${LOCAL_MODE_LABEL}.`,
+          error:
+            'Local Whisper is not available. Build the app with `npx expo run:ios` to enable Local Mode.',
         },
         requestId,
       );

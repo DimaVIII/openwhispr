@@ -976,7 +976,9 @@
         "reasoningFailed": "La IA no pudo completar la edición. El texto original no se modificó.",
         "invalidResponse": "La IA devolvió una respuesta de edición no válida. No se reemplazó nada. Selecciona el texto e inténtalo de nuevo.",
         "emptyResponse": "La IA devolvió una edición vacía. No se reemplazó nada. Prueba con una instrucción más específica.",
-        "truncatedResponse": "La IA se detuvo antes de completar la edición. No se reemplazó nada. Prueba seleccionando menos texto."
+        "truncatedResponse": "La IA se detuvo antes de completar la edición. No se reemplazó nada. Prueba seleccionando menos texto.",
+        "wlCopyMissing": "OpenWhispr generó la edición, pero en este escritorio las apps de Wayland solo pueden leer el texto pegado a través de wl-copy. Instala wl-clipboard para aplicar las ediciones.",
+        "wlCopyFailed": "OpenWhispr generó la edición, pero wl-copy no pudo copiarla para las apps de Wayland, así que no se aplicó."
       },
       "pastePermission": {
         "title": "Permitir el pegado automático",
@@ -990,7 +992,12 @@
       "pasteFailed": {
         "title": "No se pudo pegar automáticamente"
       },
-      "interruptedRecordingRecovered": "Recuperado después de que OpenWhispr se cerrara antes de terminar este dictado."
+      "interruptedRecordingRecovered": "Recuperado después de que OpenWhispr se cerrara antes de terminar este dictado.",
+      "waylandClipboard": {
+        "title": "Transcripción no pegada",
+        "wlCopyMissing": "En este escritorio, las apps de Wayland solo pueden leer el texto pegado a través de wl-copy. Instala wl-clipboard para pegar tus dictados.",
+        "wlCopyFailed": "wl-copy no pudo copiar el texto para las apps de Wayland, así que no se pegó. Pulsa Reintentar para volver a intentarlo."
+      }
     },
     "clipboard": {
       "pasteFailed": {
@@ -1476,7 +1483,9 @@
     "withoutToolPrefix": "Sin esta herramienta, OpenWhispr copiará el texto al portapapeles. Luego puedes pegarlo manualmente con Ctrl+V.",
     "wtypeCosmicTerminalsDescription": "En COSMIC, las terminales como Warp solo reciben el texto pegado mediante wtype. En las demás aplicaciones ya se pega sin él.",
     "wtypeFallbackDescription": "wtype es el método de pegado automático preferido para este compositor wlroots. Hay una alternativa disponible, pero puede ser menos fiable.",
-    "xwaylandAppsOnly": "el pegado automático funciona solo en apps XWayland"
+    "xwaylandAppsOnly": "el pegado automático funciona solo en apps XWayland",
+    "wlClipboardTitle": "Instala wl-clipboard para pegar en apps de Wayland",
+    "wlClipboardDescription": "En este escritorio, las apps de Wayland solo pueden leer el texto que OpenWhispr copia a través de wl-copy. Para pegar el dictado en ellas, instala wl-clipboard:"
   },
   "promptStudio": {
     "common": {
@@ -2123,6 +2132,10 @@
           },
           "xclip": {
             "step1Title": "Instalar xclip"
+          },
+          "wlCopy": {
+            "step1Title": "Instalar wl-clipboard",
+            "step2Title": "Verificar la instalación"
           }
         },
         "xclipDesc": "Herramienta de portapapeles para pegado en KDE Wayland (xclip o xsel)",
@@ -2134,7 +2147,8 @@
           "flakeTitle": "¿Instalando mediante nuestro flake?",
           "flakeDesc": "Si instalas OpenWhispr desde el flake, programs.openwhispr.enable activa ydotool, el módulo uinput y las pertenencias de grupo por ti.",
           "rebuildNote": "Ejecuta sudo nixos-rebuild switch, luego cierra sesión y vuelve a abrirla para que el cambio de grupo y la regla de /dev/uinput surtan efecto. Sustituye <you> por tu nombre de usuario."
-        }
+        },
+        "wlCopyDesc": "Herramienta de portapapeles de la que las apps de Wayland leen el texto pegado en este escritorio"
       },
       "updates": {
         "automaticUpdates": "Actualizaciones automáticas",

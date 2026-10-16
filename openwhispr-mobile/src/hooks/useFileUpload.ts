@@ -1,4 +1,3 @@
-import { LOCAL_MODE_LABEL } from '@/lib/processingModeLabels';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
@@ -211,7 +210,7 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
         isOggOpus(file.name, file.mimeType, file.uri)
       ) {
         throw new Error(
-          `Opus audio can't be transcribed on this iPhone yet. In Account → AI Models, turn off ${LOCAL_MODE_LABEL} or set Uploads to OpenWhispr Cloud, then try again.`,
+          "Opus audio can't be transcribed on this iPhone yet. Set Uploads to OpenWhispr Cloud in Account → AI Models, then try again.",
         );
       }
 

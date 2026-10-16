@@ -1,4 +1,3 @@
-import { LOCAL_MODE_LABEL } from '@/lib/processingModeLabels';
 import React, { useCallback, useState } from 'react';
 import { TextInput, View } from 'react-native';
 import { Text } from '@/components/ui/Text';
@@ -29,7 +28,7 @@ export function DictationAgentScreen(): React.JSX.Element {
   // Bring Your Own Key skips the assistant until it has a selection of its own.
   const unavailableNotice =
     activeMode === 'private'
-      ? `${PRIVATE_MODE_LOCKED_REASON} Your settings are saved and apply once ${LOCAL_MODE_LABEL} is off.`
+      ? `${PRIVATE_MODE_LOCKED_REASON} Your settings are saved and apply once Local Mode is off.`
       : activeMode === 'providers' && !agentSelected
         ? 'Bring Your Own Key skips the voice assistant until Chat & Voice Assistant has a selection. Your settings are saved and apply once it does.'
         : null;

@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 const mockGetPolicy = jest.fn();
 jest.mock('@/services/providers/ProviderPolicy', () => ({
   getProviderPolicy: (): Promise<unknown> => mockGetPolicy(),
@@ -14,11 +15,16 @@ jest.mock('@/store/useConfigStore', () => ({ useConfigStore: { getState: () => m
 jest.mock('@/store/useProcessingModeStore', () => ({
   useProcessingModeStore: { getState: () => mockProcessing },
 }));
+let mockUser: { id: string; isAnonymous: boolean } | null = null;
+jest.mock('@/store/useAuthStore', () => ({
+  useAuthStore: { getState: () => ({ user: mockUser }) },
+}));
 
 describe('mobile inference routing', () => {
   beforeEach(() => {
     mockState.config = { defaultMode: 'cloud', inference: {} };
     mockProcessing.activeMode = 'cloud';
+    mockUser = null;
   });
   it('does not opt existing configuration into providers', () => {
     expect(getInferenceSelection('dictation')).toBeUndefined();
@@ -201,24 +207,75 @@ it('marks text stages unavailable, never Cloud, for BYOK dictation with no text 
   );
 });
 
-it('keeps a saved provider cleanup for an On-Device recording; everything else stays local', () => {
+const OPENAI_TEXT = {
+  mode: 'providers' as const,
+  providerId: 'openai',
+  modelId: 'gpt-5-mini',
+  credentialRef: 'provider.openai',
+};
+
+// Local Mode keeps dictation on this phone; cleanup runs what is saved for it.
+it.each([
+  ['a provider', OPENAI_TEXT, { mode: 'providers', providerId: 'openai', modelId: 'gpt-5-mini' }],
+  ['OpenWhispr Cloud', { mode: 'openwhispr' }, { mode: 'openwhispr' }],
+  ['On-Device', { mode: 'local' }, { mode: 'local' }],
+])('cleans a Local Mode recording with %s saved for cleanup there', (_label, cleanup, route) => {
   mockProcessing.activeMode = 'private';
-  mockState.config.inference = {
-    dictation: { mode: 'local' },
-    cleanup: {
-      mode: 'providers',
-      providerId: 'openai',
-      modelId: 'gpt-5-mini',
-      credentialRef: 'provider.openai',
-    },
-    agent: {
-      mode: 'providers',
-      providerId: 'openai',
-      modelId: 'gpt-5-mini',
-      credentialRef: 'provider.openai',
-    },
-  };
+  mockUser = { id: 'u', isAnonymous: false };
+  mockState.config.inference = { dictation: { mode: 'local' }, cleanup, agent: OPENAI_TEXT };
   const snapshot = snapshotTranscriptionJob('dictation');
+  expect(snapshot.provider).toBe('local');
+  expect(snapshot.cleanupRoute).toMatchObject({ ...route, scope: 'cleanup' });
+  expect(snapshot.agentRoute).toEqual({ mode: 'local', scope: 'agent' });
+});
+
+// With nothing saved, Local Mode cleans on OpenWhispr Cloud only for a signed-in account.
+it.each([
+  ['a signed-in account', { id: 'u', isAnonymous: false }, 'openwhispr'],
+  ['an anonymous session', { id: 'a', isAnonymous: true }, 'local'],
+  ['no session', null, 'local'],
+])('cleans a Local Mode recording with nothing saved for %s', (_label, user, mode) => {
+  mockProcessing.activeMode = 'private';
+  mockUser = user;
+  mockState.config.inference = { dictation: { mode: 'local' } };
+  expect(snapshotTranscriptionJob('dictation').cleanupRoute).toEqual({ mode, scope: 'cleanup' });
+});
+
+// Cloud cleaning a transcript made on this phone needs a signed-in account, whatever the mode, so
+// without one it is pinned here and left raw (cleanupRunsOnDevice is false for a Cloud choice).
+it.each([
+  ['an anonymous session', { id: 'a', isAnonymous: true }],
+  ['no session', null],
+])('keeps a saved Cloud cleanup of an On-Device transcript here for %s', (_label, user) => {
+  mockUser = user;
+  for (const mode of ['private', 'cloud'] as const) {
+    mockProcessing.activeMode = mode;
+    mockState.config.inference = { upload: { mode: 'local' }, cleanup: { mode: 'openwhispr' } };
+    expect(snapshotTranscriptionJob('upload').cleanupRoute).toEqual({
+      mode: 'local',
+      scope: 'cleanup',
+    });
+  }
+});
+
+// Uploads in Local Mode run what is saved for them, or OpenWhispr Cloud when there is a session.
+it.each([
+  ['nothing saved, with a session', undefined, { id: 'a', isAnonymous: true }, 'cloud'],
+  ['nothing saved, with no session', undefined, null, 'local'],
+  ['a provider saved', { mode: 'providers', providerId: 'groq' }, null, 'byok'],
+  ['On-Device saved', { mode: 'local' }, { id: 'u', isAnonymous: false }, 'local'],
+])('routes a Local Mode upload with %s', (_label, upload, user, provider) => {
+  mockProcessing.activeMode = 'private';
+  mockUser = user;
+  mockState.config.inference = upload ? { upload } : {};
+  expect(getTranscriptionProvider('upload')).toBe(provider);
+  expect(getTranscriptionProvider('dictation')).toBe('local');
+});
+
+it('sends an On-Device upload outside Local Mode to the provider saved for cleanup', () => {
+  mockProcessing.activeMode = 'cloud';
+  mockState.config.inference = { upload: { mode: 'local' }, cleanup: OPENAI_TEXT };
+  const snapshot = snapshotTranscriptionJob('upload');
   expect(snapshot.provider).toBe('local');
   expect(snapshot.cleanupRoute).toMatchObject({
     mode: 'providers',
@@ -226,18 +283,52 @@ it('keeps a saved provider cleanup for an On-Device recording; everything else s
     providerId: 'openai',
     modelId: 'gpt-5-mini',
   });
-  expect(snapshot.agentRoute).toEqual({ mode: 'local', scope: 'agent' });
-  expect(snapshot.cleanupUnavailable).toBeUndefined();
 });
 
-it.each([
-  ['OpenWhispr Cloud', { mode: 'openwhispr' }],
-  ['nothing', undefined],
-])('keeps cleanup On-Device for an On-Device recording with %s saved', (_label, cleanup) => {
-  mockProcessing.activeMode = 'private';
-  mockState.config.inference = { dictation: { mode: 'local' }, ...(cleanup ? { cleanup } : {}) };
-  expect(snapshotTranscriptionJob('dictation').cleanupRoute).toEqual({
-    mode: 'local',
-    scope: 'cleanup',
+describe('Android Local Mode keeps the existing privacy boundary', () => {
+  const originalOS = Platform.OS;
+  beforeEach(() => {
+    Platform.OS = 'android';
+    mockProcessing.activeMode = 'private';
+    mockUser = { id: 'signed-in', isAnonymous: false };
+  });
+  afterEach(() => {
+    Platform.OS = originalOS;
+  });
+
+  it.each([undefined, { mode: 'openwhispr' }, { mode: 'providers', providerId: 'openai' }])(
+    'keeps uploads local with saved choice %j even for a signed-in account',
+    (upload) => {
+      mockState.config = { defaultMode: 'private', inference: { upload } };
+      expect(snapshotTranscriptionJob('upload').provider).toBe('local');
+    },
+  );
+  it.each([undefined, { mode: 'openwhispr' }])(
+    'does not opt local transcripts into Cloud cleanup for %j',
+    (cleanup) => {
+      mockState.config = { defaultMode: 'private', inference: { cleanup } };
+      expect(snapshotTranscriptionJob('dictation').cleanupRoute).toEqual({
+        mode: 'local',
+        scope: 'cleanup',
+      });
+    },
+  );
+  it('preserves the explicit transcript-only BYOK cleanup choice', () => {
+    mockState.config = {
+      defaultMode: 'private',
+      inference: {
+        cleanup: {
+          mode: 'providers',
+          providerId: 'openai',
+          modelId: 'gpt-4.1-mini',
+          credentialRef: 'provider.openai',
+        },
+      },
+    };
+    expect(snapshotTranscriptionJob('dictation')).toMatchObject({
+      provider: 'local',
+      cleanupRoute: { mode: 'providers', providerId: 'openai' },
+      agentRoute: { mode: 'local' },
+    });
   });
 });
