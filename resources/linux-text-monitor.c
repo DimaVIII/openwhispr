@@ -280,13 +280,26 @@ int main(int argc, char **argv) {
         if (editable) {
             AtspiText *probe_text = atspi_accessible_get_text_iface(focused);
             if (probe_text) {
-                gint n_selections = atspi_text_get_n_selections(probe_text, NULL);
+                /* A selection that cannot be read could be live, so it is
+                 * not editable. */
+                GError *selection_error = NULL;
+                gint n_selections = atspi_text_get_n_selections(probe_text, &selection_error);
+                if (selection_error) {
+                    g_error_free(selection_error);
+                    selection_error = NULL;
+                    editable = 0;
+                }
                 for (gint i = 0; i < n_selections && editable; i++) {
-                    AtspiRange *selection = atspi_text_get_selection(probe_text, i, NULL);
-                    if (selection) {
-                        if (selection->end_offset > selection->start_offset) editable = 0;
-                        g_free(selection);
+                    AtspiRange *selection =
+                        atspi_text_get_selection(probe_text, i, &selection_error);
+                    if (selection_error) {
+                        g_error_free(selection_error);
+                        selection_error = NULL;
+                        editable = 0;
+                    } else if (selection && selection->end_offset > selection->start_offset) {
+                        editable = 0;
                     }
+                    if (selection) g_free(selection);
                 }
                 g_object_unref(probe_text);
             }
