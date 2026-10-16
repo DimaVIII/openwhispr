@@ -138,6 +138,7 @@ it('returns pending when Play has a purchase but the backend has not verified it
   expect(useAndroidBillingStatus.getState().accounts['billing-a']).toBe('access-pending');
 });
 it('Refresh access retries reconciliation and clears pending only after server verification', async () => {
+  useAndroidBillingStatus.setState({ accounts: { 'billing-a': 'access-pending' } });
   jest.mocked(reconcileStoreBilling).mockRejectedValueOnce(new Error('offline'));
   await expect(refreshAndroidBillingAccess()).rejects.toThrow('offline');
   expect(useAndroidBillingStatus.getState().accounts['billing-a']).toBe('access-pending');
@@ -150,6 +151,36 @@ it('Refresh access retries reconciliation and clears pending only after server v
   await refreshAndroidBillingAccess();
   expect(reconcileStoreBilling).toHaveBeenCalledTimes(2);
   expect(useAndroidBillingStatus.getState().accounts['billing-a']).toBe('idle');
+});
+it.each([undefined, 'idle'] as const)(
+  'keeps an expired plan eligible for checkout when its prior purchase status is %s',
+  async (status) => {
+    useAndroidBillingStatus.setState({ accounts: status ? { 'billing-a': status } : {} });
+    mockUsage.isSubscribed = true;
+    mockUsage.entitlementSources.provider = true;
+    mockUsage.entitlementSources.providerStore = 'play_store';
+    mockLoad.mockImplementation(async () => {
+      mockUsage.isSubscribed = false;
+      mockUsage.entitlementSources.provider = false;
+      mockUsage.entitlementSources.providerStore = null;
+      return { status: 'loaded', usage: mockUsage };
+    });
+
+    await expect(refreshAndroidBillingAccess()).resolves.toMatchObject({ isSubscribed: false });
+    expect(useAndroidBillingStatus.getState().accounts['billing-a']).toBe(status);
+    expect(reconcileStoreBilling).not.toHaveBeenCalled();
+    await expect(androidPurchaseController.onPurchase(params)).resolves.toEqual({
+      type: 'purchased',
+    });
+    expect(Purchases.purchaseSubscriptionOption).toHaveBeenCalledWith(selected);
+  },
+);
+it('does not create a pending purchase when a generic access refresh fails', async () => {
+  useAndroidBillingStatus.setState({ accounts: { 'billing-a': 'idle' } });
+  mockLoad.mockRejectedValueOnce(new Error('offline'));
+  await expect(refreshAndroidBillingAccess()).rejects.toThrow('offline');
+  expect(useAndroidBillingStatus.getState().accounts['billing-a']).toBe('idle');
+  expect(Purchases.purchaseSubscriptionOption).not.toHaveBeenCalled();
 });
 it('rechecks a completed pending payment and deduplicates customer updates during verification', async () => {
   jest.mocked(Purchases.purchaseSubscriptionOption).mockRejectedValue({ code: 'pending' });

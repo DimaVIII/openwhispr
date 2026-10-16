@@ -1,6 +1,6 @@
 # Moonshine Android integration evidence — 2026-10-15
 
-Research and a temporary native build were performed for the premium Android feature. Model inference is not yet verified. Keep Parakeet and the existing Qwen cleanup baseline.
+The initial research and temporary native build below led to the integration and verified emulator inference recorded under Implementation checkpoint and Emulator evidence. Early statements of unverified inference describe that initial research stage. Parakeet remains the default and Qwen remains the cleanup baseline; physical-phone and production-hosting acceptance are still open.
 
 ## Pinned artifacts
 

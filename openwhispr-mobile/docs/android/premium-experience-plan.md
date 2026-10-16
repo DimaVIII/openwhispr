@@ -69,12 +69,14 @@ Subscriptions belong under Plan. Third-party/model attribution belongs under Lic
 - `src/screens/DictionaryScreen.tsx`, `src/android/StyleScreen.tsx`: share that control; preserve dictionary/snippet stores and `androidStyleContext` / `androidStyleTones` config.
 - `src/screens/AccountScreen.android.tsx`, `PreferencesScreen.android.tsx`, `PrivacyDataScreen.android.tsx`; new `HelpAboutScreen.android.tsx` and `app/(account)/help.tsx`: canonical settings grouping. Reuse `LicensesScreen.android.tsx` and `ReferralScreen.tsx`.
 - `src/android/Root.tsx`, `Tabs.tsx`, `Onboarding.tsx`, `Practice.tsx`, `useBubblePipeline.ts`: navigation, real practice lifecycle and foreground bubble visibility.
-- `src/screens/HomeScreen.android.tsx`; new `src/android/dictationStats.ts`: presentation and a small persistent aggregate/event adapter matching desktop `src/services/AnalyticsService.ts`; keep `useUsageStore` responsible for allowance/access.
-- `src/screens/NotesListScreen.tsx`, `MeetingRecordScreen.tsx`, `src/hooks/useCloudMeeting.ts`, `src/components/notes/CloudMeetingRecording.tsx`, `modules/live-pcm-streaming`: compact creation and actual Android cloud capture. Reuse recovery/persistence helpers in `src/lib/meetingRecovery.ts` and notes stores.
+- `src/screens/HomeScreen.android.tsx`; `src/android/insights.ts`: presentation and a small persistent aggregate/event adapter matching desktop `src/services/AnalyticsService.ts`; keep `useUsageStore` responsible for allowance/access.
+- `src/screens/NotesListScreen.tsx`, `MeetingRecordScreen.tsx`, `src/hooks/useCloudMeeting.ts`, `src/components/notes/CloudMeetingRecording.tsx`, `modules/live-pcm-streaming` and `modules/android-dictation/android/src/main/java/com/openwhispr/dictation/MeetingCaptureService.kt`: compact creation, shared PCM adapter and actual Android cloud capture. Reuse recovery/persistence helpers in `src/lib/meetingRecovery.ts` and notes stores.
 - `src/android/models.ts`, `ModelsScreen.tsx`, `LocalSpeechModel.ts`, `LocalTextModel.ts`, `modules/android-dictation`: device capability, verified downloads and model adapter integration. Keep benchmark findings separate from emulator smoke evidence.
 - `app/android-pro.tsx`, `src/components/superwall/*`, `src/lib/superwall.ts`, `revenuecat.ts`, `billingReconciliation.ts`, `src/data/remote/billingApi.ts`: one purchase authority, existing entitlement reconciliation and Android provider configuration.
 
 ## Ordered implementation
+
+The [review-readiness audit](premium-review-readiness.md) maps the full brief to implementation evidence and remaining acceptance. Mixed implementation/device items stay unchecked until both parts are evidenced. Historical checkpoints below retain their original build scope.
 
 ### Task 1: Shared presentation and settings hierarchy
 
@@ -86,7 +88,7 @@ Subscriptions belong under Plan. Third-party/model attribution belongs under Lic
 ### Task 2: Focused daily interactions
 
 - [ ] Wire onboarding/Home practice to actual bubble activation and insertion. Preserve bubble availability outside the app and hide it on ordinary in-app screens.
-- [ ] Make Notes New a compact anchored menu/sheet and reuse existing create/import handlers; keep the microphone off until Start is pressed.
+- [x] Make Notes New a compact anchored menu/sheet and reuse existing create/import handlers; keep the microphone off until Start is pressed.
 - [ ] Exercise add/edit/delete/search Words and Snippets, saved tone/context changes and referral share/copy against their stores/API. Show meaningful progress and retry feedback.
 - [ ] Add regression cases for practice entry/exit bubble visibility and no recording on note navigation; verify keyboard/Back behavior manually on the test device.
 
@@ -94,8 +96,8 @@ Subscriptions belong under Plan. Third-party/model attribution belongs under Lic
 
 - [x] Read desktop event identity, word-count definition and `/api/analytics/events/batch` / `/api/analytics/summary` contract against current API code before implementing the adapter.
 - [x] Add persistent local totals and an account-scoped deduplicated event queue containing counts/metadata, never transcript text. Upload only under the existing analytics/sync/organization policy gates; merge authoritative totals without double counting pending events.
-- [ ] Show words dictated separately from cloud allowance, with honest loading/offline state. Transcript retention never reduces the aggregate.
-- [ ] Test multilingual counting parity, event retry/idempotency, history deletion, offline-to-online reconciliation and account switch boundaries in a focused new stats test plus existing Home tests.
+- [x] Show words dictated separately from cloud allowance, with honest loading/offline state. Transcript retention never reduces the aggregate.
+- [x] Test multilingual counting parity, event retry/idempotency, history deletion, offline-to-online reconciliation and account switch boundaries in a focused new stats test plus existing Home tests.
 
 ### Task 4: Real Android cloud meetings
 
@@ -284,3 +286,15 @@ Two focused suites / 11 tests pass, including actual i18next updates in a mounte
 Final v18 built and installed successfully. Retained `ui-review-v18-final.apk` and installed APK SHA-256 both equal `9be967e1ddc6b7ed3f9b023684b1ec5b7ef0f326806bd648307d36d9ff0ce2a0`. Through the real Android picker, selecting German/Germany updated Home and tabs on return without a force-stop; selecting System default restored English and the locale list `[]`. Evidence: `language-picker-v18-final.png`, `home-german-warm-v18.png`, `home-language-restored-v18-final.png`, `build-ui-v18-final.log`, and `language-sync-*` logs. The earlier `ui-review-v18.apk` lacks the final manifest integration; `home-language-restored-v18.png` still shows German and is not restoration evidence.
 
 A separate minimal recorder probe was built outside the repository to inspect raw synthetic microphone input with the same Android AudioRecord source/format. Injection caused the host emulator process to crash with `EXC_BAD_ACCESS` / `SIGSEGV` in `audio_forwarder_enable`, called by `EmulatorControllerImpl::injectAudio`. This is direct test-rig failure evidence, not an OpenWhispr recording failure or successful microphone acceptance. The crash report is retained privately at `audio-probe/emulator-injection-crash.ips`; no report was sent. The same AVD was restarted without wiping data or loading a snapshot. It reached Android's normal PIN screen; user unlock was requested before further device tests. The installed final v18 hash remained intact. The temporary probe is retained pending raw-capture inspection/cleanup after unlock; its package is `com.openwhispr.research.audio`. Host audio is not enabled in the recovery launch, virtual AC and Stay awake are enabled, and no capture is active. The implementation checkout remains retained for the unfinished requirements above.
+
+### Access refresh repair and requirement audit — review build v19
+
+Independent billing investigation found a reachable client defect separate from terminal pending-payment recovery: Refresh access for a previously active Play plan could find expired/revoked access and fabricate `access-pending`, blocking checkout despite no unresolved purchase. The generic refresh now returns the freshly loaded server access without creating a purchase state. Reconciliation remains reserved for known pending attempts; genuine pending payments are not cleared on absent entitlement or network failure. Previously persisted ambiguous states are not migrated or erased.
+
+Two expired-plan regressions (idle and previously unset status) failed before the change and pass after it, including successful entry into the purchase controller. The existing pending-retry test now starts with an actual pending attempt. Four new Practice tests cover foreground/visibility lifecycle, permission refresh, successful mode-matched completion and ignored late results. Eight targeted suites / 82 tests pass; TypeScript passes; scoped ESLint reports zero errors and two existing no-void warnings. Independent review cleared the repair and tests. This is mocked purchase/lifecycle evidence, not real Play or spoken insertion acceptance.
+
+V19 built in 59 seconds (1,234 tasks; 125 executed) and installed successfully. Retained `ui-review-v19.apk` SHA-256 and installed APK hash both equal `42124428fb6e6a71dddecc00b06052112055adfc9d170873928797ec298d2fc5`. The device remains at its normal PIN screen (`deviceLocked=1`); no post-install foreground interaction or account/privacy-state verification is claimed. Final v18 language screenshots remain the newest rendered evidence. Generated repository build output was removed after exporting and verifying the installation.
+
+Evidence: `billing-refresh-red.log`, `billing-practice-green.log`, `billing-practice-types.log`, `billing-practice-lint.log`, `practice-lifecycle-tests.log`, `build-ui-v19.log` and `ui-review-v19.apk` in the external evidence directory. The [review-readiness audit](premium-review-readiness.md) now maps the full brief to exact implementation and acceptance gaps. Completed word-count and Notes-menu checklist items were reconciled; mixed implementation/device items remain open.
+
+The EAS CLI read-only identity check returned `Not logged in`; remote project/account environment variables and provider/catalog settings remain uninspected. Installed RevenueCat 10.10.0 / hybrid 19.0.0 exposes no original pending transaction token through its purchase-error API. Google documents subscription pending transactions for explicitly enabled prepaid plans; the current configuration leaves RevenueCat's prepaid-pending flag disabled. Verify the actual catalog before calling that scenario reachable. This narrows the research question without removing defensive handling or claiming delayed-payment acceptance. Original-transaction correlation and the backend's dual-store proof limitation remain external integration work.

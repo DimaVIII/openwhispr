@@ -118,7 +118,10 @@ export async function refreshAndroidBillingAccess(): Promise<UsageInfo> {
     setStatus(account.billingId, 'idle');
     return currentUsage;
   }
-  if (useAndroidBillingStatus.getState().accounts[account.billingId] === 'payment-pending') {
+  const status = useAndroidBillingStatus.getState().accounts[account.billingId];
+  // The account load already refreshed access. Only an unresolved purchase needs reconciliation.
+  if (status !== 'payment-pending' && status !== 'access-pending') return currentUsage;
+  if (status === 'payment-pending') {
     const info = await withRevenueCatUser(
       account.billingId,
       async () => {
