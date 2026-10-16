@@ -4880,6 +4880,7 @@
       "llm": "AI 请求失败"
     },
     "details": {
+      "exceptionType": "错误代码",
       "provider": "服务商",
       "requestId": "请求 ID"
     }

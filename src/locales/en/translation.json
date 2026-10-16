@@ -4880,6 +4880,7 @@
       "llm": "AI request failed"
     },
     "details": {
+      "exceptionType": "Error code",
       "provider": "Provider",
       "requestId": "Request ID"
     }

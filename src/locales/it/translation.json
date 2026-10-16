@@ -4880,6 +4880,7 @@
       "llm": "Richiesta IA non riuscita"
     },
     "details": {
+      "exceptionType": "Codice errore",
       "provider": "Provider",
       "requestId": "ID richiesta"
     }

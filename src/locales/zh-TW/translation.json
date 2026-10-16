@@ -4880,6 +4880,7 @@
       "llm": "AI 請求失敗"
     },
     "details": {
+      "exceptionType": "錯誤代碼",
       "provider": "服務商",
       "requestId": "請求 ID"
     }

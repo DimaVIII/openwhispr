@@ -506,6 +506,7 @@ function mapEnterpriseStreamError(provider, error, config = {}) {
   const {
     providerHttpError,
     providerError,
+    asProviderError,
     PROVIDER_ERROR_CODES,
     redactProviderBody,
   } = require("./providerHttpErrors");
@@ -578,6 +579,40 @@ function mapEnterpriseStreamError(provider, error, config = {}) {
   const codeClassification = Object.hasOwn(codeClassifications, code?.toLowerCase())
     ? codeClassifications[code.toLowerCase()]
     : undefined;
+  const signature = `${code || ""} ${normalized.message}`;
+  const knownMessages =
+    provider === "azure"
+      ? [
+          [/Unauthorized|invalid API key/i, PROVIDER_ERROR_CODES.AUTH_FAILED],
+          [/DeploymentNotFound|\bnot found\b/i, PROVIDER_ERROR_CODES.MODEL_NOT_FOUND],
+          [/TooManyRequests|\brate[ _-]?limit/i, PROVIDER_ERROR_CODES.RATE_LIMITED],
+          [/content_filter|ContentFilter/, PROVIDER_ERROR_CODES.BAD_REQUEST],
+        ]
+      : provider === "vertex"
+        ? [
+            [
+              /UNAUTHENTICATED|Could not load the default credentials/,
+              PROVIDER_ERROR_CODES.AUTH_FAILED,
+            ],
+            [/PERMISSION_DENIED|\b403\b/, PROVIDER_ERROR_CODES.ACCESS_DENIED],
+            [/NOT_FOUND/, PROVIDER_ERROR_CODES.MODEL_NOT_FOUND],
+            [/RESOURCE_EXHAUSTED|\bquota\b/, PROVIDER_ERROR_CODES.QUOTA_EXHAUSTED],
+            [/INVALID_ARGUMENT/, PROVIDER_ERROR_CODES.BAD_REQUEST],
+          ]
+        : [];
+  const messageClassification = knownMessages.find(([pattern]) => pattern.test(signature))?.[1];
+  const ErrorType =
+    chain.some((item) => item instanceof TypeError) ||
+    (provider === "azure" && normalized.message.includes("fetch failed"))
+      ? TypeError
+      : Error;
+  const networkError = asProviderError(
+    Object.assign(new ErrorType(normalized.message), {
+      code,
+      ...(exceptionType ? { name: exceptionType } : {}),
+    }),
+    { provider: providerName, surface: "llm" }
+  );
   const fallback = status
     ? providerHttpError({
         provider: providerName,
@@ -585,10 +620,12 @@ function mapEnterpriseStreamError(provider, error, config = {}) {
         body: normalized.message,
         surface: "llm",
       })
-    : providerError(codeClassification || PROVIDER_ERROR_CODES.ERROR, {
-        provider: providerName,
-        surface: "llm",
-      });
+    : networkError.messageKey
+      ? networkError
+      : providerError(codeClassification || messageClassification || PROVIDER_ERROR_CODES.ERROR, {
+          provider: providerName,
+          surface: "llm",
+        });
   // Known enterprise translations contain only app-owned copy. Unknown mappings
   // interpolate the provider message, which must stay out of IPC and logs.
   let safe = mapped.messageKey && !mapped.messageParams?.error ? mapped : fallback;

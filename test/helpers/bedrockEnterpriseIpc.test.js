@@ -980,3 +980,42 @@ test("enterprise stream code-only errors retain classification without inventing
     assert.doesNotMatch(JSON.stringify(mapped), /private-prompt/);
   }
 });
+
+test("enterprise stream preserves safe network and message-only provider classifications", () => {
+  const { mapEnterpriseStreamError } = require("../../src/helpers/enterpriseProviderErrors");
+  const fixtures = [
+    ["azure", new TypeError("fetch failed private-prompt"), "providerErrors.unreachable"],
+    [
+      "azure",
+      new Error("DeploymentNotFound private-prompt"),
+      "providerErrors.modelNotFoundNoModel",
+    ],
+    [
+      "azure",
+      { error: { message: "TooManyRequests private-prompt" } },
+      "providerErrors.rateLimited",
+    ],
+    ["azure", { message: "ContentFilter private-prompt" }, "providerErrors.badRequest"],
+    ["azure", { code: "ENOTFOUND", message: "private-prompt" }, "providerErrors.unreachable"],
+    ["azure", { code: "ETIMEDOUT", message: "private-prompt" }, "providerErrors.unreachable"],
+    [
+      "vertex",
+      { code: "PERMISSION_DENIED", message: "private-prompt" },
+      "providerErrors.accessDenied",
+    ],
+    [
+      "vertex",
+      { code: "RESOURCE_EXHAUSTED", message: "private-prompt" },
+      "providerErrors.quotaExhausted",
+    ],
+    ["vertex", { message: "NOT_FOUND private-prompt" }, "providerErrors.modelNotFoundNoModel"],
+    ["vertex", { message: "INVALID_ARGUMENT private-prompt" }, "providerErrors.badRequest"],
+    ["vertex", { message: "UNAUTHENTICATED private-prompt" }, "providerErrors.authFailed"],
+  ];
+  for (const [provider, error, messageKey] of fixtures) {
+    const mapped = mapEnterpriseStreamError(provider, error);
+    assert.equal(mapped.messageKey, messageKey, `${provider}: ${error.code || error.message}`);
+    assert.equal(mapped.technicalDetails.status, undefined);
+    assert.doesNotMatch(JSON.stringify(mapped), /private-prompt|cause|responseBody/);
+  }
+});
