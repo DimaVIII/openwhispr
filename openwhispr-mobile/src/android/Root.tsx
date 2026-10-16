@@ -18,6 +18,8 @@ import { useConfigStore } from '@/store/useConfigStore';
 import { useTranscriptStore } from '@/store/useTranscriptStore';
 import { useDictionaryStore } from '@/store/useDictionaryStore';
 import { useSnippetsStore } from '@/store/useSnippetsStore';
+import { useNotesStore } from '@/store/useNotesStore';
+import { startMeetingRecoveryOnce } from '@/lib/meetingRecovery';
 import { initSyncTriggers } from '@/sync/syncEngine';
 import { PermissionAlertMount } from '@/components/ui/PermissionAlert';
 import { OpenWhisprSuperwallProvider } from '@/components/superwall/OpenWhisprSuperwallProvider';
@@ -53,6 +55,10 @@ export default function AndroidRoot() {
         useDictionaryStore.getState().load(),
         useSnippetsStore.getState().load(),
       ]);
+      // A cold deep link can skip Home, which also initializes app data. Recover
+      // interrupted meetings here so every entry route makes their audio retryable.
+      useNotesStore.getState().initialize();
+      startMeetingRecoveryOnce();
       initSyncTriggers();
       setReady(true);
     }
