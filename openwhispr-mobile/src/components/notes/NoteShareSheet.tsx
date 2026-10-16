@@ -17,7 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/components/ui/Text';
 import { GlassIconButton } from '@/components/ui/GlassIconButton';
 import { SystemIcon, type LucideIconName } from '@/components/ui/SystemIcon';
-import { INVALID_EMAIL_ERROR, useNoteSharing } from '@/hooks/useNoteSharing';
+import { useNoteSharing } from '@/hooks/useNoteSharing';
 import { useAndroidCopy } from '@/hooks/useAndroidCopy';
 import { useSuperwallGate } from '@/hooks/useSuperwallGate';
 import { SUPERWALL_PLACEMENTS } from '@/lib/superwall';
@@ -579,7 +579,7 @@ export function NoteShareSheet({ noteId, onClose, onFlushDraft, onExport }: Note
       value={email}
       onChangeText={(value) => {
         setEmail(value);
-        if (sharing.error === INVALID_EMAIL_ERROR) sharing.dismissError();
+        if (sharing.errorCode === 'invalidEmail') sharing.dismissError();
       }}
       onInvite={invite}
       remoteId={note?.remoteId ?? undefined}

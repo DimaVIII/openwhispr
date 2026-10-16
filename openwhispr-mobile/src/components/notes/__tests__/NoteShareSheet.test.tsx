@@ -152,6 +152,7 @@ beforeEach(() => {
     busy: false,
     cancellable: false,
     error: null,
+    errorCode: null,
     message: null,
     hasLink: false,
     sharingMode: null,
@@ -602,6 +603,7 @@ it('shows errors beside the controls with a way to refresh', () => {
 it('clears an invalid email error once the address is edited', () => {
   mockController.state = { share, invitations: [], access };
   mockController.error = INVALID_EMAIL_ERROR;
+  mockController.errorCode = 'invalidEmail';
   const screen = render(<NoteShareSheet {...props} />);
   fireEvent.changeText(screen.getByLabelText('Add people or emails'), 'friend@example.com');
   expect(mockController.dismissError).toHaveBeenCalled();
