@@ -70,7 +70,11 @@ export function NoteChatSheet({
     windowHeight - insets.top - 8,
   );
   const bottomPad =
-    keyboardHeight > 0 ? keyboardHeight + INPUT_KEYBOARD_GAP : Math.max(insets.bottom, 14);
+    keyboardHeight > 0
+      ? // Android reports IME height minus system-bar insets; this edge-to-edge modal
+        // must reserve the navigation area too, or the keyboard clips the composer.
+        keyboardHeight + (isAndroid ? insets.bottom : 0) + INPUT_KEYBOARD_GAP
+      : Math.max(insets.bottom, 14);
 
   return (
     <Modal
