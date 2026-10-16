@@ -2,6 +2,14 @@
 
 Initially inspected read-only on 15 October 2026 through the authenticated browser session. The authorized app-creation follow-up below records subsequent provider changes separately. A zero-charge Google Play license-test monthly purchase, accelerated renewal and cancellation are now verified; production access and successful restore remain open. The later Expo checkpoint records authorized use of the Android public SDK keys; no private key is printed here.
 
+## 16 October 05:24 PDT — actual subscriber payload exposes API mapping gap
+
+A read-only RevenueCat REST v1 lookup for the review account returns subscription key `com.openwhispr.pro` and a separate `product_plan_identifier: monthly`, including the exact `openWhispr Pro` entitlement and sandbox/Play markers. The catalog and webhook use the combined identifier; assuming REST v1 did too left API draft #268 unable to match the staged base-plan allowlist.
+
+The existing API draft now has a repair under validation: preserve existing exact mappings, then combine the subscription and base-plan fields only for a confirmed Play store response. Four regression cases fail before the repair; all 21 targeted RevenueCat cases pass afterward, including unknown/missing plans, wrong/missing stores, expiry, existing Business precedence and already-combined IDs. TypeScript, scoped lint and schema checks pass. The full API suite passes **1,915 tests / 40 suites**. Repair `0af512b7048d9f644d401f6ab71d2f81cf931bf0` is pushed to draft #268; hosted tests are running.
+
+A separate local PGlite replay of the unchanged real provider response, first with a controlled clock inside its active period and then at the actual current time, writes the canonical monthly sandbox row and subsequently expires it. It uses a synthetic local user and no production database. This is provider-payload/adapter evidence, not successful app restore or production access. The private payload and replay remain outside the public repository.
+
 ## 16 October 05:13 PDT — server cause and Superwall lifecycle verified
 
 Read-only production logs for the actual review window identify the reconciliation failure: **RevenueCat android API key is not configured**, from deployment `dpl_67pG8wC9Bai7My3TLjpaiCD8zyNt` at `/api/billing/reconcile`. The staged key has not been activated by a production deployment. This is now a directly observed cause, rather than an inference from the generic client alert. No production deployment or sandbox-policy change was made.
