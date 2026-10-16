@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { withActiveProviderJob } from './providerJobActivity';
 import { snapshotTextInference } from './inferenceRouting';
 import {
@@ -19,6 +20,7 @@ import {
   detectAgentMention,
 } from './dictationAgent';
 import { isDictationContext } from './dictationHints';
+import { isToneApplicable } from './keyboardTone';
 import { isNoSpeechError } from './permissions';
 import { withRetry, type RetryOptions } from './retry';
 import { expandSnippets } from './snippets';
@@ -74,9 +76,18 @@ function cleansLocalTranscript(request: TranscriptionRequest): boolean {
   );
 }
 
+// Android Style also applies to Qwen. The iOS keyboard offers tones only for Cloud/provider
+// cleanup, so a tone picked there before Private mode must not rewrite local dictations.
 function cleanupToneForRequest(request: TranscriptionRequest): KeyboardTone | undefined {
   if (request.requestContext !== 'keyboard') return undefined;
   if (!request.keyboardTone || request.keyboardTone === 'default') return undefined;
+  const cleanupEnabled = useConfigStore.getState().config?.cleanupEnabled;
+  if (Platform.OS === 'android') return (cleanupEnabled ?? true) ? request.keyboardTone : undefined;
+  if (request.cleanupRoute?.mode === 'local') return undefined;
+  const { activeMode } = useProcessingModeStore.getState();
+  if (!isToneApplicable(activeMode, cleanupEnabled)) {
+    return undefined;
+  }
   return request.keyboardTone;
 }
 

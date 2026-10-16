@@ -1761,7 +1761,13 @@
       "copiedToClipboard": "تم النسخ إلى حافظتك",
       "openNote": "فتح الملاحظة",
       "unknownTool": "أداة غير معروفة: {{name}}",
-      "invalidArgs": "وسيطات غير صالحة للأداة {{name}}"
+      "invalidArgs": "وسيطات غير صالحة للأداة {{name}}",
+      "search_openwhispr_helpName": "البحث في مساعدة OpenWhispr",
+      "read_openwhispr_helpName": "قراءة مساعدة OpenWhispr",
+      "get_openwhispr_contextName": "قراءة إعدادات OpenWhispr",
+      "search_openwhispr_helpStatus": "جاري البحث في مساعدة OpenWhispr...",
+      "read_openwhispr_helpStatus": "جاري قراءة مساعدة OpenWhispr...",
+      "get_openwhispr_contextStatus": "جاري قراءة إعدادات OpenWhispr..."
     }
   },
   "noteEditor": {
@@ -4999,5 +5005,55 @@
       "provider": "المزوّد",
       "requestId": "معرّف الطلب"
     }
+  },
+  "productHelp": {
+    "sources": "الوثائق الرسمية",
+    "settings": "إعدادات التطبيق الحالية",
+    "guidance": "المعلومات المستخدمة في هذا الرد.",
+    "settingsNote": "خيارات وأذونات معروفة تمت قراءتها لهذا الرد دون تعديلها؛ لا يتم اختبار أجهزتك.",
+    "readAt": "تمت القراءة في {{time}}",
+    "sourceStatus": {
+      "live": "تم جلب المقال",
+      "bundled": "إرشادات مدمجة بديلة"
+    },
+    "reason": {
+      "policy": "تحدّ سياسة مؤسستك من البحث في الوثائق عبر الإنترنت.",
+      "rateLimit": "تم بلوغ حد البحث في الوثائق عبر الإنترنت. تُعرض الإرشادات المدمجة.",
+      "unavailable": "تعذّر التحقق من الوثائق الحالية. تُعرض الإرشادات المدمجة.",
+      "privacy": "البحث في الوثائق عبر الإنترنت متوقف أثناء تسجيل الخروج أو عند استخدام المعالجة المحلية فقط. تُعرض الإرشادات المدمجة."
+    },
+    "openFailed": "تعذّر فتح المقال. يمكنك نسخ الرابط وفتحه في المتصفح.",
+    "topicsList": {
+      "hotkeys": "الاختصارات",
+      "microphone": "الميكروفون",
+      "models": "النماذج",
+      "meetings": "الاجتماعات",
+      "calendar": "التقويمات",
+      "language": "اللغات",
+      "backup": "النسخ الاحتياطي",
+      "assistant": "المساعد",
+      "hold-or-tap": "استمرار الضغط أو النقر",
+      "choose-your-microphone": "اختيار الميكروفون",
+      "microphone-not-working": "الميكروفون لا يعمل",
+      "local-models": "النماذج المحلية",
+      "chat-agent": "وكيل الدردشة",
+      "record-a-meeting": "تسجيل اجتماع",
+      "connect-google-calendar": "ربط تقويم Google",
+      "languages": "الإملاء بلغات أخرى",
+      "sync-across-devices": "مزامنة الملاحظات عبر الأجهزة"
+    },
+    "appVersion": "إصدار التطبيق",
+    "platform": "المنصة",
+    "processing": "المعالجة",
+    "engine": "المحرك",
+    "policy": "تسمح السياسة باستخدام المساعد",
+    "on": "مفعّل",
+    "off": "معطّل",
+    "microphonePermission": "إذن الميكروفون",
+    "specificMicrophone": "ميكروفون محدد",
+    "permissionGranted": "مسموح",
+    "permissionDenied": "مرفوض",
+    "permissionRestricted": "مقيّد",
+    "permissionNotDetermined": "لم يُطلب"
   }
 }

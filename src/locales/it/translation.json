@@ -3865,7 +3865,13 @@
       "copiedToClipboard": "Copiato negli appunti",
       "openNote": "Apri nota",
       "unknownTool": "Strumento sconosciuto: {{name}}",
-      "invalidArgs": "Argomenti dello strumento non validi per {{name}}"
+      "invalidArgs": "Argomenti dello strumento non validi per {{name}}",
+      "search_openwhispr_helpName": "Cerca nella guida di OpenWhispr",
+      "read_openwhispr_helpName": "Leggi la guida di OpenWhispr",
+      "get_openwhispr_contextName": "Leggi le impostazioni di OpenWhispr",
+      "search_openwhispr_helpStatus": "Ricerca nella guida di OpenWhispr...",
+      "read_openwhispr_helpStatus": "Lettura della guida di OpenWhispr...",
+      "get_openwhispr_contextStatus": "Lettura delle impostazioni di OpenWhispr..."
     }
   },
   "assistant": {
@@ -4877,5 +4883,55 @@
       "provider": "Provider",
       "requestId": "ID richiesta"
     }
+  },
+  "productHelp": {
+    "sources": "Documentazione ufficiale",
+    "settings": "Impostazioni attuali",
+    "guidance": "Informazioni usate per questa risposta.",
+    "settingsNote": "Scelte e autorizzazioni note lette per questa risposta, senza modificarle; i dispositivi non vengono testati.",
+    "readAt": "Letto il {{time}}",
+    "sourceStatus": {
+      "live": "Articolo recuperato",
+      "bundled": "Guida integrata di riserva"
+    },
+    "reason": {
+      "policy": "I criteri della tua organizzazione limitano la consultazione della documentazione online.",
+      "rateLimit": "È stato raggiunto il limite di consultazione della documentazione online. Viene mostrata la guida integrata.",
+      "unavailable": "Non è stato possibile verificare la documentazione attuale. Viene mostrata la guida integrata.",
+      "privacy": "La consultazione della documentazione online è disattivata finché non hai effettuato l'accesso o usi solo l'elaborazione locale. Viene mostrata la guida integrata."
+    },
+    "openFailed": "Impossibile aprire l’articolo. Puoi copiare il link e aprirlo nel browser.",
+    "topicsList": {
+      "hotkeys": "Scorciatoie",
+      "microphone": "Microfono",
+      "models": "Modelli",
+      "meetings": "Riunioni",
+      "calendar": "Calendari",
+      "language": "Lingue",
+      "backup": "Backup",
+      "assistant": "Assistente",
+      "hold-or-tap": "Tieni premuto o tocca",
+      "choose-your-microphone": "Scegli il microfono",
+      "microphone-not-working": "Il microfono non funziona",
+      "local-models": "Modelli locali",
+      "chat-agent": "Assistente della chat",
+      "record-a-meeting": "Registra una riunione",
+      "connect-google-calendar": "Collega Google Calendar",
+      "languages": "Dettare in altre lingue",
+      "sync-across-devices": "Sincronizza le note tra dispositivi"
+    },
+    "appVersion": "Versione dell’app",
+    "platform": "Piattaforma",
+    "processing": "Elaborazione",
+    "engine": "Motore",
+    "policy": "Assistente consentito dai criteri",
+    "on": "Attivo",
+    "off": "Disattivo",
+    "microphonePermission": "Autorizzazione del microfono",
+    "specificMicrophone": "Microfono specifico",
+    "permissionGranted": "Consentita",
+    "permissionDenied": "Negata",
+    "permissionRestricted": "Limitata",
+    "permissionNotDetermined": "Non richiesta"
   }
 }

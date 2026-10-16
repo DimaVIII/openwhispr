@@ -117,7 +117,9 @@ it('cleans a late picker copy after leaving without starting inference', async (
 it('does not delete an original file returned outside app cache', async () => {
   jest.mocked(DocumentPicker.getDocumentAsync).mockResolvedValueOnce({
     canceled: false,
-    assets: [{ uri: 'file:///original.wav', name: 'sample', mimeType: 'audio/wav', lastModified: 0 }],
+    assets: [
+      { uri: 'file:///original.wav', name: 'sample', mimeType: 'audio/wav', lastModified: 0 },
+    ],
   });
   render(<DeviceCheckScreen />);
   await act(async () => {

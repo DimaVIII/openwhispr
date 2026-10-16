@@ -3909,7 +3909,13 @@
       "copiedToClipboard": "Скопировано в буфер обмена",
       "openNote": "Открыть заметку",
       "unknownTool": "Неизвестный инструмент: {{name}}",
-      "invalidArgs": "Недопустимые аргументы инструмента для {{name}}"
+      "invalidArgs": "Недопустимые аргументы инструмента для {{name}}",
+      "search_openwhispr_helpName": "Поиск справки OpenWhispr",
+      "read_openwhispr_helpName": "Чтение справки OpenWhispr",
+      "get_openwhispr_contextName": "Чтение настроек OpenWhispr",
+      "search_openwhispr_helpStatus": "Поиск в справке OpenWhispr...",
+      "read_openwhispr_helpStatus": "Чтение справки OpenWhispr...",
+      "get_openwhispr_contextStatus": "Чтение настроек OpenWhispr..."
     }
   },
   "assistant": {
@@ -4923,5 +4929,55 @@
       "provider": "Провайдер",
       "requestId": "ID запроса"
     }
+  },
+  "productHelp": {
+    "sources": "Официальная документация",
+    "settings": "Текущие настройки",
+    "guidance": "Информация, использованная для этого ответа.",
+    "settingsNote": "Настройки и известные разрешения прочитаны для этого ответа без изменений; устройства не проверялись.",
+    "readAt": "Прочитано: {{time}}",
+    "sourceStatus": {
+      "live": "Статья загружена",
+      "bundled": "Встроенная резервная справка"
+    },
+    "reason": {
+      "policy": "Политика вашей организации ограничивает доступ к онлайн-документации.",
+      "rateLimit": "Достигнут лимит запросов онлайн-документации. Показана встроенная справка.",
+      "unavailable": "Не удалось проверить текущую документацию. Показана встроенная справка.",
+      "privacy": "Поиск онлайн-документации отключён, пока вы не вошли в аккаунт или используете только локальную обработку. Показана встроенная справка."
+    },
+    "openFailed": "Не удалось открыть статью. Скопируйте ссылку и откройте её в браузере.",
+    "topicsList": {
+      "hotkeys": "Горячие клавиши",
+      "microphone": "Микрофон",
+      "models": "Модели",
+      "meetings": "Встречи",
+      "calendar": "Календари",
+      "language": "Языки",
+      "backup": "Резервная копия",
+      "assistant": "Ассистент",
+      "hold-or-tap": "Удержание или нажатие",
+      "choose-your-microphone": "Выбор микрофона",
+      "microphone-not-working": "Микрофон не работает",
+      "local-models": "Локальные модели",
+      "chat-agent": "Чат-агент",
+      "record-a-meeting": "Запись встречи",
+      "connect-google-calendar": "Подключение Google Calendar",
+      "languages": "Диктовка на других языках",
+      "sync-across-devices": "Синхронизация заметок между устройствами"
+    },
+    "appVersion": "Версия приложения",
+    "platform": "Платформа",
+    "processing": "Обработка",
+    "engine": "Движок",
+    "policy": "Ассистент разрешён политикой",
+    "on": "Вкл.",
+    "off": "Выкл.",
+    "microphonePermission": "Разрешение на доступ к микрофону",
+    "specificMicrophone": "Выбранный микрофон",
+    "permissionGranted": "Разрешено",
+    "permissionDenied": "Отклонено",
+    "permissionRestricted": "Ограничено",
+    "permissionNotDetermined": "Не запрашивалось"
   }
 }

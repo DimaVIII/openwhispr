@@ -1,6 +1,7 @@
 import { TranscriptionService } from '@/services/transcription/TranscriptionService';
 import { transcribeAndCleanup } from '@/lib/transcribeAndCleanup';
 import { cleanupTranscript } from '@/lib/cleanupTranscript';
+import { Platform } from 'react-native';
 
 // accountAccess pulls in the router for its sign-in alert; stub it here.
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
@@ -23,8 +24,9 @@ jest.mock('@/lib/permissions', () => ({
   isNoSpeechError: jest.fn(() => false),
 }));
 
+let mockConfig: Record<string, unknown> = { cleanupEnabled: true };
 jest.mock('@/store/useConfigStore', () => ({
-  useConfigStore: { getState: () => ({ config: { cleanupEnabled: true } }) },
+  useConfigStore: { getState: () => ({ config: mockConfig }) },
 }));
 
 // Snippets merged into this pipeline: transcribeAndCleanup now reads the snippet
@@ -55,9 +57,18 @@ jest.mock('@/services/reasoning/ReasoningService', () => ({
   },
 }));
 
+let mockActiveMode = 'cloud';
 jest.mock('@/store/useProcessingModeStore', () => ({
-  useProcessingModeStore: { getState: () => ({ activeMode: 'cloud' }) },
+  useProcessingModeStore: { getState: () => ({ activeMode: mockActiveMode }) },
 }));
+
+const PROVIDER_ROUTE = {
+  mode: 'providers' as const,
+  scope: 'cleanup' as const,
+  providerId: 'groq',
+  modelId: 'llama',
+  endpoint: 'https://api.groq.com/openai/v1',
+};
 
 const mockTranscribe = TranscriptionService.transcribe as jest.Mock;
 const mockFused = TranscriptionService.transcribeWithCloudCleanup as jest.Mock;
@@ -66,10 +77,42 @@ const mockCleanup = cleanupTranscript as jest.Mock;
 beforeEach(() => {
   jest.clearAllMocks();
   mockUser = { id: 'u', isAnonymous: false };
+  mockActiveMode = 'cloud';
+  mockConfig = { cleanupEnabled: true };
   mockTranscribe.mockResolvedValue({ text: 'hello world', provider: 'cloud', duration: 1 });
 });
 
 describe('transcribeAndCleanup tone', () => {
+  it.each(['private', 'cloud'])(
+    'keeps Android Style for local cleanup in %s mode',
+    async (mode) => {
+      const originalPlatform = Platform.OS;
+      Platform.OS = 'android';
+      try {
+        mockActiveMode = mode;
+        const cleanupRoute = { mode: 'local', scope: 'cleanup' } as const;
+        mockConfig = { cleanupEnabled: true, inference: { cleanup: { mode: 'local' } } };
+        mockTranscribe.mockResolvedValue({ text: 'hello world', provider: 'local', duration: 1 });
+
+        await transcribeAndCleanup({
+          audioUri: 'file://a.wav',
+          provider: 'local',
+          requestContext: 'keyboard',
+          keyboardTone: 'formal',
+          cleanupRoute,
+        });
+
+        expect(mockCleanup).toHaveBeenCalledWith(
+          'hello world',
+          expect.objectContaining({ tone: 'formal', inferenceRoute: cleanupRoute }),
+        );
+        expect(mockFused).not.toHaveBeenCalled();
+      } finally {
+        Platform.OS = originalPlatform;
+      }
+    },
+  );
+
   it('forces the serial path and passes tone for a non-default keyboard tone', async () => {
     const result = await transcribeAndCleanup({
       audioUri: 'file://a.wav',
@@ -168,4 +211,54 @@ describe('transcribeAndCleanup tone', () => {
       );
     },
   );
+
+  // Tones are a Cloud cleanup option, so a tone picked before Private mode never reaches its
+  // cleanup, and On-Device cleanup never gets one.
+  it.each([
+    ['a cleanup provider in Private mode', 'private', PROVIDER_ROUTE],
+    [
+      'On-Device cleanup in Private mode',
+      'private',
+      { mode: 'local' as const, scope: 'cleanup' as const },
+    ],
+    [
+      'On-Device cleanup outside Private mode',
+      'cloud',
+      { mode: 'local' as const, scope: 'cleanup' as const },
+    ],
+  ])('passes no tone to %s', async (_label, activeMode, cleanupRoute) => {
+    mockActiveMode = activeMode;
+    mockConfig = { cleanupEnabled: true, inference: { cleanup: { mode: cleanupRoute.mode } } };
+    mockTranscribe.mockResolvedValue({ text: 'hello world', provider: 'local', duration: 1 });
+
+    await transcribeAndCleanup({
+      audioUri: 'file://a.wav',
+      provider: 'local',
+      requestContext: 'keyboard',
+      keyboardTone: 'formal',
+      cleanupRoute,
+    });
+
+    expect(mockCleanup).toHaveBeenCalledWith(
+      'hello world',
+      expect.objectContaining({ tone: undefined, inferenceRoute: cleanupRoute }),
+    );
+  });
+
+  it('passes the tone to a cleanup provider outside Private mode', async () => {
+    mockActiveMode = 'providers';
+
+    await transcribeAndCleanup({
+      audioUri: 'file://a.wav',
+      provider: 'cloud',
+      requestContext: 'keyboard',
+      keyboardTone: 'formal',
+      cleanupRoute: PROVIDER_ROUTE,
+    });
+
+    expect(mockCleanup).toHaveBeenCalledWith(
+      'hello world',
+      expect.objectContaining({ tone: 'formal', inferenceRoute: PROVIDER_ROUTE }),
+    );
+  });
 });

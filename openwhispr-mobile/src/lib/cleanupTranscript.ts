@@ -19,6 +19,7 @@ import {
   estimateLocalTokens,
   getLocalReasoningReadiness,
   getLocalReasoningUnavailableMessage,
+  LocalReasoningError,
 } from './localReasoning';
 import { withRetry, createApiRetryStrategy } from './retry';
 
@@ -64,19 +65,46 @@ function createTimeoutSignal(
 // punctuation and capitals cleanup adds.
 const LOCAL_CLEANUP_MAX_TRANSCRIPT_TOKENS = Math.floor(LOCAL_OUTPUT_TOKEN_RESERVE * 0.8);
 
-async function localSkipReason(
+// Apple Intelligence writes a cleaned copy about as long as the transcript, at roughly 30 tokens a
+// second on an iPhone 15 Pro (Apple's figure), so a long one can't finish in Cloud's 12 s. The rate
+// here is lower so a slower or busier iPhone still finishes; the [reasoning] dev log reports the
+// real one. The startup allowance covers the readiness and budget checks and loading the model.
+const LOCAL_CLEANUP_TOKENS_PER_SECOND = 25;
+const LOCAL_CLEANUP_STARTUP_MS = 5_000;
+
+function localCleanupTimeoutMs(transcriptTokens: number): number {
+  return Math.max(
+    CLEANUP_TIMEOUT_MS,
+    LOCAL_CLEANUP_STARTUP_MS + (transcriptTokens / LOCAL_CLEANUP_TOKENS_PER_SECOND) * 1000,
+  );
+}
+
+// Why an on-device pass can't run, or, for cleanup, the transcript's length in tokens.
+async function prepareLocalRun(
   text: string,
   scope: 'cleanup' | 'agent',
-): Promise<string | undefined> {
+): Promise<{ skipReason: string } | { tokens?: number }> {
   let readiness = await getLocalReasoningReadiness();
   // The cached answer outlives a fix in iOS Settings, so check again before refusing.
   if (readiness.status !== 'ready') readiness = await getLocalReasoningReadiness({ refresh: true });
-  if (readiness.status !== 'ready') return getLocalReasoningUnavailableMessage(readiness);
-  if (scope !== 'cleanup') return undefined;
+  if (readiness.status !== 'ready') {
+    return { skipReason: getLocalReasoningUnavailableMessage(readiness) };
+  }
+  if (scope !== 'cleanup') return {};
   const tokens = (await countLocalReasoningTokens({ prompt: text })) ?? estimateLocalTokens(text);
   return tokens > LOCAL_CLEANUP_MAX_TRANSCRIPT_TOKENS
-    ? 'This transcript is too long for On-Device cleanup.'
-    : undefined;
+    ? { skipReason: 'This transcript is too long for On-Device cleanup.' }
+    : { tokens };
+}
+
+// Apple Intelligence's two common failures say what happened. The only signal a cleanup run gets
+// is its timeout, so a cancelled one took too long.
+function cleanupFailureReason(error: unknown): string {
+  if (Platform.OS === 'ios' && error instanceof LocalReasoningError) {
+    if (error.code === 'APPLE_LLM_CANCELLED') return 'Apple Intelligence took too long.';
+    if (error.code === 'APPLE_LLM_RATE_LIMITED') return 'Apple Intelligence was busy.';
+  }
+  return 'Cleanup failed.';
 }
 
 function isDictationCleanupContext(context: CleanupContext | undefined): boolean {
@@ -156,7 +184,7 @@ export async function cleanupTranscript(
   const inferenceRoute = resolved.route;
   // First-use CPU model loading and prefill are slower than a hosted request.
   // Keep the existing network timeout; local work remains user-cancellable.
-  const timeoutMs =
+  let timeoutMs =
     Platform.OS === 'android' && inferenceRoute.mode === 'local'
       ? 120_000
       : mentionDetected
@@ -164,10 +192,13 @@ export async function cleanupTranscript(
         : CLEANUP_TIMEOUT_MS;
   // Say why an on-device pass can't run, rather than retrying into a generic failure.
   if (inferenceRoute.mode === 'local') {
-    const skipReason = await localSkipReason(rawText, scope);
-    if (skipReason) {
-      options.onSkipped?.(`${skipReason} Your raw transcript is saved.`);
+    const localRun = await prepareLocalRun(rawText, scope);
+    if ('skipReason' in localRun) {
+      options.onSkipped?.(`${localRun.skipReason} Your raw transcript is saved.`);
       return rawText;
+    }
+    if (Platform.OS === 'ios' && localRun.tokens !== undefined) {
+      timeoutMs = localCleanupTimeoutMs(localRun.tokens);
     }
   }
   // Only provider and on-device routes take the privacy hint. A Cloud route is
@@ -247,7 +278,7 @@ export async function cleanupTranscript(
     }
     return result.text;
   } catch (err) {
-    options.onSkipped?.('Cleanup failed. Your raw transcript is saved.');
+    options.onSkipped?.(`${cleanupFailureReason(err)} Your raw transcript is saved.`);
     if (configuredRoute?.mode !== 'providers')
       console.warn('Reasoning failed after retries, using original transcription:', err);
     return rawText;
