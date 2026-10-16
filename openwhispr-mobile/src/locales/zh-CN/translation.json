@@ -438,6 +438,23 @@
       "enhancing": "正在优化…",
       "retryFailed": "重试失败",
       "retryBody": "无法重试此转写。"
+    },
+    "noteDetails": {
+      "transcriptSubtitle": "查看、分享或导出完整转录。",
+      "exportMarkdown": "导出 Markdown",
+      "exportText": "导出纯文本",
+      "shareTranscript": "分享或导出转录",
+      "shareFailed": "无法分享转录",
+      "error": "错误",
+      "noSegments": "暂无转录片段。",
+      "editSpeaker": "编辑{{name}}",
+      "attendees": "参会者",
+      "organizer": "组织者",
+      "you": "你",
+      "guest": "访客",
+      "attendeesLabel": "参会者：{{name}}",
+      "folderLabel": "文件夹：{{name}}。移动笔记",
+      "addToFolder": "添加到文件夹"
     }
   }
 }

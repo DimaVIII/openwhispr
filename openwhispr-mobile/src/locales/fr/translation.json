@@ -438,6 +438,23 @@
       "enhancing": "Amélioration…",
       "retryFailed": "Nouvelle tentative échouée",
       "retryBody": "Impossible de relancer cette transcription."
+    },
+    "noteDetails": {
+      "transcriptSubtitle": "Consultez, partagez ou exportez la transcription complète.",
+      "exportMarkdown": "Exporter en Markdown",
+      "exportText": "Exporter en texte brut",
+      "shareTranscript": "Partager ou exporter la transcription",
+      "shareFailed": "Impossible de partager la transcription",
+      "error": "Erreur",
+      "noSegments": "Aucun segment de transcription pour le moment.",
+      "editSpeaker": "Modifier {{name}}",
+      "attendees": "Participants",
+      "organizer": "Organisateur",
+      "you": "Vous",
+      "guest": "Invité",
+      "attendeesLabel": "Participants : {{name}}",
+      "folderLabel": "Dossier : {{name}}. Déplacer la note",
+      "addToFolder": "Ajouter à un dossier"
     }
   }
 }

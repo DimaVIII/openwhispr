@@ -81,23 +81,31 @@ export function markViewer(
   }));
 }
 
-export function attendeeName(participant: CalendarParticipant): string {
-  if (participant.self) return 'You';
-  return participant.displayName?.trim() || participant.email || 'Guest';
+const defaultAttendeeLabels = { you: 'You', guest: 'Guest' };
+
+export function attendeeName(
+  participant: CalendarParticipant,
+  labels = defaultAttendeeLabels,
+): string {
+  if (participant.self) return labels.you;
+  return participant.displayName?.trim() || participant.email || labels.guest;
 }
 
-const attendeeFirstName = (participant: CalendarParticipant): string =>
-  participant.displayName?.trim().split(/\s+/)[0] || participant.email?.split('@')[0] || 'Guest';
+const attendeeFirstName = (participant: CalendarParticipant, guest: string): string =>
+  participant.displayName?.trim().split(/\s+/)[0] || participant.email?.split('@')[0] || guest;
 
 /** "Sam +3": the first attendee who isn't you, plus everyone else. Null when nobody attends. */
-export function formatAttendeeChipLabel(participants: CalendarParticipant[]): string | null {
+export function formatAttendeeChipLabel(
+  participants: CalendarParticipant[],
+  labels = defaultAttendeeLabels,
+): string | null {
   const people = sortAttendees(participants);
   if (people.length === 0) return null;
 
   const first = people.find((participant) => !participant.self);
-  if (!first) return 'You';
+  if (!first) return labels.you;
 
   const others = people.length - 1;
-  const name = attendeeFirstName(first);
+  const name = attendeeFirstName(first, labels.guest);
   return others > 0 ? `${name} +${others}` : name;
 }

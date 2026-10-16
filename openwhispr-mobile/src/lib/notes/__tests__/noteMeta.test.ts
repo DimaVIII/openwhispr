@@ -196,3 +196,19 @@ describe('Android metadata presentation', () => {
     expect(formatNoteMetaDate(new Date(NaN), now, presentation)).toBe('');
   });
 });
+
+it('localizes anonymous attendee labels without changing supplied names or membership', () => {
+  const labels = { you: 'أنت', guest: 'ضيف' };
+  const attendees = [
+    person({ self: true, email: 'viewer@example.com' }),
+    person({ displayName: 'Sam Lee' }),
+    person({}),
+  ];
+  expect(attendeeName(attendees[0], labels)).toBe('أنت');
+  expect(attendeeName(attendees[1], labels)).toBe('Sam Lee');
+  expect(attendeeName(attendees[2], labels)).toBe('ضيف');
+  expect(formatAttendeeChipLabel(attendees, labels)).toBe('Sam +1');
+  expect(formatAttendeeChipLabel([attendees[0]], labels)).toBe('أنت');
+  expect(formatAttendeeChipLabel([attendees[2]], labels)).toBeNull();
+  expect(attendees[0].self).toBe(true);
+});

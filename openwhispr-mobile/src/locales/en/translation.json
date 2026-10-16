@@ -438,6 +438,23 @@
       "enhancing": "Enhancing...",
       "retryFailed": "Retry failed",
       "retryBody": "Could not retry this transcription."
+    },
+    "noteDetails": {
+      "transcriptSubtitle": "Review, share or export the full transcript.",
+      "exportMarkdown": "Export Markdown",
+      "exportText": "Export Plain Text",
+      "shareTranscript": "Share or export transcript",
+      "shareFailed": "Unable to share transcript",
+      "error": "Error",
+      "noSegments": "No transcript segments yet.",
+      "editSpeaker": "Edit {{name}}",
+      "attendees": "Attendees",
+      "organizer": "Organizer",
+      "you": "You",
+      "guest": "Guest",
+      "attendeesLabel": "Attendees: {{name}}",
+      "folderLabel": "Folder: {{name}}. Move note",
+      "addToFolder": "Add to folder"
     }
   }
 }

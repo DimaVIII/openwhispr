@@ -438,6 +438,23 @@
       "enhancing": "Wird überarbeitet…",
       "retryFailed": "Erneuter Versuch fehlgeschlagen",
       "retryBody": "Diese Transkription konnte nicht erneut versucht werden."
+    },
+    "noteDetails": {
+      "transcriptSubtitle": "Vollständiges Transkript ansehen, teilen oder exportieren.",
+      "exportMarkdown": "Markdown exportieren",
+      "exportText": "Text exportieren",
+      "shareTranscript": "Transkript teilen oder exportieren",
+      "shareFailed": "Transkript konnte nicht geteilt werden",
+      "error": "Fehler",
+      "noSegments": "Noch keine Transkriptabschnitte.",
+      "editSpeaker": "{{name}} bearbeiten",
+      "attendees": "Teilnehmende",
+      "organizer": "Organisator",
+      "you": "Du",
+      "guest": "Gast",
+      "attendeesLabel": "Teilnehmende: {{name}}",
+      "folderLabel": "Ordner: {{name}}. Notiz verschieben",
+      "addToFolder": "Zum Ordner hinzufügen"
     }
   }
 }

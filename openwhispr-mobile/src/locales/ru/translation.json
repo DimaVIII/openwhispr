@@ -438,6 +438,23 @@
       "enhancing": "Улучшение…",
       "retryFailed": "Повторная попытка не удалась",
       "retryBody": "Не удалось повторить расшифровку."
+    },
+    "noteDetails": {
+      "transcriptSubtitle": "Просмотрите, отправьте или экспортируйте полную расшифровку.",
+      "exportMarkdown": "Экспорт Markdown",
+      "exportText": "Экспорт обычного текста",
+      "shareTranscript": "Отправить или экспортировать расшифровку",
+      "shareFailed": "Не удалось отправить расшифровку",
+      "error": "Ошибка",
+      "noSegments": "Фрагментов расшифровки пока нет.",
+      "editSpeaker": "Изменить {{name}}",
+      "attendees": "Участники",
+      "organizer": "Организатор",
+      "you": "Вы",
+      "guest": "Гость",
+      "attendeesLabel": "Участники: {{name}}",
+      "folderLabel": "Папка: {{name}}. Переместить заметку",
+      "addToFolder": "Добавить в папку"
     }
   }
 }

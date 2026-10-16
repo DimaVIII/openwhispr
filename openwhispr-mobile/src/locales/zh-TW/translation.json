@@ -438,6 +438,23 @@
       "enhancing": "正在最佳化…",
       "retryFailed": "重試失敗",
       "retryBody": "無法重試此轉寫。"
+    },
+    "noteDetails": {
+      "transcriptSubtitle": "檢視、分享或匯出完整逐字稿。",
+      "exportMarkdown": "匯出 Markdown",
+      "exportText": "匯出純文字",
+      "shareTranscript": "分享或匯出逐字稿",
+      "shareFailed": "無法分享逐字稿",
+      "error": "錯誤",
+      "noSegments": "尚無逐字稿片段。",
+      "editSpeaker": "編輯{{name}}",
+      "attendees": "與會者",
+      "organizer": "主辦人",
+      "you": "你",
+      "guest": "訪客",
+      "attendeesLabel": "與會者：{{name}}",
+      "folderLabel": "資料夾：{{name}}。移動筆記",
+      "addToFolder": "加入資料夾"
     }
   }
 }

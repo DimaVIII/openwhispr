@@ -408,7 +408,10 @@ export default function NoteEditorScreen() {
       }),
     [calendarParticipants, note?.ownerUserId, user?.email, user?.id],
   );
-  const attendeeLabel = formatAttendeeChipLabel(attendees);
+  const attendeeLabel = formatAttendeeChipLabel(attendees, {
+    you: copy('noteDetails.you', 'You'),
+    guest: copy('noteDetails.guest', 'Guest'),
+  });
   const meetingNotesContext = useMemo(
     () =>
       note?.calendarEventId

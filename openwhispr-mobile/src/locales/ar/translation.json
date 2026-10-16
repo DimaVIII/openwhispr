@@ -438,6 +438,23 @@
       "enhancing": "جارٍ التحسين…",
       "retryFailed": "فشلت إعادة المحاولة",
       "retryBody": "تعذرت إعادة محاولة هذا التفريغ."
+    },
+    "noteDetails": {
+      "transcriptSubtitle": "مراجعة النص الكامل أو مشاركته أو تصديره.",
+      "exportMarkdown": "تصدير Markdown",
+      "exportText": "تصدير نص عادي",
+      "shareTranscript": "مشاركة النص أو تصديره",
+      "shareFailed": "تعذّرت مشاركة النص",
+      "error": "خطأ",
+      "noSegments": "لا توجد مقاطع نصية بعد.",
+      "editSpeaker": "تعديل {{name}}",
+      "attendees": "الحضور",
+      "organizer": "المنظّم",
+      "you": "أنت",
+      "guest": "ضيف",
+      "attendeesLabel": "الحضور: {{name}}",
+      "folderLabel": "المجلد: {{name}}. نقل الملاحظة",
+      "addToFolder": "إضافة إلى مجلد"
     }
   }
 }

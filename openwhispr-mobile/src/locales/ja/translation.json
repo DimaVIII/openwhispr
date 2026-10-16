@@ -438,6 +438,23 @@
       "enhancing": "整形中…",
       "retryFailed": "再試行に失敗しました",
       "retryBody": "この文字起こしを再試行できませんでした。"
+    },
+    "noteDetails": {
+      "transcriptSubtitle": "全文の文字起こしを確認、共有、または書き出します。",
+      "exportMarkdown": "Markdownを書き出す",
+      "exportText": "標準テキストを書き出す",
+      "shareTranscript": "文字起こしを共有または書き出す",
+      "shareFailed": "文字起こしを共有できませんでした",
+      "error": "エラー",
+      "noSegments": "文字起こしのセグメントはまだありません。",
+      "editSpeaker": "{{name}}を編集",
+      "attendees": "参加者",
+      "organizer": "主催者",
+      "you": "あなた",
+      "guest": "ゲスト",
+      "attendeesLabel": "参加者：{{name}}",
+      "folderLabel": "フォルダ：{{name}}。ノートを移動",
+      "addToFolder": "フォルダに追加"
     }
   }
 }
