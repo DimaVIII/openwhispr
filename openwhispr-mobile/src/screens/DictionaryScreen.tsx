@@ -81,7 +81,10 @@ function DictionaryRow({ entry, onDelete }: { entry: DictionaryEntry; onDelete: 
           <Text className="text-[15px] text-label" numberOfLines={1}>
             {entry.word}
           </Text>
-          <Text className="text-[12px] text-tertiaryLabel" numberOfLines={1}>
+          <Text
+            className="text-[12px] text-tertiaryLabel"
+            numberOfLines={Platform.OS === 'android' ? undefined : 1}
+          >
             {sourceLabel(entry, copy, language)}
           </Text>
         </View>

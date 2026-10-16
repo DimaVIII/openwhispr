@@ -176,7 +176,7 @@ export function SyncStatusLabel() {
         )}
         {isGated && <SystemIcon name="lock.fill" mdName="Lock" size={12} color="tertiaryLabel" />}
         <Text
-          numberOfLines={2}
+          numberOfLines={Platform.OS === 'android' ? undefined : 2}
           className={'flex-1 text-[13px] ' + (isError ? 'text-systemRed' : 'text-tertiaryLabel')}
         >
           {label}
