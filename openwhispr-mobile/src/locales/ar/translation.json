@@ -409,6 +409,35 @@
       "voiceProfiles": "ملفات التعريف الصوتية",
       "teachVoice": "علّم OpenWhispr التعرّف على صوتك",
       "voiceCount": "الأصوات: {{count}}"
+    },
+    "editor": {
+      "title": "العنوان",
+      "typeOrDictate": "اكتب أو أملِ…",
+      "addNotes": "أضف ملاحظاتك…",
+      "recordingNotes": "يمكنك تعديل هذه الملاحظات بعد توقف التسجيل.",
+      "transcriptFailed": "فشل التفريغ النصي",
+      "processingUnfinished": "لم تكتمل معالجة الصوت لهذه الملاحظة.",
+      "retryTranscript": "إعادة محاولة التفريغ",
+      "audioUnavailable": "لم يعد الصوت الأصلي متاحًا، لذا لا يمكن إعادة محاولة التفريغ.",
+      "enhanced": "محسّن",
+      "myNotes": "ملاحظاتي",
+      "manageActions": "إدارة الإجراءات…",
+      "askNote": "اسأل عن هذه الملاحظة",
+      "copyNotes": "نسخ الملاحظات",
+      "viewTranscript": "عرض التفريغ النصي",
+      "share": "مشاركة",
+      "enableSync": "تفعيل المزامنة السحابية",
+      "disableSync": "تعطيل المزامنة السحابية",
+      "cloudRemovalPending": "حذف النسخة السحابية قيد الانتظار",
+      "cloudRemovalBody": "تبقى الملاحظة خاصة على هذا الجهاز. تعذر حذف نسختها السحابية حتى الآن؛ سيعيد OpenWhispr المحاولة عندما تتوفر المزامنة.",
+      "noteActions": "إجراءات الملاحظة",
+      "recording": "جارٍ تسجيل الصوت…",
+      "transcribing": "جارٍ تفريغ الصوت…",
+      "diarizing": "جارٍ فصل المتحدثين…",
+      "preparing": "جارٍ إعداد التفريغ…",
+      "enhancing": "جارٍ التحسين…",
+      "retryFailed": "فشلت إعادة المحاولة",
+      "retryBody": "تعذرت إعادة محاولة هذا التفريغ."
     }
   }
 }

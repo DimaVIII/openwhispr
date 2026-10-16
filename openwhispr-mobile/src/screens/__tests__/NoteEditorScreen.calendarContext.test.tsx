@@ -264,6 +264,7 @@ jest.mock('@/components/notes/NoteActionsMenu', () => ({
     onAskNote,
     askNoteDisabled,
     onViewTranscript,
+    onDelete,
   }: {
     actions: Action[];
     processing: boolean;
@@ -271,12 +272,16 @@ jest.mock('@/components/notes/NoteActionsMenu', () => ({
     onAskNote?: () => void;
     askNoteDisabled?: boolean;
     onViewTranscript?: () => void;
+    onDelete: () => void;
   }) =>
     (() => {
       mockMenuProcessing = processing;
       const { Pressable: MockPressable, Text: MockText, View: MockView } = require('react-native');
       return (
         <MockView>
+          <MockPressable testID="menu-delete-note" onPress={onDelete}>
+            <MockText>Delete test action</MockText>
+          </MockPressable>
           {actions.map((action) => (
             <MockPressable
               key={action.id}
@@ -1853,3 +1858,70 @@ it.each(['isStarting', 'isProcessing'] as const)(
     }
   },
 );
+
+let mockEditorLanguage = 'en';
+jest.mock('@/hooks/useAndroidCopy', () => ({
+  useAndroidCopy: () => {
+    const { Platform: MockPlatform } = require('react-native');
+    const { useCallback } = require('react');
+    const language = mockEditorLanguage;
+    const copy = useCallback(
+      (key: string, fallback: string, options?: Record<string, unknown>) => {
+        if (MockPlatform.OS !== 'android') return fallback;
+        const resource =
+          language === 'ar'
+            ? require('@/locales/ar/translation.json').android
+            : require('@/locales/en/translation.json').android;
+        const value =
+          key.split('.').reduce((node: any, part: string) => node?.[part], resource) ?? fallback;
+        return value.replace(/{{(\w+)}}/g, (_: string, name: string) =>
+          String(options?.[name] ?? ''),
+        );
+      },
+      [language, MockPlatform.OS],
+    );
+    return { copy, language };
+  },
+}));
+
+it('updates Android editor copy without losing typed content and requires localized delete confirmation', async () => {
+  const original = Platform.OS;
+  Platform.OS = 'android';
+  mockEditorLanguage = 'en';
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+  try {
+    mockNote = note({
+      title: 'Literal title',
+      content: 'Original body',
+      noteType: 'note',
+      diarizationEnabled: 0,
+      calendarEventId: null,
+      participants: null,
+      transcriptionStatus: 'idle',
+    });
+    mockNotesState.notes = [mockNote];
+    mockSegments = [];
+    mockSpeakers = [];
+    const view = render(<NoteEditorScreen />);
+    fireEvent.changeText(view.getByTestId('note-content-input'), 'Keep my typed draft');
+    mockEditorLanguage = 'ar';
+    view.rerender(<NoteEditorScreen />);
+    expect(view.getByPlaceholderText('العنوان').props.value).toBe('Literal title');
+    expect(view.getByTestId('note-content-input').props.value).toBe('Keep my typed draft');
+    expect(view.getByPlaceholderText('اكتب أو أملِ…')).toBeTruthy();
+    fireEvent.press(view.getByTestId('menu-delete-note'));
+    expect(mockDeleteNote).not.toHaveBeenCalled();
+    const [title, , buttons] = alert.mock.calls.at(-1)!;
+    expect(title).toBe('حذف الملاحظة');
+    expect(buttons?.find((b) => b.style === 'cancel')?.text).toBe('إلغاء');
+    expect(buttons?.find((b) => b.style === 'destructive')?.text).toBe('حذف');
+    await act(async () => {
+      await buttons?.find((b) => b.style === 'destructive')?.onPress?.();
+    });
+    expect(mockDeleteNote).toHaveBeenCalledWith(7);
+  } finally {
+    mockEditorLanguage = 'en';
+    Platform.OS = original;
+    alert.mockRestore();
+  }
+});

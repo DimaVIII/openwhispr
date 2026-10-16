@@ -27,19 +27,25 @@ export function noteTakenAt(
  * "Today 09:27", "Yesterday 14:05", "Sep 21, 09:27", or "Sep 21, 2025, 09:27", with the time
  * shown as the notes list shows it.
  */
-export function formatNoteMetaDate(timestamp: string | Date | null | undefined, now: Date): string {
+export function formatNoteMetaDate(
+  timestamp: string | Date | null | undefined,
+  now: Date,
+  presentation?: { language: string; today: string; yesterday: string },
+): string {
   const date = tryParseNoteTimestamp(timestamp);
-  if (!date) return '';
+  if (!date || !Number.isFinite(date.getTime())) return '';
 
-  const time = formatClockTime(date);
-  if (isSameDay(date, now)) return `Today ${time}`;
+  const time = presentation
+    ? date.toLocaleTimeString(presentation.language, { hour: '2-digit', minute: '2-digit' })
+    : formatClockTime(date);
+  if (isSameDay(date, now)) return `${presentation?.today ?? 'Today'} ${time}`;
 
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
-  if (isSameDay(date, yesterday)) return `Yesterday ${time}`;
+  if (isSameDay(date, yesterday)) return `${presentation?.yesterday ?? 'Yesterday'} ${time}`;
 
   const day = date.toLocaleDateString(
-    undefined,
+    presentation?.language,
     date.getFullYear() === now.getFullYear()
       ? { month: 'short', day: 'numeric' }
       : { month: 'short', day: 'numeric', year: 'numeric' },

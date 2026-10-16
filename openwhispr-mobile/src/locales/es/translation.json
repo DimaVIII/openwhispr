@@ -409,6 +409,35 @@
       "voiceProfiles": "Perfiles de voz",
       "teachVoice": "Enseña tu voz a OpenWhispr",
       "voiceCount": "Voces: {{count}}"
+    },
+    "editor": {
+      "title": "Título",
+      "typeOrDictate": "Escribe o dicta…",
+      "addNotes": "Añade tus propias notas…",
+      "recordingNotes": "Puedes editar estas notas cuando termine la grabación.",
+      "transcriptFailed": "Error de transcripción",
+      "processingUnfinished": "No se completó el procesamiento de audio de esta nota.",
+      "retryTranscript": "Reintentar transcripción",
+      "audioUnavailable": "El audio original ya no está disponible, por lo que no se puede reintentar la transcripción.",
+      "enhanced": "Mejorado",
+      "myNotes": "Mis notas",
+      "manageActions": "Gestionar acciones…",
+      "askNote": "Preguntar sobre esta nota",
+      "copyNotes": "Copiar notas",
+      "viewTranscript": "Ver transcripción",
+      "share": "Compartir",
+      "enableSync": "Activar sincronización en la nube",
+      "disableSync": "Desactivar sincronización en la nube",
+      "cloudRemovalPending": "Eliminación de la copia en la nube pendiente",
+      "cloudRemovalBody": "La nota permanece privada en este dispositivo. Aún no se pudo eliminar su copia en la nube; OpenWhispr lo reintentará cuando la sincronización esté disponible.",
+      "noteActions": "Acciones de la nota",
+      "recording": "Grabando audio…",
+      "transcribing": "Transcribiendo audio…",
+      "diarizing": "Separando hablantes…",
+      "preparing": "Preparando transcripción…",
+      "enhancing": "Mejorando…",
+      "retryFailed": "Error al reintentar",
+      "retryBody": "No se pudo reintentar esta transcripción."
     }
   }
 }

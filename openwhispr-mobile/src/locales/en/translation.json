@@ -409,6 +409,35 @@
       "voiceProfiles": "Voice profiles",
       "teachVoice": "Teach OpenWhispr your voice",
       "voiceCount": "Voices: {{count}}"
+    },
+    "editor": {
+      "title": "Title",
+      "typeOrDictate": "Type or dictate…",
+      "addNotes": "Add your own notes…",
+      "recordingNotes": "You can edit these notes once the recording stops.",
+      "transcriptFailed": "Transcript failed",
+      "processingUnfinished": "Audio processing did not finish for this note.",
+      "retryTranscript": "Retry transcription",
+      "audioUnavailable": "The original audio is no longer available, so this transcript cannot be retried.",
+      "enhanced": "Enhanced",
+      "myNotes": "My notes",
+      "manageActions": "Manage Actions…",
+      "askNote": "Ask about this note",
+      "copyNotes": "Copy Notes",
+      "viewTranscript": "View Transcript",
+      "share": "Share",
+      "enableSync": "Enable Cloud Sync",
+      "disableSync": "Disable Cloud Sync",
+      "cloudRemovalPending": "Cloud copy removal pending",
+      "cloudRemovalBody": "The note stays private on this device. Its cloud copy could not be removed yet; OpenWhispr will retry when sync is available.",
+      "noteActions": "Note actions",
+      "recording": "Recording audio...",
+      "transcribing": "Transcribing audio...",
+      "diarizing": "Separating speakers...",
+      "preparing": "Preparing transcript...",
+      "enhancing": "Enhancing...",
+      "retryFailed": "Retry failed",
+      "retryBody": "Could not retry this transcription."
     }
   }
 }

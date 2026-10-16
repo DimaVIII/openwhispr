@@ -409,6 +409,35 @@
       "voiceProfiles": "音声プロファイル",
       "teachVoice": "OpenWhisprにあなたの声を覚えさせる",
       "voiceCount": "音声数：{{count}}"
+    },
+    "editor": {
+      "title": "タイトル",
+      "typeOrDictate": "入力または音声入力…",
+      "addNotes": "自分のメモを追加…",
+      "recordingNotes": "録音が停止すると、このメモを編集できます。",
+      "transcriptFailed": "文字起こしに失敗しました",
+      "processingUnfinished": "このメモの音声処理が完了しませんでした。",
+      "retryTranscript": "文字起こしを再試行",
+      "audioUnavailable": "元の音声が利用できないため、文字起こしを再試行できません。",
+      "enhanced": "整形済み",
+      "myNotes": "自分のメモ",
+      "manageActions": "アクションを管理…",
+      "askNote": "このメモについて質問",
+      "copyNotes": "メモをコピー",
+      "viewTranscript": "文字起こしを表示",
+      "share": "共有",
+      "enableSync": "クラウド同期を有効にする",
+      "disableSync": "クラウド同期を無効にする",
+      "cloudRemovalPending": "クラウドコピーの削除待ち",
+      "cloudRemovalBody": "メモはこの端末内で非公開のままです。クラウドコピーをまだ削除できていません。同期が利用可能になると、OpenWhisprが再試行します。",
+      "noteActions": "メモの操作",
+      "recording": "音声を録音中…",
+      "transcribing": "音声を文字起こし中…",
+      "diarizing": "話者を分離中…",
+      "preparing": "文字起こしを準備中…",
+      "enhancing": "整形中…",
+      "retryFailed": "再試行に失敗しました",
+      "retryBody": "この文字起こしを再試行できませんでした。"
     }
   }
 }

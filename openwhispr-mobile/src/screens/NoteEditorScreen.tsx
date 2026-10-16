@@ -1,3 +1,4 @@
+import { useAndroidCopy } from '@/hooks/useAndroidCopy';
 import { useTranslation } from 'react-i18next';
 import { NoteRecordingControls } from '@/android/NoteRecordingControls';
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
@@ -132,6 +133,7 @@ const transcriptStatusText = (status: string): string => {
 
 export default function NoteEditorScreen() {
   const { t } = useTranslation('android');
+  const { copy, language } = useAndroidCopy();
   const { id } = useLocalSearchParams<{ id: string }>();
   const noteId = parseInt(id ?? '', 10);
   const router = useRouter();
@@ -1124,12 +1126,17 @@ export default function NoteEditorScreen() {
   }, [router]);
 
   const handleDelete = useCallback(() => {
-    confirmDestructive('Delete Note', 'This note will be deleted permanently.', () => {
-      safeHaptics('warning');
-      deleteNote(noteId);
-      if (router.canGoBack()) router.back();
-    });
-  }, [deleteNote, noteId, router]);
+    confirmDestructive(
+      copy('library.deleteNote', 'Delete Note'),
+      copy('library.deleteNoteBody', 'This note will be deleted permanently.'),
+      () => {
+        safeHaptics('warning');
+        deleteNote(noteId);
+        if (router.canGoBack()) router.back();
+      },
+      { cancelLabel: copy('cancel', 'Cancel'), destructiveLabel: copy('deleteAction', 'Delete') },
+    );
+  }, [copy, deleteNote, noteId, router]);
 
   const handleRetryTranscript = useCallback(async () => {
     if (!note || isRetryingTranscript) return;
@@ -1139,13 +1146,15 @@ export default function NoteEditorScreen() {
       await retryMeetingTranscription(note.id);
     } catch (error) {
       Alert.alert(
-        'Retry failed',
-        error instanceof Error ? error.message : 'Could not retry this transcription.',
+        copy('editor.retryFailed', 'Retry failed'),
+        error instanceof Error
+          ? error.message
+          : copy('editor.retryBody', 'Could not retry this transcription.'),
       );
     } finally {
       setIsRetryingTranscript(false);
     }
-  }, [isRetryingTranscript, note, retryMeetingTranscription]);
+  }, [copy, isRetryingTranscript, note, retryMeetingTranscription]);
 
   const handleSpeakerPress = useCallback((block: TranscriptBlock) => {
     if (block.speakerId == null) return;
@@ -1299,7 +1308,7 @@ export default function NoteEditorScreen() {
         />
       ) : null}
       <TabScreenHeader
-        title={title || 'Untitled'}
+        title={title || copy('library.untitled', 'Untitled')}
         left={<GlassBackButton fallbackRoute="/(tabs)/(notes)" />}
         right={
           <NoteActionsMenu
@@ -1344,7 +1353,7 @@ export default function NoteEditorScreen() {
           <TextInput
             value={title}
             onChangeText={handleTitleChange}
-            placeholder="Title"
+            placeholder={copy('editor.title', 'Title')}
             placeholderTextColor="rgba(0,0,0,0.2)"
             multiline
             className="mb-3 text-3xl font-bold leading-9 text-label"
@@ -1355,6 +1364,13 @@ export default function NoteEditorScreen() {
             dateLabel={formatNoteMetaDate(
               noteTakenAt(note?.createdAt, note?.cloudUpdatedAt ?? note?.updatedAt),
               new Date(),
+              Platform.OS === 'android'
+                ? {
+                    language,
+                    today: copy('library.today', 'Today'),
+                    yesterday: copy('library.yesterday', 'Yesterday'),
+                  }
+                : undefined,
             )}
             attendeeLabel={attendeeLabel}
             folderLabel={folderName}
@@ -1408,7 +1424,13 @@ export default function NoteEditorScreen() {
                         'text-[13px] font-medium ' + (active ? 'text-white' : 'text-secondaryLabel')
                       }
                     >
-                      {getNoteBodyTabLabel(tab, bodyTabInput)}
+                      {copy(
+                        tab === 'transcript' ||
+                          (tab === 'notes' && bodyTabInput.contentIsTranscript)
+                          ? 'importTranscript'
+                          : `editor.${tab === 'enhanced' ? 'enhanced' : 'myNotes'}`,
+                        getNoteBodyTabLabel(tab, bodyTabInput),
+                      )}
                     </Text>
                     {tab === 'enhanced' && isStale ? (
                       <View
@@ -1440,7 +1462,10 @@ export default function NoteEditorScreen() {
               <>
                 {transcriptStatus === 'recording' ? (
                   <Text className="mb-2 text-[13px] text-secondaryLabel">
-                    You can edit these notes once the recording stops.
+                    {copy(
+                      'editor.recordingNotes',
+                      'You can edit these notes once the recording stops.',
+                    )}
                   </Text>
                 ) : null}
                 <TextInput
@@ -1449,7 +1474,11 @@ export default function NoteEditorScreen() {
                   onChangeText={handleContentChange}
                   selection={selection}
                   onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
-                  placeholder={hasTypedMeetingNotes ? 'Add your own notes…' : 'Type or dictate…'}
+                  placeholder={
+                    hasTypedMeetingNotes
+                      ? copy('editor.addNotes', 'Add your own notes…')
+                      : copy('editor.typeOrDictate', 'Type or dictate…')
+                  }
                   placeholderTextColor="rgba(0,0,0,0.2)"
                   multiline
                   // The recording screen still writes these notes until the recording stops.
@@ -1463,7 +1492,10 @@ export default function NoteEditorScreen() {
               <View className="min-h-[180px] flex-row items-center gap-3">
                 <ActivityIndicator size="small" color={BRAND} />
                 <Text className="text-[15px] text-secondaryLabel">
-                  {transcriptStatusText(transcriptStatus)}
+                  {copy(
+                    `editor.${transcriptStatus === 'recording' ? 'recording' : transcriptStatus === 'transcribing' ? 'transcribing' : transcriptStatus === 'diarizing' ? 'diarizing' : 'preparing'}`,
+                    transcriptStatusText(transcriptStatus),
+                  )}
                 </Text>
               </View>
             ) : shouldShowTranscriptFailed ? (
@@ -1471,16 +1503,23 @@ export default function NoteEditorScreen() {
                 <Text className="text-[15px] font-medium text-label">
                   {hasTranscriptSegments
                     ? t('meetingTranscriptIncomplete', { defaultValue: 'Transcript incomplete' })
-                    : 'Transcript failed'}
+                    : copy('editor.transcriptFailed', 'Transcript failed')}
                 </Text>
                 <Text className="mt-1 text-[14px] leading-5 text-secondaryLabel">
-                  Audio processing did not finish for this note.
+                  {copy(
+                    'editor.processingUnfinished',
+                    'Audio processing did not finish for this note.',
+                  )}
                 </Text>
                 {note && isManagedMeetingAudioUri(note.id, note.sourceFile) ? (
                   <Pressable
                     onPress={handleRetryTranscript}
                     disabled={isRetryingTranscript}
-                    className="mt-4 h-11 flex-row items-center justify-center rounded-full bg-brand px-5 active:opacity-85 disabled:opacity-50"
+                    className={
+                      Platform.OS === 'android'
+                        ? 'mt-4 min-h-12 flex-row items-center justify-center rounded-full bg-brand px-5 py-3 active:opacity-85 disabled:opacity-50'
+                        : 'mt-4 h-11 flex-row items-center justify-center rounded-full bg-brand px-5 active:opacity-85 disabled:opacity-50'
+                    }
                   >
                     {isRetryingTranscript ? (
                       <ActivityIndicator size="small" color="#FFFFFF" />
@@ -1493,14 +1532,17 @@ export default function NoteEditorScreen() {
                           color="#FFFFFF"
                         />
                         <Text className="ml-2 text-[14px] font-semibold text-white">
-                          Retry transcription
+                          {copy('editor.retryTranscript', 'Retry transcription')}
                         </Text>
                       </>
                     )}
                   </Pressable>
                 ) : (
                   <Text className="mt-3 text-[13px] leading-5 text-tertiaryLabel">
-                    The original audio is no longer available, so this transcript cannot be retried.
+                    {copy(
+                      'editor.audioUnavailable',
+                      'The original audio is no longer available, so this transcript cannot be retried.',
+                    )}
                   </Text>
                 )}
                 {hasTranscriptSegments ? (
@@ -1527,7 +1569,9 @@ export default function NoteEditorScreen() {
                 style={{ borderRadius: 12 }}
               >
                 <ActivityIndicator size="large" color={BRAND} />
-                <Text className="mt-2 text-sm text-secondaryLabel">Enhancing...</Text>
+                <Text className="mt-2 text-sm text-secondaryLabel">
+                  {copy('editor.enhancing', 'Enhancing...')}
+                </Text>
               </View>
             ) : null}
           </View>

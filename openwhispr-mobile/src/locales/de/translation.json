@@ -409,6 +409,35 @@
       "voiceProfiles": "Stimmprofile",
       "teachVoice": "Bringe OpenWhispr deine Stimme bei",
       "voiceCount": "Stimmen: {{count}}"
+    },
+    "editor": {
+      "title": "Titel",
+      "typeOrDictate": "Tippen oder diktieren…",
+      "addNotes": "Eigene Notizen hinzufügen…",
+      "recordingNotes": "Du kannst diese Notizen bearbeiten, sobald die Aufnahme endet.",
+      "transcriptFailed": "Transkription fehlgeschlagen",
+      "processingUnfinished": "Die Audioverarbeitung für diese Notiz wurde nicht abgeschlossen.",
+      "retryTranscript": "Transkription erneut versuchen",
+      "audioUnavailable": "Die ursprüngliche Audiodatei ist nicht mehr verfügbar. Die Transkription kann nicht wiederholt werden.",
+      "enhanced": "Überarbeitet",
+      "myNotes": "Meine Notizen",
+      "manageActions": "Aktionen verwalten…",
+      "askNote": "Zu dieser Notiz fragen",
+      "copyNotes": "Notizen kopieren",
+      "viewTranscript": "Transkript anzeigen",
+      "share": "Teilen",
+      "enableSync": "Cloud-Synchronisierung aktivieren",
+      "disableSync": "Cloud-Synchronisierung deaktivieren",
+      "cloudRemovalPending": "Löschen der Cloud-Kopie ausstehend",
+      "cloudRemovalBody": "Die Notiz bleibt auf diesem Gerät privat. Ihre Cloud-Kopie konnte noch nicht entfernt werden. OpenWhispr versucht es erneut, sobald die Synchronisierung verfügbar ist.",
+      "noteActions": "Notizaktionen",
+      "recording": "Audio wird aufgenommen…",
+      "transcribing": "Audio wird transkribiert…",
+      "diarizing": "Sprecher werden getrennt…",
+      "preparing": "Transkript wird vorbereitet…",
+      "enhancing": "Wird überarbeitet…",
+      "retryFailed": "Erneuter Versuch fehlgeschlagen",
+      "retryBody": "Diese Transkription konnte nicht erneut versucht werden."
     }
   }
 }

@@ -409,6 +409,35 @@
       "voiceProfiles": "聲紋檔案",
       "teachVoice": "讓 OpenWhispr 認識你的聲音",
       "voiceCount": "聲音數量：{{count}}"
+    },
+    "editor": {
+      "title": "標題",
+      "typeOrDictate": "輸入或口述…",
+      "addNotes": "新增自己的筆記…",
+      "recordingNotes": "錄音停止後即可編輯這些筆記。",
+      "transcriptFailed": "轉寫失敗",
+      "processingUnfinished": "這則筆記的音訊處理未完成。",
+      "retryTranscript": "重試轉寫",
+      "audioUnavailable": "原始音訊已無法使用，因此無法重試轉寫。",
+      "enhanced": "已最佳化",
+      "myNotes": "我的筆記",
+      "manageActions": "管理操作…",
+      "askNote": "詢問這則筆記",
+      "copyNotes": "複製筆記",
+      "viewTranscript": "檢視轉寫",
+      "share": "分享",
+      "enableSync": "啟用雲端同步",
+      "disableSync": "停用雲端同步",
+      "cloudRemovalPending": "等待刪除雲端副本",
+      "cloudRemovalBody": "筆記在此裝置上維持私密。暫時無法刪除其雲端副本；同步可用時，OpenWhispr 會重試。",
+      "noteActions": "筆記操作",
+      "recording": "正在錄音…",
+      "transcribing": "正在轉寫音訊…",
+      "diarizing": "正在區分說話者…",
+      "preparing": "正在準備轉寫…",
+      "enhancing": "正在最佳化…",
+      "retryFailed": "重試失敗",
+      "retryBody": "無法重試此轉寫。"
     }
   }
 }
