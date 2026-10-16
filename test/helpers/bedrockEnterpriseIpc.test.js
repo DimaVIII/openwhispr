@@ -965,7 +965,7 @@ test("enterprise stream code-only errors retain classification without inventing
   for (const [code, messageKey] of [
     ["DeploymentNotFound", "providerErrors.modelNotFoundNoModel"],
     ["rate_limit_exceeded", "providerErrors.rateLimited"],
-    ["content_filter", "providerErrors.badRequest"],
+    ["content_filter", "providerErrors.contentFiltered"],
     ["invalid_request_error", "providerErrors.badRequest"],
     ["constructor", "providerErrors.unknown"],
     ["AUTH_EXPIRED", "common.managedConfigUnavailable"],
@@ -995,7 +995,7 @@ test("enterprise stream preserves safe network and message-only provider classif
       { error: { message: "TooManyRequests private-prompt" } },
       "providerErrors.rateLimited",
     ],
-    ["azure", { message: "ContentFilter private-prompt" }, "providerErrors.badRequest"],
+    ["azure", { message: "ContentFilter private-prompt" }, "providerErrors.contentFiltered"],
     ["azure", { code: "ENOTFOUND", message: "private-prompt" }, "providerErrors.unreachable"],
     ["azure", { code: "ETIMEDOUT", message: "private-prompt" }, "providerErrors.unreachable"],
     [
@@ -1017,5 +1017,21 @@ test("enterprise stream preserves safe network and message-only provider classif
     assert.equal(mapped.messageKey, messageKey, `${provider}: ${error.code || error.message}`);
     assert.equal(mapped.technicalDetails.status, undefined);
     assert.doesNotMatch(JSON.stringify(mapped), /private-prompt|cause|responseBody/);
+  }
+});
+
+test("enterprise Chat preserves specific content-filter guidance without echoing provider text", () => {
+  const { mapEnterpriseStreamError } = require("../../src/helpers/enterpriseProviderErrors");
+  for (const error of [
+    { error: { code: "content_filter", message: "private-prompt" } },
+    { code: "ContentFilter", message: "private-prompt", statusCode: 400 },
+    { error: { message: "content safety filtering rejected private-prompt" } },
+  ]) {
+    const mapped = mapEnterpriseStreamError("azure", error);
+    assert.equal(mapped.messageKey, "providerErrors.contentFiltered");
+    assert.equal(mapped.code, "PROVIDER_CONTENT_FILTERED");
+    assert.match(mapped.error, /filtered this request for content safety/);
+    assert.equal(mapped.technicalDetails.status, error.statusCode);
+    assert.doesNotMatch(JSON.stringify(mapped), /private-prompt/);
   }
 });

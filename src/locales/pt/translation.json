@@ -4842,6 +4842,7 @@
     }
   },
   "providerErrors": {
+    "contentFiltered": "{{provider}} filtrou esta solicitação por motivos de segurança do conteúdo. Reformule sua solicitação e tente novamente.",
     "authFailed": "{{provider}} rejeitou sua chave de API.",
     "accessDenied": "{{provider}} negou o acesso. Sua chave pode não incluir este modelo.",
     "quotaExhausted": "Sua conta {{provider}} está sem crédito.",

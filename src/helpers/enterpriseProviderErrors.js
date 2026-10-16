@@ -629,6 +629,17 @@ function mapEnterpriseStreamError(provider, error, config = {}) {
   // Known enterprise translations contain only app-owned copy. Unknown mappings
   // interpolate the provider message, which must stay out of IPC and logs.
   let safe = mapped.messageKey && !mapped.messageParams?.error ? mapped : fallback;
+  if (
+    provider === "azure" &&
+    /content_filter|ContentFilter|content safety filtering/i.test(signature)
+  ) {
+    safe = {
+      message: `${providerName} filtered this request for content safety. Rephrase your request and try again.`,
+      messageKey: "providerErrors.contentFiltered",
+      messageParams: { provider: providerName },
+      code: "PROVIDER_CONTENT_FILTERED",
+    };
+  }
   if (mapManagedIdentityError(normalized, provider) || code === "MANAGED_CONFIG_CHANGED") {
     safe =
       code === "PROVIDER_NOT_ALLOWED"
@@ -645,7 +656,7 @@ function mapEnterpriseStreamError(provider, error, config = {}) {
   }
   return {
     error: safe.message,
-    code: fallback.code,
+    code: safe.code || fallback.code,
     messageKey: safe.messageKey,
     messageParams: safe.messageParams,
     ...(safe.actionKey ? { actionKey: safe.actionKey, action: safe.action } : {}),
