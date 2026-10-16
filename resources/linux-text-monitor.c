@@ -10,9 +10,11 @@
  *   INITIAL_VALUE_B64:<base64> - Initial text field value (multiline)
  *   CHANGED:<text>        - Text field value after a change
  *   CHANGED_B64:<base64>  - Text field value after a change (multiline)
- *   EDITABLE              - Focused element is writable with no live selection (--probe-editable)
+ *   EDITABLE              - Focused element in the active window of <pid> is
+ *                           writable with no live selection (--probe-editable <pid>)
  *   NOT_EDITABLE          - Focused element is not safely writable
- *   NO_ELEMENT            - Could not get focused element
+ *   NO_ELEMENT            - Could not get focused element (with --probe-editable,
+ *                           also a missing or invalid pid, or no accessible app for it)
  *   NO_VALUE              - Focused element has no text value
  *
  * Input (stdin):
@@ -134,16 +136,25 @@ static AtspiAccessible *find_focused(AtspiAccessible *accessible) {
     return NULL;
 }
 
-/* The editable probe vouches for the window a paste will reach, so it looks
- * only inside the first ACTIVE window on the desktop, the one
- * linux-fast-paste --atspi-target picks. A FOCUSED state left behind in a
- * background app must not count, even when the active window has nothing
- * focused. */
-static AtspiAccessible *find_focused_in_active_window(AtspiAccessible *desktop) {
+/* The editable probe vouches for the app a paste will reach, so it looks only
+ * inside that process's first ACTIVE window. A FOCUSED state left behind in
+ * another app must not count, even when the target window has nothing focused
+ * or exposes no accessibility at all. */
+static AtspiAccessible *find_focused_in_active_window(AtspiAccessible *desktop, gint target_pid) {
     int app_count = atspi_accessible_get_child_count(desktop, NULL);
     for (int i = 0; i < app_count; i++) {
         AtspiAccessible *app = atspi_accessible_get_child_at_index(desktop, i, NULL);
         if (!app) continue;
+        GError *pid_error = NULL;
+        gint pid = atspi_accessible_get_process_id(app, &pid_error);
+        if (pid_error) {
+            g_error_free(pid_error);
+            pid = 0;
+        }
+        if (pid != target_pid) {
+            g_object_unref(app);
+            continue;
+        }
         int window_count = atspi_accessible_get_child_count(app, NULL);
         for (int j = 0; j < window_count; j++) {
             AtspiAccessible *win = atspi_accessible_get_child_at_index(app, j, NULL);
@@ -189,6 +200,19 @@ int main(int argc, char **argv) {
     signal(SIGINT, signal_handler);
 
     int probe_editable = argc >= 2 && strcmp(argv[1], "--probe-editable") == 0;
+    gint target_pid = 0;
+    if (probe_editable && argc >= 3) {
+        char *end = NULL;
+        long parsed = strtol(argv[2], &end, 10);
+        if (end != argv[2] && *end == '\0' && parsed > 0 && parsed <= G_MAXINT) {
+            target_pid = (gint)parsed;
+        }
+    }
+    if (probe_editable && !target_pid) {
+        printf("NO_ELEMENT\n");
+        fflush(stdout);
+        return 1;
+    }
 
     /* Read original text from stdin (consume but don't use) */
     char stdin_buf[4096];
@@ -214,7 +238,7 @@ int main(int argc, char **argv) {
 
     AtspiAccessible *focused = NULL;
     if (probe_editable) {
-        focused = find_focused_in_active_window(desktop);
+        focused = find_focused_in_active_window(desktop, target_pid);
     } else {
         /* Search for focused element across all applications */
         int app_count = atspi_accessible_get_child_count(desktop, &error);

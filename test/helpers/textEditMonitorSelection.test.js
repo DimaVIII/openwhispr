@@ -145,7 +145,7 @@ async function withLinuxPlatform(run) {
   }
 }
 
-// The -c script sees the appended --probe-editable as $0.
+// The -c script sees the appended --probe-editable as $0 and the pid as $1.
 const linuxProbe = (script) => {
   const m = new TextEditMonitor();
   m.resolveBinary = () => ({ command: "/bin/sh", args: ["-c", script] });
@@ -153,9 +153,22 @@ const linuxProbe = (script) => {
 };
 const posixOnly = { skip: process.platform === "win32" };
 
-test("isFocusedEditable passes --probe-editable on Linux", posixOnly, async () => {
-  const m = linuxProbe('[ "$0" = "--probe-editable" ] && echo EDITABLE || echo NOT_EDITABLE');
-  assert.equal(await withLinuxPlatform(() => m.isFocusedEditable(null)), "editable");
+const LINUX_TARGET = { kind: "x11-window", id: "7", pid: "4242" };
+
+test("isFocusedEditable passes the target pid to the Linux probe", posixOnly, async () => {
+  const m = linuxProbe(
+    '[ "$0" = "--probe-editable" ] && [ "$1" = "4242" ] && echo EDITABLE || echo NOT_EDITABLE'
+  );
+  assert.equal(await withLinuxPlatform(() => m.isFocusedEditable(LINUX_TARGET)), "editable");
+});
+
+// The probe answers only for the target process's active window; without a
+// pid it would have nothing to tie the focused field to.
+test("isFocusedEditable never probes a Linux target without a pid", posixOnly, async () => {
+  const m = linuxProbe("echo EDITABLE");
+  const withoutPid = { kind: "x11-window", id: "7" };
+  assert.equal(await withLinuxPlatform(() => m.isFocusedEditable(withoutPid)), "not_editable");
+  assert.equal(await withLinuxPlatform(() => m.isFocusedEditable(null)), "not_editable");
 });
 
 // linux-text-monitor-v1.0.0 predates --probe-editable and shipped in every
@@ -165,12 +178,15 @@ test("isFocusedEditable passes --probe-editable on Linux", posixOnly, async () =
 test("isFocusedEditable fails closed on a pre-probe Linux binary", posixOnly, async () => {
   const m = linuxProbe('echo "INITIAL_VALUE:EDITABLE"; sleep 2');
   const startedAt = Date.now();
-  assert.equal(await withLinuxPlatform(() => m.isFocusedEditable(null)), "not_editable");
+  assert.equal(await withLinuxPlatform(() => m.isFocusedEditable(LINUX_TARGET)), "not_editable");
   assert.ok(Date.now() - startedAt < 900, "must resolve on the first output line");
 
   for (const line of ["NO_ELEMENT", "NO_VALUE"]) {
     const exiting = linuxProbe(`echo ${line}; exit 1`);
-    assert.equal(await withLinuxPlatform(() => exiting.isFocusedEditable(null)), "not_editable");
+    assert.equal(
+      await withLinuxPlatform(() => exiting.isFocusedEditable(LINUX_TARGET)),
+      "not_editable"
+    );
   }
 });
 

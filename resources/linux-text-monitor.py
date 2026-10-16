@@ -11,7 +11,11 @@ Protocol (stdout):
   INITIAL_VALUE_B64:<base64> - Initial text field value (multiline)
   CHANGED:<text>        - Text field value after a change
   CHANGED_B64:<base64>  - Text field value after a change (multiline)
-  NO_ELEMENT            - Could not get focused element
+  EDITABLE              - Focused element in the active window of <pid> is
+                          writable with no live selection (--probe-editable <pid>)
+  NOT_EDITABLE          - Focused element is not safely writable
+  NO_ELEMENT            - Could not get focused element (with --probe-editable,
+                          also a missing or invalid pid, or no accessible app for it)
   NO_VALUE              - Focused element has no text value
 
 Input (stdin):
@@ -59,16 +63,17 @@ def _find_focused(accessible):
     return None
 
 
-# The editable probe vouches for the window a paste will reach, so it looks
-# only inside the first ACTIVE window on the desktop, the one
-# linux-fast-paste --atspi-target picks. A FOCUSED state left behind in a
-# background app must not count, even when the active window has nothing
-# focused.
-def _find_focused_in_active_window(desktop):
+# The editable probe vouches for the app a paste will reach, so it looks only
+# inside that process's first ACTIVE window. A FOCUSED state left behind in
+# another app must not count, even when the target window has nothing focused
+# or exposes no accessibility at all.
+def _find_focused_in_active_window(desktop, target_pid):
     for i in range(desktop.get_child_count()):
         try:
             app = desktop.get_child_at_index(i)
-            window_count = app.get_child_count() if app is not None else 0
+            if app is None or app.get_process_id() != target_pid:
+                continue
+            window_count = app.get_child_count()
         except Exception:
             continue
         for j in range(window_count):
@@ -93,8 +98,20 @@ def _emit_text(prefix, value):
         print(f"{prefix}:{truncated}", flush=True)
 
 
+def _parse_pid(value):
+    try:
+        pid = int(value)
+    except ValueError:
+        return 0
+    return pid if 0 < pid <= 2**31 - 1 else 0
+
+
 def main():
     probe_editable = len(sys.argv) >= 2 and sys.argv[1] == "--probe-editable"
+    target_pid = _parse_pid(sys.argv[2]) if probe_editable and len(sys.argv) >= 3 else 0
+    if probe_editable and not target_pid:
+        print("NO_ELEMENT", flush=True)
+        sys.exit(1)
 
     # Read original text from stdin (consume but don't use in this binary)
     if not probe_editable:
@@ -116,7 +133,7 @@ def main():
     focused = None
 
     if probe_editable:
-        focused = _find_focused_in_active_window(desktop)
+        focused = _find_focused_in_active_window(desktop, target_pid)
     else:
         # Search for the focused element across all applications
         for i in range(desktop.get_child_count()):
