@@ -1,5 +1,5 @@
 import React from 'react';
-import { type ColorValue } from 'react-native';
+import { I18nManager, type ColorValue } from 'react-native';
 import { Image } from 'expo-image';
 import * as LucideIcons from 'lucide-react-native';
 import { BRAND, iosColor } from '@/config/colors';
@@ -52,12 +52,26 @@ export function SystemIcon({ name, mdName, size = 18, color = 'label' }: SystemI
     );
   }
 
+  return <AndroidSystemIcon name={name} mdName={mdName} size={size} color={color} />;
+}
+
+export function AndroidSystemIcon({ name, mdName, size = 18, color = 'label' }: SystemIconProps) {
+  const tint = resolveColor(color);
+  const rtl = I18nManager.isRTL;
+
   if (!mdName) {
     if (__DEV__) console.warn(`SystemIcon "${name}" missing mdName for Android fallback.`);
     return null;
   }
 
-  const LucideIcon = LucideIcons[mdName] as React.ComponentType<{
+  const directionalIcons: Partial<Record<LucideIconName, LucideIconName>> = {
+    ArrowLeft: 'ArrowRight',
+    ArrowRight: 'ArrowLeft',
+    ChevronLeft: 'ChevronRight',
+    ChevronRight: 'ChevronLeft',
+  };
+  const icon = rtl ? (directionalIcons[mdName] ?? mdName) : mdName;
+  const LucideIcon = LucideIcons[icon] as React.ComponentType<{
     size?: number;
     color?: string;
   }>;
