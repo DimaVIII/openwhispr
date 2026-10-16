@@ -178,5 +178,28 @@ test("cleanup validates completed provider output using the request's prompt set
       ),
       JSON.stringify(toasts)
     );
+
+    // A partial local decode must say so, as dictation does, not report a clean update.
+    toasts.length = 0;
+    window.electronAPI.retryTranscription = async () => ({
+      success: true,
+      transcription: row,
+      warning: "truncated",
+    });
+    window.electronAPI.processLocalReasoning = async () => ({ success: true, text: RAW });
+    await retry(row.id);
+    assert.ok(
+      toasts.some(
+        (toast) =>
+          toast.title === "hooks.audioRecording.partialTranscription.title" &&
+          toast.description === "hooks.audioRecording.partialTranscription.description"
+      ),
+      JSON.stringify(toasts)
+    );
+    assert.equal(
+      toasts.some((toast) => toast.title === "controlPanel.history.retrySuccess"),
+      false,
+      JSON.stringify(toasts)
+    );
   });
 });

@@ -92,6 +92,20 @@ function assertAnalyticsSyncContext(context) {
   }
   return context.accountId;
 }
+// Local engines resolve a failed decode instead of throwing. Retry turns that
+// into a coded error so the toast says what went wrong rather than blaming a
+// missing engine.
+function localTranscriptionFailure(result) {
+  const error = new Error(result.message || result.error || "Local transcription failed");
+  if (result.code === "NO_SPEECH_DETECTED" || result.message === "No audio detected") {
+    error.code = "NO_SPEECH_DETECTED";
+    error.messageKey = "controlPanel.history.retryErrors.noSpeech";
+  } else if (result.error === "invalid_response") {
+    error.code = "INVALID_RESPONSE";
+    error.messageKey = "controlPanel.history.retryErrors.invalidResponse";
+  }
+  return error;
+}
 // Which diarization dialect a resolved endpoint speaks, for Custom endpoints
 // that front a known provider. Null when the host offers no known dialect.
 const diarizationHost = (endpoint) => {
@@ -7134,6 +7148,9 @@ class IPCHandlers {
           }
         }
 
+        if (result?.success === false) {
+          throw localTranscriptionFailure(result);
+        }
         if (!result?.text) {
           return { success: false, error: "No transcription engine available" };
         }
@@ -7157,7 +7174,13 @@ class IPCHandlers {
             void this._ensureAnalyticsHistoryBackfilled();
           });
         }
-        return { success: true, transcription: updated };
+        // A partial decode still replaces the row, as dictation keeps it, but the
+        // renderer must say so instead of reporting a clean update.
+        return {
+          success: true,
+          transcription: updated,
+          ...(result.warning ? { warning: result.warning } : {}),
+        };
       } catch (rawError) {
         const error = providerErrorContext
           ? asProviderError(rawError, providerErrorContext)

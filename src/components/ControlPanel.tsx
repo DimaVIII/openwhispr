@@ -826,13 +826,22 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
           }
 
           updateInStore(finalTranscription);
-          toast({
-            title: t(
-              options?.isRecover
-                ? "controlPanel.history.discarded.recovered"
-                : "controlPanel.history.retrySuccess"
-            ),
-          });
+          if (result.warning) {
+            // Same notice dictation shows when a local decode came back partial.
+            toast({
+              title: t("hooks.audioRecording.partialTranscription.title"),
+              description: t("hooks.audioRecording.partialTranscription.description"),
+              variant: "default",
+            });
+          } else {
+            toast({
+              title: t(
+                options?.isRecover
+                  ? "controlPanel.history.discarded.recovered"
+                  : "controlPanel.history.retrySuccess"
+              ),
+            });
+          }
         } else {
           toast({
             title: t("controlPanel.history.retryError"),

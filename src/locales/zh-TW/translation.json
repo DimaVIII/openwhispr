@@ -693,6 +693,10 @@
       "retrying": "正在重新轉錄…",
       "retrySuccess": "轉錄已更新",
       "retryError": "重新轉錄失敗",
+      "retryErrors": {
+        "noSpeech": "此錄音中未偵測到語音。",
+        "invalidResponse": "轉錄引擎傳回了非預期的回應。請再試一次。"
+      },
       "audioNotFound": "找不到音訊檔案或檔案已過期",
       "noAiProcessing": "此轉錄未套用 AI 處理",
       "rawTranscript": "原始轉錄",
