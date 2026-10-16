@@ -305,10 +305,11 @@ int main(int argc, char **argv) {
          * check: the caller's clipboard-based capture cannot see a selection
          * whose text already matches the clipboard. */
         if (editable) {
+            /* A selection that cannot be read could be live, so it is not
+             * editable. That includes a Text interface that cannot be read:
+             * libatspi returns none when its GetInterfaces call fails. */
             AtspiText *probe_text = atspi_accessible_get_text_iface(focused);
             if (probe_text) {
-                /* A selection that cannot be read could be live, so it is
-                 * not editable. */
                 GError *selection_error = NULL;
                 gint n_selections = atspi_text_get_n_selections(probe_text, &selection_error);
                 if (selection_error) {
@@ -329,6 +330,8 @@ int main(int argc, char **argv) {
                     if (selection) g_free(selection);
                 }
                 g_object_unref(probe_text);
+            } else {
+                editable = 0;
             }
         }
         printf("%s\n", editable ? "EDITABLE" : "NOT_EDITABLE");

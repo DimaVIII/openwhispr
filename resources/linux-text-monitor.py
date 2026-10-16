@@ -186,7 +186,9 @@ def main():
         # GI returns the text interface as an Atspi.Accessible, whose own
         # get_selection() is the unrelated Selection interface, so the Text
         # methods are called unbound. A selection that cannot be read could
-        # be live, so it is not editable.
+        # be live, so it is not editable. That includes a Text interface that
+        # cannot be read: libatspi returns none when its GetInterfaces call
+        # fails.
         if editable:
             try:
                 text_iface = focused.get_text_iface()
@@ -196,6 +198,8 @@ def main():
                         if selection and selection.end_offset > selection.start_offset:
                             editable = False
                             break
+                else:
+                    editable = False
             except Exception:
                 editable = False
         print("EDITABLE" if editable else "NOT_EDITABLE", flush=True)
