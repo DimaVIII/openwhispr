@@ -2,6 +2,20 @@
 
 Initially inspected read-only on 15 October 2026 through the authenticated browser session. The authorized app-creation follow-up below records subsequent provider changes separately. No purchase test has occurred. The later Expo checkpoint records authorized use of the Android public SDK keys; no private key is printed here.
 
+## 16 October 01:40 PDT — private release and backend checkpoint
+
+Using Josh's superseding overnight authority, release 1 (`1.2.3 Android internal review`, bundle 5) was published at 01:29 PDT to the single-account **internal testing** track `4701027879952097526`. Play reports Active / Available to internal testers / Not reviewed. This is not a public release. The enrolled and license-testing account is `josh@openwhispr.com`; both the browser and emulator Play Store identity were verified. The enrollment page confirms **You're a tester**. The download link and emulator listing still return Not found at this checkpoint, so no Play installation or purchase is claimed.
+
+After this internal publication, RevenueCat's credential recheck changed to **Valid credentials**. This supersedes the earlier package-not-found validation failure. Both published Play products, entitlement/offering mappings, notification connection and Superwall campaign remain configured. Credential validation is not transaction evidence.
+
+The live API deployment `dpl_67pG8wC9Bai7My3TLjpaiCD8zyNt` is READY on production source `da0767ac91582ca04776f2a8c9ac0662c6360e73`; that exact source contains Android RevenueCat reconciliation and exact product allowlists. `REVENUECAT_ANDROID_API_KEY` was added to the Vercel production environment as a sensitive variable using the existing Android public SDK key. No service-account key was copied there. **No backend deployment was made**, so the running deployment has not acquired this new variable.
+
+The existing `SUPERWALL_PRO_PRODUCT_IDS` is a write-only sensitive variable shared by preview and production. Vercel omits its value from reads; an empty pulled value does **not** establish an empty live list. It was preserved. Completing the configuration requires its authoritative existing contents before adding Android identifiers, or a reviewed additive configuration change that preserves the existing mapping. Unknown products cannot grant access. Production source also excludes sandbox provider subscriptions from production access by default; do not weaken that global boundary merely to make a license-test purchase unlock cloud service. A separate test backend or explicitly designed test-account path is needed to prove sandbox purchase-to-server access safely. Existing Business access was preserved.
+
+## Historical setup checkpoints
+
+The following sections retain their dated observations; the checkpoint above supersedes their current release, credential and backend-key status.
+
 ## Expo access and first signed Android build
 
 Expo browser and CLI access are verified as `joshuapadoa` for `gizmo-labs/openwhispr-mobile` (`8447d067-4553-472a-8783-554c3adc2352`). The project dashboard is still linked to the older `OpenWhispr/openwhispr-mobile` GitHub repository; that integration was not changed. This build uploads the current monorepo checkout through EAS CLI instead.
