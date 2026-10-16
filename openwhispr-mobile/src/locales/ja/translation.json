@@ -466,7 +466,7 @@
       "retryQuestion": "質問を再試行",
       "retryAction": "再試行",
       "sendsQuestion": "この質問を送信します",
-      "questionPlaceholder": "質問を入力...",
+      "questionPlaceholder": "質問…",
       "noContent": "質問できるノートの内容がありません",
       "sendQuestion": "質問を送信",
       "actionItems": "タスクを一覧表示",

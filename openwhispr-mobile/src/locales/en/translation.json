@@ -466,7 +466,7 @@
       "retryQuestion": "Retry chat question",
       "retryAction": "Retry",
       "sendsQuestion": "Sends this question",
-      "questionPlaceholder": "Ask a question...",
+      "questionPlaceholder": "Question…",
       "noContent": "No note content to ask about",
       "sendQuestion": "Send question",
       "actionItems": "List action items",
