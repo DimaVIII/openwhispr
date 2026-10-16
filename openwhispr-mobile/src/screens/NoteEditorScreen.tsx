@@ -1279,7 +1279,14 @@ export default function NoteEditorScreen() {
   );
 
   return (
-    <View className="flex-1 bg-systemBackground">
+    <KeyboardAvoidingView
+      className="bg-systemBackground"
+      // Native flex lets height avoidance disable growth; NativeWind flex-1
+      // expands to flexGrow/flexBasis and keeps the footer behind Android's IME.
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'android' ? 'height' : undefined}
+      enabled={Platform.OS === 'android'}
+    >
       {shareVisible ? (
         <NoteShareSheet
           noteId={noteId}
@@ -1654,7 +1661,7 @@ export default function NoteEditorScreen() {
         onClose={() => setVoiceSetupVisible(false)}
         onDismissed={handleVoiceSetupDismissed}
       />
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
