@@ -1,6 +1,16 @@
 # Android purchase configuration review
 
-Initially inspected read-only on 15 October 2026 through the authenticated browser session. The authorized app-creation follow-up below records subsequent provider changes separately. No purchase test has occurred. The later Expo checkpoint records authorized use of the Android public SDK keys; no private key is printed here.
+Initially inspected read-only on 15 October 2026 through the authenticated browser session. The authorized app-creation follow-up below records subsequent provider changes separately. No purchase transaction has completed; the later native test-card checkout and cancellation are recorded below. The later Expo checkpoint records authorized use of the Android public SDK keys; no private key is printed here.
+
+## 16 October 03:58 PDT — native checkout and cached price defect
+
+Play code 8 / 1.2.4 is installed through `com.android.vending` (03:57:48 PDT). Its signed bundle passed validation and signature checks before internal publication. A separate free app review account was created through normal signup; the pre-existing Business session is preserved in the development package.
+
+The code-6 paywall displayed USD preview prices while Google Play's native test-card sheet showed the actual ZA price, ZAR149.99 for the accelerated monthly test period. The sheet explicitly said no charge; Subscribe was not pressed, and checkout was cancelled. Dashboard product loading completed with storefront ZA and correct monthly/annual identifiers. The price text uses the correct dynamic bindings; publishing reviewed revision 7 did not fix the display.
+
+The installed native Superwall 2.7.20 serializer loses product reference names after cache round-trip. The same probe passes with released 2.8.3. The Android-only pin also keeps Billing 8.3.0 for RevenueCat compatibility. Native build and targeted billing checks pass; signed code-9 build `f289ba99-2068-4ac3-a196-d228962b5d5e` is in progress. Store-rendered prices, purchase completion, restore and server access remain unaccepted until tested on that build. No security policy, service-account key or existing store entitlement was changed in this investigation.
+
+Follow-up: code 8 rendered ZAR149.99/month and ZAR1,499.99/year on first post-update presentation and after a cold restart, before the SDK fix. Delayed publication/cache refresh remains a possible contributor to the earlier mismatch. The serializer regression is proven independently; its causal role in that exact device symptom is not established.
 
 ## 16 October 01:50 PDT — Play installation and additive backend mapping
 
