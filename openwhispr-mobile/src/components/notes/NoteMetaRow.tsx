@@ -26,7 +26,7 @@ export function NoteMetaRow({
   const { copy } = useAndroidCopy();
   const chip =
     Platform.OS === 'android'
-      ? 'min-h-12 max-w-full flex-row flex-wrap items-center gap-1.5 rounded-full bg-tertiarySystemFill px-3 py-2'
+      ? 'min-h-12 max-w-full flex-row items-center gap-1.5 rounded-full bg-tertiarySystemFill px-3 py-2'
       : CHIP;
   return (
     <View className="mb-4 flex-row flex-wrap items-center gap-2">
