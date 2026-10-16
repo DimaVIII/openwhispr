@@ -230,13 +230,12 @@ export function workflowSaveConfig(
   };
 }
 
-// Before Local Mode used OpenWhispr Cloud for uploads and cleanup with nothing saved, it kept both
-// on this iPhone and ignored a Cloud choice saved for them. A config from then that is in Local
-// Mode holds both there as automatic pins, released like any other when the mode changes, so the
-// upgrade sends nothing to Cloud that was never sent before. An On-Device or provider choice stays.
-export function localModeUpgradeConfig(config: UserConfig): Partial<UserConfig> {
-  if (Platform.OS === 'android' || config.defaultMode !== 'private')
-    return { localModeUpgraded: true };
+// Holds uploads and cleanup on this iPhone unless the user saved On-Device or a provider for them.
+// They are automatic pins, so changing the mode releases them to its defaults, and a pinned
+// cleanup Apple Intelligence can't run yet is skipped quietly (skipsLocalModeCleanup).
+export function holdOnDeviceConfig(
+  config: Pick<UserConfig, 'inference' | 'pinnedInference' | 'rememberedInference'>,
+): Pick<UserConfig, 'inference' | 'pinnedInference'> {
   const inference = { ...config.inference };
   const pinnedInference = [...(config.pinnedInference ?? [])];
   for (const scope of ['upload', 'cleanup'] as const) {
@@ -245,5 +244,14 @@ export function localModeUpgradeConfig(config: UserConfig): Partial<UserConfig> 
     inference[scope] = config.rememberedInference?.[scope]?.local ?? { mode: 'local' };
     if (!pinnedInference.includes(scope)) pinnedInference.push(scope);
   }
-  return { localModeUpgraded: true, inference, pinnedInference };
+  return { inference, pinnedInference };
+}
+
+// Before Local Mode used OpenWhispr Cloud for uploads and cleanup with nothing saved, it kept both
+// on this iPhone and ignored a Cloud choice saved for them, so a config from then that is in Local
+// Mode keeps them there: the upgrade sends nothing to Cloud that was never sent before.
+export function localModeUpgradeConfig(config: UserConfig): Partial<UserConfig> {
+  if (Platform.OS === 'android' || config.defaultMode !== 'private')
+    return { localModeUpgraded: true };
+  return { localModeUpgraded: true, ...holdOnDeviceConfig(config) };
 }

@@ -6,7 +6,7 @@ import { useOnboardingStore } from '@/store/useOnboardingStore';
 import { useProcessingModeStore } from '@/store/useProcessingModeStore';
 import { hasRealAccountHistory } from '@/sync/syncIdentity';
 import type { UserConfig } from '@/types';
-import { dictationModeConfig } from './inferenceModes';
+import { dictationModeConfig, holdOnDeviceConfig } from './inferenceModes';
 import { OnboardingError } from './onboardingErrors';
 
 // updateConfig reports persistence errors in its store instead of rejecting.
@@ -74,7 +74,11 @@ export async function chooseOnboardingMode(
       delete next.inference.cleanup;
     }
   }
-  await saveOnboardingConfig(next);
+  await saveOnboardingConfig(
+    Platform.OS !== 'android' && mode === 'private'
+      ? { ...next, ...holdOnDeviceConfig({ ...config, ...next }) }
+      : next,
+  );
   useProcessingModeStore.getState().resetToDefault(mode);
   try {
     await useOnboardingStore.getState().chooseMode(mode, from);

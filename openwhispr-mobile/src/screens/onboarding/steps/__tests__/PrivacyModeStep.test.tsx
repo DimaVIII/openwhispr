@@ -133,25 +133,26 @@ describe('cleanup line', () => {
     expect(screen.queryByText(/Apple Intelligence|iPhone/)).toBeNull();
   });
 
-  // Local Mode runs the cleanup saved for it, so a saved choice names where cleanup goes.
-  it.each([
-    ['openwhispr', 'Cleanup with OpenWhispr Cloud'],
-    ['providers', 'Cleanup with your saved provider'],
-  ])('names a saved %s cleanup', async (mode, line) => {
-    mockSavedCleanup = { mode };
+  // A provider saved for cleanup keeps cleaning in Local Mode.
+  it('names a saved cleanup provider', async () => {
+    mockSavedCleanup = { mode: 'providers' };
     const screen = await renderStep();
-    expect(screen.getByText(line)).toBeTruthy();
+    expect(screen.getByText('Cleanup with your saved provider')).toBeTruthy();
     expect(screen.queryByText(/Apple Intelligence/)).toBeNull();
   });
 
-  // With nothing saved, Local Mode cleans on OpenWhispr Cloud for a signed-in account only.
+  // Choosing Local here keeps cleanup on this iPhone (holdOnDeviceConfig), whatever the account
+  // and even over a saved Cloud cleanup.
   it.each([
-    [{ id: 'u', isAnonymous: false }, 'Cleanup with OpenWhispr Cloud'],
-    [{ id: 'a', isAnonymous: true }, 'Cleanup with Apple Intelligence'],
-  ])('with nothing saved, cleans for %j with the line %s', async (user, line) => {
+    ['a signed-in account', { id: 'u', isAnonymous: false }, undefined],
+    ['an anonymous session', { id: 'a', isAnonymous: true }, undefined],
+    ['a saved Cloud cleanup', { id: 'u', isAnonymous: false }, { mode: 'openwhispr' }],
+  ])('cleans with Apple Intelligence for %s', async (_label, user, saved) => {
     mockUser = user;
+    mockSavedCleanup = saved;
     const screen = await renderStep();
-    expect(screen.getByText(line)).toBeTruthy();
+    expect(screen.getByText('Cleanup with Apple Intelligence')).toBeTruthy();
+    expect(screen.queryByText(/OpenWhispr Cloud cleanup|Cleanup with OpenWhispr Cloud/)).toBeNull();
   });
 
   // Neither says whether this iPhone can run it, so the card makes no claim.
