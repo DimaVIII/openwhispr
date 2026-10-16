@@ -131,19 +131,31 @@ static AtspiAccessible *find_focused(AtspiAccessible *accessible) {
 }
 
 /* The editable probe vouches for the window a paste will reach, so it looks
- * only inside the active window: a FOCUSED state left behind in a background
- * app must not count. linux-fast-paste scopes its AT-SPI target the same way. */
-static AtspiAccessible *find_focused_in_active_window(AtspiAccessible *app) {
-    int window_count = atspi_accessible_get_child_count(app, NULL);
-    for (int i = 0; i < window_count; i++) {
-        AtspiAccessible *win = atspi_accessible_get_child_at_index(app, i, NULL);
-        if (!win) continue;
-        AtspiStateSet *states = atspi_accessible_get_state_set(win);
-        int active = states && atspi_state_set_contains(states, ATSPI_STATE_ACTIVE);
-        if (states) g_object_unref(states);
-        AtspiAccessible *focused = active ? find_focused(win) : NULL;
-        g_object_unref(win);
-        if (active) return focused;
+ * only inside the first ACTIVE window on the desktop, the one
+ * linux-fast-paste --atspi-target picks. A FOCUSED state left behind in a
+ * background app must not count, even when the active window has nothing
+ * focused. */
+static AtspiAccessible *find_focused_in_active_window(AtspiAccessible *desktop) {
+    int app_count = atspi_accessible_get_child_count(desktop, NULL);
+    for (int i = 0; i < app_count; i++) {
+        AtspiAccessible *app = atspi_accessible_get_child_at_index(desktop, i, NULL);
+        if (!app) continue;
+        int window_count = atspi_accessible_get_child_count(app, NULL);
+        for (int j = 0; j < window_count; j++) {
+            AtspiAccessible *win = atspi_accessible_get_child_at_index(app, j, NULL);
+            if (!win) continue;
+            AtspiStateSet *states = atspi_accessible_get_state_set(win);
+            int active = states && atspi_state_set_contains(states, ATSPI_STATE_ACTIVE);
+            if (states) g_object_unref(states);
+            if (active) {
+                AtspiAccessible *focused = find_focused(win);
+                g_object_unref(win);
+                g_object_unref(app);
+                return focused;
+            }
+            g_object_unref(win);
+        }
+        g_object_unref(app);
     }
     return NULL;
 }
@@ -195,26 +207,30 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    /* Search for focused element across all applications */
     AtspiAccessible *focused = NULL;
-    int app_count = atspi_accessible_get_child_count(desktop, &error);
-    if (error) {
-        g_error_free(error);
-        error = NULL;
-        app_count = 0;
-    }
-
-    for (int i = 0; i < app_count && !focused; i++) {
-        AtspiAccessible *app = atspi_accessible_get_child_at_index(desktop, i, &error);
+    if (probe_editable) {
+        focused = find_focused_in_active_window(desktop);
+    } else {
+        /* Search for focused element across all applications */
+        int app_count = atspi_accessible_get_child_count(desktop, &error);
         if (error) {
             g_error_free(error);
             error = NULL;
-            continue;
+            app_count = 0;
         }
-        if (!app) continue;
 
-        focused = probe_editable ? find_focused_in_active_window(app) : find_focused(app);
-        g_object_unref(app);
+        for (int i = 0; i < app_count && !focused; i++) {
+            AtspiAccessible *app = atspi_accessible_get_child_at_index(desktop, i, &error);
+            if (error) {
+                g_error_free(error);
+                error = NULL;
+                continue;
+            }
+            if (!app) continue;
+
+            focused = find_focused(app);
+            g_object_unref(app);
+        }
     }
 
     g_object_unref(desktop);

@@ -56,16 +56,27 @@ def _find_focused(accessible):
 
 
 # The editable probe vouches for the window a paste will reach, so it looks
-# only inside the active window: a FOCUSED state left behind in a background
-# app must not count. linux-fast-paste scopes its AT-SPI target the same way.
-def _find_focused_in_active_window(app):
-    try:
-        for i in range(app.get_child_count()):
-            window = app.get_child_at_index(i)
-            if window is not None and window.get_state_set().contains(Atspi.StateType.ACTIVE):
+# only inside the first ACTIVE window on the desktop, the one
+# linux-fast-paste --atspi-target picks. A FOCUSED state left behind in a
+# background app must not count, even when the active window has nothing
+# focused.
+def _find_focused_in_active_window(desktop):
+    for i in range(desktop.get_child_count()):
+        try:
+            app = desktop.get_child_at_index(i)
+            window_count = app.get_child_count() if app is not None else 0
+        except Exception:
+            continue
+        for j in range(window_count):
+            try:
+                window = app.get_child_at_index(j)
+                active = window is not None and window.get_state_set().contains(
+                    Atspi.StateType.ACTIVE
+                )
+            except Exception:
+                continue
+            if active:
                 return _find_focused(window)
-    except Exception:
-        pass
     return None
 
 
@@ -98,19 +109,20 @@ def main():
     desktop = Atspi.get_desktop(0)
     focused = None
 
-    # Search for the focused element across all applications
-    for i in range(desktop.get_child_count()):
-        try:
-            app = desktop.get_child_at_index(i)
-            if app is None:
+    if probe_editable:
+        focused = _find_focused_in_active_window(desktop)
+    else:
+        # Search for the focused element across all applications
+        for i in range(desktop.get_child_count()):
+            try:
+                app = desktop.get_child_at_index(i)
+                if app is None:
+                    continue
+                focused = _find_focused(app)
+                if focused is not None:
+                    break
+            except Exception:
                 continue
-            focused = (
-                _find_focused_in_active_window(app) if probe_editable else _find_focused(app)
-            )
-            if focused is not None:
-                break
-        except Exception:
-            continue
 
     if focused is None:
         print("NO_ELEMENT", flush=True)
