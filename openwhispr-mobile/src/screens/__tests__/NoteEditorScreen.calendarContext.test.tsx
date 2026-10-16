@@ -564,6 +564,51 @@ beforeEach(() => {
 });
 
 describe('NoteEditorScreen generated meeting context', () => {
+  it.each([
+    ['android', 'personal', 1, true],
+    ['android', 'personal', 0, false],
+    ['android', 'meeting', 1, false],
+    ['ios', 'personal', 1, false],
+  ] as const)(
+    'selects personal cleanup instructions on %s for %s default=%s',
+    async (platform, noteType, isDefault, usesPersonalInstructions) => {
+      const originalPlatform = Platform.OS;
+      Platform.OS = platform;
+      mockActionsState.actions = [defaultAction({ isDefault })];
+      mockNote = note({ noteType, calendarEventId: null, participants: null });
+      if (noteType === 'personal') {
+        mockSegments = [];
+        mockSpeakers = [];
+      }
+      mockDictionaryState.entries = [{ word: 'OpenWhispr' }];
+      try {
+        const { getByTestId } = render(<NoteEditorScreen />);
+        await act(async () => fireEvent.press(getByTestId('run-action-1')));
+        await waitFor(() => expect(ReasoningService.processText).toHaveBeenCalledTimes(1));
+        const { systemPrompt } = (ReasoningService.processText as jest.Mock).mock.calls[0][0];
+        expect(systemPrompt).toContain('OpenWhispr');
+        if (usesPersonalInstructions) {
+          expect(systemPrompt).toContain('Clean up this personal note.');
+          expect(systemPrompt).not.toContain('Transform this meeting into notes.');
+          await waitFor(() =>
+            expect(mockUpdateNote).toHaveBeenCalledWith(
+              7,
+              expect.objectContaining({
+                enhancementPrompt: expect.stringContaining('Clean up this personal note.'),
+              }),
+            ),
+          );
+        } else {
+          expect(systemPrompt).toContain('Transform this meeting into notes.');
+          expect(systemPrompt).not.toContain('Clean up this personal note.');
+        }
+      } finally {
+        mockDictionaryState.entries = [];
+        Platform.OS = originalPlatform;
+      }
+    },
+  );
+
   it('saves Android generated notes without the model Markdown wrapper', async () => {
     const originalPlatform = Platform.OS;
     Platform.OS = 'android';

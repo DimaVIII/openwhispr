@@ -6,6 +6,7 @@ import { generateNoteTitle } from '@/utils/generateTitle';
 import {
   buildActionSystemPrompt,
   isDefaultGenerateNotesAction,
+  PERSONAL_NOTE_INSTRUCTIONS,
   type GenerateNotesInputKind,
 } from '@/lib/notes/generateNotesPrompt';
 import type { Action } from '@/data';
@@ -45,9 +46,16 @@ export function useActionProcessing({ onSuccess, onError }: UseActionProcessingO
       setState('processing');
 
       try {
+        const inputKind = options.inputKind ?? 'plain-note';
+        const actionPrompt =
+          Platform.OS === 'android' &&
+          inputKind === 'plain-note' &&
+          isDefaultGenerateNotesAction(action)
+            ? PERSONAL_NOTE_INSTRUCTIONS
+            : action.prompt;
         const systemPrompt = buildActionSystemPrompt({
-          actionPrompt: action.prompt,
-          inputKind: options.inputKind ?? 'plain-note',
+          actionPrompt,
+          inputKind,
           isDefaultGenerateNotesAction: isDefaultGenerateNotesAction(action),
           customDictionary: options.customDictionary,
         });
@@ -76,7 +84,7 @@ export function useActionProcessing({ onSuccess, onError }: UseActionProcessingO
         }
 
         setState('success');
-        onSuccess(enhancedContent, action.prompt, generatedTitle);
+        onSuccess(enhancedContent, actionPrompt, generatedTitle);
 
         setTimeout(() => {
           setState('idle');

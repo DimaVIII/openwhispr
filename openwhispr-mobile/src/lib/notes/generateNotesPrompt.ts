@@ -2,6 +2,10 @@ import type { Action } from '@/data';
 
 export type GenerateNotesInputKind = 'plain-note' | 'meeting-transcript';
 
+// Personal notes need cleanup, not the meeting template in the shared built-in action.
+export const PERSONAL_NOTE_INSTRUCTIONS =
+  'Clean up this personal note. Preserve every substantive fact, name, quantity, correction and condition. Remove filler and improve grammar. Write each fact once, in its original order. Use one concise paragraph or a short bullet list. Do not add a title, summary or meeting sections. Do not infer deadlines or ownership beyond what the note says. Return only the cleaned note.';
+
 export interface BuildActionSystemPromptInput {
   actionPrompt: string;
   inputKind: GenerateNotesInputKind;
