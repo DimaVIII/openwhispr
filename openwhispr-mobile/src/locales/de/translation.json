@@ -676,7 +676,7 @@
       "cloudOnce": "Cloud einmal verwenden",
       "cloudActionBody": "{{action}} sendet diese Notiz für diese Anfrage an die Cloud-KI. Deine Einstellungen für Datenschutz und Synchronisierung dieser Notiz bleiben unverändert.",
       "cloudChatBody": "Der Chat sendet den Kontext dieser Notiz für diese Anfrage an deinen ausgewählten KI-Dienst. Deine Einstellungen für Datenschutz und Synchronisierung dieser Notiz bleiben unverändert.",
-      "replaceTitle": "Verbesserte Notizen ersetzen?",
+      "replaceTitle": "Notizen ersetzen?",
       "replaceBody": "Diese Aktion ersetzt die aktuellen verbesserten Notizen einschließlich aller Bearbeitungen.",
       "replaceAction": "Ersetzen",
       "nothingTitle": "Kein Inhalt für Fragen",

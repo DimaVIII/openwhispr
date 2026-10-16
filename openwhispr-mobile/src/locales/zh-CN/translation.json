@@ -676,7 +676,7 @@
       "cloudOnce": "仅此次使用云端",
       "cloudActionBody": "{{action}}将为此次请求把此笔记发送至云端 AI。笔记的隐私和同步设置不会改变。",
       "cloudChatBody": "聊天将为此次请求把此笔记的上下文发送至所选的 AI 服务。笔记的隐私和同步设置不会改变。",
-      "replaceTitle": "替换优化后的笔记？",
+      "replaceTitle": "替换笔记？",
       "replaceBody": "运行此操作将替换当前优化后的笔记，包括所有编辑内容。",
       "replaceAction": "替换",
       "nothingTitle": "没有可提问的内容",

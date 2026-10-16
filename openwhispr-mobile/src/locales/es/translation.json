@@ -676,7 +676,7 @@
       "cloudOnce": "Usar la nube una vez",
       "cloudActionBody": "{{action}} envía esta nota a la IA en la nube para esta solicitud. No cambiarán los ajustes de privacidad ni de sincronización de la nota.",
       "cloudChatBody": "El chat envía el contexto de esta nota al servicio de IA seleccionado para esta solicitud. No cambiarán los ajustes de privacidad ni de sincronización de la nota.",
-      "replaceTitle": "¿Reemplazar las notas mejoradas?",
+      "replaceTitle": "¿Reemplazar notas?",
       "replaceBody": "Esta acción reemplaza las notas mejoradas actuales, incluidas las modificaciones.",
       "replaceAction": "Reemplazar",
       "nothingTitle": "No hay contenido sobre el que preguntar",

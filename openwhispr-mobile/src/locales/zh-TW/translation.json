@@ -676,7 +676,7 @@
       "cloudOnce": "僅此次使用雲端",
       "cloudActionBody": "{{action}}將為此次請求把此筆記傳送至雲端 AI。筆記的隱私權和同步設定不會變更。",
       "cloudChatBody": "聊天將為此次請求把此筆記的上下文傳送至所選的 AI 服務。筆記的隱私權和同步設定不會變更。",
-      "replaceTitle": "取代最佳化後的筆記？",
+      "replaceTitle": "取代筆記？",
       "replaceBody": "執行此操作會取代目前最佳化後的筆記，包括所有編輯內容。",
       "replaceAction": "取代",
       "nothingTitle": "沒有可提問的內容",

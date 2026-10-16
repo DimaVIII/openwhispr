@@ -676,7 +676,7 @@
       "cloudOnce": "Use Cloud Once",
       "cloudActionBody": "{{action}} sends this note to cloud AI for this request. Your note privacy and sync settings will not change.",
       "cloudChatBody": "Chat sends this note context to your selected AI service for this request. Your note privacy and sync settings will not change.",
-      "replaceTitle": "Replace enhanced notes?",
+      "replaceTitle": "Replace notes?",
       "replaceBody": "Running this action replaces the current enhanced notes, including any edits.",
       "replaceAction": "Replace",
       "nothingTitle": "Nothing to ask about",

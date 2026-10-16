@@ -2108,7 +2108,7 @@ describe('Android editor consent language', () => {
     await act(async () => fireEvent.press(view.getByTestId('run-action-1')));
     expect(ReasoningService.processText).not.toHaveBeenCalled();
     const [title, , buttons] = alert.mock.calls[0];
-    expect(title).toBe('استبدال الملاحظات المحسّنة؟');
+    expect(title).toBe('استبدال الملاحظات؟');
     expect(buttons[0]).toMatchObject({ text: 'إلغاء', style: 'cancel' });
     await act(async () =>
       buttons.find((button: { text: string }) => button.text === 'استبدال').onPress(),
