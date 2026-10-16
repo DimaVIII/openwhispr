@@ -586,6 +586,7 @@ class SelectionManager {
     const verdict = await this.textEditMonitor?.isFocusedEditable?.(
       pid ? { ...target, pid } : target
     );
+    debugLogger.debug("Editable caret probe", { kind: target.kind, pid, verdict }, "clipboard");
     if (verdict === "editable") return { status: "editable", target };
     // An empty copy cannot distinguish a caret from an integrated terminal or
     // a page without an input; it can also hide a selection matching the clipboard.

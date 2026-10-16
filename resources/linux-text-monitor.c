@@ -196,10 +196,13 @@ static char *read_text_value(AtspiText *text_iface) {
 }
 
 int main(int argc, char **argv) {
-    signal(SIGTERM, signal_handler);
-    signal(SIGINT, signal_handler);
-
     int probe_editable = argc >= 2 && strcmp(argv[1], "--probe-editable") == 0;
+    /* The probe never reads `running`, so it keeps the default action and the
+     * caller's kill at its give-up stops a slow walk. */
+    if (!probe_editable) {
+        signal(SIGTERM, signal_handler);
+        signal(SIGINT, signal_handler);
+    }
     gint target_pid = 0;
     if (probe_editable && argc >= 3) {
         char *end = NULL;
