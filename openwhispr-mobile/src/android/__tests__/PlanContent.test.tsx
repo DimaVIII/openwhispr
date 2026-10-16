@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { Alert, Linking } from 'react-native';
 import { router } from 'expo-router';
 import { useUsageStore } from '@/store/useUsageStore';
@@ -28,7 +28,8 @@ jest.mock('@/store/useAuthStore', () => ({
 jest.mock('@/store/useUsageStore', () => ({
   useUsageStore: require('zustand').create(() => ({
     usage: null,
-    load: jest.fn(async () => undefined),
+    isLoading: false,
+    load: jest.fn(async () => ({ status: 'loaded' })),
   })),
 }));
 jest.mock('@/hooks/useSuperwallGate', () => ({
@@ -66,9 +67,11 @@ jest.mock('../ui', () => {
 });
 beforeEach(() => {
   jest.clearAllMocks();
+  (useUsageStore.getState().load as jest.Mock).mockResolvedValue({ status: 'loaded' });
   jest.spyOn(Alert, 'alert').mockImplementation(() => {});
   jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
   useUsageStore.setState({
+    isLoading: false,
     usage: {
       billingUserId: 'billing-a',
       isSubscribed: false,
@@ -86,6 +89,28 @@ beforeEach(() => {
     },
   });
   useAndroidBillingStatus.setState({ accounts: { 'billing-a': 'payment-pending' } });
+});
+it('keeps unknown access out of checkout and offers a retry after loading fails', async () => {
+  useUsageStore.setState({ usage: null });
+  const load = useUsageStore.getState().load as jest.Mock;
+  load.mockResolvedValueOnce({ status: 'failed', error: new Error('offline') });
+  render(<PlanContent />);
+  expect(screen.getByText('planChecking')).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'upgrade' })).toBeNull();
+  expect(screen.queryByText('proBody')).toBeNull();
+  await waitFor(() => expect(screen.getByText('planUnavailable')).toBeTruthy());
+  fireEvent.press(screen.getByRole('button', { name: 'refreshAccess' }));
+  await waitFor(() => expect(load).toHaveBeenCalledTimes(2));
+  act(() => {
+    useUsageStore.setState({
+      usage: {
+        isSubscribed: true,
+        plan: 'business',
+      } as NonNullable<ReturnType<typeof useUsageStore.getState>['usage']>,
+    });
+  });
+  expect(screen.getByText('OpenWhispr Business')).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'upgrade' })).toBeNull();
 });
 it('offers Play and help for an unresolved payment without launching another checkout', async () => {
   render(<PlanContent />);

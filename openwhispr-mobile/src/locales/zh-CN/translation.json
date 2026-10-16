@@ -227,6 +227,8 @@
     "cloudAllowance": "可用{{remaining}}词，共{{limit}}词",
     "cloudUnlimited": "不限词数",
     "plansAndBilling": "方案与账单",
+    "planChecking": "正在检查你的套餐…",
+    "planUnavailable": "无法加载你的套餐。请连接互联网后重试。",
     "meetingLeaveTitle": "离开此次录音？",
     "meetingLeaveBody": "停止并保存转录，或取消转录并将音频保留在笔记中。",
     "meetingKeepRecording": "继续录音",

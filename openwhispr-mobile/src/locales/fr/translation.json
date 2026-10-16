@@ -227,6 +227,8 @@
     "cloudAllowance": "{{remaining}} mots disponibles sur {{limit}}",
     "cloudUnlimited": "Mots illimités",
     "plansAndBilling": "Offres et facturation",
+    "planChecking": "Vérification de votre offre…",
+    "planUnavailable": "Impossible de charger votre offre. Connectez-vous à Internet et réessayez.",
     "meetingLeaveTitle": "Quitter cet enregistrement ?",
     "meetingLeaveBody": "Arrêtez et enregistrez la transcription, ou annulez la transcription et conservez l’audio dans votre note.",
     "meetingKeepRecording": "Continuer à enregistrer",

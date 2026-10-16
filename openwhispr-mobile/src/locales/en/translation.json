@@ -227,6 +227,8 @@
     "cloudAllowance": "{{remaining}} of {{limit}} words available",
     "cloudUnlimited": "Unlimited words",
     "plansAndBilling": "Plans & billing",
+    "planChecking": "Checking your plan…",
+    "planUnavailable": "Your plan could not be loaded. Connect to the internet and try again.",
     "meetingLeaveTitle": "Leave this recording?",
     "meetingLeaveBody": "Stop and save the transcript, or cancel transcription and keep the audio in your note.",
     "meetingKeepRecording": "Keep recording",

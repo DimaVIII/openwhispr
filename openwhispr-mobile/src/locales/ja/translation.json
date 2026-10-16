@@ -227,6 +227,8 @@
     "cloudAllowance": "{{limit}}語中{{remaining}}語を利用可能",
     "cloudUnlimited": "語数無制限",
     "plansAndBilling": "プランと請求",
+    "planChecking": "プランを確認しています…",
+    "planUnavailable": "プランを読み込めませんでした。インターネットに接続して、もう一度お試しください。",
     "meetingLeaveTitle": "この録音を終了しますか？",
     "meetingLeaveBody": "停止して文字起こしを保存するか、文字起こしをキャンセルして音声をノートに残します。",
     "meetingKeepRecording": "録音を続ける",

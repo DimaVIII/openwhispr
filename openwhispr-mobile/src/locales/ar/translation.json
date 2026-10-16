@@ -227,6 +227,8 @@
     "cloudAllowance": "{{remaining}} من {{limit}} كلمة متاحة",
     "cloudUnlimited": "كلمات غير محدودة",
     "plansAndBilling": "الخطط والفوترة",
+    "planChecking": "جارٍ التحقق من خطتك…",
+    "planUnavailable": "تعذّر تحميل خطتك. اتصل بالإنترنت وحاول مرة أخرى.",
     "meetingLeaveTitle": "هل تريد مغادرة هذا التسجيل؟",
     "meetingLeaveBody": "أوقف التسجيل واحفظ النص، أو ألغِ التفريغ النصي واحتفظ بالصوت في ملاحظتك.",
     "meetingKeepRecording": "متابعة التسجيل",

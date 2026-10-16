@@ -19,15 +19,29 @@ export function PlanContent() {
   const { t } = useTranslation('android');
   const user = useAuthStore((state) => state.user);
   const usage = useUsageStore((state) => state.usage);
+  const isUsageLoading = useUsageStore((state) => state.isLoading);
   const billingStatus = useAndroidBillingStatus((state) =>
     usage?.billingUserId ? state.accounts[usage.billingUserId] : undefined,
   );
   const sources = usage?.entitlementSources;
   const { register } = useSuperwallGate();
   const [busy, setBusy] = useState(false);
+  const [accessLoadFailed, setAccessLoadFailed] = useState(false);
   const signedIn = user && !user.isAnonymous;
   useEffect(() => {
-    if (signedIn) void useUsageStore.getState().load(true);
+    let active = true;
+    setAccessLoadFailed(false);
+    if (signedIn) {
+      useUsageStore
+        .getState()
+        .load(true)
+        .then((result) => {
+          if (active) setAccessLoadFailed(result.status !== 'loaded' && !result.usage);
+        });
+    }
+    return () => {
+      active = false;
+    };
   }, [signedIn, user?.id]);
   const run = async (action: () => Promise<unknown>) => {
     if (busy) return;
@@ -40,6 +54,28 @@ export function PlanContent() {
       setBusy(false);
     }
   };
+  if (signedIn && !usage) {
+    return (
+      <>
+        <Text accessibilityRole="header" style={styles.title}>
+          {t('plansAndBilling')}
+        </Text>
+        <Text accessibilityLiveRegion="polite" style={styles.body}>
+          {t(accessLoadFailed && !isUsageLoading ? 'planUnavailable' : 'planChecking')}
+        </Text>
+        <Button
+          label={t('refreshAccess')}
+          busy={busy || isUsageLoading}
+          onPress={() => {
+            run(async () => {
+              const result = await useUsageStore.getState().load(true);
+              setAccessLoadFailed(result.status !== 'loaded');
+            });
+          }}
+        />
+      </>
+    );
+  }
   return (
     <>
       <Text accessibilityRole="header" style={styles.title}>
