@@ -54,7 +54,7 @@ export const ON_DEVICE_MODE_NOTES: Partial<Record<MobileInferenceScope, string>>
 
 export const PRIVATE_MODE_LOCKED_REASON =
   Platform.OS === 'android'
-    ? 'Off while Local Mode is on. Turn it off in AI Models.'
+    ? 'Off while Local Mode is on. Turn it off in Models & processing.'
     : 'Off while Local Mode is on. Change Dictation in AI Models to turn it off.';
 
 // Android's explicit Local Mode switch continues to protect uploads and cleanup.
