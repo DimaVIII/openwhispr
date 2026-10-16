@@ -1,6 +1,6 @@
 import { createAuthClient } from 'better-auth/client';
 import { anonymousClient } from 'better-auth/client/plugins';
-import { expoClient } from '@better-auth/expo/client';
+import { expoClient, storageAdapter } from '@better-auth/expo/client';
 import * as Application from 'expo-application';
 import Constants from 'expo-constants';
 import * as SecureStore from 'expo-secure-store';
@@ -143,7 +143,8 @@ async function getCachedAndroidUser(): Promise<AuthUser | null> {
   try {
     const cookie = currentCookie();
     if (!cookie) return null;
-    const raw = await SecureStore.getItemAsync(SESSION_DATA_STORAGE_KEY);
+    // Use Expo's adapter because larger sessions are split across secure-store keys.
+    const raw = storageAdapter(SecureStore).getItem(SESSION_DATA_STORAGE_KEY);
     if (!raw) return null;
     const cached = JSON.parse(raw);
     if (typeof cached?.user?.id !== 'string' || typeof cached.user.email !== 'string') return null;
@@ -161,10 +162,11 @@ async function getCachedAndroidUser(): Promise<AuthUser | null> {
     ) {
       return null;
     }
+    // Production names its session cookie openwhispr; retain the SDK default for previews.
     const tokens = cookie
       .split(';')
       .map((part) => part.trim())
-      .filter((part) => /^(?:__Secure-)?better-auth\.session_token=/.test(part))
+      .filter((part) => /^(?:__Secure-)?(?:openwhispr|better-auth)\.session_token=/.test(part))
       .map((part) => decodeURIComponent(part.slice(part.indexOf('=') + 1)).split('.')[0]);
     // A stale cache from another login must never select the wrong local workspace.
     return cookie === currentCookie() && tokens.length === 1 && tokens[0] === session.token
