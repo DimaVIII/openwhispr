@@ -1,5 +1,5 @@
 import React from 'react';
-import { Platform, Alert } from 'react-native';
+import { Platform, Alert, PermissionsAndroid } from 'react-native';
 import { act, fireEvent, render } from '@testing-library/react-native';
 import { MeetingRecordScreen } from '../MeetingRecordScreen';
 import { CloudMeetingFinishError } from '@/hooks/useCloudMeeting';
@@ -162,6 +162,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   Platform.OS = 'android';
   jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+  jest.spyOn(PermissionsAndroid, 'request').mockResolvedValue(PermissionsAndroid.RESULTS.GRANTED);
   mockUser = { id: 'a' };
   mockUseRealCloudHook = false;
   mockMode = 'cloud';
@@ -172,6 +173,80 @@ beforeEach(() => {
   mockLocalStart.mockReset().mockResolvedValue(undefined);
 });
 afterEach(() => jest.restoreAllMocks());
+
+it.each([PermissionsAndroid.RESULTS.DENIED, PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN])(
+  'keeps cloud meeting setup available without creating a note when microphone access is %s',
+  async (result) => {
+    jest.mocked(PermissionsAndroid.request).mockResolvedValueOnce(result);
+    const view = render(<MeetingRecordScreen />);
+    await act(async () => fireEvent.press(view.getByTestId('begin')));
+    await act(async () => mockFeature?.());
+    expect(mockCreateNote).not.toHaveBeenCalled();
+    expect(view.queryByTestId('stop')).toBeNull();
+    expect(view.getByTestId('begin')).toBeTruthy();
+    expect(Alert.alert).toHaveBeenCalledWith('errorTitle', 'permissionDenied');
+
+    await act(async () => fireEvent.press(view.getByTestId('begin')));
+    await act(async () => {
+      mockFeature?.();
+      mockFeature?.();
+    });
+    expect(mockCreateNote).toHaveBeenCalledTimes(1);
+    expect(view.getByTestId('stop')).toBeTruthy();
+  },
+);
+
+it('keeps setup usable when the Android permission request fails', async () => {
+  jest.mocked(PermissionsAndroid.request).mockRejectedValueOnce(new Error('Activity unavailable'));
+  const view = render(<MeetingRecordScreen />);
+  await act(async () => fireEvent.press(view.getByTestId('begin')));
+  await act(async () => mockFeature?.());
+  expect(mockCreateNote).not.toHaveBeenCalled();
+  expect(view.getByTestId('begin')).toBeTruthy();
+  expect(Alert.alert).toHaveBeenCalledWith('errorTitle', 'permissionDenied');
+  await act(async () => fireEvent.press(view.getByTestId('begin')));
+  await act(async () => mockFeature?.());
+  expect(mockCreateNote).toHaveBeenCalledTimes(1);
+});
+
+it.each(['blur', 'unmount', 'account', 'mode', 'destination'] as const)(
+  'does not start after a delayed microphone grant following %s',
+  async (change) => {
+    let grant!: (result: typeof PermissionsAndroid.RESULTS.GRANTED) => void;
+    jest.mocked(PermissionsAndroid.request).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          grant = resolve;
+        }),
+    );
+    const view = render(<MeetingRecordScreen />);
+    await act(async () => fireEvent.press(view.getByTestId('begin')));
+    expect(mockFeature).toBeUndefined();
+    act(() => {
+      if (change === 'blur') mockBlur?.();
+      if (change === 'unmount') view.unmount();
+      if (change === 'account') mockAuthListener?.({ user: { id: 'b' } }, { user: mockUser });
+      if (change === 'mode') mockModeListener?.({ activeMode: 'private' }, { activeMode: 'cloud' });
+      if (change === 'destination') {
+        mockParams = { folderId: '3' };
+        view.rerender(<MeetingRecordScreen />);
+      }
+    });
+    await act(async () => grant(PermissionsAndroid.RESULTS.GRANTED));
+    await act(async () => mockFeature?.());
+    expect(mockCreateNote).not.toHaveBeenCalled();
+    expect(mockFeature).toBeUndefined();
+  },
+);
+
+it('does not request Android microphone permission for an iOS cloud meeting', async () => {
+  Platform.OS = 'ios';
+  const view = render(<MeetingRecordScreen />);
+  await act(async () => fireEvent.press(view.getByTestId('begin')));
+  await act(async () => mockFeature?.());
+  expect(PermissionsAndroid.request).not.toHaveBeenCalled();
+  expect(mockCreateNote).toHaveBeenCalledTimes(1);
+});
 
 it.each(['blur', 'unmount', 'account', 'mode', 'destination'] as const)(
   'does not start from a late authorization after %s',

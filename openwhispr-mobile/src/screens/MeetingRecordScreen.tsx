@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type React from 'react';
-import { Alert, TextInput, View, Platform } from 'react-native';
+import { Alert, TextInput, View, Platform, PermissionsAndroid } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { usePreventRemove } from '@react-navigation/native';
 import { useHeaderHeight } from '@react-navigation/elements';
@@ -329,6 +329,21 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
     setCount(expected);
     try {
       if (cloud) {
+        if (Platform.OS === 'android') {
+          let granted = false;
+          try {
+            granted =
+              (await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO)) ===
+              PermissionsAndroid.RESULTS.GRANTED;
+          } catch (error) {
+            Sentry.captureException(error);
+          }
+          if (!isCurrent()) return;
+          if (!granted) {
+            Alert.alert(t('errorTitle'), t('permissionDenied'));
+            return;
+          }
+        }
         await authorize();
         return;
       }
@@ -403,9 +418,9 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
   const isCloudMeeting = (): boolean =>
     canRunCloudMeeting(useAuthStore.getState().user, useProcessingModeStore.getState().activeMode);
 
-  // Cloud meetings don't pre-check the mic (the realtime session requests it); the note is
-  // created up front so live captions have somewhere to land. A session that never connects
-  // is resolved on Stop (finishCloud) as failed rather than a done, empty note.
+  // Android checks microphone access before authorization so denial leaves setup intact.
+  // The realtime session checks again when capture starts. Once permitted, create the note
+  // up front for live captions; a connection failure remains recoverable through finishCloud.
   const startCloudMeeting = (expected: number | undefined): void => {
     let note: Note;
     try {
