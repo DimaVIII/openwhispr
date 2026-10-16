@@ -2162,6 +2162,12 @@ const CLEANUP_ROUTING_CASES = [
     expected: "model",
   },
   {
+    label: "providers, cloud field left at default",
+    cleanupMode: "providers",
+    cleanupCloudMode: "openwhispr",
+    expected: "model",
+  },
+  {
     label: "OpenWhispr Cloud",
     cleanupMode: "openwhispr",
     cleanupCloudMode: "openwhispr",
