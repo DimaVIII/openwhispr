@@ -6930,13 +6930,11 @@ class IPCHandlers {
             });
           }
           const data = await response.json();
-          if (data?.text) {
-            result = {
-              text: data.text,
-              source: "self-hosted",
-              model: route.model,
-            };
-          }
+          result = {
+            text: data?.text,
+            source: "self-hosted",
+            model: route.model,
+          };
         } else if (route.transport === "local") {
           if (isSherpaLocalProvider(settings.localTranscriptionProvider)) {
             const model =
@@ -7020,7 +7018,7 @@ class IPCHandlers {
             language: route.language,
             apiKey: this.environmentManager.getTinfoilKey(),
           });
-          if (text) result = { text, source: "tinfoil", model };
+          result = { text, source: "tinfoil", model };
         } else if (route.transport === "proxied" && route.provider === "corti") {
           // Corti uses OAuth + an interaction-based REST flow, so it can't use
           // the generic fetch below.
@@ -7041,7 +7039,7 @@ class IPCHandlers {
             audioBuffer: buffer,
             language: route.language,
           });
-          if (text) result = { text, source: "corti", model: route.model };
+          result = { text, source: "corti", model: route.model };
         } else if (route.transport === "proxied" && route.provider === "gemini") {
           if (route.sizeCapBytes && buffer.byteLength > route.sizeCapBytes) {
             throw new Error(byokSizeCapError(route.sizeCapBytes));
@@ -7053,7 +7051,7 @@ class IPCHandlers {
             language: route.language,
             apiKey: this.environmentManager.getGeminiKey(),
           });
-          if (text) result = { text, source: "gemini", model: route.model };
+          result = { text, source: "gemini", model: route.model };
         } else {
           // mistral/xai have no OpenAI-compatible endpoint — main talks to them
           // directly; everything else consumes the route endpoint as-is.
@@ -7147,16 +7145,19 @@ class IPCHandlers {
             });
           }
           const data = await response.json();
-          if (data?.text) {
-            result = { text: data.text, source: provider, model: route.model };
-          }
+          result = { text: data?.text, source: provider, model: route.model };
         }
 
         if (result?.success === false) {
           throw localTranscriptionFailure(result);
         }
-        if (!result?.text) {
+        if (!result) {
           return { success: false, error: "No transcription engine available" };
+        }
+        if (!result.text) {
+          throw Object.assign(new Error("No speech detected in audio"), {
+            code: "NO_SPEECH_DETECTED",
+          });
         }
 
         this.databaseManager.updateTranscriptionText(id, result.text, result.text);
@@ -7195,8 +7196,8 @@ class IPCHandlers {
           "audio-storage"
         );
         if (error.code === "NO_SPEECH_DETECTED" && !error.messageKey) {
-          // Local, cloud and managed engines all report silence with this code,
-          // so it is translated here once rather than per route.
+          // Every engine reports silence with this code, so it is translated
+          // here once rather than per route.
           error.messageKey = "notes.upload.noSpeechDetected";
         }
         if (error.code) {

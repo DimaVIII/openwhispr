@@ -551,6 +551,35 @@ test("retry: no speech from OpenWhispr Cloud is translated like a local engine's
   assert.equal(textUpdates.length, 0);
 });
 
+test("retry: an empty answer from a BYOK engine is no speech, not a missing engine", async (t) => {
+  const originalFetchResponse = fetchResponse;
+  const originalCortiBehavior = cortiBehavior;
+  t.after(() => {
+    fetchResponse = originalFetchResponse;
+    cortiBehavior = originalCortiBehavior;
+  });
+  fetchResponse = () => ({ ok: true, status: 200, json: async () => ({ text: "" }) });
+  cortiBehavior = async () => ({ text: "" });
+  for (const [name, settings] of [
+    ["custom", CUSTOM_SETTINGS],
+    [
+      "corti",
+      {
+        cloudTranscriptionProvider: "corti",
+        cloudTranscriptionMode: "byok",
+        transcriptionMode: "providers",
+      },
+    ],
+  ]) {
+    textUpdates.length = 0;
+    const result = await invoke(settings);
+    assert.equal(result.success, false, name);
+    assert.equal(result.code, "NO_SPEECH_DETECTED", name);
+    assert.equal(result.messageKey, "notes.upload.noSpeechDetected", name);
+    assert.equal(textUpdates.length, 0, name);
+  }
+});
+
 test("retry: a chunked cloud retry that lost a chunk saves the rest and returns the warning", async (t) => {
   const result = await withCloudResponse(
     t,
