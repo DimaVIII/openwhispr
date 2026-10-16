@@ -861,12 +861,15 @@ export const useNotesStore = create<NotesStore>((set, get) => ({
         noteId,
       }));
       notesRepository.replaceSegments(noteId, segments);
-      if (options?.incomplete) {
+      const hasRecognizedWords = segments.some((segment) => segment.text?.trim());
+      // Android retains the recording for explicit retry. A clean socket close
+      // without recognized words must not hide that recovery behind a done state.
+      if (options?.incomplete || (Platform.OS === 'android' && !hasRecognizedWords)) {
         get().transitionStatus(noteId, 'failed');
         return;
       }
       get().transitionStatus(noteId, 'done'); // transcribing -> done (cloud skips diarizing)
-      if (segments.some((segment) => segment.text?.trim())) {
+      if (hasRecognizedWords) {
         logTranscriptionCompleted({ source: 'meeting', provider: 'cloud' });
       }
       await finalizeMeetingNoteContent(noteId);

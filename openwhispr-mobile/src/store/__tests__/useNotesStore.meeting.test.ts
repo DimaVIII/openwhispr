@@ -116,6 +116,7 @@ jest.mock('@/services/transcription/LocalTranscriptionService', () => ({
   },
 }));
 
+import { Platform } from 'react-native';
 import { useNotesStore } from '../useNotesStore';
 import { notesRepository, spacesRepository } from '@/data';
 import { ReasoningService } from '@/services/reasoning/ReasoningService';
@@ -465,6 +466,51 @@ describe('finalizeCloudMeeting', () => {
       source: 'meeting',
       provider: 'cloud',
     });
+  });
+
+  it.each([
+    { utterances: [] },
+    { utterances: [{ itemId: 'empty', text: '   ', startMs: 0, endMs: 1000 }] },
+  ])('keeps an Android meeting without recognized words retryable', async ({ utterances }) => {
+    const originalPlatform = Platform.OS;
+    Object.defineProperty(Platform, 'OS', { value: 'android', configurable: true });
+    try {
+      (notesRepository.getNoteById as jest.Mock).mockReturnValue({
+        id: 7,
+        noteType: 'meeting',
+        sourceFile: 'file:///app/documents/meeting-7.wav',
+        content: 'Keep my typed notes.',
+      });
+      await useNotesStore.getState().finalizeCloudMeeting(7, utterances, 30);
+      expect(notesRepository.setTranscriptionStatus).toHaveBeenLastCalledWith(7, 'failed');
+      expect(notesRepository.updateNoteMeta).not.toHaveBeenCalled();
+      expect(notesRepository.updateNote).not.toHaveBeenCalled();
+      expect(ReasoningService.processText).not.toHaveBeenCalled();
+      expect(mockLogTranscriptionCompleted).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(Platform, 'OS', { value: originalPlatform, configurable: true });
+    }
+  });
+
+  it('still completes Android meetings with recognized words', async () => {
+    const originalPlatform = Platform.OS;
+    Object.defineProperty(Platform, 'OS', { value: 'android', configurable: true });
+    try {
+      await useNotesStore
+        .getState()
+        .finalizeCloudMeeting(
+          7,
+          [{ itemId: 'spoken', text: 'Keep these words.', startMs: 0, endMs: 1000 }],
+          2,
+        );
+      expect(notesRepository.setTranscriptionStatus).toHaveBeenLastCalledWith(7, 'done');
+      expect(mockLogTranscriptionCompleted).toHaveBeenCalledWith({
+        source: 'meeting',
+        provider: 'cloud',
+      });
+    } finally {
+      Object.defineProperty(Platform, 'OS', { value: originalPlatform, configurable: true });
+    }
   });
 
   it('does not log an empty cloud meeting transcription', async () => {
