@@ -2,6 +2,14 @@
 
 Initially inspected read-only on 15 October 2026 through the authenticated browser session. The authorized app-creation follow-up below records subsequent provider changes separately. A zero-charge Google Play license-test monthly purchase, accelerated renewal and cancellation are now verified; production access and successful restore remain open. The later Expo checkpoint records authorized use of the Android public SDK keys; no private key is printed here.
 
+## 16 October 05:47 PDT — Play code 10 recovery links verified
+
+Google Play installed **1.2.4 / code 10** at **05:44:25 PDT**, installer `com.android.vending`, runtime `4568a7c43878fc174137d19a230bbc414476fc06`. Private internal release 5 was published at 05:30 PDT. The existing real access-pending account survived the update with its 2,000/2,000 free allowance and no duplicate checkout. **Google Play subscriptions** opens native Play management, which shows this test subscription expired at 04:58 PDT. **Get help** opens Help & about. Back from both returns to the unchanged pending-access screen. Refresh still reports **Failed to reconcile mobile billing**, consistent with the confirmed missing runtime key. No new purchase, local storage manipulation or manual grant occurred.
+
+The three new original captures are `play-v10-recovery-links.png`, `play-v10-manage-play.png` and `play-v10-help.png`; the private packet now contains **46 captures**, with every source/embedded hash verified. Native package, release and recovery readbacks are in `play-v10-install-verification.json`, `play-v10-release.json` and `play-v10-recovery-verification.json`. A transient ADB shell stall was recovered by reconnecting only emulator-5554; no emulator restart or data reset was needed. The temporary upload copy and an older verified duplicate download archive were removed; original review artifacts remain.
+
+API draft #268 repair `0af512b` now passes hosted tests and CodeQL as well as all local checks; its Vercel preview remains pending. The owned API checkout was pushed clean, verified synchronized and removed without force. Mobile CI and CodeQL pass on documentation head `28b857d5e`; quality remains running there. This later documentation checkpoint needs its own hosted readback. Successful server access/restore, spoken bubble/cloud meeting flows, TalkBack and physical-device performance remain unverified.
+
 ## 16 October 05:24 PDT — actual subscriber payload exposes API mapping gap
 
 A read-only RevenueCat REST v1 lookup for the review account returns subscription key `com.openwhispr.pro` and a separate `product_plan_identifier: monthly`, including the exact `openWhispr Pro` entitlement and sandbox/Play markers. The catalog and webhook use the combined identifier; assuming REST v1 did too left API draft #268 unable to match the staged base-plan allowlist.
