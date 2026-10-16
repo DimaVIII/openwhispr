@@ -2,6 +2,18 @@
 
 Inspected on 15 October 2026 through the existing authenticated browser session. This is a read-only configuration audit, not a purchase test. No provider settings, products, campaigns, credentials or account permissions were changed. SDK keys were not revealed or copied.
 
+## App creation follow-up — 15 October 2026 (America/Los_Angeles)
+
+Josh confirmed there was no existing Android app and explicitly authorized creating it and configuring RevenueCat. The active goal resumed. He separately approved the Developer Program Policies declaration, Play App Signing Terms of Service and US export-compliance certification at the form submission step.
+
+- The authenticated Google Play organization is **OpenWhispr**, developer account `9196608534150662842`. Its app list was empty before creation.
+- Created **OpenWhispr**, package **`com.gizmolabs.openwhispr`**, default language **English (United States)**, category **App**, pricing **Free**. Google confirmed package availability before submission. The app dashboard confirms creation: [OpenWhispr Play dashboard](https://play.google.com/console/u/0/developers/9196608534150662842/app/4975567306866152208/app-dashboard), app ID `4975567306866152208`. No build, test track or production release was published.
+- [Subscriptions](https://play.google.com/console/u/0/developers/9196608534150662842/app/4975567306866152208/subscriptions) is unavailable with the explicit requirement: “The account owner needs to set up a Google Payments merchant account before you can access this page.” The account owner must complete that financial-account setup. No products or prices were created, so there are no Play products to import into RevenueCat yet.
+- Chrome's RevenueCat session requires sign-in. The sign-in tab is retained for Josh's account with configuration access; no password was requested in chat. The earlier Arc role restriction has not been revalidated under that account. No RevenueCat configuration has been changed in this follow-up.
+- Private screenshot `play-created-merchant-required.png` in the premium evidence root shows the created app and merchant requirement. The Play and RevenueCat Chrome tabs are retained for continuation.
+
+The initial read-only audit below predates this app creation. Its Play signup/access observation is superseded by the authenticated organization and new app above; its original RevenueCat, Superwall and Expo observations retain their earlier scope until rechecked.
+
 ## Observed configuration
 
 | Service                                        | Direct observation                                                                                                                                                                                       | Consequence for this Android build                                                                                                                                                                                                                                                         |
