@@ -2114,46 +2114,132 @@ const CLEANUP_ROUTING_STORE = `
     const s = getSettings();
     return !!s.isSignedIn && s.cleanupMode === "openwhispr" && s.cleanupCloudMode === "openwhispr";
   };
-  export const getEffectiveCleanupModel = () => (isCloudCleanupMode() ? "" : "qwen3.5-4b-q4_k_m");
-  export const selectResolvedLLMConfig = () =>
-    isCloudCleanupMode()
-      ? { model: "", provider: "openwhispr", mode: "openwhispr" }
-      : { model: "qwen3.5-4b-q4_k_m", provider: "qwen", mode: "local" };
+  export const selectResolvedLLMConfig = (s) => ({
+    model: s.cleanupModel,
+    provider: s.cleanupMode === "openwhispr" ? "openwhispr" : "qwen",
+    mode: s.cleanupMode,
+  });
+  export const getEffectiveCleanupModel = () =>
+    isCloudCleanupMode() ? "" : selectResolvedLLMConfig(getSettings()).model;
   export const isCloudDictationAgentMode = () => false;
   export const isCloudTranslationMode = () => false;
 `;
 
+const LOCAL_CLEANUP_MODEL = "qwen3.5-4b-q4_k_m";
+
+// `expected` is where cleanup runs: "cloud" (cloudReason), "model" (the scope's
+// own model) or "raw" (no reachable cleanup, so the transcript is kept as is).
 const CLEANUP_ROUTING_CASES = [
   {
     label: "local, cloud field left at default",
     cleanupMode: "local",
     cleanupCloudMode: "openwhispr",
-    cloud: false,
+    expected: "model",
   },
   {
     label: "local, cloud field byok",
     cleanupMode: "local",
     cleanupCloudMode: "byok",
-    cloud: false,
+    expected: "model",
   },
-  { label: "providers (BYOK)", cleanupMode: "providers", cleanupCloudMode: "byok", cloud: false },
+  {
+    label: "local, model not downloaded",
+    cleanupMode: "local",
+    cleanupCloudMode: "openwhispr",
+    cleanupModel: "",
+    expected: "raw",
+  },
+  {
+    label: "self-hosted, cloud field left at default",
+    cleanupMode: "self-hosted",
+    cleanupCloudMode: "openwhispr",
+    expected: "model",
+  },
+  {
+    label: "providers (BYOK)",
+    cleanupMode: "providers",
+    cleanupCloudMode: "byok",
+    expected: "model",
+  },
   {
     label: "OpenWhispr Cloud",
     cleanupMode: "openwhispr",
     cleanupCloudMode: "openwhispr",
-    cloud: true,
+    expected: "cloud",
   },
   {
     label: "OpenWhispr Cloud, signed out",
     cleanupMode: "openwhispr",
     cleanupCloudMode: "openwhispr",
+    cleanupModel: "",
     isSignedIn: false,
-    cloud: false,
+    expected: "raw",
   },
 ];
 
-function cleanupRoutingSettings({ cleanupMode, cleanupCloudMode, isSignedIn = true }) {
-  return { useCleanupModel: true, cleanupMode, cleanupCloudMode, isSignedIn, customPrompts: {} };
+const SIGNED_IN_CLEANUP_ROUTING_CASES = CLEANUP_ROUTING_CASES.filter(
+  ({ isSignedIn }) => isSignedIn !== false
+);
+
+function cleanupRoutingSettings({
+  cleanupMode,
+  cleanupCloudMode,
+  cleanupModel = LOCAL_CLEANUP_MODEL,
+  isSignedIn = true,
+}) {
+  return {
+    useCleanupModel: true,
+    cleanupMode,
+    cleanupCloudMode,
+    cleanupModel,
+    isSignedIn,
+    customPrompts: {},
+  };
+}
+
+function cleanedText(text, { expected }) {
+  if (expected === "cloud") return `${text}。`;
+  return expected === "model" ? `${text} (local)` : text;
+}
+
+const CLEANUP_TRANSLATION_MODULES = {
+  "/stores/settingsStore": CLEANUP_ROUTING_STORE,
+  "/config/prompts": `
+    export const resolvePrompt = () => "translation prompt";
+    export const appendScreenContextSuffix = (prompt) => prompt;
+  `,
+  "/dictationAgentInference": `
+    export const resolveDictationAgentInference = () => ({ reachable: false, config: {} });
+    export const resolveDictationAgentVisionInference = () => ({ active: false, config: {} });
+  `,
+  "/dictationTranslationInference": `
+    export const resolveDictationTranslationInference = () => ({
+      reachable: true, model: "translation-model", config: { provider: "qwen" }
+    });
+  `,
+};
+
+// Cloud carries the STT telemetry for its combined log; any other cleanup
+// descriptor names the scope's model and sends nothing to Cloud.
+function assertChainCleanup(cleanup, routing) {
+  if (routing.expected === "cloud") {
+    assert.equal(cleanup.mode, "cloudReason");
+    return;
+  }
+  assert.equal(cleanup.mode, "model");
+  assert.equal(cleanup.model, cleanupRoutingSettings(routing).cleanupModel);
+  assert.equal(cleanup.meta, undefined);
+}
+
+function useOnlineNavigator(t) {
+  const originalNavigator = globalThis.navigator;
+  Object.defineProperty(globalThis, "navigator", { value: { onLine: true }, configurable: true });
+  t.after(() =>
+    Object.defineProperty(globalThis, "navigator", {
+      value: originalNavigator,
+      configurable: true,
+    })
+  );
 }
 
 function countingReasoningModel(localCalls) {
@@ -2168,70 +2254,57 @@ test("streaming cleanup goes to Cloud only when the cleanup scope is OpenWhispr 
     "/stores/settingsStore": CLEANUP_ROUTING_STORE,
   });
   for (const routing of CLEANUP_ROUTING_CASES) {
-    const localCalls = [];
-    const { reasonCalls, published } = await stopManagedDictation(AudioManager, {
-      final: { success: true, text: "hello there", model: "orukeet-v0.1.0" },
-      language: "en",
-      upload: async () => assert.fail("must not re-transcribe"),
-      settings: cleanupRoutingSettings(routing),
-      overrides: {
-        processWithReasoningModel: countingReasoningModel(localCalls),
-        finalizeChineseScript: async (text) => text,
-      },
+    await t.test(routing.label, async () => {
+      const localCalls = [];
+      const { reasonCalls, usage, published } = await stopManagedDictation(AudioManager, {
+        final: { success: true, text: "hello there", model: "orukeet-v0.1.0" },
+        language: "en",
+        upload: async () => assert.fail("must not re-transcribe"),
+        settings: cleanupRoutingSettings(routing),
+        overrides: {
+          processWithReasoningModel: countingReasoningModel(localCalls),
+          finalizeChineseScript: async (text) => text,
+        },
+      });
+      assert.equal(reasonCalls.length, routing.expected === "cloud" ? 1 : 0);
+      assert.deepEqual(
+        localCalls.map(([, model]) => model),
+        routing.expected === "model" ? [LOCAL_CLEANUP_MODEL] : []
+      );
+      assert.equal(published[0].text, cleanedText("hello there", routing));
+      // Only a Cloud cleanup writes the combined log, so only it suppresses the STT one.
+      assert.equal(usage.length, 1);
+      assert.equal(usage[0].sendLogs, routing.expected !== "cloud");
     });
-    assert.equal(reasonCalls.length, routing.cloud ? 1 : 0, routing.label);
-    assert.deepEqual(
-      localCalls.map(([, model]) => model),
-      routing.cloud ? [] : ["qwen3.5-4b-q4_k_m"],
-      routing.label
-    );
-    assert.equal(
-      published[0].text,
-      routing.cloud ? "hello there。" : "hello there (local)",
-      routing.label
-    );
   }
 });
 
 test("streaming translation cleans up in Cloud only when the cleanup scope is OpenWhispr Cloud", async (t) => {
-  const AudioManager = await loadManagerClass(t, {
-    "/stores/settingsStore": CLEANUP_ROUTING_STORE,
-    "/config/prompts": `
-      export const resolvePrompt = () => "translation prompt";
-      export const appendScreenContextSuffix = (prompt) => prompt;
-    `,
-    "/dictationAgentInference": `
-      export const resolveDictationAgentInference = () => ({ reachable: false, config: {} });
-      export const resolveDictationAgentVisionInference = () => ({ active: false, config: {} });
-    `,
-    "/dictationTranslationInference": `
-      export const resolveDictationTranslationInference = () => ({
-        reachable: true, model: "translation-model", config: { provider: "qwen" }
-      });
-    `,
-  });
+  const AudioManager = await loadManagerClass(t, CLEANUP_TRANSLATION_MODULES);
   for (const routing of CLEANUP_ROUTING_CASES) {
-    const chainCleanups = [];
-    await stopManagedDictation(AudioManager, {
-      final: { success: true, text: "hello there", model: "orukeet-v0.1.0" },
-      language: "en",
-      upload: async () => assert.fail("must not re-transcribe"),
-      settings: {
-        ...cleanupRoutingSettings(routing),
-        translationSourceLanguage: "en",
-        translationTargetLanguage: "es",
-      },
-      overrides: {
-        translationRequested: true,
-        runTranslationChain: async ({ cleanup }) => {
-          chainCleanups.push(cleanup);
-          return { text: "hola" };
+    await t.test(routing.label, async () => {
+      const chainCleanups = [];
+      await stopManagedDictation(AudioManager, {
+        final: { success: true, text: "hello there", model: "orukeet-v0.1.0" },
+        language: "en",
+        upload: async () => assert.fail("must not re-transcribe"),
+        settings: {
+          ...cleanupRoutingSettings(routing),
+          translationSourceLanguage: "en",
+          translationTargetLanguage: "es",
         },
-        finalizeChineseScript: async (text) => text,
-      },
+        overrides: {
+          translationRequested: true,
+          runTranslationChain: async ({ cleanup }) => {
+            chainCleanups.push(cleanup);
+            return { text: "hola" };
+          },
+          finalizeChineseScript: async (text) => text,
+        },
+      });
+      assert.equal(chainCleanups.length, 1);
+      assertChainCleanup(chainCleanups[0], routing);
     });
-    assert.equal(chainCleanups.length, 1, routing.label);
-    assert.equal(chainCleanups[0].mode, routing.cloud ? "cloudReason" : "model", routing.label);
   }
 });
 
@@ -2239,41 +2312,68 @@ test("batch Cloud cleanup goes to Cloud only when the cleanup scope is OpenWhisp
   const AudioManager = await loadManagerClass(t, {
     "/stores/settingsStore": CLEANUP_ROUTING_STORE,
   });
-  const originalNavigator = globalThis.navigator;
-  Object.defineProperty(globalThis, "navigator", { value: { onLine: true }, configurable: true });
-  t.after(() =>
-    Object.defineProperty(globalThis, "navigator", {
-      value: originalNavigator,
-      configurable: true,
-    })
-  );
+  useOnlineNavigator(t);
   // Signed out never re-transcribes through Cloud, so it never reaches this path.
-  for (const routing of CLEANUP_ROUTING_CASES.filter(({ isSignedIn }) => isSignedIn !== false)) {
-    const transcribeOpts = [];
-    globalThis.window.electronAPI.cloudTranscribe = async (_audio, opts) => {
-      transcribeOpts.push(opts);
-      return { success: true, text: "明日の会議", sttProvider: "openai" };
-    };
-    const localCalls = [];
-    const { reasonCalls, published } = await stopManagedDictation(AudioManager, {
-      final: JA_FINAL,
-      settings: cleanupRoutingSettings(routing),
-      overrides: {
-        isDictionaryEcho: () => false,
-        getWhisperPrompt: () => null,
-        finalizeChineseScript: async (text) => text,
-        processWithReasoningModel: countingReasoningModel(localCalls),
-      },
+  for (const routing of SIGNED_IN_CLEANUP_ROUTING_CASES) {
+    await t.test(routing.label, async () => {
+      const transcribeOpts = [];
+      globalThis.window.electronAPI.cloudTranscribe = async (_audio, opts) => {
+        transcribeOpts.push(opts);
+        return { success: true, text: "明日の会議", sttProvider: "openai" };
+      };
+      const localCalls = [];
+      const { reasonCalls, published } = await stopManagedDictation(AudioManager, {
+        final: JA_FINAL,
+        settings: cleanupRoutingSettings(routing),
+        overrides: {
+          isDictionaryEcho: () => false,
+          getWhisperPrompt: () => null,
+          finalizeChineseScript: async (text) => text,
+          processWithReasoningModel: countingReasoningModel(localCalls),
+        },
+      });
+      assert.equal(transcribeOpts.length, 1);
+      assert.equal(reasonCalls.length, routing.expected === "cloud" ? 1 : 0);
+      assert.equal(localCalls.length, routing.expected === "model" ? 1 : 0);
+      assert.equal(published[0].text, cleanedText("明日の会議", routing));
+      // Only a Cloud cleanup writes the combined log, so only it suppresses the STT one.
+      assert.equal(transcribeOpts[0].sendLogs, routing.expected === "cloud" ? "false" : undefined);
     });
-    assert.equal(transcribeOpts.length, 1, routing.label);
-    assert.equal(reasonCalls.length, routing.cloud ? 1 : 0, routing.label);
-    assert.equal(localCalls.length, routing.cloud ? 0 : 1, routing.label);
-    assert.equal(
-      published[0].text,
-      routing.cloud ? "明日の会議。" : "明日の会議 (local)",
-      routing.label
-    );
-    // Only a Cloud cleanup writes the combined log, so only it suppresses the STT one.
-    assert.equal(transcribeOpts[0].sendLogs, routing.cloud ? "false" : undefined, routing.label);
+  }
+});
+
+test("batch Cloud translation cleans up in Cloud only when the cleanup scope is OpenWhispr Cloud", async (t) => {
+  const AudioManager = await loadManagerClass(t, CLEANUP_TRANSLATION_MODULES);
+  useOnlineNavigator(t);
+  for (const routing of SIGNED_IN_CLEANUP_ROUTING_CASES) {
+    await t.test(routing.label, async () => {
+      const transcribeOpts = [];
+      globalThis.window.electronAPI.cloudTranscribe = async (_audio, opts) => {
+        transcribeOpts.push(opts);
+        return { success: true, text: "明日の会議", sttProvider: "openai" };
+      };
+      const chainCleanups = [];
+      await stopManagedDictation(AudioManager, {
+        final: JA_FINAL,
+        settings: {
+          ...cleanupRoutingSettings(routing),
+          translationSourceLanguage: "ja",
+          translationTargetLanguage: "en",
+        },
+        overrides: {
+          translationRequested: true,
+          isDictionaryEcho: () => false,
+          getWhisperPrompt: () => null,
+          runTranslationChain: async ({ cleanup }) => {
+            chainCleanups.push(cleanup);
+            return { text: "tomorrow's meeting" };
+          },
+          finalizeChineseScript: async (text) => text,
+        },
+      });
+      assert.equal(transcribeOpts.length, 1);
+      assert.equal(chainCleanups.length, 1);
+      assertChainCleanup(chainCleanups[0], routing);
+    });
   }
 });

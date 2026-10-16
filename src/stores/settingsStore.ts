@@ -2725,6 +2725,8 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
 
 // --- Selectors (derived state, not stored) ---
 
+// Route cleanup to Cloud on this, never on cleanupCloudMode alone: the local and
+// enterprise choices set cleanupMode and leave that field at its "openwhispr" default.
 export const selectIsCloudCleanupMode = (state: SettingsState) =>
   state.isSignedIn && state.cleanupMode === "openwhispr" && state.cleanupCloudMode === "openwhispr";
 

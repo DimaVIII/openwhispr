@@ -3517,6 +3517,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
 
     const timings = {};
     const settings = getSettings();
+    const isCloudCleanup = isCloudCleanupMode();
     const language = getBaseLanguageCode(this.getEffectiveSttLanguage(settings));
 
     const arrayBuffer = await audioBlob.arrayBuffer();
@@ -3543,7 +3544,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     }
     // Only cloud cleanup writes a combined STT log; translation alone does not.
     // A voice assistant recording never runs cleanup, so this upload is its log.
-    if (settings.useCleanupModel && isCloudCleanupMode() && !this.voiceAgentRequested) {
+    if (settings.useCleanupModel && isCloudCleanup && !this.voiceAgentRequested) {
       opts.sendLogs = "false";
     }
 
@@ -3589,10 +3590,6 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       if (this.translationRequested && route.kind !== "translation") {
         this.notifyTranslationFallback("unreachable");
       }
-      // The whole cloud predicate, never cleanupCloudMode alone: a local or BYOK
-      // cleanup choice can leave that field at its "openwhispr" default.
-      const isCloudCleanup = isCloudCleanupMode();
-
       try {
         if (route.kind === "agent") {
           const reasoned = await this.processAgentCommand(
@@ -4661,7 +4658,6 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       !settings.useCleanupModel ||
       !isCloudCleanupMode() ||
       !isLlmSelectionAllowed(usePolicyStore.getState(), { mode: "openwhispr" }) ||
-      (settings.cleanupCloudMode || "openwhispr") !== "openwhispr" ||
       voiceAgentRequested ||
       translationRequested
     )
@@ -5787,8 +5783,6 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       if (this.translationRequested && route.kind !== "translation") {
         this.notifyTranslationFallback("unreachable");
       }
-      // The whole cloud predicate, never cleanupCloudMode alone: a local or BYOK
-      // cleanup choice can leave that field at its "openwhispr" default.
       const isCloudCleanup = isCloudCleanupMode();
 
       try {
