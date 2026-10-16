@@ -1,4 +1,5 @@
 import { create, type StoreApi } from 'zustand';
+import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import {
   getStoredSession,
@@ -203,10 +204,13 @@ export const useAuthStore = create<AuthStore>((set) => ({
     try {
       await deleteAccountApi();
       const deletedUserId = useAuthStore.getState().user?.id;
-      if (deletedUserId) {
-        const { eraseAccountInsights } = await import('@/android/insights');
+      if (deletedUserId && Platform.OS === 'android') {
         await Promise.resolve()
-          .then(() => eraseAccountInsights(deletedUserId))
+          .then(() => {
+            const { eraseAccountInsights } =
+              require('@/android/insights') as typeof import('@/android/insights');
+            return eraseAccountInsights(deletedUserId);
+          })
           .catch((error) => Sentry.captureException(error));
       }
       if (deletedUserId) await tolerateCacheFailure('clear', clearNoteShareTokens(deletedUserId));

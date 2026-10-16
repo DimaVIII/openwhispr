@@ -7,6 +7,16 @@ import {
 
 export type CloudMeetingStatus = 'connecting' | 'live' | 'reconnecting' | 'error';
 
+export class CloudMeetingFinishError extends Error {
+  constructor(
+    error: unknown,
+    readonly utterances: RealtimeUtterance[],
+  ) {
+    super(error instanceof Error ? error.message : String(error));
+    this.name = 'CloudMeetingFinishError';
+  }
+}
+
 export interface CloudMeeting {
   status: CloudMeetingStatus;
   error: string | null;
@@ -71,9 +81,9 @@ export function useCloudMeeting({
         onPartial: (text) => {
           if (!cancelled) setPartialText(text);
         },
-        onUtterance: (utterance) => {
+        onUtterances: (captured) => {
           if (cancelled) return;
-          setUtterances((prev) => [...prev, utterance]);
+          setUtterances(captured);
           setPartialText('');
         },
         onError: (e) => {
@@ -151,6 +161,8 @@ export function useCloudMeeting({
         if (session.finish) await session.finish();
         else session.stop();
         return session.utterances();
+      } catch (cause) {
+        throw new CloudMeetingFinishError(cause, session.utterances());
       } finally {
         sessionRef.current = null;
       }

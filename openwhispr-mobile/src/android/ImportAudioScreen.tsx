@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
@@ -16,6 +17,7 @@ import { snapshotTranscriptionJob } from '@/lib/inferenceRouting';
 import { accountRequiredForCloud, showAccountRequiredAlert } from '@/lib/accountAccess';
 import { buildUsageGateParams, SUPERWALL_PLACEMENTS } from '@/lib/superwall';
 import {
+  ImportDestinationError,
   resolveImportDestination,
   saveImportedNote,
   type ImportDestination,
@@ -25,11 +27,21 @@ function parseId(value?: string): number | undefined {
   if (!value) return undefined;
   const id = Number(value);
   if (!Number.isSafeInteger(id) || id <= 0)
-    throw new Error('This destination is invalid. Return to Notes.');
+    throw new ImportDestinationError(
+      'importInvalidDestination',
+      'This destination is invalid. Return to Notes.',
+    );
   return id;
 }
 
 export default function ImportAudioScreen() {
+  const { t } = useTranslation('android');
+  const errorMessage = (cause: unknown) =>
+    cause instanceof ImportDestinationError
+      ? t(cause.translationKey)
+      : cause instanceof Error
+        ? cause.message
+        : String(cause);
   const params = useLocalSearchParams<{ folderId?: string; spaceId?: string }>();
   const router = useRouter();
   const navigation = useNavigation();
@@ -62,7 +74,7 @@ export default function ImportAudioScreen() {
       const route = snapshotTranscriptionJob('upload');
       return { target, route, error: '' };
     } catch (cause) {
-      return { target: null, route: null, error: (cause as Error).message };
+      return { target: null, route: null, error: errorMessage(cause) };
     }
   })();
   const { isProcessing, currentText, stage, cancel, pickAndTranscribeFile } = useFileUpload({
@@ -73,12 +85,12 @@ export default function ImportAudioScreen() {
       destination.current?.ownerId === (useAuthStore.getState().user?.id ?? null),
     onComplete: (text, fileName) => {
       if (!destination.current) return;
-      const note = saveImportedNote(destination.current, text, fileName);
+      const note = saveImportedNote(destination.current, text, fileName, t('importDefaultTitle'));
       setCompletedNoteId(note.id);
       useNotesStore.getState().loadNotes();
       useNotesStore.getState().loadFolders();
     },
-    onError: (cause) => setError(cause.message),
+    onError: (cause) => setError(errorMessage(cause)),
   });
   useFocusEffect(
     useCallback(() => {
@@ -96,16 +108,16 @@ export default function ImportAudioScreen() {
         if (state.user?.id !== previous.user?.id) {
           accountChanged.current = true;
           cancel();
-          setError('Your account changed. Return to Notes and start a new import.');
+          setError(t('importAccountChanged'));
         }
       }),
-    [cancel],
+    [cancel, t],
   );
   usePreventRemove(isProcessing, ({ data }) => {
-    Alert.alert('Cancel import?', 'This import will stop without creating a note.', [
-      { text: 'Keep importing', style: 'cancel' },
+    Alert.alert(t('importCancelTitle'), t('importCancelBody'), [
+      { text: t('importKeep'), style: 'cancel' },
       {
-        text: 'Cancel import',
+        text: t('importCancel'),
         style: 'destructive',
         onPress: () => {
           pendingNavigation.current = data.action;
@@ -173,7 +185,7 @@ export default function ImportAudioScreen() {
         });
       } else begin();
     } catch (cause) {
-      if (focused.current) setError((cause as Error).message);
+      if (focused.current) setError(errorMessage(cause));
     } finally {
       requestBusy.current = false;
       if (focused.current) setGating(false);
@@ -188,36 +200,38 @@ export default function ImportAudioScreen() {
           remoteCleanup: preview.route?.cleanupRoute?.mode === 'providers',
         };
   return (
-    <Page title="Import audio" back showAccount={false}>
+    <Page title={t('importAudio')} back showAccount={false}>
       <Card>
-        <Text style={styles.heading}>Turn audio into a note</Text>
+        <Text style={styles.heading}>{t('importTitle')}</Text>
+        <Text style={styles.body}>{t('importFormats')}</Text>
         <Text style={styles.body}>
-          Choose a WAV, MP3, M4A, AAC, OGG/Opus or WEBM file. Recording stays off.
+          {t('importSaveTo', {
+            destination:
+              (isProcessing ? destination.current : preview.target)?.label ??
+              t('importUnavailable'),
+          })}
         </Text>
-        <Text
-          style={styles.body}
-        >{`Save to: ${(isProcessing ? destination.current : preview.target)?.label ?? 'Unavailable'}`}</Text>
         <Text style={styles.body}>
           {choice?.isPrivate
             ? choice.remoteCleanup
-              ? 'Audio is transcribed on this phone. Transcript text is sent to your selected cleanup provider. The note is saved privately; imports from a shared space go to Personal.'
-              : 'Private import: processed on this phone and saved as a private note. A shared-space import is saved in Personal.'
+              ? t('importPrivateRemoteCleanup')
+              : t('importPrivateLocal')
             : choice?.provider === 'local'
-              ? 'Audio is transcribed on this phone. Cleanup follows your AI workflow settings. The note follows your sync settings.'
+              ? t('importLocal')
               : choice?.provider === 'byok'
-                ? 'Audio is sent to your selected provider. The note follows your sync settings.'
-                : 'Audio is sent to OpenWhispr Cloud. The note follows your sync settings.'}
+                ? t('importByok')
+                : t('importCloud')}
         </Text>
         {isProcessing ? (
           <>
             <Text style={styles.body} accessibilityLiveRegion="polite">
-              {stage === 'cleaning' ? 'Formatting transcript…' : 'Importing audio…'}
+              {stage === 'cleaning' ? t('importFormatting') : t('importProcessing')}
             </Text>
-            <Button label="Cancel import" secondary onPress={cancel} />
+            <Button label={t('importCancel')} secondary onPress={cancel} />
           </>
         ) : (
           <Button
-            label="Choose audio file"
+            label={t('importChoose')}
             disabled={gating || accountChanged.current || !!preview.error}
             onPress={() => {
               void start();
@@ -228,11 +242,11 @@ export default function ImportAudioScreen() {
       {error || preview.error ? (
         <Card>
           <Text style={styles.heading} accessibilityRole="alert">
-            Could not import audio
+            {t('importFailure')}
           </Text>
           <Text style={styles.body}>{error || preview.error}</Text>
           <Button
-            label="Models & processing"
+            label={t('models')}
             secondary
             onPress={() => router.push('/(account)/ai-models')}
           />
@@ -240,18 +254,18 @@ export default function ImportAudioScreen() {
       ) : null}
       {currentText ? (
         <Card>
-          <Text style={styles.heading}>Transcript</Text>
+          <Text style={styles.heading}>{t('importTranscript')}</Text>
           <Text style={styles.body} selectable>
             {currentText}
           </Text>
           {!isProcessing && error ? (
             <Button
-              label="Copy transcript"
+              label={t('importCopyTranscript')}
               secondary
               onPress={() => {
                 void Clipboard.setStringAsync(currentText)
-                  .then(() => Alert.alert('Copied', 'Transcript copied.'))
-                  .catch(() => Alert.alert('Could not copy', 'Try again.'));
+                  .then(() => Alert.alert(t('copied'), t('importCopied')))
+                  .catch(() => Alert.alert(t('importCopyFailed'), t('retry')));
               }}
             />
           ) : null}

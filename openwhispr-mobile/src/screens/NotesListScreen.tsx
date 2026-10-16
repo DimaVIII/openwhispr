@@ -172,7 +172,7 @@ export default function NotesListScreen() {
     if (Platform.OS === 'android')
       actions.push({
         id: 'import',
-        label: 'Import audio',
+        label: t('importAudio'),
         icon: 'square.and.arrow.down',
         mdIcon: 'FileAudio',
       });
@@ -185,7 +185,7 @@ export default function NotesListScreen() {
       });
     }
     return actions;
-  }, [spaceId]);
+  }, [spaceId, t]);
 
   // Deleting a space folder tombstones its notes for everyone in the space, so
   // the server allows it to admins only (requireSpaceFolderAdmin). Renaming has
@@ -435,7 +435,7 @@ export default function NotesListScreen() {
                 ...action,
                 label:
                   action.id === 'import'
-                    ? 'Import audio'
+                    ? t('importAudio')
                     : t(
                         action.id === 'note'
                           ? 'newNote'

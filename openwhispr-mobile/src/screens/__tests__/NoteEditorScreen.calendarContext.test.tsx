@@ -1101,6 +1101,23 @@ describe('NoteEditorScreen body tabs', () => {
     expect(getByText('Transcript failed')).toBeTruthy();
   });
 
+  it.each([true, false])(
+    'shows captured text and an incomplete warning with retry only when audio exists (%s)',
+    (hasAudio) => {
+      mockNote = note({
+        transcriptionStatus: 'failed',
+        sourceFile: hasAudio ? 'managed://meeting-7.wav' : null,
+      });
+      mockNotesState.notes = [mockNote];
+      const { getByText, getByTestId, queryByText } = render(<NoteEditorScreen />);
+      fireEvent.press(getByTestId('note-tab-transcript'));
+      expect(getByText('Transcript incomplete')).toBeTruthy();
+      expect(getByText(mockSegments[0].text)).toBeTruthy();
+      if (hasAudio) expect(getByText('Retry transcription')).toBeTruthy();
+      else expect(queryByText('Retry transcription')).toBeNull();
+    },
+  );
+
   it('never shows an uploaded file’s body, the flat copy of its transcript, as My notes', () => {
     mockNote = note({
       noteType: 'upload',

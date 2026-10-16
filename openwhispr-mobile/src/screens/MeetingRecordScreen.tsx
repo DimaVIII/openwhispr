@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type React from 'react';
 import { Alert, TextInput, View, Platform } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { usePreventRemove } from '@react-navigation/native';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -28,7 +28,7 @@ import { useNotesStore } from '@/store/useNotesStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { canRunCloudMeeting } from '@/lib/accountAccess';
 import { useProcessingModeStore } from '@/store/useProcessingModeStore';
-import { useCloudMeeting } from '@/hooks/useCloudMeeting';
+import { CloudMeetingFinishError, useCloudMeeting } from '@/hooks/useCloudMeeting';
 import { useMeetingLiveActivity, type MeetingActivityPhase } from '@/hooks/useMeetingLiveActivity';
 import { CloudMeetingRecording } from '@/components/notes/CloudMeetingRecording';
 import { canTransition } from '@/lib/diarization/transcriptionStatus';
@@ -45,6 +45,7 @@ type Phase =
   | 'recording'
   | 'cloud-finalizing'
   | 'cloud-recording'
+  | 'cloud-save-failed'
   | 'processing';
 
 const formatClock = (seconds: number): string =>
@@ -52,9 +53,15 @@ const formatClock = (seconds: number): string =>
 
 export const MeetingRecordScreen = (): React.JSX.Element => {
   const { t } = useTranslation('android');
+  const [cloudSaveError, setCloudSaveError] = useState<string | null>(null);
   const [exitToNote, setExitToNote] = useState<number | null>(null);
   const finishingRef = useRef(false);
   const [starting, setStarting] = useState(false);
+  const focused = useRef(true);
+  const requestGeneration = useRef(0);
+  const requestBusy = useRef(false);
+  const preparingLocalRecording = useRef(false);
+  const resumeAfterDownload = useRef<(() => Promise<void>) | null>(null);
   const [phase, setPhase] = useState<Phase>('prompt');
   const [noteId, setNoteId] = useState<number | null>(null);
   const [count, setCount] = useState<number | undefined>(undefined);
@@ -95,7 +102,8 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
     onError: () => setPhase('prompt'),
   });
   const cloudMeeting = useCloudMeeting({
-    enabled: phase === 'cloud-recording' || phase === 'cloud-finalizing',
+    enabled:
+      phase === 'cloud-recording' || phase === 'cloud-finalizing' || phase === 'cloud-save-failed',
     noteId: noteId ?? undefined,
     language: getPreferredTranscriptionLanguage(),
   });
@@ -122,6 +130,42 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
       return null;
     }
   }, [accountsById, selectedCalendarEvent]);
+
+  const startContext = JSON.stringify({ ...startedIn, meeting: selectedMeetingContext });
+  const latestStartContext = useRef(startContext);
+  latestStartContext.current = startContext;
+  const cancelLocalPreparation = useRef(recording.cancelRecording);
+  cancelLocalPreparation.current = recording.cancelRecording;
+  const invalidateStart = useCallback(() => {
+    requestGeneration.current += 1;
+    requestBusy.current = false;
+    resumeAfterDownload.current = null;
+    if (preparingLocalRecording.current)
+      void cancelLocalPreparation.current().catch(Sentry.captureException);
+    if (focused.current) setStarting(false);
+  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      focused.current = true;
+      return () => {
+        focused.current = false;
+        invalidateStart();
+      };
+    }, [invalidateStart]),
+  );
+  useEffect(() => {
+    const unsubscribeAccount = useAuthStore.subscribe((state, previous) => {
+      if (state.user?.id !== previous.user?.id) invalidateStart();
+    });
+    const unsubscribeMode = useProcessingModeStore.subscribe((state, previous) => {
+      if (state.activeMode !== previous.activeMode) invalidateStart();
+    });
+    return () => {
+      unsubscribeAccount();
+      unsubscribeMode();
+    };
+  }, [invalidateStart]);
+  useEffect(invalidateStart, [startContext, invalidateStart]);
 
   useEffect(() => {
     if (phase !== 'prompt') return;
@@ -197,12 +241,23 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
 
   // Create the note only AFTER recording actually starts, so a denied mic permission / recorder
   // failure doesn't leave an orphan "recording" note behind (startRecording re-throws on failure).
-  const startRecording = async (expected: number | undefined): Promise<void> => {
+  const startRecording = async (
+    expected: number | undefined,
+    isCurrent: () => boolean,
+  ): Promise<void> => {
+    if (!isCurrent()) return;
+    preparingLocalRecording.current = true;
     try {
       await recording.startRecording();
+      if (!isCurrent()) {
+        await recording.cancelRecording();
+        return;
+      }
     } catch {
-      setPhase('prompt');
+      if (isCurrent()) setPhase('prompt');
       return;
+    } finally {
+      preparingLocalRecording.current = false;
     }
     let note: Note;
     try {
@@ -242,57 +297,84 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
   };
 
   const begin = async (expected: number | undefined): Promise<void> => {
-    setCount(expected);
-    // Cloud realtime path (signed in + not private): stream live captions instead of the
-    // on-device whisper + diarizer pipeline, skipping the on-device model gates below.
-    if (isCloudMeeting()) {
+    if (!focused.current || requestBusy.current) return;
+    const requestId = ++requestGeneration.current;
+    const ownerId = useAuthStore.getState().user?.id;
+    const mode = useProcessingModeStore.getState().activeMode;
+    const context = latestStartContext.current;
+    const isCurrent = () =>
+      focused.current &&
+      requestId === requestGeneration.current &&
+      ownerId === useAuthStore.getState().user?.id &&
+      mode === useProcessingModeStore.getState().activeMode &&
+      context === latestStartContext.current;
+    const cloud = isCloudMeeting();
+    let launched = false;
+    const authorize = async () => {
+      if (!isCurrent()) return;
       await registerSuperwallGate({
         placement: SUPERWALL_PLACEMENTS.meetingRecordStart,
         params: { expectedSpeakerCount: expected ?? 0 },
-        requiresAccount: false, // Account was checked above; the token endpoint enforces access.
+        requiresAccount: false,
         feature: () => {
-          startCloudMeeting(expected);
+          if (!isCurrent() || launched) return;
+          launched = true;
+          if (cloud) startCloudMeeting(expected);
+          else void startRecording(expected, isCurrent).catch(Sentry.captureException);
         },
       });
-      return;
+    };
+    requestBusy.current = true;
+    setStarting(true);
+    setCount(expected);
+    try {
+      if (cloud) {
+        await authorize();
+        return;
+      }
+      const supported = await isDiarizerAvailable();
+      if (!isCurrent()) return;
+      if (!supported) {
+        setPhase('unsupported');
+        return;
+      }
+      const speechReady = await isLocalAsrModelReady();
+      if (!isCurrent()) return;
+      if (!speechReady) {
+        Alert.alert(
+          'Speech model needed',
+          'Download a local speech model in Settings → AI Models → Dictation, then try again.',
+        );
+        setPhase('prompt');
+        return;
+      }
+      const diarizerReady = await isDiarizerModelReady();
+      if (!isCurrent()) return;
+      if (!diarizerReady) {
+        resumeAfterDownload.current = authorize;
+        setPhase('needs-model');
+        return;
+      }
+      await authorize();
+    } finally {
+      if (requestId === requestGeneration.current) {
+        requestBusy.current = false;
+        if (focused.current) setStarting(false);
+      }
     }
-    // Don't walk the user through record → transcribe only to fail: gate on platform support and a
-    // downloaded speech model up front.
-    if (!(await isDiarizerAvailable())) {
-      setPhase('unsupported');
-      return;
-    }
-    if (!(await isLocalAsrModelReady())) {
-      Alert.alert(
-        'Speech model needed',
-        'Download a local speech model in Settings → AI Models → Dictation, then try again.',
-      );
-      setPhase('prompt');
-      return;
-    }
-    if (!(await isDiarizerModelReady())) {
-      setPhase('needs-model');
-      return;
-    }
-
-    await registerSuperwallGate({
-      placement: SUPERWALL_PLACEMENTS.meetingRecordStart,
-      params: { expectedSpeakerCount: expected ?? 0 },
-      requiresAccount: false,
-      feature: () => {
-        startRecording(expected).catch(() => setPhase('prompt'));
-      },
-    });
   };
 
   const confirmDownload = async (): Promise<void> => {
+    const resume = resumeAfterDownload.current;
+    const requestId = requestGeneration.current;
+    if (!resume || !focused.current) return;
     setPhase('downloading');
     try {
       await downloadDiarizerModel();
-      await startRecording(count);
+      await resume();
     } catch (error) {
       Sentry.captureException(error);
-      setPhase('prompt');
+      if (focused.current && requestId === requestGeneration.current) setPhase('prompt');
     }
   };
 
@@ -363,50 +445,34 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
     if (finishingRef.current) return;
     finishingRef.current = true;
     setPhase('cloud-finalizing');
-    saveRawNotesNow();
+    setCloudSaveError(null);
     let utterances;
+    let interrupted: Error | null = null;
     try {
       utterances = await stopCloud();
     } catch (error) {
-      if (noteId != null) markNoteFailed(noteId);
-      Alert.alert(t('meetingInterrupted'), (error as Error).message);
-      setPhase('prompt');
-      setExitToNote(noteId);
-      return;
-    }
-    const elapsed = cloudElapsed;
-    const hadError = cloudStatus === 'error';
-    setPhase('processing');
-    if (noteId == null) {
-      setPhase('prompt');
-      return;
-    }
-    saveRawNotesNow();
-    // A failed session with nothing transcribed shouldn't become a done, empty note.
-    if (hadError && utterances.length === 0) {
-      markNoteFailed(noteId);
-      setPhase('prompt');
-      return;
+      interrupted = error instanceof Error ? error : new Error(String(error));
+      utterances = error instanceof CloudMeetingFinishError ? error.utterances : [];
     }
     try {
-      await finalizeCloudMeeting(noteId, utterances, elapsed);
-      setPhase('prompt');
-      setExitToNote(noteId);
+      if (noteId == null) throw new Error('Meeting note is unavailable.');
+      saveRawNotesNow();
+      await finalizeCloudMeeting(noteId, utterances, cloudElapsed, {
+        incomplete: interrupted !== null || cloudStatus === 'error',
+      });
     } catch (error) {
-      markNoteFailed(noteId);
+      // stopCloud retains its settled result, including partial text. Keep this
+      // screen mounted so Retry can persist it without starting another recording.
       Sentry.captureException(error);
-      setPhase('prompt');
+      setCloudSaveError(t('meetingSaveFailedBody'));
+      setPhase('cloud-save-failed');
+      finishingRef.current = false;
+      return;
     }
-  }, [
-    stopCloud,
-    cloudElapsed,
-    cloudStatus,
-    finalizeCloudMeeting,
-    markNoteFailed,
-    noteId,
-    saveRawNotesNow,
-    t,
-  ]);
+    if (interrupted) Alert.alert(t('meetingInterrupted'), interrupted.message);
+    setPhase('prompt');
+    setExitToNote(noteId);
+  }, [stopCloud, cloudElapsed, cloudStatus, finalizeCloudMeeting, noteId, saveRawNotesNow, t]);
 
   useEffect(() => {
     if (cloudMeeting.stopRequested && phase === 'cloud-recording') void finishCloud();
@@ -415,9 +481,29 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
     if (exitToNote != null && phase === 'prompt') router.replace(`/(tabs)/(notes)/${exitToNote}`);
   }, [exitToNote, phase]);
   usePreventRemove(
-    Platform.OS === 'android' && (phase === 'cloud-recording' || phase === 'cloud-finalizing'),
+    phase === 'cloud-save-failed' || phase === 'cloud-recording' || phase === 'cloud-finalizing',
     () => {
       if (phase === 'cloud-finalizing') return;
+      if (phase === 'cloud-save-failed') {
+        Alert.alert(t('meetingSaveFailedTitle'), t('meetingSaveFailedBody'), [
+          { text: t('cancel'), style: 'cancel' },
+          {
+            text: t('retry'),
+            onPress: () => {
+              void finishCloud();
+            },
+          },
+          {
+            text: t('meetingDiscardUnsaved'),
+            style: 'destructive',
+            onPress: () => {
+              setPhase('prompt');
+              setExitToNote(noteId);
+            },
+          },
+        ]);
+        return;
+      }
       Alert.alert(t('meetingLeaveTitle'), t('meetingLeaveBody'), [
         { text: t('meetingKeepRecording'), style: 'cancel' },
         {
@@ -463,10 +549,9 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
         busy={starting}
         onStart={() => {
           if (starting) return;
-          setStarting(true);
-          begin(undefined)
-            .catch((error) => Alert.alert('Meeting', error.message))
-            .finally(() => setStarting(false));
+          void begin(undefined).catch((error) => {
+            if (focused.current) Alert.alert('Meeting', error.message);
+          });
         }}
       />
     );
@@ -500,8 +585,9 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
           Not available on this device
         </Text>
         <Text className="text-base text-secondaryLabel">
-          Meeting diarization runs on the Apple Neural Engine and needs iOS 17+ in a development or
-          production build (not Expo Go or other platforms).
+          {Platform.OS === 'android'
+            ? t('meetingPrivateBody')
+            : 'Meeting diarization needs iOS 17+ in a development or production build.'}
         </Text>
         <Button variant="secondary" onPress={() => router.back()}>
           Go back
@@ -526,7 +612,14 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
         >
           Download
         </Button>
-        <Button testID="model-cancel" variant="secondary" onPress={() => setPhase('prompt')}>
+        <Button
+          testID="model-cancel"
+          variant="secondary"
+          onPress={() => {
+            invalidateStart();
+            setPhase('prompt');
+          }}
+        >
           Cancel
         </Button>
       </View>
@@ -601,11 +694,12 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
     );
   }
 
-  if (phase === 'cloud-recording') {
+  if (phase === 'cloud-recording' || phase === 'cloud-save-failed') {
     return (
       <CloudMeetingRecording
-        status={cloudMeeting.status}
-        error={cloudMeeting.error}
+        status={cloudSaveError ? 'error' : cloudMeeting.status}
+        error={cloudSaveError ?? cloudMeeting.error}
+        stopLabel={phase === 'cloud-save-failed' ? t('retry') : undefined}
         elapsedSeconds={cloudMeeting.elapsedSeconds}
         rawNotes={rawNotes}
         onChangeRawNotes={setRawNotes}

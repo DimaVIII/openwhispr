@@ -20,6 +20,8 @@ export interface RealtimeCallbacks {
   onPartial?: (text: string, itemId: string) => void;
   /** A finalized utterance (one VAD turn) with its transcript + timing. */
   onUtterance?: (utterance: RealtimeUtterance) => void;
+  /** Complete transcript in recording order, even when server results finish out of order. */
+  onUtterances?: (utterances: RealtimeUtterance[]) => void;
   /** Raw server event stream — used by the spike screen to log every event type. */
   onDebug?: (event: unknown) => void;
   onError?: (error: unknown) => void;

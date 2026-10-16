@@ -387,6 +387,23 @@ describe('finalizeCloudMeeting', () => {
       status = next;
     });
   });
+  it('persists an incomplete transcript without generating notes or claiming completion', async () => {
+    await useNotesStore
+      .getState()
+      .finalizeCloudMeeting(
+        7,
+        [{ itemId: 'kept', text: 'Keep this part.', startMs: 0, endMs: 1000 }],
+        2,
+        { incomplete: true },
+      );
+    expect(notesRepository.replaceSegments).toHaveBeenCalledWith(7, [
+      expect.objectContaining({ noteId: 7, text: 'Keep this part.' }),
+    ]);
+    expect(notesRepository.setTranscriptionStatus).toHaveBeenLastCalledWith(7, 'failed');
+    expect(ReasoningService.processText).not.toHaveBeenCalled();
+    expect(mockLogTranscriptionCompleted).not.toHaveBeenCalled();
+    expect(notesRepository.updateNoteMeta).not.toHaveBeenCalled();
+  });
   it('generates notes without exposing an unknown speaker label', async () => {
     mockAuthState.user = signedInUser;
     (notesRepository.getNoteById as jest.Mock).mockReturnValue({

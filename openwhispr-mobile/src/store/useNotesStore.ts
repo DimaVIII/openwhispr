@@ -456,6 +456,7 @@ interface NotesStore {
     noteId: number,
     utterances: RealtimeUtterance[],
     elapsedSeconds: number,
+    options?: { incomplete?: boolean },
   ) => Promise<void>;
   isDiarizerAvailable: () => Promise<boolean>;
   isDiarizerModelReady: () => Promise<boolean>;
@@ -851,7 +852,7 @@ export const useNotesStore = create<NotesStore>((set, get) => ({
     await get().runMeetingPipeline(noteId, note.sourceFile, note.expectedSpeakerCount ?? undefined);
   },
 
-  finalizeCloudMeeting: async (noteId, utterances, elapsedSeconds) => {
+  finalizeCloudMeeting: async (noteId, utterances, elapsedSeconds, options) => {
     try {
       if (notesRepository.getTranscriptionStatus(noteId) !== 'transcribing')
         get().transitionStatus(noteId, 'transcribing');
@@ -860,6 +861,10 @@ export const useNotesStore = create<NotesStore>((set, get) => ({
         noteId,
       }));
       notesRepository.replaceSegments(noteId, segments);
+      if (options?.incomplete) {
+        get().transitionStatus(noteId, 'failed');
+        return;
+      }
       get().transitionStatus(noteId, 'done'); // transcribing -> done (cloud skips diarizing)
       if (segments.some((segment) => segment.text?.trim())) {
         logTranscriptionCompleted({ source: 'meeting', provider: 'cloud' });

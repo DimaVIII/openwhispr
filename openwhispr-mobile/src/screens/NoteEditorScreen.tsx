@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { NoteRecordingControls } from '@/android/NoteRecordingControls';
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import {
@@ -130,6 +131,7 @@ const transcriptStatusText = (status: string): string => {
 };
 
 export default function NoteEditorScreen() {
+  const { t } = useTranslation('android');
   const { id } = useLocalSearchParams<{ id: string }>();
   const noteId = parseInt(id ?? '', 10);
   const router = useRouter();
@@ -464,8 +466,7 @@ export default function NoteEditorScreen() {
   );
   const shouldShowTranscriptStatus =
     isAudioTranscript && !hasTranscriptSegments && isTranscriptInProgress;
-  const shouldShowTranscriptFailed =
-    isAudioTranscript && !hasTranscriptSegments && transcriptStatus === 'failed';
+  const shouldShowTranscriptFailed = isAudioTranscript && transcriptStatus === 'failed';
   const shouldRenderPlainEditor =
     !isAudioTranscript ||
     (!hasTranscriptSegments && (transcriptStatus === 'idle' || transcriptStatus === 'done'));
@@ -1460,7 +1461,11 @@ export default function NoteEditorScreen() {
               </View>
             ) : shouldShowTranscriptFailed ? (
               <View className="min-h-[180px] justify-center">
-                <Text className="text-[15px] font-medium text-label">Transcript failed</Text>
+                <Text className="text-[15px] font-medium text-label">
+                  {hasTranscriptSegments
+                    ? t('meetingTranscriptIncomplete', { defaultValue: 'Transcript incomplete' })
+                    : 'Transcript failed'}
+                </Text>
                 <Text className="mt-1 text-[14px] leading-5 text-secondaryLabel">
                   Audio processing did not finish for this note.
                 </Text>
@@ -1491,6 +1496,14 @@ export default function NoteEditorScreen() {
                     The original audio is no longer available, so this transcript cannot be retried.
                   </Text>
                 )}
+                {hasTranscriptSegments ? (
+                  <SpeakerTranscript
+                    blocks={transcriptBlocks}
+                    selectedSpeakerId={activeSpeakerId}
+                    selectable
+                    onSpeakerPress={handleSpeakerPress}
+                  />
+                ) : null}
               </View>
             ) : (
               <SpeakerTranscript

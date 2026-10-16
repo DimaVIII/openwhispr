@@ -31,6 +31,7 @@ interface CloudMeetingRecordingProps {
   utterances: RealtimeUtterance[];
   partialText: string;
   onStop: () => void;
+  stopLabel?: string;
 }
 
 /**
@@ -49,6 +50,7 @@ export function CloudMeetingRecording({
   utterances,
   partialText,
   onStop,
+  stopLabel = 'Stop',
 }: CloudMeetingRecordingProps): React.JSX.Element {
   const insets = useSafeAreaInsets();
   // The meeting-record route uses a transparent (glass) header, so content renders
@@ -118,13 +120,17 @@ export function CloudMeetingRecording({
             />
           </View>
         ) : (
-          <LiveTranscriptList utterances={utterances} partialText={partialText} />
+          <LiveTranscriptList
+            utterances={utterances}
+            partialText={partialText}
+            active={status !== 'error'}
+          />
         )}
       </View>
 
       <View className="px-4 pt-2" style={{ paddingBottom: footerBottomPadding }}>
         <Button testID="meeting-stop" variant="destructive" size="lg" onPress={onStop}>
-          Stop
+          {stopLabel}
         </Button>
       </View>
     </View>

@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react-native';
-import { useCloudMeeting } from '../useCloudMeeting';
+import { CloudMeetingFinishError, useCloudMeeting } from '../useCloudMeeting';
 import { startRealtimeMeetingWs } from '@/services/transcription/RealtimeMeetingWsService';
 import type { RealtimeCallbacks, RealtimeSession } from '@/services/transcription/realtimeEvents';
 
@@ -111,4 +111,22 @@ it('Cancel aborts and closes the session without requesting a final transcript',
   expect(start.mock.calls[0][0]?.signal?.aborted).toBe(true);
   expect(live.stop).toHaveBeenCalledTimes(1);
   expect(live.finish).not.toHaveBeenCalled();
+});
+
+it('preserves finalized text in the error when the final transcript cannot be completed', async () => {
+  const live = session();
+  const utterance = { itemId: 'kept', text: 'Keep these notes.', startMs: 0, endMs: 1200 };
+  live.finish = jest.fn(async () => {
+    throw new Error('Connection interrupted.');
+  });
+  live.utterances = jest.fn(() => [utterance]);
+  start.mockResolvedValue(live);
+  const { result } = renderHook(() => useCloudMeeting({ enabled: true }));
+  await act(async () => undefined);
+  await act(async () => {
+    const error = await result.current.stop().catch((failure: unknown) => failure);
+    expect(error).toBeInstanceOf(CloudMeetingFinishError);
+    expect(error).toMatchObject({ message: 'Connection interrupted.', utterances: [utterance] });
+    expect((error as Error).message).not.toContain('saved recording');
+  });
 });

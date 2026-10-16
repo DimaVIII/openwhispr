@@ -46,6 +46,21 @@ const OPENAI_REALTIME_WS_URL = 'wss://api.openai.com/v1/realtime?intent=transcri
 const FLUSH_INTERVAL_MS = 150;
 const WS_OPEN = 1; // WebSocket.OPEN, decoupled from the global so tests can inject a fake
 
+interface LegState {
+  legIndex: number;
+  offsetMs: number;
+  legacyProtocol: boolean;
+  closed: boolean;
+  pendingItems: Set<string>;
+  drain?: {
+    promise: Promise<void>;
+    complete: () => void;
+    fail: (error: Error) => void;
+    commitSent: boolean;
+    acknowledged: boolean;
+  };
+}
+
 interface TokenResponse {
   clientSecret: string;
   model: string;
@@ -102,7 +117,15 @@ export async function startRealtimeMeetingWs(
   const pcmRing = new PcmRingBuffer(pcmTailCapBytes(sampleRate));
   // Per-leg index + offset, keyed by socket so a replaced leg's late messages keep
   // their own leg's namespace/offset during a swap.
-  const legMeta = new WeakMap<WebSocketLike, { legIndex: number; offsetMs: number }>();
+  const legMeta = new WeakMap<WebSocketLike, LegState>();
+  const retiringLegs = new Map<WebSocketLike, Promise<void>>();
+  const itemOrder = new Map<string, { leg: number; sequence: number }>();
+  const orderedUtterances = () =>
+    reducer.utterances().sort((a, b) => {
+      const first = itemOrder.get(a.itemId)!;
+      const second = itemOrder.get(b.itemId)!;
+      return first.leg - second.leg || first.sequence - second.sequence;
+    });
 
   let currentWs: WebSocketLike | null = null;
   // Leg mid-connect; tracked so a terminal stop closes it instead of leaking until timeout.
@@ -115,15 +138,9 @@ export async function startRealtimeMeetingWs(
   let terminalError: Error | null = null;
   let finishing = false;
   let finishPromise: Promise<void> | null = null;
-  let drainComplete: (() => void) | null = null;
-  let drainFailed: ((error: Error) => void) | null = null;
-  let commitAcknowledged = false;
-  let commitSent = false;
-  let legacyProtocol = true;
   let coverageIncomplete = false;
-  const pendingItems = new Set<string>();
-  const checkDrain = () => {
-    if (commitAcknowledged && pendingItems.size === 0) drainComplete?.();
+  const checkDrain = (meta: LegState) => {
+    if (meta.drain?.acknowledged && meta.pendingItems.size === 0) meta.drain.complete();
   };
 
   let legIndex = 0;
@@ -145,7 +162,9 @@ export async function startRealtimeMeetingWs(
   };
 
   const enqueuePcm = (buf: Buffer): void => {
+    const expectedBytes = pcmRing.byteLength + buf.length;
     pcmRing.push(buf);
+    if (pcmRing.byteLength < expectedBytes) coverageIncomplete = true;
   };
 
   const flush = (): void => {
@@ -160,12 +179,15 @@ export async function startRealtimeMeetingWs(
         JSON.stringify({ type: 'input_audio_buffer.append', audio: merged.toString('base64') }),
       );
     } catch {
-      // Socket may have closed between the readyState check and send; drop the chunk.
+      // We cannot know whether the server received this audio; never claim full coverage.
+      coverageIncomplete = true;
     }
   };
 
   const closeWs = (ws: WebSocketLike | null, options?: { commit?: boolean }): void => {
     if (!ws) return;
+    const meta = legMeta.get(ws);
+    if (meta) meta.closed = true;
     try {
       // Optional final commit so the leg's last turn finalizes (empty buffer → benign commit_empty).
       if (options?.commit && ws.readyState === WS_OPEN) {
@@ -175,6 +197,57 @@ export async function startRealtimeMeetingWs(
     } catch {
       // best-effort teardown
     }
+  };
+
+  // Each retiring/active leg has its own ordered barrier. Late events from one
+  // socket must never acknowledge another socket's final commit.
+  const drainLeg = (ws: WebSocketLike): Promise<void> => {
+    const meta = legMeta.get(ws)!;
+    if (meta.drain) return meta.drain.promise;
+    if (ws.readyState !== WS_OPEN)
+      return Promise.reject(new Error('Connection closed before the final transcript.'));
+    let complete!: () => void;
+    let fail!: (error: Error) => void;
+    const promise = new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => fail(new Error('Final transcript timed out.')), 15000);
+      complete = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+      fail = (error) => {
+        clearTimeout(timer);
+        reject(error);
+      };
+    });
+    meta.drain = { promise, complete, fail, commitSent: false, acknowledged: false };
+    try {
+      // Disabling VAD is an ordering barrier before the explicit final commit.
+      ws.send(
+        JSON.stringify(
+          meta.legacyProtocol
+            ? { type: 'transcription_session.update', session: { turn_detection: null } }
+            : {
+                type: 'session.update',
+                session: {
+                  type: 'transcription',
+                  audio: { input: { turn_detection: null } },
+                },
+              },
+        ),
+      );
+    } catch (error) {
+      fail(error instanceof Error ? error : new Error(String(error)));
+    }
+    return promise;
+  };
+
+  const closeAllLegs = (error: Error): void => {
+    for (const ws of [currentWs, ...retiringLegs.keys()]) {
+      if (!ws) continue;
+      legMeta.get(ws)?.drain?.fail(error);
+      closeWs(ws);
+    }
+    currentWs = null;
   };
 
   // Mic + timers only, never the socket — a reconnectable close must not stop capture.
@@ -203,6 +276,8 @@ export async function startRealtimeMeetingWs(
   };
 
   const handleMessage = (ws: WebSocketLike, event: { data: string }): void => {
+    const meta = legMeta.get(ws);
+    if (!meta || meta.closed || terminated) return;
     let parsed: unknown;
     try {
       parsed = JSON.parse(event.data);
@@ -215,62 +290,65 @@ export async function startRealtimeMeetingWs(
       error?: { code?: string };
       session?: { turn_detection?: unknown; audio?: { input?: { turn_detection?: unknown } } };
     };
-    if (evt.type === 'session.created') legacyProtocol = false;
+    if (evt.type === 'session.created') meta.legacyProtocol = false;
+    const drain = meta.drain;
     if (
-      finishing &&
-      !commitSent &&
-      ws === currentWs &&
+      drain &&
+      !drain.commitSent &&
       (evt.type === 'transcription_session.updated' || evt.type === 'session.updated') &&
-      (legacyProtocol
+      (meta.legacyProtocol
         ? evt.session?.turn_detection === null
         : evt.session?.audio?.input?.turn_detection === null)
     ) {
-      commitSent = true;
-      commitAcknowledged = false;
+      drain.commitSent = true;
+      drain.acknowledged = false;
       try {
         ws.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
       } catch (error) {
-        drainFailed?.(error instanceof Error ? error : new Error(String(error)));
+        drain.fail(error instanceof Error ? error : new Error(String(error)));
       }
       return;
     }
     if (evt.type === 'error' && evt.error?.code === 'input_audio_buffer_commit_empty') {
-      if (finishing && commitSent) {
-        commitAcknowledged = true;
-        checkDrain();
+      if (drain?.commitSent) {
+        drain.acknowledged = true;
+        checkDrain(meta);
       }
       return; // benign: our commit hit an already-drained buffer
     }
-    const meta = legMeta.get(ws) ?? { legIndex: 0, offsetMs: 0 };
     const rewritten = applyLegOffset(parsed as object, meta.offsetMs) as { item_id?: unknown };
     if (typeof rewritten.item_id === 'string') {
       rewritten.item_id = namespaceItemId(meta.legIndex, rewritten.item_id);
     }
     const itemId = rewritten.item_id;
     if (typeof itemId === 'string') {
+      if (!itemOrder.has(itemId))
+        itemOrder.set(itemId, { leg: meta.legIndex, sequence: itemOrder.size });
       if (
         evt.type === 'input_audio_buffer.speech_started' ||
-        evt.type === 'input_audio_buffer.committed'
+        evt.type === 'input_audio_buffer.committed' ||
+        evt.type === 'conversation.item.input_audio_transcription.delta'
       )
-        pendingItems.add(itemId);
+        meta.pendingItems.add(itemId);
       if (
         evt.type === 'conversation.item.input_audio_transcription.completed' ||
         evt.type === 'conversation.item.input_audio_transcription.failed'
       )
-        pendingItems.delete(itemId);
+        meta.pendingItems.delete(itemId);
     }
     if (evt.type === 'conversation.item.input_audio_transcription.failed') {
-      goTerminal(
-        new Error('Part of the meeting could not be transcribed. Retry from the saved recording.'),
-      );
+      goTerminal(new Error('Part of the meeting could not be transcribed.'));
       return;
     }
-    if (finishing && commitSent && evt.type === 'input_audio_buffer.committed')
-      commitAcknowledged = true;
+    if (drain?.commitSent && evt.type === 'input_audio_buffer.committed') drain.acknowledged = true;
     reducer.handleEvent(rewritten);
-    if (finishing && evt.type === 'error')
-      drainFailed?.(new Error('Meeting finalization failed. The recording is saved.'));
-    checkDrain();
+    if (evt.type === 'conversation.item.input_audio_transcription.completed')
+      callbacks.onUtterances?.(orderedUtterances());
+    if (evt.type === 'error') {
+      coverageIncomplete = true;
+      drain?.fail(new Error('Meeting finalization failed.'));
+    }
+    checkDrain(meta);
   };
 
   // Opens one leg; resolves on open, rejects on pre-open close/error/timeout. Does NOT
@@ -284,7 +362,7 @@ export async function startRealtimeMeetingWs(
         'realtime',
         `openai-insecure-api-key.${clientSecret}`,
       ]);
-      legMeta.set(ws, meta);
+      legMeta.set(ws, { ...meta, legacyProtocol: true, closed: false, pendingItems: new Set() });
       connectingWs = ws;
       let settled = false;
       let timer: ReturnType<typeof setTimeout>;
@@ -345,21 +423,26 @@ export async function startRealtimeMeetingWs(
     }, ROTATION_MS);
   };
 
-  // Point the flush loop at a fresh, open leg and retire the previous one. On a
-  // reconnect the previous leg is already dead so closeWs is a no-op; on a rotation
-  // (or a rotation that fell back to reconnect while the old leg was live) it commits
-  // and closes it. Always re-arm the rotation clock onto the new leg.
+  // New audio goes to the new leg while the retiring leg finishes its transcript.
   const swapCurrentLeg = (ws: WebSocketLike): void => {
     const previous = currentWs;
+    flush(); // queued audio still belongs to the previous live leg
+    cumulativeOffsetMs += Date.now() - legStartedAt;
+    legMeta.get(ws)!.offsetMs = cumulativeOffsetMs;
     currentWs = ws;
     legStartedAt = Date.now();
-    // Rotation fires no reconnect callback, so this is the only signal that clears a
-    // lingering pre-swap partial caption.
     callbacks.onPartial?.('', '');
-    flush();
+    flush(); // replays buffered audio when the previous leg was already disconnected
     if (previous && previous !== ws) {
-      coverageIncomplete = true;
-      closeWs(previous, { commit: true });
+      const retiring = drainLeg(previous)
+        .catch(() => {
+          coverageIncomplete = true;
+        })
+        .finally(() => {
+          closeWs(previous);
+          retiringLegs.delete(previous);
+        });
+      retiringLegs.set(previous, retiring);
     }
     scheduleRotation();
   };
@@ -367,19 +450,16 @@ export async function startRealtimeMeetingWs(
   const goTerminal = (error: unknown): void => {
     if (terminated) return;
     terminalError = error instanceof Error ? error : new Error(String(error));
-    drainFailed?.(terminalError);
     terminated = true;
-    closeWs(currentWs);
+    closeAllLegs(terminalError);
     teardownCapture();
-    currentWs = null;
     const message = error instanceof Error ? error.message : 'Realtime session ended';
     callbacks.onError?.({ error: { message } });
     notifyClose();
   };
 
   // Replace a dead leg with a fresh one (bounded backoff), mic never stopping. Keeps
-  // cumulativeOffsetMs unchanged: the new session's restarted clock rewinds this leg's
-  // ms labels, but display order is by sortOrder (utterance index), not startMs.
+  // the transcript accumulated by earlier legs.
   const attemptReconnect = (): void => {
     if (terminated || finishing || reconnecting || rotating) return;
     reconnecting = true;
@@ -422,9 +502,6 @@ export async function startRealtimeMeetingWs(
   const rollLeg = async (): Promise<void> => {
     if (terminated || finishing || reconnecting || rotating) return;
     rotating = true;
-    // Advance the offset by the old leg's duration BEFORE opening the new leg so its
-    // fresh-clock messages stamp continuously.
-    cumulativeOffsetMs += Date.now() - legStartedAt;
     try {
       const clientSecret = await fetchClientSecret();
       const newWs = await openLeg(clientSecret);
@@ -443,15 +520,11 @@ export async function startRealtimeMeetingWs(
   };
 
   const handleLegClosed = async (ws: WebSocketLike, code: number | undefined): Promise<void> => {
-    if (ws !== currentWs || terminated) return;
-    if (finishing) {
-      drainFailed?.(
-        new Error('Connection closed before the final transcript. The recording is saved.'),
-      );
-      return;
-    }
-    if (ws !== currentWs || terminated || rotating || reconnecting) return;
+    const meta = legMeta.get(ws);
+    if (terminated || meta?.closed) return;
     coverageIncomplete = true;
+    meta?.drain?.fail(new Error('Connection closed before the final transcript.'));
+    if (ws !== currentWs || finishing || rotating || reconnecting) return;
     const sessionAgeMs = Date.now() - sessionStartedAt;
     let isConnected = true;
     try {
@@ -473,12 +546,10 @@ export async function startRealtimeMeetingWs(
 
   const stop = (): void => {
     if (terminated) return;
-    drainFailed?.(new Error('Meeting interrupted.'));
     terminated = true;
-    const ws = currentWs;
     flush();
-    closeWs(ws, { commit: true });
-    currentWs = null;
+    closeWs(currentWs, { commit: true });
+    closeAllLegs(new Error('Meeting interrupted.'));
     teardownCapture();
   };
 
@@ -494,52 +565,18 @@ export async function startRealtimeMeetingWs(
         frameSub = null;
         if (flushTimer) clearInterval(flushTimer);
         flush();
-        if (coverageIncomplete)
-          throw new Error(
-            'Connection was interrupted. Retry from the saved recording for a complete transcript.',
-          );
         const ws = currentWs;
-        if (!ws || ws.readyState !== WS_OPEN)
-          throw new Error('Connection unavailable. The recording is saved.');
-        await new Promise<void>((resolve, reject) => {
-          const timer = setTimeout(
-            () => reject(new Error('Final transcript timed out. The recording is saved.')),
-            15000,
-          );
-          drainComplete = () => {
-            clearTimeout(timer);
-            resolve();
-          };
-          drainFailed = (error) => {
-            clearTimeout(timer);
-            reject(error);
-          };
-          try {
-            // The acknowledgement is an ordering barrier: prior VAD commits cannot
-            // satisfy the final manual commit after turn detection has been disabled.
-            ws.send(
-              JSON.stringify(
-                legacyProtocol
-                  ? { type: 'transcription_session.update', session: { turn_detection: null } }
-                  : {
-                      type: 'session.update',
-                      session: {
-                        type: 'transcription',
-                        audio: { input: { turn_detection: null } },
-                      },
-                    },
-              ),
-            );
-          } catch (error) {
-            drainFailed(error instanceof Error ? error : new Error(String(error)));
-          }
-        });
+        const results = await Promise.allSettled([
+          ...retiringLegs.values(),
+          ws ? drainLeg(ws) : Promise.reject(new Error('Connection unavailable.')),
+        ]);
+        const failure = results.find((result) => result.status === 'rejected');
+        if (failure?.status === 'rejected') throw failure.reason;
+        if (coverageIncomplete)
+          throw new Error('The connection was interrupted. The transcript may be incomplete.');
       } finally {
-        drainComplete = null;
-        drainFailed = null;
         terminated = true;
-        closeWs(currentWs);
-        currentWs = null;
+        closeAllLegs(new Error('Meeting ended.'));
         teardownCapture();
       }
     })();
@@ -592,5 +629,5 @@ export async function startRealtimeMeetingWs(
   flush(); // drain the cold-start buffer
   scheduleRotation();
 
-  return { stop, finish, utterances: reducer.utterances };
+  return { stop, finish, utterances: orderedUtterances };
 }

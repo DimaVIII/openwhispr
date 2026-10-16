@@ -1,6 +1,16 @@
 import { notesRepository, spacesRepository } from '@/data';
 import { useAuthStore } from '@/store/useAuthStore';
 
+export class ImportDestinationError extends Error {
+  constructor(
+    readonly translationKey: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'ImportDestinationError';
+  }
+}
+
 export interface ImportDestination {
   ownerId: string | null;
   folderId?: number;
@@ -22,13 +32,17 @@ export function resolveImportDestination(input: {
       ? undefined
       : notesRepository.getFolders().find((item) => item.id === input.folderId);
   if (input.folderId != null && !folder)
-    throw new Error(
+    throw new ImportDestinationError(
+      'importFolderUnavailable',
       'This folder is no longer available. Return to Notes and choose a destination.',
     );
   const spaceId = folder?.spaceId ?? input.spaceId ?? personal.id;
   const space = spaces.find((item) => item.id === spaceId);
   if (!space || space.deletedAt)
-    throw new Error('This space is no longer available. Return to Notes and choose a destination.');
+    throw new ImportDestinationError(
+      'importSpaceUnavailable',
+      'This space is no longer available. Return to Notes and choose a destination.',
+    );
   // Private imports cannot enter a shared space, even when started there.
   const usePersonal = input.isPrivate && space.kind !== 'private';
   return {
@@ -40,15 +54,26 @@ export function resolveImportDestination(input: {
   };
 }
 
-export function saveImportedNote(destination: ImportDestination, text: string, fileName: string) {
+export function saveImportedNote(
+  destination: ImportDestination,
+  text: string,
+  fileName: string,
+  fallbackTitle = 'Imported audio',
+) {
   if ((useAuthStore.getState().user?.id ?? null) !== destination.ownerId) {
-    throw new Error('Your account changed. Start the import again from Notes.');
+    throw new ImportDestinationError(
+      'importAccountChanged',
+      'Your account changed. Start the import again from Notes.',
+    );
   }
   const current = resolveImportDestination(destination);
   if (current.spaceId !== destination.spaceId || current.folderId !== destination.folderId) {
-    throw new Error('The destination changed. Return to Notes and choose a destination.');
+    throw new ImportDestinationError(
+      'importDestinationChanged',
+      'The destination changed. Return to Notes and choose a destination.',
+    );
   }
-  const title = fileName.replace(/\.[^.]+$/, '').trim() || 'Imported audio';
+  const title = fileName.replace(/\.[^.]+$/, '').trim() || fallbackTitle;
   // Create an empty row, set privacy, then add the transcript. A privacy-write
   // failure cannot leave the imported text in a syncable row.
   const note = notesRepository.createNote(
