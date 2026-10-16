@@ -1,3 +1,4 @@
+import { noteShareMenuActions } from './noteShareMenuActions';
 import { type ReactNode } from 'react';
 import { Alert, Platform, Pressable, View } from 'react-native';
 import { MenuView, type MenuAction } from '@react-native-menu/menu';
@@ -83,7 +84,7 @@ function RoleMenu({ role, accessibilityLabel, actions, busy, onAction }: RoleMen
   }
   return (
     <MenuView
-      actions={actions}
+      actions={noteShareMenuActions(actions)}
       onPressAction={({ nativeEvent }) => onAction(nativeEvent.event)}
       shouldOpenOnLongPress={false}
     >

@@ -1,3 +1,4 @@
+import { MenuView, type MenuAction } from '@react-native-menu/menu';
 import { AccessibilityInfo, Alert, Platform, type AlertButton } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { INVALID_EMAIL_ERROR, type NoteSharingController } from '@/hooks/useNoteSharing';
@@ -56,7 +57,9 @@ jest.mock('@/hooks/useNoteSharing', () => ({
   useNoteSharing: () => mockController,
 }));
 jest.mock('@/data/remote/noteSharingApi', () => ({ searchNoteAccessPrincipals: jest.fn() }));
-jest.mock('@react-native-menu/menu', () => require('./menuViewMock'));
+jest.mock('@react-native-menu/menu', () => ({
+  MenuView: jest.fn(require('./menuViewMock').MenuView),
+}));
 jest.mock('@/components/ui/Text', () => ({ Text: require('react-native').Text }));
 jest.mock('@/components/ui/SystemIcon', () => ({ SystemIcon: () => null }));
 jest.mock('@/components/ui/GlassIconButton', () => ({
@@ -765,4 +768,30 @@ describe('Android sharing consent in the selected language', () => {
     expect(screen.getByText('Share note')).toBeTruthy();
     expect(screen.getByLabelText('Export Plain Text')).toBeTruthy();
   });
+});
+
+it('provides named native Android choices instead of unsupported blank inline submenus', () => {
+  const original = Platform.OS;
+  Platform.OS = 'android';
+  mockController.state = { share: { ...share, visibility: 'link' }, access, invitations: [] };
+  try {
+    const screen = render(<NoteShareSheet {...props} />);
+    const actions = (MenuView as jest.Mock).mock.lastCall[0].actions as MenuAction[];
+    expect(actions.map((action) => action.id)).toEqual([
+      'visibility:link',
+      'visibility:domain',
+      'visibility:invited',
+      'replace-link',
+      'disable-sharing',
+    ]);
+    expect(actions.every((action) => Boolean(action.title) && !action.subactions)).toBe(true);
+    fireEvent.press(screen.getByTestId('menu-disable-sharing'));
+    expect(mockController.setVisibility).not.toHaveBeenCalled();
+    Platform.OS = 'ios';
+    screen.rerender(<NoteShareSheet {...props} />);
+    const iosActions = (MenuView as jest.Mock).mock.lastCall[0].actions as MenuAction[];
+    expect(iosActions.map((action) => action.id)).toEqual(['visibility', 'link']);
+  } finally {
+    Platform.OS = original;
+  }
 });

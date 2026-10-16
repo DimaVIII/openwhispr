@@ -1,3 +1,4 @@
+import { noteShareMenuActions } from './noteShareMenuActions';
 import { useEffect, useState, type ReactNode } from 'react';
 import {
   AccessibilityInfo,
@@ -451,7 +452,7 @@ export function NoteShareSheet({ noteId, onClose, onFlushDraft, onExport }: Note
   const accessRow =
     accessMenu.length > 0 ? (
       <MenuView
-        actions={accessMenu}
+        actions={noteShareMenuActions(accessMenu)}
         onPressAction={({ nativeEvent }) => pressAccessMenu(nativeEvent.event)}
         shouldOpenOnLongPress={false}
       >

@@ -1,9 +1,12 @@
+import { MenuView, type MenuAction } from '@react-native-menu/menu';
 import { Alert, Platform, type AlertButton } from 'react-native';
 import { fireEvent, render } from '@testing-library/react-native';
 import type { NoteAccessState, NoteShareInvitation } from '@/data/remote/noteSharingTypes';
 import { NoteShareAccessList } from '../NoteShareAccessList';
 
-jest.mock('@react-native-menu/menu', () => require('./menuViewMock'));
+jest.mock('@react-native-menu/menu', () => ({
+  MenuView: jest.fn(require('./menuViewMock').MenuView),
+}));
 jest.mock('@/components/ui/Text', () => ({ Text: require('react-native').Text }));
 jest.mock('@/components/ui/SystemIcon', () => ({ SystemIcon: () => null }));
 
@@ -468,5 +471,33 @@ it('localizes Android access changes without changing identities or bypassing co
   } finally {
     Platform.OS = original;
     mockLanguage = 'en';
+  }
+});
+
+it('exposes named Android role actions directly while preserving their permission and busy state', () => {
+  const original = Platform.OS;
+  Platform.OS = 'android';
+  try {
+    render(
+      <NoteShareAccessList
+        access={access}
+        invitations={[]}
+        busy
+        onUpdateGrant={jest.fn()}
+        onRemoveGrant={jest.fn()}
+        onRevokeInvitation={jest.fn()}
+        onResendInvitation={jest.fn()}
+      />,
+    );
+    const actions = (MenuView as jest.Mock).mock.lastCall[0].actions as MenuAction[];
+    expect(actions.slice(0, 2).map((action) => action.id)).toEqual([
+      'grant-1:editor',
+      'grant-1:viewer',
+    ]);
+    expect(actions.every((action) => Boolean(action.title) && !action.subactions)).toBe(true);
+    expect(actions[0].attributes?.disabled).toBe(true);
+    expect(actions[1].state).toBe('on');
+  } finally {
+    Platform.OS = original;
   }
 });
