@@ -1925,3 +1925,165 @@ it('updates Android editor copy without losing typed content and requires locali
     alert.mockRestore();
   }
 });
+
+describe('Android delayed AI consent', () => {
+  const originalPlatform = Platform.OS;
+  let alertSpy: jest.SpyInstance;
+  beforeEach(() => {
+    Platform.OS = 'android';
+    alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+  });
+  afterEach(() => {
+    Platform.OS = originalPlatform;
+    alertSpy.mockRestore();
+  });
+
+  it.each(['note', 'account', 'unmount', 'privacy', 'routing'] as const)(
+    'does not run a replacement after the %s changes while confirmation is open',
+    async (change) => {
+      mockNote = note({ enhancedContent: '## Keep this draft' });
+      mockNotesState.notes = [mockNote];
+      const screen = render(<NoteEditorScreen />);
+      await act(async () => fireEvent.press(screen.getByTestId('run-action-1')));
+      const confirm = alertSpy.mock.calls[0][2].find(
+        (button: { text: string }) => button.text === 'Replace',
+      ).onPress;
+      if (change === 'note') {
+        mockRouteNoteId = '8';
+        mockNote = note({ id: 8, content: 'Different private content', isPrivate: 1 });
+        mockNotesState.notes = [mockNote];
+        screen.rerender(<NoteEditorScreen />);
+      } else if (change === 'account') {
+        mockAuthState.user = { id: 'other-user', email: 'other@example.com', emailVerified: true };
+        screen.rerender(<NoteEditorScreen />);
+      } else if (change === 'privacy') {
+        mockNote = { ...mockNote, isPrivate: 1 };
+        mockNotesState.notes = [mockNote];
+        screen.rerender(<NoteEditorScreen />);
+      } else if (change === 'routing') {
+        mockConfigState.config.inference = {
+          notes: { mode: 'providers', providerId: 'openai', modelId: 'other-model' },
+        };
+        screen.rerender(<NoteEditorScreen />);
+      } else {
+        screen.unmount();
+      }
+      await act(async () => confirm());
+      expect(ReasoningService.processText).not.toHaveBeenCalled();
+      expect(mockRegisterSuperwallGate).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not send a different note through an old cloud-chat confirmation', async () => {
+    mockNote = note({ isPrivate: 1 });
+    mockNotesState.notes = [mockNote];
+    const screen = render(<NoteEditorScreen />);
+    fireEvent.changeText(screen.getByTestId('chat-draft'), 'Summarize this note');
+    await act(async () => fireEvent.press(screen.getByTestId('chat-send')));
+    const confirm = alertSpy.mock.calls[0][2].find(
+      (button: { text: string }) => button.text === 'Use Cloud Once',
+    ).onPress;
+    mockRouteNoteId = '8';
+    mockNote = note({ id: 8, content: 'Different private content', isPrivate: 1 });
+    mockNotesState.notes = [mockNote];
+    screen.rerender(<NoteEditorScreen />);
+    await act(async () => confirm());
+    expect(ReasoningService.chatOverNote).not.toHaveBeenCalled();
+    expect(mockRegisterSuperwallGate).not.toHaveBeenCalled();
+  });
+  it('discards a delayed paywall callback after another note opens', async () => {
+    let release: (() => void) | undefined;
+    mockRegisterSuperwallGate.mockImplementationOnce(async ({ feature }) => {
+      release = feature;
+      return true;
+    });
+    const screen = render(<NoteEditorScreen />);
+    await act(async () => fireEvent.press(screen.getByTestId('run-action-1')));
+    expect(release).toBeDefined();
+    mockRouteNoteId = '8';
+    mockNote = note({ id: 8, content: 'A different note' });
+    mockNotesState.notes = [mockNote];
+    screen.rerender(<NoteEditorScreen />);
+    await act(async () => release?.());
+    expect(ReasoningService.processText).not.toHaveBeenCalled();
+  });
+
+  it('does not generate a title or save an action result into a changed account', async () => {
+    mockConfigState.config.autoGenerateNoteTitle = true;
+    let resolve!: (value: { text: string; model: string }) => void;
+    (ReasoningService.processText as jest.Mock).mockReturnValueOnce(
+      new Promise((r) => {
+        resolve = r;
+      }),
+    );
+    const screen = render(<NoteEditorScreen />);
+    await act(async () => fireEvent.press(screen.getByTestId('run-action-1')));
+    expect(ReasoningService.processText).toHaveBeenCalledTimes(1);
+    mockAuthState.user = { id: 'other-user', email: 'other@example.com', emailVerified: true };
+    screen.rerender(<NoteEditorScreen />);
+    mockUpdateNote.mockClear();
+    await act(async () => resolve({ text: 'Old account response', model: 'test' }));
+    expect(mockUpdateNote).not.toHaveBeenCalled();
+    expect(generateNoteTitle).not.toHaveBeenCalled();
+  });
+  it('allows current replacement consent after an unrelated rerender', async () => {
+    mockNote = note({ enhancedContent: '## Keep until confirmed' });
+    mockNotesState.notes = [mockNote];
+    const screen = render(<NoteEditorScreen />);
+    await act(async () => fireEvent.press(screen.getByTestId('run-action-1')));
+    expect(ReasoningService.processText).not.toHaveBeenCalled();
+    mockConfigState.config.preferredLanguage = 'de';
+    screen.rerender(<NoteEditorScreen />);
+    const confirm = alertSpy.mock.calls[0][2].find(
+      (button: { text: string }) => button.text === 'Replace',
+    ).onPress;
+    await act(async () => confirm());
+    expect(ReasoningService.processText).toHaveBeenCalledTimes(1);
+    expect(mockUpdateNote).toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({ enhancedContent: 'Generated calendar-aware notes' }),
+    );
+    expect(mockUpdateConfig).not.toHaveBeenCalled();
+    delete mockConfigState.config.preferredLanguage;
+  });
+
+  it('sends the original private note only after current explicit cloud consent', async () => {
+    mockNote = note({ isPrivate: 1 });
+    mockNotesState.notes = [mockNote];
+    (ReasoningService.chatOverNote as jest.Mock).mockResolvedValueOnce({
+      text: 'Answer',
+      model: 'test',
+    });
+    const screen = render(<NoteEditorScreen />);
+    fireEvent.changeText(screen.getByTestId('chat-draft'), 'Summarize this note');
+    await act(async () => fireEvent.press(screen.getByTestId('chat-send')));
+    expect(ReasoningService.chatOverNote).not.toHaveBeenCalled();
+    const buttons = alertSpy.mock.calls[0][2];
+    expect(buttons[0].style).toBe('cancel');
+    await act(async () =>
+      buttons.find((button: { text: string }) => button.text === 'Use Cloud Once').onPress(),
+    );
+    expect(ReasoningService.chatOverNote).toHaveBeenCalledWith(
+      expect.objectContaining({
+        question: 'Summarize this note',
+        routing: { isPrivateNote: true, allowCloudFallback: true },
+      }),
+    );
+    expect(mockUpdateConfig).not.toHaveBeenCalled();
+    expect(mockNote.isPrivate).toBe(1);
+  });
+
+  it('discards cloud-chat consent after the chat sheet closes', async () => {
+    mockNote = note({ isPrivate: 1 });
+    mockNotesState.notes = [mockNote];
+    const screen = render(<NoteEditorScreen />);
+    fireEvent.changeText(screen.getByTestId('chat-draft'), 'Summarize this note');
+    await act(async () => fireEvent.press(screen.getByTestId('chat-send')));
+    const confirm = alertSpy.mock.calls[0][2].find(
+      (button: { text: string }) => button.text === 'Use Cloud Once',
+    ).onPress;
+    fireEvent.press(screen.getByTestId('chat-close'));
+    await act(async () => confirm());
+    expect(ReasoningService.chatOverNote).not.toHaveBeenCalled();
+  });
+});

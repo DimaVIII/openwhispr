@@ -178,6 +178,7 @@ export default function NoteEditorScreen() {
     [getConflictedNote, noteId, note?.conflictServerNote],
   );
   const user = useAuthStore((s) => s.user);
+  const sessionCookie = useAuthStore((s) => s.sessionCookie);
   const activeMode = useProcessingModeStore((s) => s.activeMode);
   const { register: registerSuperwallGate } = useSuperwallGate();
   const { handleUsageLimitReached, isRecoveringUsageLimit } = useUsageLimitRecovery();
@@ -186,6 +187,70 @@ export default function NoteEditorScreen() {
   const notesProviderId = useConfigStore((s) => s.config?.inference?.notes?.providerId);
   const chatMode = useConfigStore((s) => s.config?.inference?.agent?.mode);
   const chatEnabled = useConfigStore((s) => (s.config ? isNoteChatEnabled(s.config) : true));
+  // Consent belongs to this editor, account, note and processing selection. Native alerts,
+  // model readiness and the paywall may finish after any of those have changed.
+  const aiRoutingKey = useConfigStore((s) => JSON.stringify(s.config?.inference));
+  const aiContext = useMemo(
+    () => ({
+      noteId,
+      clientNoteId: note?.clientNoteId,
+      remoteId: note?.remoteId,
+      isPrivate: note?.isPrivate,
+      accountId: user?.id,
+      sessionCookie,
+      activeMode,
+      aiRoutingKey,
+    }),
+    [
+      noteId,
+      note?.clientNoteId,
+      note?.remoteId,
+      note?.isPrivate,
+      user?.id,
+      sessionCookie,
+      activeMode,
+      aiRoutingKey,
+    ],
+  );
+  const aiContextRef = useRef(aiContext);
+  aiContextRef.current = aiContext;
+  const editorActive = useRef(true);
+  const editorGeneration = useRef(0);
+  const captureAIContext = useCallback(() => {
+    const context = aiContextRef.current;
+    const generation = editorGeneration.current;
+    const auth = useAuthStore.getState();
+    const accountId = auth.user?.id;
+    const cookie = auth.sessionCookie;
+    const mode = useProcessingModeStore.getState().activeMode;
+    const routingKey = JSON.stringify(useConfigStore.getState().config?.inference);
+    return (): boolean => {
+      if (Platform.OS !== 'android') return true;
+      const currentAuth = useAuthStore.getState();
+      const currentNote = getNoteById(context.noteId);
+      return (
+        editorActive.current &&
+        generation === editorGeneration.current &&
+        context === aiContextRef.current &&
+        !!currentNote &&
+        !currentNote.deletedAt &&
+        currentNote.clientNoteId === context.clientNoteId &&
+        currentNote.remoteId === context.remoteId &&
+        currentNote.isPrivate === context.isPrivate &&
+        currentAuth.user?.id === accountId &&
+        currentAuth.sessionCookie === cookie &&
+        useProcessingModeStore.getState().activeMode === mode &&
+        JSON.stringify(useConfigStore.getState().config?.inference) === routingKey
+      );
+    };
+  }, [getNoteById]);
+  useEffect(() => {
+    editorActive.current = true;
+    return () => {
+      editorActive.current = false;
+      editorGeneration.current += 1;
+    };
+  }, []);
   const providerNotes = notesMode === 'providers';
   // Only an unset or OpenWhispr chat route reaches Cloud, so only it needs an account and the paywall.
   const cloudChat = chatMode !== 'providers' && chatMode !== 'local';
@@ -248,6 +313,7 @@ export default function NoteEditorScreen() {
   const dictionaryWordsRef = useRef(dictionaryWords);
   dictionaryWordsRef.current = dictionaryWords;
   const chatAbortRef = useRef<AbortController | null>(null);
+  const chatConsentGeneration = useRef(0);
 
   useEffect(() => {
     initializeActions();
@@ -741,12 +807,12 @@ export default function NoteEditorScreen() {
     Alert.alert('Dictation failed', error.message);
   }, []);
 
-  const editorActive = useRef(true);
   useFocusEffect(
     useCallback(() => {
       editorActive.current = true;
       return () => {
         editorActive.current = false;
+        editorGeneration.current += 1;
       };
     }, []),
   );
@@ -847,7 +913,12 @@ export default function NoteEditorScreen() {
   );
 
   const runSelectedAction = useCallback(
-    (action: Parameters<typeof runAction>[0], routing?: ReasoningRoutingOptions) => {
+    (
+      action: Parameters<typeof runAction>[0],
+      routing: ReasoningRoutingOptions | undefined,
+      isCurrent: () => boolean,
+    ) => {
+      if (!isCurrent()) return;
       if (processingState === 'processing') return;
       // Save a queued edit now: it must not land on top of the new notes later, and it must
       // survive an action that fails.
@@ -860,6 +931,7 @@ export default function NoteEditorScreen() {
       runAction(action, inputText, {
         inputKind: usesSegmentTranscriptRef.current ? 'meeting-transcript' : 'plain-note',
         customDictionary: dictionaryWordsRef.current,
+        isCurrent,
         routing: {
           isPrivateNote: note?.isPrivate === 1,
           ...routing,
@@ -870,13 +942,18 @@ export default function NoteEditorScreen() {
   );
 
   const runActionWithRouting = useCallback(
-    async (action: Parameters<typeof runAction>[0]) => {
+    async (action: Parameters<typeof runAction>[0], isCurrent: () => boolean) => {
+      if (!isCurrent()) return;
+      const run = (routing: ReasoningRoutingOptions): void => {
+        if (isCurrent()) runSelectedAction(action, routing, isCurrent);
+      };
       const routing = { isPrivateNote: note?.isPrivate === 1 };
       // On-Device never leaves this phone: no account, paywall, or fallback to another service.
       if (notesMode === 'local') {
         const readiness = await getLocalReasoningReadiness();
+        if (!isCurrent()) return;
         if (readiness.status === 'ready') {
-          runSelectedAction(action, routing);
+          run(routing);
           return;
         }
         Alert.alert(
@@ -892,17 +969,17 @@ export default function NoteEditorScreen() {
 
       if (localRequired) {
         if (await shouldUseLocalReasoning(routing)) {
-          runSelectedAction(action, routing);
+          run(routing);
           return;
         }
 
         const readiness = await getLocalReasoningReadiness();
-        const runElsewhereOnce = (): void =>
-          runSelectedAction(action, { ...routing, allowCloudFallback: true });
+        if (!isCurrent()) return;
+        const runElsewhereOnce = (): void => run({ ...routing, allowCloudFallback: true });
         promptLocalReasoningFallback({
           readiness,
           signedIn: !!user,
-          onEnableLocal: () => runSelectedAction(action, routing),
+          onEnableLocal: () => run(routing),
           onUseCloudOnce: user || providerNotes ? runElsewhereOnce : undefined,
           destinationName: providerNotes ? providerDisplayName(notesProviderId ?? '') : undefined,
         });
@@ -910,7 +987,7 @@ export default function NoteEditorScreen() {
       }
 
       if (providerNotes) {
-        runSelectedAction(action, routing);
+        run(routing);
         return;
       }
 
@@ -920,11 +997,12 @@ export default function NoteEditorScreen() {
       }
 
       const gateAndRun = (actionRouting: ReasoningRoutingOptions) => {
+        if (!isCurrent()) return;
         registerSuperwallGate({
           placement: SUPERWALL_PLACEMENTS.aiActionRun,
           params: { actionName: action.name },
           requiresAccount: false,
-          feature: () => runSelectedAction(action, actionRouting),
+          feature: () => run(actionRouting),
         }).catch(() => {});
       };
 
@@ -952,24 +1030,31 @@ export default function NoteEditorScreen() {
 
   const handleRunAction = useCallback(
     (action: Parameters<typeof runAction>[0]) => {
+      const isCurrent = captureAIContext();
       // Decide from the notes on screen: an edit typed since the last save counts too.
       flushEnhancedSave();
       if (!getNoteById(noteId)?.enhancedContent?.trim()) {
-        runActionWithRouting(action).catch(() => {});
+        runActionWithRouting(action, isCurrent).catch(() => {});
         return;
       }
       confirmDestructive(
         'Replace enhanced notes?',
         'Running this action replaces the current enhanced notes, including any edits.',
-        () => runActionWithRouting(action),
+        () => runActionWithRouting(action, isCurrent),
         { destructiveLabel: 'Replace' },
       );
     },
-    [flushEnhancedSave, getNoteById, noteId, runActionWithRouting],
+    [captureAIContext, flushEnhancedSave, getNoteById, noteId, runActionWithRouting],
   );
 
   const startChatRequest = useCallback(
-    async (question: string, appendUserMessage: boolean, allowRemoteContent = false) => {
+    async (
+      question: string,
+      appendUserMessage: boolean,
+      allowRemoteContent: boolean,
+      isCurrent: () => boolean,
+    ) => {
+      if (!isCurrent()) return;
       const trimmedQuestion = question.trim();
       const context = chatContextRef.current.trim();
       if (!trimmedQuestion || chatAbortRef.current) return;
@@ -1019,6 +1104,7 @@ export default function NoteEditorScreen() {
           // still fits wherever it did before they were added.
           if (
             controller.signal.aborted ||
+            !isCurrent() ||
             !isLocalContextLimitError(error) ||
             !sourceContext ||
             sourceContext === context
@@ -1027,7 +1113,7 @@ export default function NoteEditorScreen() {
           }
           response = await askAbout(sourceContext);
         }
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || !isCurrent()) return;
         setChatMessages((current) => [
           ...current,
           {
@@ -1038,7 +1124,7 @@ export default function NoteEditorScreen() {
           },
         ]);
       } catch (error) {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || !isCurrent()) return;
         setChatError(error instanceof Error ? error.message : 'Chat failed');
       } finally {
         if (chatAbortRef.current === controller) {
@@ -1052,14 +1138,22 @@ export default function NoteEditorScreen() {
 
   const runChatWithCloudConfirmation = useCallback(
     (question: string, appendUserMessage: boolean) => {
+      const contextIsCurrent = captureAIContext();
+      const generation = chatConsentGeneration.current;
+      const isCurrent = (): boolean =>
+        contextIsCurrent() &&
+        (Platform.OS !== 'android' || generation === chatConsentGeneration.current);
       if (cloudChat && requiresRealAccount(user)) {
         showAccountRequiredAlert('AI chat', { cloudOnly: true });
         return;
       }
 
       const gateAndRun = (allowRemoteContent = false) => {
+        if (!isCurrent()) return;
         if (!cloudChat) {
-          startChatRequest(question, appendUserMessage, allowRemoteContent).catch(() => {});
+          startChatRequest(question, appendUserMessage, allowRemoteContent, isCurrent).catch(
+            () => {},
+          );
           return;
         }
         registerSuperwallGate({
@@ -1067,7 +1161,9 @@ export default function NoteEditorScreen() {
           params: { source: 'note_chat' },
           requiresAccount: false,
           feature: () => {
-            startChatRequest(question, appendUserMessage, allowRemoteContent).catch(() => {});
+            startChatRequest(question, appendUserMessage, allowRemoteContent, isCurrent).catch(
+              () => {},
+            );
           },
         }).catch(() => {});
       };
@@ -1082,7 +1178,15 @@ export default function NoteEditorScreen() {
 
       gateAndRun();
     },
-    [chatMode, cloudChat, registerSuperwallGate, requiresCloudConfirmation, startChatRequest, user],
+    [
+      captureAIContext,
+      chatMode,
+      cloudChat,
+      registerSuperwallGate,
+      requiresCloudConfirmation,
+      startChatRequest,
+      user,
+    ],
   );
 
   const handleAskNote = useCallback(() => {
@@ -1112,6 +1216,7 @@ export default function NoteEditorScreen() {
 
   const handleClearChat = useCallback(() => {
     if (isChatProcessing) return;
+    chatConsentGeneration.current += 1;
     setChatMessages([]);
     setChatDraft('');
     setChatError(null);
@@ -1119,6 +1224,7 @@ export default function NoteEditorScreen() {
   }, [isChatProcessing]);
 
   const handleCloseChat = useCallback(() => {
+    chatConsentGeneration.current += 1;
     if (chatAbortRef.current) {
       chatAbortRef.current.abort();
       chatAbortRef.current = null;

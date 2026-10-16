@@ -16,6 +16,8 @@ export interface RunActionOptions {
   inputKind?: GenerateNotesInputKind;
   customDictionary?: string[];
   routing?: ReasoningRoutingOptions;
+  /** Recheck ownership after asynchronous work before continuing or publishing a result. */
+  isCurrent?: () => boolean;
 }
 
 interface UseActionProcessingOptions {
@@ -33,7 +35,7 @@ export function useActionProcessing({ onSuccess, onError }: UseActionProcessingO
 
   const runAction = useCallback(
     async (action: Action, noteContent: string, options: RunActionOptions = {}) => {
-      if (processingRef.current) return;
+      if (processingRef.current || options.isCurrent?.() === false) return;
       processingRef.current = true;
       cancelledRef.current = false;
 
@@ -57,12 +59,12 @@ export function useActionProcessing({ onSuccess, onError }: UseActionProcessingO
           routing: options.routing,
         });
 
-        if (cancelledRef.current) return;
+        if (cancelledRef.current || options.isCurrent?.() === false) return;
 
         let generatedTitle: string | undefined;
         if (cfg?.autoGenerateNoteTitle ?? true) {
           const title = await generateNoteTitle(result.text, options.routing);
-          if (cancelledRef.current) return;
+          if (cancelledRef.current || options.isCurrent?.() === false) return;
           if (title) generatedTitle = title;
         }
 
@@ -73,10 +75,11 @@ export function useActionProcessing({ onSuccess, onError }: UseActionProcessingO
           setState('idle');
         }, 600);
       } catch (e) {
-        if (cancelledRef.current) return;
+        if (cancelledRef.current || options.isCurrent?.() === false) return;
         setState('idle');
         onError(e instanceof Error ? e.message : 'Enhancement failed', e);
       } finally {
+        if (options.isCurrent?.() === false) setState('idle');
         processingRef.current = false;
       }
     },
