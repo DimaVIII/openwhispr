@@ -1,4 +1,4 @@
-import './strings';
+import { observeAndroidLanguage } from './strings';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Stack } from 'expo-router';
@@ -43,6 +43,7 @@ export default function AndroidRoot() {
   useBubblePipeline();
   useRevenueCatIdentity();
   useEffect(() => observeAndroidPurchaseUpdates(), []);
+  useEffect(() => observeAndroidLanguage(), []);
   useEffect(() => {
     async function initialize() {
       await useConfigStore.getState().loadConfig();

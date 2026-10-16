@@ -1,5 +1,6 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
+import { AppState } from 'react-native';
 import en from '../locales/en/translation.json';
 import es from '../locales/es/translation.json';
 import fr from '../locales/fr/translation.json';
@@ -29,4 +30,16 @@ if (!i18n.isInitialized)
     resources,
     defaultNS: 'android',
   });
+
+export function observeAndroidLanguage(): () => void {
+  const refresh = () => {
+    const language = deviceLanguage();
+    if (i18n.language !== language) i18n.changeLanguage(language).catch(() => undefined);
+  };
+  refresh();
+  const subscription = AppState.addEventListener('change', (state) => {
+    if (state === 'active') refresh();
+  });
+  return () => subscription.remove();
+}
 export default i18n;
