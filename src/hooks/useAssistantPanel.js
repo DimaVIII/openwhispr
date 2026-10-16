@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import {
   getAssistantFooterTransitionTimeline,
   resolveAssistantThinkingTransition,
+  shouldBeginAssistantFollowUpThinking,
 } from "../helpers/voicePillPresentation";
 import {
   closeAssistantSessionState,
@@ -337,4 +338,26 @@ export function useAssistantPanel({
     completeContentFade,
     noteDictationError,
   };
+}
+
+/**
+ * Starts the open panel's thinking when a voice-assistant follow-up spoken into
+ * it is processed. `recording` is the `useAudioRecording` result and
+ * `assistant` the `useAssistantPanel` result.
+ */
+export function useAssistantFollowUpThinking(recording, assistant) {
+  const { isAssistantVoice, isProcessing, isCancelling } = recording;
+  const { openRef, beginThinking } = assistant;
+  useEffect(() => {
+    if (
+      shouldBeginAssistantFollowUpThinking({
+        isAssistantVoice,
+        isProcessing,
+        isCancelling,
+        panelOpen: openRef.current,
+      })
+    ) {
+      beginThinking();
+    }
+  }, [isAssistantVoice, isProcessing, isCancelling, openRef, beginThinking]);
 }

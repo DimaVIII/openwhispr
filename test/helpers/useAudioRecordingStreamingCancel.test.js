@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const React = require("react");
+const { flushSync } = require("react-dom");
 const { createRoot } = require("react-dom/client");
 const {
   createRendererServer,
@@ -11,7 +12,8 @@ const {
 // A streaming voice-assistant recording in progress. Its stop and cancel
 // report state the way the real AudioManager does: a stop stays processing
 // until the transcript is handled, and a cancel reports a transient
-// processing state while it tears the stream down, then idle.
+// processing state while it tears the stream down, then idle even when the
+// teardown fails.
 const FAKE_AUDIO_MANAGER_SOURCE = `
 export default class FakeAudioManager {
   constructor() {
@@ -19,10 +21,12 @@ export default class FakeAudioManager {
     this.translationRequested = false;
     this.sttConfig = { success: true };
     this.callbacks = {};
+    this.state = { isRecording: true, isStreaming: true };
+    this.cancelError = null;
     globalThis.__streamingCancelAudioManager = this;
   }
   getState() {
-    return { isRecording: true, isStreaming: true };
+    return this.state;
   }
   setCallbacks(callbacks) {
     this.callbacks = callbacks;
@@ -55,17 +59,24 @@ export default class FakeAudioManager {
   }
   async cancelStreamingRecording() {
     this.report({ isRecording: false, isProcessing: true, isStreaming: false });
-    // Held open the way a real provider disconnect keeps the cancel pending.
-    await new Promise((resolve) => {
-      this.finishCancel = resolve;
-    });
-    this.report({ isRecording: false, isProcessing: false, isStreaming: false });
-    return true;
+    try {
+      // Held open the way a real provider disconnect keeps the cancel pending.
+      await new Promise((resolve) => {
+        this.finishCancel = resolve;
+      });
+      if (this.cancelError) throw this.cancelError;
+      return true;
+    } finally {
+      this.state = { isRecording: false, isStreaming: false };
+      this.report({ isRecording: false, isProcessing: false, isStreaming: false });
+    }
   }
 }
 `;
 
-async function renderStreamingAssistantRecording(t) {
+// Renders the recording hook, the assistant panel and the follow-up wiring
+// App.jsx uses, with the panel already open.
+async function renderOpenPanelWithStreamingFollowUp(t) {
   // Registered before the DOM helpers so it runs while window/document exist.
   let root = null;
   t.after(async () => {
@@ -102,32 +113,26 @@ async function renderStreamingAssistantRecording(t) {
     },
   });
   const { useAudioRecording } = await vite.ssrLoadModule("/hooks/useAudioRecording.js");
-  const { shouldBeginAssistantFollowUpThinking } = await vite.ssrLoadModule(
-    "/helpers/voicePillPresentation.js"
+  const { useAssistantFollowUpThinking, useAssistantPanel } = await vite.ssrLoadModule(
+    "/hooks/useAssistantPanel.js"
   );
 
-  // Every committed render, judged the way App.jsx decides whether an open
-  // panel starts thinking for a follow-up voice command.
-  const thinkingStarts = [];
   const api = {};
+  const panel = {};
   // Stable, or every render would rebuild the AudioManager in the mount effect.
   const toast = () => {};
   const options = { onDemoEvent: () => {} };
+  const panelOptions = {
+    requestMainWindowSize: async () => {},
+    dictationErrorActionCount: 0,
+    recordingControlsRef: { current: null },
+  };
   function Harness() {
+    const assistant = useAssistantPanel(panelOptions);
     const recording = useAudioRecording(toast, options);
+    useAssistantFollowUpThinking(recording, assistant);
     Object.assign(api, recording);
-    React.useEffect(() => {
-      if (
-        shouldBeginAssistantFollowUpThinking({
-          isAssistantVoice: recording.isAssistantVoice,
-          isProcessing: recording.isProcessing,
-          isCancelling: recording.isCancelling,
-          panelOpen: true,
-        })
-      ) {
-        thinkingStarts.push(recording.isProcessing);
-      }
-    });
+    Object.assign(panel, assistant);
     return null;
   }
 
@@ -136,47 +141,121 @@ async function renderStreamingAssistantRecording(t) {
     root.render(React.createElement(Harness));
   });
   await React.act(async () => {
-    globalThis.__streamingCancelAudioManager.report({
-      isRecording: true,
-      isProcessing: false,
-      isStreaming: true,
-    });
+    await panel.openPanel();
   });
+  const manager = globalThis.__streamingCancelAudioManager;
+  await startFollowUp(manager);
+  assert.equal(panel.openRef.current, true);
   assert.equal(api.isRecording, true);
   assert.equal(api.isAssistantVoice, true);
+  assert.equal(panel.thinking, false);
 
-  return { api, thinkingStarts };
+  return { api, panel, manager };
+}
+
+async function startFollowUp(manager, state = { isRecording: true, isStreaming: true }) {
+  manager.state = state;
+  await React.act(async () => {
+    manager.report({ isRecording: true, isProcessing: false, isStreaming: true });
+  });
 }
 
 test("cancelling a streaming voice-assistant follow-up never starts the open panel's thinking", async (t) => {
-  const { api, thinkingStarts } = await renderStreamingAssistantRecording(t);
+  const { api, panel, manager } = await renderOpenPanelWithStreamingFollowUp(t);
+
+  let cancelled;
+  await React.act(async () => {
+    // A discrete event (Esc, the panel's close button) flushes its updates
+    // before any microtask, so the cancel flag must land in the same batch as
+    // the teardown's processing report.
+    flushSync(() => {
+      cancelled = api.cancelRecording();
+    });
+  });
+  assert.equal(api.isProcessing, true);
+  assert.equal(api.isCancelling, true);
+  assert.equal(panel.thinking, false);
+
+  await React.act(async () => {
+    manager.finishCancel();
+    await cancelled;
+  });
+
+  assert.equal(panel.thinking, false);
+  assert.equal(api.isProcessing, false);
+  assert.equal(api.isCancelling, false);
+});
+
+test("cancelling a streaming follow-up while its stream is still starting never starts thinking", async (t) => {
+  const { api, panel, manager } = await renderOpenPanelWithStreamingFollowUp(t);
+  manager.state = { isRecording: true, isStreaming: false, isStreamingStartInProgress: true };
 
   let cancelled;
   await React.act(async () => {
     cancelled = api.cancelRecording();
   });
   assert.equal(api.isProcessing, true);
-  assert.deepEqual(thinkingStarts, []);
-  assert.equal(api.isCancelling, true);
+  assert.equal(panel.thinking, false);
 
   await React.act(async () => {
-    globalThis.__streamingCancelAudioManager.finishCancel();
+    manager.finishCancel();
     await cancelled;
   });
-
-  assert.deepEqual(thinkingStarts, []);
-  assert.equal(api.isProcessing, false);
-  assert.equal(api.isCancelling, false);
+  assert.equal(panel.thinking, false);
 });
 
 test("stopping a streaming voice-assistant follow-up still starts the open panel's thinking", async (t) => {
-  const { api, thinkingStarts } = await renderStreamingAssistantRecording(t);
+  const { api, panel } = await renderOpenPanelWithStreamingFollowUp(t);
 
   await React.act(async () => {
     await api.stopRecording();
   });
 
-  assert.ok(thinkingStarts.length > 0);
+  assert.equal(panel.thinking, true);
   assert.equal(api.isProcessing, true);
   assert.equal(api.isCancelling, false);
+});
+
+test("the next follow-up still thinks after a cancelled one", async (t) => {
+  const { api, panel, manager } = await renderOpenPanelWithStreamingFollowUp(t);
+
+  let cancelled;
+  await React.act(async () => {
+    cancelled = api.cancelRecording();
+  });
+  await React.act(async () => {
+    manager.finishCancel();
+    await cancelled;
+  });
+
+  await startFollowUp(manager);
+  await React.act(async () => {
+    await api.stopRecording();
+  });
+
+  assert.equal(panel.thinking, true);
+});
+
+test("a streaming cancel that fails still lets the next follow-up think", async (t) => {
+  const { api, panel, manager } = await renderOpenPanelWithStreamingFollowUp(t);
+  manager.cancelError = new Error("preview cleanup failed");
+
+  let cancelled;
+  await React.act(async () => {
+    cancelled = api.cancelRecording();
+  });
+  await React.act(async () => {
+    manager.finishCancel();
+    await assert.rejects(cancelled, /preview cleanup failed/);
+  });
+  assert.equal(api.isCancelling, false);
+  assert.equal(panel.thinking, false);
+
+  manager.cancelError = null;
+  await startFollowUp(manager);
+  await React.act(async () => {
+    await api.stopRecording();
+  });
+
+  assert.equal(panel.thinking, true);
 });
