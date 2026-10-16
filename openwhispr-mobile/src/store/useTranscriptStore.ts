@@ -1,3 +1,4 @@
+import { LOCAL_MODE_LABEL } from '@/lib/processingModeLabels';
 import { isProviderJobActive } from '@/lib/providerJobActivity';
 import { AppGroupStorage } from '../../modules/app-group-storage/src';
 import { create } from 'zustand';
@@ -369,7 +370,7 @@ export const useTranscriptStore = create<TranscriptState>((set, get) => {
         rerouted ?? (provider === current.provider ? current : snapshotTextInference(provider));
       if (provider !== 'local' && activeMode === 'private') {
         throw new Error(
-          'This recording used a remote provider. Turn off Private Mode in Account → AI Models to retry its original route.',
+          `This recording used a remote provider. Turn off ${LOCAL_MODE_LABEL} in Account → AI Models to retry its original route.`,
         );
       }
       const retryCount = (current.retryCount ?? 0) + 1;

@@ -1,3 +1,4 @@
+import { LOCAL_MODE_LABEL } from '@/lib/processingModeLabels';
 import { useRef, useState, type ReactElement } from 'react';
 import { Modal, Pressable, View } from 'react-native';
 import { GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -70,8 +71,8 @@ export function SlowDownloadSheet({
               <View className="flex-row items-center gap-2">
                 <SystemIcon name="lock.fill" mdName="Lock" size={16} color="brand" />
                 <Text className="flex-1 text-[13px] leading-[18px] text-secondaryLabel">
-                  Turn on <Text className="font-semibold text-label">Private Mode</Text> in Account
-                  → AI Models to switch once it&apos;s ready.
+                  Turn on <Text className="font-semibold text-label">{LOCAL_MODE_LABEL}</Text> in
+                  Account → AI Models to switch once it&apos;s ready.
                 </Text>
               </View>
             </View>

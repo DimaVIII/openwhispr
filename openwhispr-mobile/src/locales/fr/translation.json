@@ -190,7 +190,7 @@
     "cleanupRecovery": "La correction du texte a échoué. La transcription originale est disponible dans Accueil.",
     "removeModel": "Supprimer le téléchargement",
     "removeModelConfirm": "Supprimer ce modèle du téléphone ? Vous pourrez le télécharger à nouveau.",
-    "privateMode": "Mode privé",
+    "privateMode": "Mode local",
     "privateModeDescription": "Gardez les données audio sur ce téléphone. Désactivez ce mode pour choisir le traitement dans le cloud.",
     "preferencesSummary": "Langue, bulle et notifications",
     "processingSummary": "Voix, correction et fournisseurs",

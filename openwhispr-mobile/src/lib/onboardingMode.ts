@@ -1,3 +1,4 @@
+import { LOCAL_MODE_LABEL } from '@/lib/processingModeLabels';
 import { Platform } from 'react-native';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useConfigStore } from '@/store/useConfigStore';
@@ -95,14 +96,14 @@ export async function chooseOnboardingMode(
       if (from !== 'private-download')
         throw new OnboardingError(
           auth.isGuest
-            ? 'Cloud needs an account. Use Private Mode for now, or sign in after setup.'
-            : 'Cloud needs you signed in. Use Private Mode for now, or sign in after setup.',
+            ? `Cloud needs an account. Use ${LOCAL_MODE_LABEL} for now, or sign in after setup.`
+            : `Cloud needs you signed in. Use ${LOCAL_MODE_LABEL} for now, or sign in after setup.`,
         );
     } else {
       await auth.ensureAnonymousSession();
       if (!useAuthStore.getState().user) {
         throw new OnboardingError(
-          'Cloud needs a connection to set up. Try again or use Private Mode for now.',
+          `Cloud needs a connection to set up. Try again or use ${LOCAL_MODE_LABEL} for now.`,
         );
       }
     }

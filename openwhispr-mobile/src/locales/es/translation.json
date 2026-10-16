@@ -190,7 +190,7 @@
     "cleanupRecovery": "No se pudo corregir el texto. La transcripción original está disponible en Inicio.",
     "removeModel": "Eliminar descarga",
     "removeModelConfirm": "¿Eliminar este modelo del teléfono? Puedes volver a descargarlo.",
-    "privateMode": "Modo privado",
+    "privateMode": "Modo local",
     "privateModeDescription": "Mantén el audio en este teléfono. Desactívalo para elegir el procesamiento en la nube.",
     "preferencesSummary": "Idioma, burbuja y notificaciones",
     "processingSummary": "Voz, limpieza de texto y proveedores",

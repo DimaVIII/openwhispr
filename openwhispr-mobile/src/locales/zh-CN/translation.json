@@ -190,7 +190,7 @@
     "cleanupRecovery": "文本润色失败。原始转写内容可在首页查看。",
     "removeModel": "移除下载",
     "removeModelConfirm": "从手机移除此模型？以后可以重新下载。",
-    "privateMode": "隐私模式",
+    "privateMode": "本地模式",
     "privateModeDescription": "将音频保留在此手机上。关闭后可选择云端处理。",
     "preferencesSummary": "语言、悬浮按钮和通知",
     "processingSummary": "语音、文本润色和服务商",

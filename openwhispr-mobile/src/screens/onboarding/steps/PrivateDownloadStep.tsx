@@ -1,3 +1,4 @@
+import { LOCAL_MODE_LABEL } from '@/lib/processingModeLabels';
 import { useOnboardingStep } from '@/hooks/useOnboardingStep';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, ActivityIndicator, Pressable } from 'react-native';
@@ -121,7 +122,7 @@ export function PrivateDownloadStep() {
       <OnboardingShell
         progress={stepProgress}
         onBack={goBack}
-        title="Private Mode needs the full app"
+        title={`${LOCAL_MODE_LABEL} needs the full app`}
         subtitle={getPrivateModeUnavailableMessage()}
         ctaLabel="Use Cloud instead"
         onCta={switchToCloud}
@@ -140,7 +141,7 @@ export function PrivateDownloadStep() {
       <OnboardingShell
         progress={stepProgress}
         onBack={goBack}
-        title="Private Mode setup needs another try"
+        title={`${LOCAL_MODE_LABEL} setup needs another try`}
         subtitle={discoveryError}
         ctaLabel="Retry model selection"
         onCta={() => setDiscoveryAttempt((attempt) => attempt + 1)}
@@ -161,7 +162,7 @@ export function PrivateDownloadStep() {
       <OnboardingShell
         progress={stepProgress}
         onBack={goBack}
-        title="Set up Private Mode"
+        title={`Set up ${LOCAL_MODE_LABEL}`}
         titleAccent="Private"
         subtitle={`Private runs entirely on your device. It needs a one-time ${
           modelSize || 'model'

@@ -1,3 +1,4 @@
+import { LOCAL_MODE_LABEL } from '@/lib/processingModeLabels';
 import { useEffect, useState, type ReactElement, type ReactNode } from 'react';
 import { Platform, Pressable, ScrollView, View } from 'react-native';
 import { Text } from '@/components/ui/Text';
@@ -124,7 +125,7 @@ export function PrivacyModeStep(): ReactElement {
           <Bullet text="Automatic cleanup & formatting" />
         </ModeCard>
         <ModeCard
-          title="Private Mode"
+          title={`${LOCAL_MODE_LABEL}`}
           icon={<SystemIcon name="lock.fill" mdName="Lock" size={18} color="brand" />}
           selected={choice === 'private'}
           onSelect={() => setChoice('private')}

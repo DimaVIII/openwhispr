@@ -190,7 +190,7 @@
     "cleanupRecovery": "Text cleanup failed. Your original transcript is available in Home.",
     "removeModel": "Remove download",
     "removeModelConfirm": "Remove this model from the phone? You can download it again.",
-    "privateMode": "Private mode",
+    "privateMode": "Local Mode",
     "privateModeDescription": "Keep audio on this phone. Turn off to choose cloud processing.",
     "preferencesSummary": "Language, bubble and notifications",
     "processingSummary": "Speech, text cleanup and providers",

@@ -1,3 +1,4 @@
+import { LOCAL_MODE_LABEL } from '@/lib/processingModeLabels';
 import { Alert } from 'react-native';
 import { router } from 'expo-router';
 import { isAccountRequiredError } from '@/lib/accountRequiredError';
@@ -39,13 +40,13 @@ export function getCloudAccountRequiredMessage(feature: string, anonymous = fals
   // Already in Private Mode, which is what turning it off asks Cloud for, so don't offer it back.
   return useProcessingModeStore.getState().activeMode === 'private'
     ? `${action}.`
-    : `${action}, or turn on Private Mode in Account → AI Models.`;
+    : `${action}, or turn on ${LOCAL_MODE_LABEL} in Account → AI Models.`;
 }
 
 // For features with no local model (AI actions, AI chat): Private Mode is not
 // an alternative, so don't suggest it as one.
 export function getCloudOnlyAccountRequiredMessage(feature: string, anonymous = false): string {
-  return `${anonymous ? 'Create an account' : 'Sign in'} to use ${feature}. This feature always uses cloud AI, even in Private Mode.`;
+  return `${anonymous ? 'Create an account' : 'Sign in'} to use ${feature}. This feature always uses cloud AI, even in ${LOCAL_MODE_LABEL}.`;
 }
 
 export function showAccountRequiredAlert(feature: string, options?: { cloudOnly?: boolean }): void {

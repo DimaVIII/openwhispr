@@ -1,3 +1,4 @@
+import { LOCAL_MODE_LABEL } from '@/lib/processingModeLabels';
 import type { InferenceSelection } from '@/lib/mobileProviders';
 import { MODE_LABELS } from '@/lib/inferenceModes';
 import { isLocalModelKey, LOCAL_MODEL_TITLES } from '@/lib/localModelCatalog';
@@ -23,22 +24,17 @@ export const UNSET_PROVIDER_NOTES: Partial<Record<MobileInferenceScope, string>>
 
 // Private mode skips cleanup until On-Device or a provider is saved for it, so the unset
 // page picks nothing.
-export const UNSET_ON_DEVICE_CLEANUP_NOTE =
-  'Not saved yet. Private Mode skips cleanup until you choose On-Device or Bring Your Own Key.';
+export const UNSET_ON_DEVICE_CLEANUP_NOTE = `Not saved yet. ${LOCAL_MODE_LABEL} skips cleanup until you choose On-Device or Bring Your Own Key.`;
 
 // The same, on an iPhone that can never run On-Device cleanup.
-export const UNSET_UNSUPPORTED_CLEANUP_NOTE =
-  "Not saved yet. This iPhone can't run On-Device cleanup, so Private Mode skips it until you choose Bring Your Own Key.";
+export const UNSET_UNSUPPORTED_CLEANUP_NOTE = `Not saved yet. This iPhone can't run On-Device cleanup, so ${LOCAL_MODE_LABEL} skips it until you choose Bring Your Own Key.`;
 
 // What Private mode means for each workflow other than dictation.
 export const ON_DEVICE_MODE_NOTES: Partial<Record<MobileInferenceScope, string>> = {
-  upload: 'Private Mode keeps uploads on this phone.',
-  notes:
-    'Private Mode formats notes on this phone and asks before sending one to your choice here.',
-  cleanup:
-    'In Private Mode, cleanup runs on this phone, or sends only the transcript text to your provider with Bring Your Own Key. OpenWhispr Cloud cleanup is skipped until Private Mode is off.',
-  agent:
-    'In Private Mode the voice assistant is off, and note chat asks before sending a note off this phone.',
+  upload: `${LOCAL_MODE_LABEL} keeps uploads on this phone.`,
+  notes: `${LOCAL_MODE_LABEL} formats notes on this phone and asks before sending one to your choice here.`,
+  cleanup: `In ${LOCAL_MODE_LABEL}, cleanup runs on this phone, or sends only the transcript text to your provider with Bring Your Own Key. OpenWhispr Cloud cleanup is skipped until ${LOCAL_MODE_LABEL} is off.`,
+  agent: `In ${LOCAL_MODE_LABEL} the voice assistant is off, and note chat asks before sending a note off this phone.`,
 };
 
 // Modes Private mode never runs for a workflow, so its page can't offer them as if they would.
@@ -50,7 +46,7 @@ export const PRIVATE_MODE_LOCKED: Partial<Record<MobileInferenceScope, Inference
   cleanup: ['openwhispr'],
 };
 
-export const PRIVATE_MODE_LOCKED_REASON = 'Off while Private Mode is on. Turn it off in AI Models.';
+export const PRIVATE_MODE_LOCKED_REASON = `Off while ${LOCAL_MODE_LABEL} is on. Turn it off in AI Models.`;
 
 // A local transcript is cleaned on the phone when cleanup is saved as On-Device.
 export function cleanupSavedOnDevice(config: UserConfig | null): boolean {

@@ -190,7 +190,7 @@
     "cleanupRecovery": "文字潤飾失敗。原始轉錄內容可在首頁查看。",
     "removeModel": "移除下載",
     "removeModelConfirm": "從手機移除此模型？之後可以重新下載。",
-    "privateMode": "隱私模式",
+    "privateMode": "本機模式",
     "privateModeDescription": "將音訊保留在此手機上。關閉後可選擇雲端處理。",
     "preferencesSummary": "語言、懸浮按鈕和通知",
     "processingSummary": "語音、文字潤飾和服務商",

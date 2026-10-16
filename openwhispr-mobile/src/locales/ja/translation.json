@@ -190,7 +190,7 @@
     "cleanupRecovery": "テキストの修正に失敗しました。元の文字起こしはホームで確認できます。",
     "removeModel": "ダウンロードを削除",
     "removeModelConfirm": "このモデルを端末から削除しますか？後で再ダウンロードできます。",
-    "privateMode": "プライベートモード",
+    "privateMode": "ローカルモード",
     "privateModeDescription": "音声をこの端末内に保持します。クラウド処理を選択するにはオフにしてください。",
     "preferencesSummary": "言語、バブル、通知",
     "processingSummary": "音声、文章の整形、プロバイダー",

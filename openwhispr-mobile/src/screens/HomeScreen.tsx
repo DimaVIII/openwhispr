@@ -1,3 +1,4 @@
+import { LOCAL_MODE_LABEL } from '@/lib/processingModeLabels';
 import { getTranscriptionProvider } from '@/lib/inferenceRouting';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Pressable, ScrollView, ActivityIndicator, Alert, StyleSheet } from 'react-native';
@@ -523,7 +524,7 @@ export default function HomeScreen() {
             <Pressable
               onPress={() => router.push('/(account)/ai-models')}
               accessibilityRole="button"
-              accessibilityLabel="Private Mode is on"
+              accessibilityLabel={`${LOCAL_MODE_LABEL} is on`}
               accessibilityHint="Opens AI Models."
               className="h-9 flex-row items-center gap-1.5 rounded-full bg-tertiarySystemFill px-3 active:opacity-70"
             >

@@ -190,7 +190,7 @@
     "cleanupRecovery": "A correção falhou. A transcrição original está disponível na página inicial.",
     "removeModel": "Remover download",
     "removeModelConfirm": "Remover este modelo do celular? Você pode baixá-lo novamente.",
-    "privateMode": "Modo privado",
+    "privateMode": "Modo local",
     "privateModeDescription": "Mantenha o áudio neste telefone. Desative para escolher o processamento na nuvem.",
     "preferencesSummary": "Idioma, bolha e notificações",
     "processingSummary": "Voz, revisão e provedores",

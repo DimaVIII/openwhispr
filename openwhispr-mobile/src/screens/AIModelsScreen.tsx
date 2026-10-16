@@ -1,3 +1,4 @@
+import { LOCAL_MODE_LABEL } from '@/lib/processingModeLabels';
 import React, { useEffect, useState } from 'react';
 import { Platform, View } from 'react-native';
 import { router } from 'expo-router';
@@ -149,7 +150,7 @@ export default function AIModelsScreen(): React.JSX.Element {
     setRequestedPrivateMode(enabled);
     try {
       if ((await setPrivateMode(enabled)) === 'switched') {
-        showToast(enabled ? 'Private Mode on.' : 'Private Mode off.', 'success');
+        showToast(enabled ? `${LOCAL_MODE_LABEL} on.` : `${LOCAL_MODE_LABEL} off.`, 'success');
       }
     } finally {
       setRequestedPrivateMode(null);
@@ -172,7 +173,7 @@ export default function AIModelsScreen(): React.JSX.Element {
             iconStyle="line"
             icon="lock"
             mdIcon="Lock"
-            title="Private Mode"
+            title={`${LOCAL_MODE_LABEL}`}
             description={
               privateMode
                 ? 'Audio stays on this iPhone, notes ask before leaving it, and the voice assistant is off.'
@@ -180,7 +181,7 @@ export default function AIModelsScreen(): React.JSX.Element {
             }
             rightElement={
               <SettingsSwitch
-                accessibilityLabel="Private Mode"
+                accessibilityLabel={`${LOCAL_MODE_LABEL}`}
                 value={requestedPrivateMode ?? privateMode}
                 disabled={busy}
                 onValueChange={(enabled) => {
