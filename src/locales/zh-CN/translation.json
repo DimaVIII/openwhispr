@@ -694,7 +694,6 @@
       "retrySuccess": "转录已更新",
       "retryError": "重新转录失败",
       "retryErrors": {
-        "noSpeech": "此录音中未检测到语音。",
         "invalidResponse": "转录引擎返回了意外的响应。请重试。"
       },
       "audioNotFound": "音频文件未找到或已过期",

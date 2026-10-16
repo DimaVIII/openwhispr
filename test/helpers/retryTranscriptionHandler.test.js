@@ -1,6 +1,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const Module = require("node:module");
+const fs = require("node:fs");
+const path = require("node:path");
 
 const handlersModulePath = require.resolve("../../src/helpers/ipcHandlers");
 const originalLoad = Module._load;
@@ -40,15 +42,22 @@ const electronStub = {
     static getAllWindows() {
       return [];
     }
-    static fromWebContents() {
-      return null;
+    // Cloud retries need a window to read auth from; a sender opts in with one.
+    static fromWebContents(sender) {
+      return sender?.window ?? null;
     }
   },
   shell: {},
   dialog: {},
   screen: { getPrimaryDisplay: () => ({ workAreaSize: { width: 0, height: 0 } }) },
   systemPreferences: { getMediaAccessStatus: () => "granted" },
-  session: { fromPartition: () => ({}) },
+  session: {
+    fromPartition: () => ({
+      webRequest: { onBeforeSendHeaders: () => {} },
+      fetch: (url, init) => electronStub.net.fetch(url, init),
+      closeAllConnections: async () => {},
+    }),
+  },
   clipboard: {},
   nativeImage: {},
   globalShortcut: {},
@@ -64,6 +73,9 @@ const WAV_BUFFER = Buffer.concat([
   Buffer.alloc(32),
 ]);
 const CONVERTED_WAV = Buffer.concat([WAV_BUFFER, Buffer.from("converted")]);
+// Just over the inline upload limit, so an OpenWhispr Cloud retry is chunked.
+const CHUNKED_BUFFER = Buffer.alloc(4 * 1024 * 1024 + 1);
+const CLOUD_CHUNKS = ["chunk-000.mp3", "chunk-001.mp3", "chunk-002.mp3", "chunk-003.mp3"];
 
 // Conversion is mocked rather than run: spawning ffmpeg from a unit test would
 // make it slow and dependent on the runner having a usable binary.
@@ -100,6 +112,9 @@ Module._load = function loadWithMocks(request, parent, isMain) {
         getTinfoilChatModels: () => [],
       };
     }
+    if (request === "./tokenStore") {
+      return { ...originalLoad.call(this, request, parent, isMain), get: () => "test-token" };
+    }
     if (request === "./windowBroadcast") {
       return { broadcastToWindows: () => {} };
     }
@@ -110,6 +125,11 @@ Module._load = function loadWithMocks(request, parent, isMain) {
         convertBufferToWav: async (buffer, options) => {
           wavConversions.push(buffer);
           return convertBehavior(buffer, options);
+        },
+        splitAudioFile: async (inputPath, chunkDir) => {
+          const chunkPaths = CLOUD_CHUNKS.map((name) => path.join(chunkDir, name));
+          for (const chunkPath of chunkPaths) fs.writeFileSync(chunkPath, "audio");
+          return { chunkPaths, durationSeconds: 120 };
         },
       };
     }
@@ -138,8 +158,16 @@ function buildFakeThis() {
   const target = {
     sessionId: "test-session",
     audioStorageManager: {
-      // 7 is a stored WebM recording, 8 one already in WAV.
-      getAudioBuffer: (id) => (id === 7 ? Buffer.from([1, 2, 3]) : id === 8 ? WAV_BUFFER : null),
+      // 7 is a stored WebM recording, 8 one already in WAV, 9 one too large to
+      // upload inline.
+      getAudioBuffer: (id) =>
+        id === 7
+          ? Buffer.from([1, 2, 3])
+          : id === 8
+            ? WAV_BUFFER
+            : id === 9
+              ? CHUNKED_BUFFER
+              : null,
     },
     databaseManager: {
       updateTranscriptionText: (id, text) => textUpdates.push({ id, text }),
@@ -465,7 +493,7 @@ test("retry: no speech from a local engine is reported as such", async (t) => {
         (result) => {
           assert.equal(result.success, false);
           assert.equal(result.code, "NO_SPEECH_DETECTED");
-          assert.equal(result.messageKey, "controlPanel.history.retryErrors.noSpeech");
+          assert.equal(result.messageKey, "notes.upload.noSpeechDetected");
           assert.equal(textUpdates.length, 0);
         }
       )
@@ -483,6 +511,65 @@ test("retry: an unclassified local failure keeps the engine's own message", asyn
       assert.equal(result.messageKey, undefined);
     }
   );
+});
+
+const CLOUD_SETTINGS = {
+  transcriptionMode: "providers",
+  cloudTranscriptionMode: "openwhispr",
+  cloudTranscriptionProvider: "openai",
+};
+
+async function withCloudResponse(t, respond, id) {
+  const originalFetchResponse = fetchResponse;
+  const originalApiUrl = process.env.OPENWHISPR_API_URL;
+  t.after(() => {
+    fetchResponse = originalFetchResponse;
+    if (originalApiUrl === undefined) delete process.env.OPENWHISPR_API_URL;
+    else process.env.OPENWHISPR_API_URL = originalApiUrl;
+  });
+  process.env.OPENWHISPR_API_URL = "https://api.openwhispr.test";
+  fetchResponse = (url, init) => {
+    const { status, body } = respond(init);
+    return { ok: status === 200, status, text: async () => JSON.stringify(body) };
+  };
+  textUpdates.length = 0;
+  return retryHandler({ sender: { window: {} } }, id, CLOUD_SETTINGS);
+}
+
+test("retry: no speech from OpenWhispr Cloud is translated like a local engine's", async (t) => {
+  const result = await withCloudResponse(
+    t,
+    () => ({
+      status: 422,
+      body: { code: "NO_SPEECH_DETECTED", error: "No speech detected in audio" },
+    }),
+    7
+  );
+  assert.equal(result.success, false);
+  assert.equal(result.code, "NO_SPEECH_DETECTED");
+  assert.equal(result.messageKey, "notes.upload.noSpeechDetected");
+  assert.equal(textUpdates.length, 0);
+});
+
+test("retry: a chunked cloud retry that lost a chunk saves the rest and returns the warning", async (t) => {
+  const result = await withCloudResponse(
+    t,
+    (init) =>
+      init.body.includes("chunk-001.mp3")
+        ? { status: 400, body: { error: "Bad chunk" } }
+        : { status: 200, body: { text: "part" } },
+    9
+  );
+  assert.equal(result.success, true, JSON.stringify(result));
+  assert.equal(result.warning, "1 of 4 chunks failed");
+  assert.equal(textUpdates.length, 1);
+  assert.match(textUpdates[0].text, /part/);
+});
+
+test("retry: a clean chunked cloud retry reports no warning", async (t) => {
+  const result = await withCloudResponse(t, () => ({ status: 200, body: { text: "part" } }), 9);
+  assert.equal(result.success, true, JSON.stringify(result));
+  assert.equal("warning" in result, false);
 });
 
 test("retry: mistral goes to Mistral with x-api-key", async () => {

@@ -1650,7 +1650,7 @@ declare global {
       ) => Promise<{
         success: boolean;
         transcription?: TranscriptionItem;
-        warning?: "truncated";
+        warning?: string;
         error?: string;
         code?: TranscriptionErrorCode | "NO_SPEECH_DETECTED" | "INVALID_RESPONSE";
         messageKey?: string;

@@ -99,7 +99,6 @@ function localTranscriptionFailure(result) {
   const error = new Error(result.message || result.error || "Local transcription failed");
   if (result.code === "NO_SPEECH_DETECTED" || result.message === "No audio detected") {
     error.code = "NO_SPEECH_DETECTED";
-    error.messageKey = "controlPanel.history.retryErrors.noSpeech";
   } else if (result.error === "invalid_response") {
     error.code = "INVALID_RESPONSE";
     error.messageKey = "controlPanel.history.retryErrors.invalidResponse";
@@ -6972,13 +6971,18 @@ class IPCHandlers {
                   sessionId: this.sessionId,
                 };
                 if (buffer.length > CLOUD_INLINE_LIMIT) {
-                  const { text } = await chunkedCloudTranscribe({
+                  const { text, warning } = await chunkedCloudTranscribe({
                     buffer,
                     apiUrl,
                     policyHeaders: withPolicyHeaders(authHeader),
                     multipartFields,
                   });
-                  result = { text, source: "openwhispr", model: "cloud" };
+                  result = {
+                    text,
+                    source: "openwhispr",
+                    model: "cloud",
+                    ...(warning ? { warning } : {}),
+                  };
                 } else {
                   const { body, boundary } = buildMultipartBody(
                     buffer,
@@ -7174,8 +7178,8 @@ class IPCHandlers {
             void this._ensureAnalyticsHistoryBackfilled();
           });
         }
-        // A partial decode still replaces the row, as dictation keeps it, but the
-        // renderer must say so instead of reporting a clean update.
+        // A partial result (local truncation, lost cloud chunks) still replaces the
+        // row, as dictation keeps it, but the renderer must say so.
         return {
           success: true,
           transcription: updated,
@@ -7190,6 +7194,11 @@ class IPCHandlers {
           { id, error: error.message, code: error.code },
           "audio-storage"
         );
+        if (error.code === "NO_SPEECH_DETECTED" && !error.messageKey) {
+          // Local, cloud and managed engines all report silence with this code,
+          // so it is translated here once rather than per route.
+          error.messageKey = "notes.upload.noSpeechDetected";
+        }
         if (error.code) {
           return { success: false, ...ipcErrorFields(error) };
         }

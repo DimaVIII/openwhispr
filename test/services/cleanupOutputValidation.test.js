@@ -179,27 +179,32 @@ test("cleanup validates completed provider output using the request's prompt set
       JSON.stringify(toasts)
     );
 
-    // A partial local decode must say so, as dictation does, not report a clean update.
+    // A clean retry confirms without a description.
     toasts.length = 0;
+    window.electronAPI.processLocalReasoning = async () => ({ success: true, text: RAW });
+    await retry(row.id);
+    // Toasts are built in the vm's realm; copy them so deepEqual compares values.
+    const shown = () => toasts.map((toast) => ({ ...toast }));
+    assert.deepEqual(shown(), [{ title: "controlPanel.history.retrySuccess" }]);
+
+    // A partial result must say so, as dictation does, while still confirming the
+    // retry or recovery the user asked for.
     window.electronAPI.retryTranscription = async () => ({
       success: true,
       transcription: row,
       warning: "truncated",
     });
-    window.electronAPI.processLocalReasoning = async () => ({ success: true, text: RAW });
-    await retry(row.id);
-    assert.ok(
-      toasts.some(
-        (toast) =>
-          toast.title === "hooks.audioRecording.partialTranscription.title" &&
-          toast.description === "hooks.audioRecording.partialTranscription.description"
-      ),
-      JSON.stringify(toasts)
-    );
-    assert.equal(
-      toasts.some((toast) => toast.title === "controlPanel.history.retrySuccess"),
-      false,
-      JSON.stringify(toasts)
-    );
+    for (const [options, title] of [
+      [undefined, "controlPanel.history.retrySuccess"],
+      [{ isRecover: true }, "controlPanel.history.discarded.recovered"],
+    ]) {
+      toasts.length = 0;
+      await retry(row.id, options);
+      assert.deepEqual(
+        shown(),
+        [{ title, description: "hooks.audioRecording.partialTranscription.description" }],
+        JSON.stringify(options)
+      );
+    }
   });
 });

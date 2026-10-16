@@ -681,8 +681,7 @@
       "retrySuccess": "Transkription aktualisiert",
       "retryError": "Erneute Transkription fehlgeschlagen",
       "retryErrors": {
-        "noSpeech": "In dieser Aufnahme wurde keine Sprache erkannt.",
-        "invalidResponse": "Die Transkriptions-Engine hat eine unerwartete Antwort zurückgegeben. Versuche es erneut."
+        "invalidResponse": "Die Transkriptions-Engine hat eine unerwartete Antwort zurückgegeben. Bitte versuchen Sie es erneut."
       },
       "audioNotFound": "Audiodatei nicht gefunden oder abgelaufen",
       "noAiProcessing": "Auf diese Transkription wurde keine KI-Verarbeitung angewendet",

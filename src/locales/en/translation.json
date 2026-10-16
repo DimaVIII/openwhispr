@@ -681,7 +681,6 @@
       "retrySuccess": "Transcription updated",
       "retryError": "Failed to re-transcribe",
       "retryErrors": {
-        "noSpeech": "No speech was detected in this recording.",
         "invalidResponse": "The transcription engine returned an unexpected response. Try again."
       },
       "audioNotFound": "Audio file not found or expired",

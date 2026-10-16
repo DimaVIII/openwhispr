@@ -694,7 +694,6 @@
       "retrySuccess": "Trascrizione aggiornata",
       "retryError": "Ritrascrizione non riuscita",
       "retryErrors": {
-        "noSpeech": "Nessun parlato rilevato in questa registrazione.",
         "invalidResponse": "Il motore di trascrizione ha restituito una risposta inattesa. Riprova."
       },
       "audioNotFound": "File audio non trovato o scaduto",

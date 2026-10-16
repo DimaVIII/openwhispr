@@ -673,7 +673,6 @@
       "retrySuccess": "Transcrição atualizada",
       "retryError": "Falha ao retranscrever",
       "retryErrors": {
-        "noSpeech": "Nenhuma fala foi detectada nesta gravação.",
         "invalidResponse": "O mecanismo de transcrição retornou uma resposta inesperada. Tente novamente."
       },
       "audioNotFound": "Arquivo de áudio não encontrado ou expirado",

@@ -681,7 +681,6 @@
       "retrySuccess": "Transcription mise à jour",
       "retryError": "Échec de la retranscription",
       "retryErrors": {
-        "noSpeech": "Aucune parole n’a été détectée dans cet enregistrement.",
         "invalidResponse": "Le moteur de transcription a renvoyé une réponse inattendue. Réessayez."
       },
       "audioNotFound": "Fichier audio introuvable ou expiré",
