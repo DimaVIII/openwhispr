@@ -596,7 +596,7 @@ function mapEnterpriseStreamError(provider, error, config = {}) {
             ],
             [/PERMISSION_DENIED|\b403\b/, PROVIDER_ERROR_CODES.ACCESS_DENIED],
             [/NOT_FOUND/, PROVIDER_ERROR_CODES.MODEL_NOT_FOUND],
-            [/RESOURCE_EXHAUSTED|\bquota\b/, PROVIDER_ERROR_CODES.QUOTA_EXHAUSTED],
+            [/RESOURCE_EXHAUSTED|\bquota\b/, PROVIDER_ERROR_CODES.RATE_LIMITED],
             [/INVALID_ARGUMENT/, PROVIDER_ERROR_CODES.BAD_REQUEST],
           ]
         : [];

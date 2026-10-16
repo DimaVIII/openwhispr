@@ -1006,7 +1006,7 @@ test("enterprise stream preserves safe network and message-only provider classif
     [
       "vertex",
       { code: "RESOURCE_EXHAUSTED", message: "private-prompt" },
-      "providerErrors.quotaExhausted",
+      "providerErrors.rateLimited",
     ],
     ["vertex", { message: "NOT_FOUND private-prompt" }, "providerErrors.modelNotFoundNoModel"],
     ["vertex", { message: "INVALID_ARGUMENT private-prompt" }, "providerErrors.badRequest"],
@@ -1034,4 +1034,20 @@ test("enterprise Chat preserves specific content-filter guidance without echoing
     assert.equal(mapped.technicalDetails.status, error.statusCode);
     assert.doesNotMatch(JSON.stringify(mapped), /private-prompt/);
   }
+});
+
+test("Vertex request quota failures do not claim the account is out of credit", () => {
+  const { mapEnterpriseStreamError } = require("../../src/helpers/enterpriseProviderErrors");
+  for (const error of [
+    { code: "RESOURCE_EXHAUSTED", message: "Requests per minute quota exceeded. Try again later." },
+    { message: "Requests per minute quota exceeded. Try again later." },
+  ]) {
+    const mapped = mapEnterpriseStreamError("vertex", error);
+    assert.equal(mapped.messageKey, "providerErrors.rateLimited");
+    assert.equal(mapped.code, "PROVIDER_RATE_LIMITED");
+    assert.equal(mapped.technicalDetails.status, undefined);
+    assert.doesNotMatch(mapped.error, /credit|billing|Requests per minute/);
+  }
+  const explicitCredit = mapEnterpriseStreamError("vertex", { code: "insufficient_quota" });
+  assert.equal(explicitCredit.messageKey, "providerErrors.quotaExhausted");
 });
