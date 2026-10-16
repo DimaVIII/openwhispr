@@ -1,6 +1,6 @@
 # Android development acceptance — 15 October 2026
 
-Current installed development build: **v54 / runtime `a2c62d7bc`**. See the [readiness audit](premium-review-readiness.md) for its 3,506-test result, note AI consent regression coverage, native warning/Cancel evidence, restored settings and remaining acceptance gaps. Host audio is disabled on the retained SwiftShader emulator; Play code 12 excludes v41–v54. The following baseline paragraphs retain their historical build scope.
+Current installed development build: **v55 / runtime `38304786e`**. See the [readiness audit](premium-review-readiness.md) for its 3,510-test result, translated sharing feedback, native offline/Retry recovery and large-text evidence, restored settings and remaining acceptance gaps. Host audio is disabled on the retained SwiftShader emulator; Play code 12 excludes v41–v55. The following baseline paragraphs retain their historical build scope.
 
 The development app is built and installed on the retained Android 16 ARM64 research emulator. It embeds its JavaScript and has run with airplane mode on, Wi-Fi off and no Metro reverse port. Earlier interaction checks used normal user unlock. After the earlier host audio-injection crash and AVD restart, normal user unlock restored access; the then-current v28 review build is visible and its installed hash matches the saved artifact. At that baseline, virtual AC and Android Stay awake were enabled. Host microphone input remains off. This is a development review delivery, not a Play release or physical-phone acceptance.
 
