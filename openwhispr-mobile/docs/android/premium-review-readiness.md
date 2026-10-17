@@ -4,11 +4,11 @@ This is a requirements audit against the 15 October 2026 goal brief, including t
 
 ## Current continuation — Qwen3 and correction-learning batch
 
-Installed runtime is `bd8938cbdf8e9da3984ecb46b30410f04dd649fc`, the local Qwen3 candidate. [Local note quality](local-note-quality.md) records six native runs across four fixtures, verified model replacement, automatic-title persistence and the remaining grammar/paragraph limitations. The original host comparisons omitted the configured dictionary suffix; later paired screening shows sensitivity to that context. Do not attribute the native miss solely to a runtime difference.
+Installed runtime is `ce8f0ccbfaf565c06f65b2f85c71df9cebc944a2`, combining the Qwen3 candidate, conservative correction learning and custom-title request suppression. **One local build and zero cloud builds** cover v67. Whole-note/partial-tail edits leave the dictionary unchanged; a genuine single-character correction is learned and its owned test entry is removed afterward. Custom titles use one inference; an untitled note uses two and persists **Silver draft needed**. Raw content is retained. [Local note quality](local-note-quality.md) records the exact checks and remaining grammar/paragraph limitations.
 
-The next source batch repairs false dictionary learning from whole-note replacement/partial-word autosaves and skips Android title inference when a custom title will be retained. These fixes are not yet in the installed APK. Complete their native verification together in the next consolidated build; do not rebuild for each case. The v66 investigation uses **zero local and zero cloud builds**. Owned test-note and learned-dictionary state remain explicit in the quality report.
+The combined source passes **307 suites / 3,551 tests**, TypeScript and formatting, with zero scoped lint errors and nine existing inline-style warnings. The 65-second ARM64 build is installed and hash-verified (`46276438404bdc0c4da952f021f34dcb42266fdd47339f840fa46eb23e8533ed`); generated native output is removed. Original v67 captures are separate from the unchanged 171-image packet. Owned note/QA actions remain, Dictionary39, radios off and host audio disabled. No prompt, model or sampling adjustment was introduced during native verification.
 
-EAS code15 finished, but official artifact retrieval returned HTTP403 and Chrome ERR_BLOCKED_BY_CLIENT. It excludes the Qwen3 candidate and later source batch. No code15 bundle was validated or uploaded; Play remains on code12. The product PR remains draft, and the local candidate is held pending its native quality checks. Physical-device, full spoken and provider acceptance gaps remain as recorded below.
+EAS code15 finished, but official artifact retrieval returned HTTP403 and Chrome ERR_BLOCKED_BY_CLIENT. It excludes the Qwen3 candidate and later source batch. No code15 bundle was validated or uploaded; Play remains on code12. The product PR remains draft. Physical-device, full spoken and provider acceptance gaps remain as recorded below.
 
 ## 16 October — v61/v62 notes and keyboard batch
 
@@ -457,9 +457,9 @@ Earlier v21/v22 interaction checks verified privacy/sync preferences, Account/Mo
 
 ## Immediate continuation
 
-1. Keep the current installed Qwen3 APK for independent checks. Group the correction-learning and unused-title repairs into the next local verification build after source checks; do not make a build per fixture. Record the configured dictionary context during model comparisons.
-2. Verify the pending batch through whole-note replacement, slow typing/backspacing, a genuine correction, an existing custom title and an untitled note. Preserve unrelated dictionary entries; current test-created entries are not silently removed by the fix.
-3. Update the draft PR with the accepted source batch and inspect required checks at that pushed head. The 171-capture curated packet still predates the new v65/v66 originals. Keep build identity, newer captures and known limitations explicit.
+1. Keep the v67 APK for independent checks; its correction-learning/title batch is verified. Group any further justified source changes before another build. Record the configured dictionary context during model comparisons.
+2. Resolve or explicitly bound the remaining grammar/paragraph quality limitations. Preserve unrelated dictionary entries; the new owned test entry was removed and the prior39 remain. Avoid repeating passing tests or making speculative prompt builds.
+3. Update the draft PR with the accepted source batch and inspect required checks at that pushed head. The 171-capture curated packet still predates the new v65–v67 originals. Keep build identity, newer captures and known limitations explicit.
 4. Retain EAS code15 and its existing private Play draft. Resolve legitimate artifact access before bundle/signature/alignment validation; do not bypass protections or rebuild to solve access. Play code12 and its pending test purchase remain untouched.
 5. API draft #268 and the staged Android RevenueCat key remain undeployed. Installed restoration/server access, full spoken meeting accuracy, dictionary hints/TalkBack, physical-phone measurements and production Moonshine hosting retain their separate acceptance gaps. Host audio stays disabled; do not repeat inconclusive emulator audio controls without new evidence.
 
