@@ -47,12 +47,11 @@ export function useActionProcessing({ onSuccess, onError }: UseActionProcessingO
 
       try {
         const inputKind = options.inputKind ?? 'plain-note';
-        const actionPrompt =
+        const isAndroidPersonalCleanup =
           Platform.OS === 'android' &&
           inputKind === 'plain-note' &&
-          isDefaultGenerateNotesAction(action)
-            ? PERSONAL_NOTE_INSTRUCTIONS
-            : action.prompt;
+          isDefaultGenerateNotesAction(action);
+        const actionPrompt = isAndroidPersonalCleanup ? PERSONAL_NOTE_INSTRUCTIONS : action.prompt;
         const systemPrompt = buildActionSystemPrompt({
           actionPrompt,
           inputKind,
@@ -65,7 +64,8 @@ export function useActionProcessing({ onSuccess, onError }: UseActionProcessingO
           inferenceScope: 'notes',
           text: noteContent,
           systemPrompt,
-          temperature: 0.3,
+          // Personal cleanup should not randomly restructure facts between identical runs.
+          temperature: isAndroidPersonalCleanup ? 0 : 0.3,
           routing: options.routing,
         });
 
