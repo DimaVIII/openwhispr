@@ -119,6 +119,7 @@
     "parakeetCredit": "Modèle vocal de NVIDIA. Conversion ONNX et quantification int8 par le projet Sherpa-ONNX ; les poids sont téléchargés sans autre modification.",
     "sherpaCredit": "Moteur de reconnaissance vocale locale pour Android.",
     "qwenCredit": "Modèles locaux de correction, traduction, rédaction et modification ; versions GGUF quantifiées officielles.",
+    "qwen3Credit": "Modèle local de correction, traduction, rédaction et modification de texte. Quantification GGUF par Unsloth.",
     "llamaCredit": "Moteur de génération de texte sur l’appareil.",
     "retention": "Conserver l’historique de dictée",
     "forever": "Toujours",

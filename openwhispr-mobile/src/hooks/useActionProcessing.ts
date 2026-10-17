@@ -57,6 +57,7 @@ export function useActionProcessing({ onSuccess, onError }: UseActionProcessingO
           inputKind,
           isDefaultGenerateNotesAction: isDefaultGenerateNotesAction(action),
           customDictionary: options.customDictionary,
+          personalNoteCleanup: isAndroidPersonalCleanup,
         });
         const cfg = useConfigStore.getState().config;
 
@@ -64,8 +65,7 @@ export function useActionProcessing({ onSuccess, onError }: UseActionProcessingO
           inferenceScope: 'notes',
           text: noteContent,
           systemPrompt,
-          // Personal cleanup should not randomly restructure facts between identical runs.
-          temperature: isAndroidPersonalCleanup ? 0 : 0.3,
+          temperature: 0.3,
           routing: options.routing,
         });
 

@@ -587,24 +587,23 @@ describe('NoteEditorScreen generated meeting context', () => {
         await waitFor(() => expect(ReasoningService.processText).toHaveBeenCalledTimes(1));
         const { systemPrompt, temperature } = (ReasoningService.processText as jest.Mock).mock
           .calls[0][0];
-        expect(temperature).toBe(usesPersonalInstructions ? 0 : 0.3);
+        expect(temperature).toBe(0.3);
         expect(systemPrompt).toContain('OpenWhispr');
         if (usesPersonalInstructions) {
-          expect(systemPrompt).toContain('Copyedit the text sentence by sentence.');
+          expect(systemPrompt).toContain('You edit dictated personal notes.');
+          expect(systemPrompt).not.toContain('You are a note enhancement assistant.');
           expect(systemPrompt).not.toContain('Transform this meeting into notes.');
           await waitFor(() =>
             expect(mockUpdateNote).toHaveBeenCalledWith(
               7,
               expect.objectContaining({
-                enhancementPrompt: expect.stringContaining(
-                  'Copyedit the text sentence by sentence.',
-                ),
+                enhancementPrompt: expect.stringContaining('You edit dictated personal notes.'),
               }),
             ),
           );
         } else {
           expect(systemPrompt).toContain('Transform this meeting into notes.');
-          expect(systemPrompt).not.toContain('Copyedit the text sentence by sentence.');
+          expect(systemPrompt).not.toContain('You edit dictated personal notes.');
         }
       } finally {
         mockDictionaryState.entries = [];

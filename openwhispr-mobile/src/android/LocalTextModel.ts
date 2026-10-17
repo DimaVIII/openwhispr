@@ -88,6 +88,18 @@ export const LocalTextModel = {
                   },
                 }
               : {}),
+            // Qwen3 defaults to thinking. Keep editing on its non-thinking chat template.
+            ...(model === 'qwen-balanced'
+              ? {
+                  jinja: true,
+                  enable_thinking: false,
+                  reasoning_format: 'auto' as const,
+                  top_k: 20,
+                  top_p: 0.8,
+                  min_p: 0,
+                  penalty_present: 1.5,
+                }
+              : {}),
             n_predict: Math.min(request.maxTokens ?? 384, 900),
             temperature: request.temperature ?? 0,
             stop: ['<|im_end|>', '<|endoftext|>'],
@@ -106,7 +118,7 @@ export const LocalTextModel = {
               Date.now() - startedAt,
               JSON.stringify(result.timings),
             );
-          const text = result.text.trim();
+          const text = (model === 'qwen-balanced' ? result.content : result.text)?.trim();
           if (!text) throw new Error(i18n.t('emptyResponse'));
           return { text, model };
         } finally {

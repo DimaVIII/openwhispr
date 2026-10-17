@@ -119,6 +119,7 @@
     "parakeetCredit": "Modelo de fala da NVIDIA. Conversão ONNX e quantização int8 pelo projeto Sherpa-ONNX; os pesos são baixados sem outras alterações.",
     "sherpaCredit": "Runtime de reconhecimento de fala local para Android.",
     "qwenCredit": "Modelos locais de correção, tradução, escrita e edição; versões oficiais quantizadas em GGUF.",
+    "qwen3Credit": "Modelo local de correção, tradução, escrita e edição de texto. Quantização GGUF pela Unsloth.",
     "llamaCredit": "Runtime de geração de texto no dispositivo.",
     "retention": "Manter histórico de ditados",
     "forever": "Para sempre",

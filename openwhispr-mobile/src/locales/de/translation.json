@@ -119,6 +119,7 @@
     "parakeetCredit": "Sprachmodell von NVIDIA. ONNX-Konvertierung und int8-Quantisierung durch das Sherpa-ONNX-Projekt; die Gewichte werden ohne weitere Änderungen heruntergeladen.",
     "sherpaCredit": "Laufzeit für lokale Spracherkennung auf Android.",
     "qwenCredit": "Lokale Modelle für Textkorrektur, Übersetzung, Schreiben und Bearbeitung; offizielle quantisierte GGUF-Versionen.",
+    "qwen3Credit": "Lokales Modell für Textkorrektur, Übersetzung, Schreiben und Bearbeitung. GGUF-Quantisierung von Unsloth.",
     "llamaCredit": "Laufzeit für Texterzeugung auf dem Gerät.",
     "retention": "Diktatverlauf aufbewahren",
     "forever": "Unbegrenzt",

@@ -81,3 +81,61 @@ it.each(['native-error', 'context-full', 'truncated'])(
     }
   },
 );
+
+it('disables thinking for balanced cleanup and returns only parsed answer content', async () => {
+  const completion = jest.fn().mockResolvedValue({
+    text: '<think>internal reasoning</think>Edited note.',
+    content: 'Edited note.',
+    reasoning_content: 'internal reasoning',
+  });
+  jest.mocked(initLlama).mockResolvedValue({ completion, release: jest.fn() } as never);
+  try {
+    await expect(
+      LocalTextModel.processText({ text: 'uh a note', temperature: 0.3 }, 'qwen-balanced'),
+    ).resolves.toEqual({ text: 'Edited note.', model: 'qwen-balanced' });
+    expect(completion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jinja: true,
+        enable_thinking: false,
+        reasoning_format: 'auto',
+        temperature: 0.3,
+        top_k: 20,
+        top_p: 0.8,
+        min_p: 0,
+        penalty_present: 1.5,
+      }),
+    );
+  } finally {
+    await LocalTextModel.release();
+  }
+});
+
+it('does not expose reasoning when a balanced completion has no answer', async () => {
+  const completion = jest.fn().mockResolvedValue({
+    text: '<think>internal reasoning</think>',
+    content: '',
+    reasoning_content: 'internal reasoning',
+  });
+  jest.mocked(initLlama).mockResolvedValue({ completion, release: jest.fn() } as never);
+  try {
+    await expect(LocalTextModel.processText({ text: 'a note' }, 'qwen-balanced')).rejects.toThrow();
+  } finally {
+    await LocalTextModel.release();
+  }
+});
+
+it('preserves the small model completion format and explicit sampling settings', async () => {
+  const completion = jest.fn().mockResolvedValue({ text: 'Small model output.', content: '' });
+  jest.mocked(initLlama).mockResolvedValue({ completion, release: jest.fn() } as never);
+  try {
+    await expect(
+      LocalTextModel.processText({ text: 'a note', temperature: 0.2 }, 'qwen-small'),
+    ).resolves.toEqual({ text: 'Small model output.', model: 'qwen-small' });
+    const params = completion.mock.calls[0][0];
+    expect(params.temperature).toBe(0.2);
+    expect(params.enable_thinking).toBeUndefined();
+    expect(params.penalty_present).toBeUndefined();
+  } finally {
+    await LocalTextModel.release();
+  }
+});

@@ -119,6 +119,7 @@
     "parakeetCredit": "Speech model by NVIDIA. ONNX conversion and int8 quantization by the Sherpa-ONNX project; weights are downloaded without further changes.",
     "sherpaCredit": "Android on-device speech recognition runtime.",
     "qwenCredit": "Local text cleanup, translation, writing and editing models; official quantized GGUF releases.",
+    "qwen3Credit": "Local text cleanup, translation, writing and editing model. GGUF quantization by Unsloth.",
     "llamaCredit": "On-device text-generation runtime.",
     "retention": "Keep dictation history",
     "forever": "Forever",

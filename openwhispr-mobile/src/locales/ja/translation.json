@@ -119,6 +119,7 @@
     "parakeetCredit": "NVIDIA の音声モデル。ONNX 変換と int8 量子化は Sherpa-ONNX プロジェクトによるものです。重みは追加変更なしでダウンロードされます。",
     "sherpaCredit": "Android 端末内で音声を認識する実行環境。",
     "qwenCredit": "文章修正、翻訳、作成、編集のローカルモデル。公式の量子化 GGUF 版を使用。",
+    "qwen3Credit": "文章修正、翻訳、作成、編集のローカルモデル。GGUF 量子化は Unsloth によるものです。",
     "llamaCredit": "デバイス上でテキストを生成する実行環境。",
     "retention": "音声入力の履歴を保存",
     "forever": "無期限",

@@ -70,3 +70,17 @@ it('does not require free space to reuse already verified weights', async () => 
   await downloadAndroidModel(id);
   expect(FileSystem.createDownloadResumable).not.toHaveBeenCalled();
 });
+
+it('requires the current balanced artifact rather than accepting cached Qwen2.5 weights', async () => {
+  jest.mocked(FileSystem.getInfoAsync).mockImplementation(async (uri) => ({
+    exists: true,
+    isDirectory: false,
+    size: 1117320736,
+    modificationTime: modified,
+    uri,
+  }));
+  jest
+    .mocked(AndroidDictation!.sha256)
+    .mockResolvedValue('6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e');
+  await expect(modelReady('qwen-balanced')).resolves.toBe(false);
+});

@@ -119,6 +119,7 @@
     "parakeetCredit": "NVIDIA 语音模型。ONNX 转换和 int8 量化由 Sherpa-ONNX 项目完成；下载的权重未作其他修改。",
     "sherpaCredit": "Android 设备上的本地语音识别运行时。",
     "qwenCredit": "本地润色、翻译、写作和编辑模型；使用官方量化 GGUF 版本。",
+    "qwen3Credit": "本地润色、翻译、写作和编辑模型。GGUF 量化由 Unsloth 提供。",
     "llamaCredit": "设备上的文本生成运行时。",
     "retention": "保留听写历史",
     "forever": "永久",

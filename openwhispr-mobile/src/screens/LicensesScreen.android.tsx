@@ -28,11 +28,18 @@ const entries = [
     url: 'https://github.com/k2-fsa/sherpa-onnx',
   },
   {
-    name: 'Qwen2.5 0.5B / 1.5B Instruct',
+    name: 'Qwen2.5 0.5B Instruct',
     license: 'Apache-2.0',
     owner: 'Qwen Team, Alibaba Cloud',
     note: 'qwenCredit',
-    url: 'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF',
+    url: 'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF',
+  },
+  {
+    name: 'Qwen3 1.7B',
+    license: 'Apache-2.0',
+    owner: 'Qwen Team, Alibaba Cloud',
+    note: 'qwen3Credit',
+    url: 'https://huggingface.co/unsloth/Qwen3-1.7B-GGUF',
   },
   {
     name: 'llama.cpp / llama.rn',
