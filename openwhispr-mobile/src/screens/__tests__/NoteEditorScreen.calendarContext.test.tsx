@@ -616,11 +616,13 @@ describe('NoteEditorScreen generated meeting context', () => {
     const originalPlatform = Platform.OS;
     Platform.OS = 'android';
     mockNote = note({
+      title: 'Untitled',
       noteType: 'personal',
       content: 'Synthetic large text editing check.',
       calendarEventId: null,
       participants: null,
     });
+    mockNotesState.notes = [mockNote];
     mockSegments = [];
     mockSpeakers = [];
     mockConfigState.config.autoGenerateNoteTitle = true;
@@ -1026,6 +1028,46 @@ describe('NoteEditorScreen generated titles', () => {
 
     await waitFor(() => expect(mockUpdateNote).toHaveBeenCalledTimes(1));
     expect(mockUpdateNote.mock.calls[0][1]).not.toHaveProperty('title');
+  });
+
+  it('does not spend an Android inference request on an existing custom title', async () => {
+    const originalPlatform = Platform.OS;
+    Platform.OS = 'android';
+    mockNote = personalNote('Customer Planning');
+    mockNotesState.notes = [mockNote];
+    try {
+      const { getByTestId } = render(<NoteEditorScreen />);
+      await act(async () => fireEvent.press(getByTestId('run-action-1')));
+      await waitFor(() => expect(mockUpdateNote).toHaveBeenCalledTimes(1));
+      expect(generateNoteTitle).not.toHaveBeenCalled();
+      expect(mockUpdateNote.mock.calls[0][1]).not.toHaveProperty('title');
+    } finally {
+      Platform.OS = originalPlatform;
+    }
+  });
+
+  it('rechecks the Android title after note generation completes', async () => {
+    const originalPlatform = Platform.OS;
+    Platform.OS = 'android';
+    mockNote = personalNote('Untitled');
+    mockNotesState.notes = [mockNote];
+    let resolve!: (value: { text: string; model: string }) => void;
+    (ReasoningService.processText as jest.Mock).mockReturnValueOnce(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    try {
+      const { getByTestId, getByPlaceholderText } = render(<NoteEditorScreen />);
+      await act(async () => fireEvent.press(getByTestId('run-action-1')));
+      fireEvent.changeText(getByPlaceholderText('Title'), 'My chosen title');
+      await act(async () => resolve({ text: 'Edited note.', model: 'test' }));
+      await waitFor(() => expect(mockUpdateNote).toHaveBeenCalled());
+      expect(generateNoteTitle).not.toHaveBeenCalled();
+      expect(getByPlaceholderText('Title').props.value).toBe('My chosen title');
+    } finally {
+      Platform.OS = originalPlatform;
+    }
   });
 });
 

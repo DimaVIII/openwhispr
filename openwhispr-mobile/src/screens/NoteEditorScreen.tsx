@@ -966,6 +966,8 @@ export default function NoteEditorScreen() {
         inputKind: usesSegmentTranscriptRef.current ? 'meeting-transcript' : 'plain-note',
         customDictionary: dictionaryWordsRef.current,
         isCurrent,
+        shouldGenerateTitle: () =>
+          Platform.OS !== 'android' || isRegenerableNoteTitle(titleRef.current),
         routing: {
           isPrivateNote: note?.isPrivate === 1,
           ...routing,

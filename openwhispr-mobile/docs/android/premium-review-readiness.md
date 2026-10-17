@@ -2,6 +2,14 @@
 
 This is a requirements audit against the 15 October 2026 goal brief, including the Android-only correction. It is not a completion certificate. The [implementation plan](premium-experience-plan.md) preserves the chronological checkpoints; [acceptance](acceptance.md) distinguishes baseline checks from later builds. A checked implementation item does not establish physical-device or provider acceptance.
 
+## Current continuation — Qwen3 and correction-learning batch
+
+Installed runtime is `bd8938cbdf8e9da3984ecb46b30410f04dd649fc`, the local Qwen3 candidate. [Local note quality](local-note-quality.md) records six native runs across four fixtures, verified model replacement, automatic-title persistence and the remaining grammar/paragraph limitations. The original host comparisons omitted the configured dictionary suffix; later paired screening shows sensitivity to that context. Do not attribute the native miss solely to a runtime difference.
+
+The next source batch repairs false dictionary learning from whole-note replacement/partial-word autosaves and skips Android title inference when a custom title will be retained. These fixes are not yet in the installed APK. Complete their native verification together in the next consolidated build; do not rebuild for each case. The v66 investigation uses **zero local and zero cloud builds**. Owned test-note and learned-dictionary state remain explicit in the quality report.
+
+EAS code15 finished, but official artifact retrieval returned HTTP403 and Chrome ERR_BLOCKED_BY_CLIENT. It excludes the Qwen3 candidate and later source batch. No code15 bundle was validated or uploaded; Play remains on code12. The product PR remains draft, and the local candidate is held pending its native quality checks. Physical-device, full spoken and provider acceptance gaps remain as recorded below.
+
 ## 16 October — v61/v62 notes and keyboard batch
 
 Installed development runtime **`7835928828ae9239f4bd6e0cb3e5dd1fa0e8e290`** repairs three reproduced Android failures: the system status bar intercepted Attendees/Move-to-folder Close, docked Gboard covered speaker rename, and Gboard clipped note chat. Headers now respect the top inset; rename has a bounded scrollable body with reachable actions; chat expands while typing and includes the navigation inset omitted from Android keyboard events. Shared iOS layout/behavior remains separate. Native checks repeat the original failures at normal English size and **320dp / 200% text**. Rename Save persists Leon QA, Cancel preserves Mira, and the final chat input/Send remain fully above Gboard with a two-line draft. No chat request was sent.
@@ -449,11 +457,11 @@ Earlier v21/v22 interaction checks verified privacy/sync preferences, Account/Mo
 
 ## Immediate continuation
 
-1. Retain development **v62 / `783592882`**. Follow the one consolidated EAS code15 job `078980b5-8513-4583-a47d-1682c381ea00`, then validate its signed bundle and install through the existing private Play audience if artifact access permits. Code14 finished but excludes the keyboard batch. Code13 retrieval was blocked; do not bypass browser protections. Play code12 and its existing pending test purchase remain untouched.
-2. Honor Josh's build-batching instruction: complete local checks and collect fixes before any new binary; no cloud builds between individual fixes and no rebuild for documentation-only changes. Native transcript exports, speaker/attendee actions and large-text docked keyboards now have bounded evidence. Owned fixtures/helpers are cleaned up. The tidy-input generation check is not a rough-dictation quality benchmark.
-3. Read required checks on the pushed head and keep PR #2684, Titan PR #138 and the **171-capture** private packet aligned. Retain the product checkout/emulator; remove the owned sparse publication checkout after its synchronized push.
-4. API draft #268 contains the Play allowlist and REST v1 base-plan repair. Installed-app sandbox restoration still lacks production server configuration/access proof. Preserve production sandbox isolation and the documented deployment boundary.
-5. Do not repeat inconclusive emulator AudioRecord pacing/buffering/rate controls without new evidence. Full spoken meeting accuracy, dictionary hints/TalkBack and physical-phone measurements remain separate gaps; host audio stays disabled.
+1. Keep the current installed Qwen3 APK for independent checks. Group the correction-learning and unused-title repairs into the next local verification build after source checks; do not make a build per fixture. Record the configured dictionary context during model comparisons.
+2. Verify the pending batch through whole-note replacement, slow typing/backspacing, a genuine correction, an existing custom title and an untitled note. Preserve unrelated dictionary entries; current test-created entries are not silently removed by the fix.
+3. Update the draft PR with the accepted source batch and inspect required checks at that pushed head. The 171-capture curated packet still predates the new v65/v66 originals. Keep build identity, newer captures and known limitations explicit.
+4. Retain EAS code15 and its existing private Play draft. Resolve legitimate artifact access before bundle/signature/alignment validation; do not bypass protections or rebuild to solve access. Play code12 and its pending test purchase remain untouched.
+5. API draft #268 and the staged Android RevenueCat key remain undeployed. Installed restoration/server access, full spoken meeting accuracy, dictionary hints/TalkBack, physical-phone measurements and production Moonshine hosting retain their separate acceptance gaps. Host audio stays disabled; do not repeat inconclusive emulator audio controls without new evidence.
 
 Billing research references: [Google pending subscriptions](https://developer.android.com/google/play/billing/subscriptions#pending), [RTDN purchase-token notifications](https://developer.android.com/google/play/billing/rtdn-reference), and the installed RevenueCat React Native 10.10.0 / hybrid 19.0.0 public interfaces. The inspected Play catalog has auto-renewing monthly and annual plans only, with no prepaid plans; prepaid pending purchases are not enabled. Defensive handling of unresolved payments remains, without claiming a delayed-payment scenario was executed.
 

@@ -38,3 +38,20 @@ The native Models screen rejected the obsolete balanced artifact, downloaded its
 **Grammar cleanup is not accepted yet.** The installed model changed “we was” to “we were” but retained “the train were delayed” and “there is two drafts.” Facts were preserved, but the host grammar pass did not transfer fully to Android. Do not launch another build in response to this single case: complete the native fixture batch, investigate runtime/prompt differences offline and group any justified fixes.
 
 The owned synthetic note and QA actions remain for continued testing, Qwen3 selected and radios off. Original v65 screenshots and `v65-native-note-quality.json` retain exact inputs/results; these captures are separate from the earlier 171-image packet. Title inference completed, but the custom note title prevented visible assessment of the generated title. Physical-device/OEM measurements, full spoken capture and provider acceptance remain separate gaps in the readiness audit.
+
+## Follow-up: dictionary context and unused title requests
+
+The next native check used the same installed APK, with no new build. A second scheduling run preserved all five facts and generated **Android onboarding review** for the owned note after its title was set to Untitled. Returning to the note list verified persistence. The owned fixture now has that generated title.
+
+The Dictionary screen then exposed 39 entries (1 manual / 38 learned), including ordinary words timestamped during whole-note fixture replacements. `extractCorrections` compared removed and added words anywhere in the two bodies, so one unrelated replacement could learn ten false spellings. Native note requests append dictionary entries, while the original host screening had no dictionary suffix. Those comparisons therefore did not isolate runtime differences.
+
+Two further instruction alternatives were rejected offline: minimal-edit wording lost rough-text punctuation, and proofreading wording retained fillers/grammar errors. Temperature zero still merged paragraphs. No prompt or sampling change was selected. In a paired diagnostic, the same grammar input/model/seed corrected all three errors without a suffix but reproduced the native errors with a synthetic dictionary suffix. That suffix was built from observed/test words; it is not an exact capture of the earlier native request and does not establish a sole cause. Exact commands and all 88 follow-up outputs are retained under `text-evaluation/`, with `v66-comparison-review.json` describing each comparison.
+
+A pending source batch fixes two reproduced issues before another consolidated build:
+
+- Correction learning rejects pure tail typing/backspacing and replacements retaining less than half the word occurrences. It keeps single-word substitutions, genuine corrections within retained sentences, multiple corrections and dictionary deduplication. This is a conservative automatic-learning rule; users can still add words explicitly. It does not delete existing entries.
+- Android Generate Notes checks the current title before starting automatic title inference. A custom title, including one typed while note generation is pending, avoids a second AI request whose result would be discarded. Untitled notes retain automatic titles; iOS behavior stays unchanged.
+
+The installed app still predates these two repairs. Native verification must cover whole-body replacement, a genuine correction, an existing custom title and an untitled note on the next consolidated APK. The learned test entries remain present and must be accounted for in subsequent model comparisons; do not claim a clean dictionary or silently remove unrelated entries.
+
+The combined source batch passes 307 suites / 3,551 tests, TypeScript and formatting. Scoped lint has zero errors and nine pre-existing NoteEditor inline-style warnings. The two title-request regressions and the wholesale-replacement/partial-word learning regressions failed before their fixes. Native acceptance of this source batch remains pending; no APK or cloud build was created for it.

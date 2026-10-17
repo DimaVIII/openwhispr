@@ -21,6 +21,8 @@ export interface RunActionOptions {
   routing?: ReasoningRoutingOptions;
   /** Recheck ownership after asynchronous work before continuing or publishing a result. */
   isCurrent?: () => boolean;
+  /** Recheck whether the editor can still use an automatic title. */
+  shouldGenerateTitle?: () => boolean;
 }
 
 interface UseActionProcessingOptions {
@@ -77,7 +79,7 @@ export function useActionProcessing({ onSuccess, onError }: UseActionProcessingO
             : result.text;
 
         let generatedTitle: string | undefined;
-        if (cfg?.autoGenerateNoteTitle ?? true) {
+        if ((cfg?.autoGenerateNoteTitle ?? true) && options.shouldGenerateTitle?.() !== false) {
           const title = await generateNoteTitle(enhancedContent, options.routing);
           if (cancelledRef.current || options.isCurrent?.() === false) return;
           if (title) generatedTitle = title;
