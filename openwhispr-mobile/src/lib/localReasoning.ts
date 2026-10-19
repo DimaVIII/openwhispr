@@ -12,10 +12,11 @@ export const LOCAL_OUTPUT_TOKEN_RESERVE = 900;
 export const LOCAL_CONTEXT_SAFETY_TOKENS = 300;
 export const LOCAL_TOKEN_CHAR_RATIO = 3.5;
 
-// Apple Intelligence stops at LOCAL_OUTPUT_TOKEN_RESERVE without an error, and a larger context
-// (iOS 27's 8,192) doesn't raise that cap. Cleanup writes back about as many tokens as it reads, so
-// a transcript whose cleaned copy might not fit would come back cut short. The margin covers the
-// punctuation and capitals cleanup adds.
+// Local requests pass LOCAL_OUTPUT_TOKEN_RESERVE as maximumResponseTokens, and Apple Intelligence
+// stops there without an error. A larger context (iOS 27's 8,192) grows the input budget, not this
+// reserve. Cleanup writes back about as many tokens as it reads, so a transcript whose cleaned copy
+// might not fit would come back cut short. The margin covers the punctuation and capitals cleanup
+// adds.
 export const LOCAL_CLEANUP_MAX_TRANSCRIPT_TOKENS = Math.floor(LOCAL_OUTPUT_TOKEN_RESERVE * 0.8);
 
 let cachedReadiness: Promise<LocalReasoningReadiness> | null = null;
@@ -167,6 +168,16 @@ export async function countLocalReasoningTokens(input: {
   }
 }
 
+export async function countLocalInputTokens(input: {
+  instructions?: string;
+  prompt: string;
+}): Promise<number> {
+  return (
+    (await countLocalReasoningTokens(input)) ??
+    estimateLocalTokens([input.instructions, input.prompt].filter(Boolean).join('\n\n'))
+  );
+}
+
 export async function fitsLocalReasoningBudget(input: {
   instructions?: string;
   prompt: string;
@@ -174,13 +185,10 @@ export async function fitsLocalReasoningBudget(input: {
   budget?: number;
 }): Promise<boolean> {
   const budget = input.budget ?? getLocalInputTokenBudget(input.readiness);
-  const nativeCount = await countLocalReasoningTokens({
+  const count = await countLocalInputTokens({
     instructions: input.instructions,
     prompt: input.prompt,
   });
-  const count =
-    nativeCount ??
-    estimateLocalTokens([input.instructions, input.prompt].filter(Boolean).join('\n\n'));
   return count < budget;
 }
 

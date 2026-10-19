@@ -271,6 +271,15 @@ public class AppleLLMModule: Module {
         }
         return
       }
+      // GenerationError's assetsUnavailable and concurrentRequests moved to these two types.
+      if error is SystemLanguageModel.Error {
+        promise.reject("APPLE_LLM_UNAVAILABLE", error.localizedDescription)
+        return
+      }
+      if let sessionError = error as? LanguageModelSession.Error, sessionError == .concurrentRequests {
+        promise.reject("APPLE_LLM_RATE_LIMITED", sessionError.localizedDescription)
+        return
+      }
     }
     #endif
 
@@ -281,8 +290,8 @@ public class AppleLLMModule: Module {
       case .exceededContextWindowSize(_):
         promise.reject("APPLE_LLM_CONTEXT_LIMIT", generationError.localizedDescription)
       case .decodingFailure(_):
-        // Guided generation cut off by maximumResponseTokens leaves structured output that can't
-        // be decoded. JS treats it as an output limit and retries on smaller input.
+        // Structured output that can't be decoded, most often because maximumResponseTokens cut it
+        // off. JS treats it as an output limit and retries on smaller input.
         promise.reject("APPLE_LLM_OUTPUT_LIMIT", generationError.localizedDescription)
       case .rateLimited(_), .concurrentRequests(_):
         promise.reject("APPLE_LLM_RATE_LIMITED", generationError.localizedDescription)

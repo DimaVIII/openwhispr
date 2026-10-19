@@ -2,6 +2,7 @@ import { AppleLLM } from '@/lib/appleLLM';
 import { notesRepository } from '@/data';
 import type { Note, Segment, Speaker } from '@/data/types';
 import {
+  countLocalInputTokens,
   fitsLocalReasoningBudget,
   getLocalInputTokenBudget,
   getLocalReasoningReadiness,
@@ -22,10 +23,12 @@ import type { StructuredMeetingNotes } from '@/types';
 const DEFAULT_LOCAL_MEETING_ACTION_PROMPT =
   'Transform this meeting transcript into concise, actionable meeting notes.';
 
-// Each chunk's notes have to fit LOCAL_OUTPUT_TOKEN_RESERVE, which stays the same when the context
-// grows (iOS 27's 8,192). Chunks the size of iOS 26's whole input budget already ran past it, so a
-// chunk is held to less than that, whatever the context.
-const LOCAL_MEETING_CHUNK_MAX_INPUT_TOKENS = 2_000;
+// Each chunk's notes have to fit LOCAL_OUTPUT_TOKEN_RESERVE, the maximumResponseTokens these runs
+// pass, which a larger context (iOS 27's 8,192) doesn't grow. Chunks the size of iOS 26's whole
+// input budget already ran past it. Notes grow with the transcript they cover, so the limit is on
+// transcript, not on the instructions and raw notes every chunk repeats; with the default
+// instructions, a full chunk is about 2,000 tokens.
+const LOCAL_MEETING_CHUNK_MAX_TRANSCRIPT_TOKENS = 1_300;
 
 // A chunk whose notes still run past the cap is halved at most this many times, so a model that
 // keeps looping can't turn one chunk into dozens of slow runs.
@@ -144,11 +147,13 @@ async function buildTranscriptChunks(input: {
   meetingContext?: MeetingNotesContext;
   instructions: string;
   budget: number;
+  overhead: number;
 }): Promise<string[][]> {
   const chunks: string[][] = [];
   let current: string[] = [];
+  const pending = [...input.lines];
 
-  for (const line of input.lines) {
+  for (let line = pending.shift(); line !== undefined; line = pending.shift()) {
     const candidate = [...current, line];
     const prompt = buildChunkInput({
       note: input.note,
@@ -161,11 +166,19 @@ async function buildTranscriptChunks(input: {
       budget: input.budget,
     });
 
-    if (!fits && current.length > 0) {
-      chunks.push(current);
-      current = [line];
-    } else {
+    if (fits) {
       current = candidate;
+    } else if (current.length > 0) {
+      chunks.push(current);
+      current = [];
+      pending.unshift(line);
+    } else {
+      // One speaker's consecutive segments are one line, so a long stretch by one speaker can
+      // outgrow a chunk by itself. It is split by words; a single word is kept as it is, and so is
+      // every line when the instructions and raw notes alone fill a chunk.
+      const halves = input.overhead < input.budget ? splitTranscriptLine(line) : null;
+      if (halves) pending.unshift(...halves);
+      else current = [line];
     }
   }
 
@@ -248,7 +261,8 @@ async function mapChunkWithRetry(input: {
     }
 
     // Notes too long for the output cap come from too much material, so fewer lines fix them.
-    // One line's notes overflowing means the model is looping, and half a line won't help.
+    // Chunking already split any line longer than a chunk's transcript limit, so one line's notes
+    // overflowing means the model is looping, and half a line won't help.
     const split =
       input.lines.length > 1
         ? [
@@ -354,8 +368,12 @@ export async function generateLocalMeetingNotes(
   });
   const readiness = await getLocalReasoningReadiness();
   const budget = getLocalInputTokenBudget(readiness);
-  const chunkBudget = Math.min(budget, LOCAL_MEETING_CHUNK_MAX_INPUT_TOKENS);
   const meetingContext = resolveMeetingContext(note);
+  const chunkOverhead = await countLocalInputTokens({
+    instructions,
+    prompt: buildChunkInput({ note, lines: [], meetingContext }),
+  });
+  const chunkBudget = Math.min(budget, chunkOverhead + LOCAL_MEETING_CHUNK_MAX_TRANSCRIPT_TOKENS);
   const lines = transcriptLines(segments, notesRepository.getSpeakers(noteId));
   const chunks = await buildTranscriptChunks({
     note,
@@ -363,6 +381,7 @@ export async function generateLocalMeetingNotes(
     meetingContext,
     instructions,
     budget: chunkBudget,
+    overhead: chunkOverhead,
   });
 
   const mapped: StructuredMeetingNotes[] = [];

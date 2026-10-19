@@ -15,6 +15,7 @@ jest.mock('@/data', () => ({
 
 jest.mock('@/lib/localReasoning', () => ({
   LOCAL_OUTPUT_TOKEN_RESERVE: 900,
+  countLocalInputTokens: jest.fn(async () => 700),
   fitsLocalReasoningBudget: jest.fn(async () => true),
   getLocalInputTokenBudget: jest.fn(() => 2896),
   getLocalReasoningReadiness: jest.fn(async () => ({
@@ -41,7 +42,11 @@ import {
 } from '../localMeetingNotes';
 import { AppleLLM } from '@/lib/appleLLM';
 import { notesRepository } from '@/data';
-import { fitsLocalReasoningBudget, getLocalInputTokenBudget } from '@/lib/localReasoning';
+import {
+  countLocalInputTokens,
+  fitsLocalReasoningBudget,
+  getLocalInputTokenBudget,
+} from '@/lib/localReasoning';
 
 const mockGenerateMeetingNotes = AppleLLM.generateMeetingNotes as jest.Mock;
 const mockGetNoteById = notesRepository.getNoteById as jest.Mock;
@@ -50,6 +55,7 @@ const mockGetSpeakers = notesRepository.getSpeakers as jest.Mock;
 const mockGetActions = notesRepository.getActions as jest.Mock;
 const mockFitsBudget = fitsLocalReasoningBudget as jest.Mock;
 const mockGetInputBudget = getLocalInputTokenBudget as jest.Mock;
+const mockCountInputTokens = countLocalInputTokens as jest.Mock;
 
 const outputLimit = (): Error =>
   Object.assign(new Error('decodingFailure'), { code: 'APPLE_LLM_OUTPUT_LIMIT' });
@@ -99,6 +105,7 @@ beforeEach(() => {
   mockGenerateMeetingNotes.mockReset();
   mockFitsBudget.mockResolvedValue(true);
   mockGetInputBudget.mockReturnValue(2896);
+  mockCountInputTokens.mockResolvedValue(700);
   mockGetNoteById.mockReturnValue(meetingNote);
   mockGetSegments.mockReturnValue([
     {
@@ -256,15 +263,61 @@ describe('local meeting notes', () => {
     expect(markdown).toContain('- Ship Friday.\n- Alice owns QA.');
   });
 
-  it.each([2896, 6992])(
-    'holds each chunk under the output-safe size whatever the context (budget %i)',
-    async (inputBudget) => {
+  it.each([
+    // The default instructions leave a chunk of about 2,000 tokens, whatever the context.
+    [2896, 700, 2000],
+    [6992, 700, 2000],
+    // Long raw notes repeat in every chunk, so they don't take the transcript's room.
+    [6992, 1600, 2900],
+    // The input budget still caps a chunk.
+    [2896, 2000, 2896],
+  ])(
+    'limits each chunk to the transcript the output cap allows (budget %i, overhead %i)',
+    async (inputBudget, overhead, chunkBudget) => {
       mockGetInputBudget.mockReturnValue(inputBudget);
+      mockCountInputTokens.mockResolvedValue(overhead);
       mockGenerateMeetingNotes.mockResolvedValue(partialNotes('Notes'));
 
       await generateLocalMeetingNotes(7);
 
-      expect(mockFitsBudget).toHaveBeenCalledWith(expect.objectContaining({ budget: 2000 }));
+      expect(mockCountInputTokens).toHaveBeenCalledWith({
+        instructions: expect.any(String),
+        prompt: '',
+      });
+      expect(mockFitsBudget).toHaveBeenCalledWith(expect.objectContaining({ budget: chunkBudget }));
     },
   );
+
+  it('keeps lines whole when the instructions and raw notes alone fill a chunk', async () => {
+    mockGetSegments.mockReturnValue([
+      { ...segmentsOf(1)[0], text: Array.from({ length: 40 }, (_, i) => `w${i}`).join(' ') },
+    ]);
+    mockCountInputTokens.mockResolvedValue(3000);
+    mockFitsBudget.mockResolvedValue(false);
+    mockGenerateMeetingNotes.mockResolvedValue(partialNotes('Notes'));
+
+    await generateLocalMeetingNotes(7);
+
+    expect(mockGenerateMeetingNotes).toHaveBeenCalledTimes(1);
+    expect(mockGenerateMeetingNotes.mock.calls[0][0].prompt).toContain('w0 w1');
+  });
+
+  // One speaker's consecutive segments are one line, so a long monologue is a single line.
+  it('splits one line too long for a chunk by words', async () => {
+    const words = Array.from({ length: 40 }, (_, index) => `w${index}`);
+    mockGetSegments.mockReturnValue([{ ...segmentsOf(1)[0], text: words.join(' ') }]);
+    const wordsIn = (prompt: string): string[] => prompt.match(/\bw\d+\b/g) ?? [];
+    mockFitsBudget.mockImplementation(
+      async ({ prompt }: { prompt: string }) => wordsIn(prompt).length <= 10,
+    );
+    mockGenerateMeetingNotes.mockResolvedValue(partialNotes('Notes'));
+
+    await generateLocalMeetingNotes(7);
+
+    const mapPrompts = mockGenerateMeetingNotes.mock.calls
+      .map(([request]) => request.prompt as string)
+      .filter((prompt) => !prompt.includes('Merge these'));
+    expect(mapPrompts).toHaveLength(4);
+    expect(mapPrompts.flatMap(wordsIn)).toEqual(words);
+  });
 });

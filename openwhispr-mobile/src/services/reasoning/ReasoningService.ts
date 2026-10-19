@@ -172,7 +172,8 @@ export class ReasoningService {
               readiness,
             })) &&
             // The input fitting the context isn't enough for cleanup: its reply is as long as the
-            // transcript, and Apple Intelligence cuts it off at the output cap without an error.
+            // transcript, and Apple Intelligence cuts it off at LOCAL_OUTPUT_TOKEN_RESERVE without an
+            // error.
             (scope !== 'cleanup' || (await fitsLocalCleanupOutput(text)));
 
           if (!fits) {

@@ -26,6 +26,7 @@ jest.mock('@/store/useConfigStore', () => ({
 import {
   canRunLocalReasoning,
   clearLocalReasoningReadinessCache,
+  countLocalInputTokens,
   fitsLocalCleanupOutput,
   getLocalReasoningReadiness,
   getLocalReasoningUnavailableMessage,
@@ -190,6 +191,21 @@ it('reads the native output-limit code as an output limit, and nothing else', ()
     isLocalOutputLimitError(Object.assign(new Error('x'), { code: 'APPLE_LLM_CONTEXT_LIMIT' })),
   ).toBe(false);
   expect(isLocalOutputLimitError(new Error('x'))).toBe(false);
+});
+
+describe('countLocalInputTokens', () => {
+  it('counts on the device, and estimates instructions and prompt together without it', async () => {
+    mockCountTokens.mockResolvedValueOnce(42);
+    await expect(countLocalInputTokens({ instructions: 'rules', prompt: 'text' })).resolves.toBe(
+      42,
+    );
+    expect(mockCountTokens).toHaveBeenCalledWith({ instructions: 'rules', prompt: 'text' });
+
+    mockCountTokens.mockResolvedValueOnce(null);
+    await expect(
+      countLocalInputTokens({ instructions: 'a'.repeat(33), prompt: 'b'.repeat(33) }),
+    ).resolves.toBe(20);
+  });
 });
 
 describe('fitsLocalCleanupOutput', () => {
