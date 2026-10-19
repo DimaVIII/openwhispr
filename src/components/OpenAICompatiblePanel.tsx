@@ -117,10 +117,17 @@ export default function OpenAICompatiblePanel({
     ready: checkReady && visible,
     delayMs,
   });
-  const saveKeyDraft = keyDraft.save;
+  const followKeyDraft = keyDraft.follow;
+  const refused = check.failure?.errorCode === "credentialsRejected";
   useEffect(() => {
-    if (check.phase === "connected") saveKeyDraft();
-  }, [check.phase, saveKeyDraft]);
+    followKeyDraft({
+      phase: check.phase,
+      checked: { apiKey },
+      // Someone's own server may refuse a key for other reasons, so only OpenRouter's refusal
+      // holds a key back.
+      refused: refused && provider === "openrouter",
+    });
+  }, [check.phase, apiKey, refused, provider, followKeyDraft]);
 
   useEffect(() => {
     latestBaseRef.current = normalizedBase;
@@ -133,9 +140,7 @@ export default function OpenAICompatiblePanel({
   // The status describes the applied address, so it waits while another one is typed.
   const endpointCheck = isDraftDirty ? { ...check, phase: "idle" as const, failure: null } : check;
   const failureReason =
-    !apiKey.trim() && check.failure?.errorCode === "credentialsRejected"
-      ? t("reasoning.custom.endpointUnauthorized")
-      : undefined;
+    !apiKey.trim() && refused ? t("reasoning.custom.endpointUnauthorized") : undefined;
   // While the check covers the address, its reason under the field replaces the list's line.
   const listErrorShown =
     Boolean(modelsError) && (lockedBaseUrl || !checkReady || check.phase === "connected");
@@ -314,7 +319,9 @@ export default function OpenAICompatiblePanel({
   // so it never settles. It also runs when a load that was in flight settles (`modelsLoading`
   // drops), since a key typed during that load has a check that settled before the load did.
   useEffect(() => {
-    if (check.phase !== "connected" && check.phase !== "failed") return;
+    if (check.phase !== "connected" && check.phase !== "unverified" && check.phase !== "failed") {
+      return;
+    }
     if (!hasBase) return;
     if (lastLoadedBaseRef.current === normalizedBase) return;
     if (pendingBaseRef.current === normalizedBase) return;

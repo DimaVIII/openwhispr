@@ -1,6 +1,9 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const Module = require("node:module");
+const os = require("node:os");
+const path = require("node:path");
 const { deferred } = require("./harness/deferred");
 
 const handlersModulePath = require.resolve("../../src/helpers/ipcHandlers");
@@ -9,10 +12,12 @@ const handlers = new Map();
 const probes = [];
 const tokens = [];
 let probeAnswer = async () => ({ success: true });
+let tokenAnswer = async () => "token";
+const userData = fs.mkdtempSync(path.join(os.tmpdir(), "provider-connection-ipc-"));
 
 const electronStub = {
   app: {
-    getPath: () => "/tmp",
+    getPath: () => userData,
     getName: () => "test",
     getVersion: () => "0.0.0",
     isPackaged: false,
@@ -60,14 +65,16 @@ function anything() {
 Module._load = function loadWithMocks(request, parent, isMain) {
   if (request === "electron") return electronStub;
   if (parent?.filename === handlersModulePath) {
-    if (request === "./connectionCheckCache") {
+    if (request === "./connectionCheckCache" || request === "./paidKeyCheck") {
       return originalLoad.call(this, request, parent, isMain);
     }
     if (request === "./providerConnectionTest") {
+      const { describeCortiTokenFailure } = originalLoad.call(this, request, parent, isMain);
       return {
-        testProviderConnection: (config) => {
+        describeCortiTokenFailure,
+        testProviderConnection: (config, _fetch, runPaidCheck) => {
           probes.push(config);
-          return probeAnswer(config);
+          return probeAnswer(config, runPaidCheck);
         },
       };
     }
@@ -75,7 +82,7 @@ Module._load = function loadWithMocks(request, parent, isMain) {
       return {
         getCortiToken: async (target) => {
           tokens.push(target);
-          return "token";
+          return tokenAnswer(target);
         },
       };
     }
@@ -96,6 +103,7 @@ test.before(() => {
 
 test.after(() => {
   Module._load = originalLoad;
+  fs.rmSync(userData, { recursive: true, force: true });
 });
 
 const check = (config) => handlers.get("test-provider-connection")({}, config);
@@ -142,4 +150,53 @@ test("Corti's token request is shared and remembered the same way", async () => 
     probes.some((probe) => probe.provider === "corti"),
     false
   );
+});
+
+test("Tinfoil's paid key check runs once per key, across checks the cache keeps apart", async () => {
+  let paid = 0;
+  probeAnswer = (_config, runPaidCheck) =>
+    runPaidCheck("tf-key", async () => {
+      paid += 1;
+      return { success: true };
+    });
+  for (const model of ["voxtral-small-24b", "gpt-oss-120b"]) {
+    const config = { scope: "transcription", provider: "tinfoil", apiKey: "tf-key", model };
+    assert.deepEqual(await check(config), { success: true });
+  }
+  assert.equal(paid, 1);
+  const stored = fs.readFileSync(path.join(userData, "paid-key-checks.json"), "utf8");
+  assert.doesNotMatch(stored, /tf-key/);
+});
+
+test("Corti's own refusal and its no-verdict failures reach the panel, never remembered", async () => {
+  const corti = {
+    scope: "transcription",
+    provider: "corti",
+    clientId: "corti-id-3",
+    clientSecret: "corti-secret-3",
+    environment: "eu",
+    tenant: "",
+  };
+  const busy = Object.assign(new Error("Corti authentication failed: 503"), { status: 503 });
+  tokenAnswer = async () => {
+    throw busy;
+  };
+  try {
+    const before = tokens.length;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const result = await check(corti);
+      assert.equal(result.errorCode, "providerStatus");
+      assert.equal(result.unverified, true);
+    }
+    assert.equal(tokens.length - before, 2, "no verdict is asked again");
+    tokenAnswer = async () => {
+      throw Object.assign(new Error("Corti authentication failed: 401"), { status: 401 });
+    };
+    const refusedFrom = tokens.length;
+    assert.equal((await check(corti)).errorCode, "credentialsRejected");
+    assert.equal((await check(corti)).errorCode, "credentialsRejected");
+    assert.equal(tokens.length - refusedFrom, 2, "a refusal is asked again too");
+  } finally {
+    tokenAnswer = async () => "token";
+  }
 });

@@ -6,7 +6,7 @@ const PANEL = "/components/OpenAICompatiblePanel.tsx";
 const ENDPOINT = "reasoning.custom.endpointTitle";
 const OPTIONAL_KEY = "reasoning.custom.apiKeyOptional";
 const BASE = "http://127.0.0.1:11434/v1";
-const KEYLESS_REFUSAL = { success: false, errorCode: "credentialsRejected", status: 401 };
+const REJECTED = { success: false, errorCode: "credentialsRejected", status: 401 };
 const props = (overrides = {}) => ({
   baseUrl: BASE,
   setBaseUrl() {},
@@ -89,7 +89,7 @@ test("a new address waits until the field is left; a window switch applies nothi
 test("a server that refuses a keyless check says it wants a key", async (t) => {
   const panel = await mount(t);
   await panel.wait(0);
-  await panel.answer(KEYLESS_REFUSAL);
+  await panel.answer(REJECTED);
   const unauthorized = "reasoning.custom.endpointUnauthorized";
   assert.equal(panel.field(ENDPOINT).props.failureReason, unauthorized);
   assert.equal(
@@ -99,7 +99,7 @@ test("a server that refuses a keyless check says it wants a key", async (t) => {
   );
   await panel.setProps({ apiKey: "sk-server" });
   await panel.wait(0);
-  await panel.answer(KEYLESS_REFUSAL);
+  await panel.answer(REJECTED);
   assert.equal(panel.field(ENDPOINT).props.failureReason, undefined, "with a key, a rejection");
 });
 
@@ -107,7 +107,7 @@ test("the list's error line gives way to the check's reason", async (t) => {
   const panel = await mount(t, { fetch: respond(401) });
   await panel.wait(0); // the list loads and the check goes out
   assert.equal(listError(panel), undefined, "nothing twice while the check runs");
-  await panel.answer(KEYLESS_REFUSAL);
+  await panel.answer(REJECTED);
   assert.equal(listError(panel), undefined);
   await panel.retry();
   await panel.answer({ success: true });
@@ -160,7 +160,7 @@ test("a key typed into a failed list waits for its check to settle", async (t) =
   const panel = await mount(t, { fetch: respond(401), props: savingKey(saved) });
   await panel.wait(0); // the list fails without a key; the check goes out
   assert.equal(globalThis.fetch.mock.calls.length, 1);
-  await panel.answer(KEYLESS_REFUSAL);
+  await panel.answer(REJECTED);
   for (const key of ["s", "sk"]) await panel.type(OPTIONAL_KEY, key);
   await panel.wait(499);
   assert.equal(globalThis.fetch.mock.calls.length, 1, "the list never sees a half-typed key");
@@ -179,7 +179,7 @@ test("a key typed into a failed list waits for its check to settle", async (t) =
 test("a parent's new setter on each render never reloads a failed list", async (t) => {
   const panel = await mount(t, { fetch: respond(401) });
   await panel.wait(0); // the list fails without a key
-  await panel.answer(KEYLESS_REFUSAL);
+  await panel.answer(REJECTED);
   for (const key of ["s", "sk"]) {
     await panel.type(OPTIONAL_KEY, key);
     // InferenceConfigEditor passes setField("cloudBaseUrl"), a new function on each render.
@@ -199,7 +199,7 @@ test("a key typed while the list is still loading retries once the load settles"
     props: savingKey([]),
   });
   await panel.wait(0); // the list is still loading; the check goes out
-  await panel.answer(KEYLESS_REFUSAL);
+  await panel.answer(REJECTED);
   await panel.type(OPTIONAL_KEY, "sk-late");
   await panel.wait(500);
   assert.equal(panel.requests().at(-1).apiKey, "sk-late");
@@ -236,5 +236,39 @@ test("a server key saves trimmed once its field is left, and the address is chec
   );
   assert.deepEqual(saved, [], "nothing is saved while the key is typed");
   await panel.blur(OPTIONAL_KEY);
+  assert.deepEqual(saved, [], "a key left while its check runs waits for the answer");
+  await panel.answer({ success: false, errorCode: "network", unverified: true });
   assert.deepEqual(saved, ["sk-server"], "leaving the field saves it");
+});
+
+test("a key someone's own server refuses still saves once its field is left", async (t) => {
+  const saved = [];
+  const panel = await mount(t, { props: savingKey(saved) });
+  await panel.wait(0);
+  await panel.answer({ success: true });
+  await panel.type(OPTIONAL_KEY, "sk-wrong");
+  await panel.blur(OPTIONAL_KEY);
+  await panel.wait(0);
+  await panel.answer(REJECTED);
+  assert.deepEqual(saved, ["sk-wrong"]);
+});
+
+test("a key OpenRouter refuses is never saved", async (t) => {
+  const saved = [];
+  const live = Object.assign(savingKey(saved), {
+    provider: "openrouter",
+    baseUrl: "https://openrouter.ai/api/v1",
+    lockedBaseUrl: true,
+    apiKeyRequired: true,
+    apiKey: "sk-or-saved",
+  });
+  const panel = await mount(t, { props: live });
+  await panel.wait(0);
+  await panel.answer({ success: true });
+  await panel.type("common.apiKey", "sk-or-wrong");
+  await panel.blur("common.apiKey");
+  await panel.wait(0);
+  await panel.answer(REJECTED);
+  await panel.unmount();
+  assert.deepEqual(saved, []);
 });

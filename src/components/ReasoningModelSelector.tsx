@@ -473,10 +473,15 @@ export default function ReasoningModelSelector({
       visible,
     delayMs,
   });
-  const saveKeyDraft = keyDraft.save;
+  const followKeyDraft = keyDraft.follow;
+  const refused = check.failure?.errorCode === "credentialsRejected";
   useEffect(() => {
-    if (check.phase === "connected") saveKeyDraft();
-  }, [check.phase, saveKeyDraft]);
+    followKeyDraft({
+      phase: check.phase,
+      checked: { [displayedCloudProvider]: typedKey },
+      refused,
+    });
+  }, [check.phase, displayedCloudProvider, typedKey, refused, followKeyDraft]);
 
   const localProviders = useMemo<LocalProvider[]>(() => {
     return modelRegistry.getAllProviders().map((provider) => ({

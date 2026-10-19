@@ -1183,16 +1183,28 @@ export default function TranscriptionModelPicker({
     hold: isCustom && endpointHold.held,
     delayMs,
   });
-  const saveKeyDraft = keyDraft.save;
-  useEffect(() => {
-    if (check.phase === "connected") saveKeyDraft();
-  }, [check.phase, saveKeyDraft]);
   // The field that completes the connection carries the status.
   const checkedCredential = isCorti ? "cortiClientSecret" : providerCredentials.fields[0].key;
+  const refused = check.failure?.errorCode === "credentialsRejected";
+  // The typed values the check carries, as one string so the effect sees each new set.
+  const checkedFields = JSON.stringify(
+    isCustom
+      ? { customTranscriptionApiKey: customKey }
+      : Object.fromEntries(
+          providerCredentials.fields.map((field) => [field.key, credentialValues[field.key]])
+        )
+  );
+  const followKeyDraft = keyDraft.follow;
+  useEffect(() => {
+    followKeyDraft({
+      phase: check.phase,
+      checked: JSON.parse(checkedFields),
+      // Someone's own server may refuse a key for other reasons, so its refusal holds nothing back.
+      refused: refused && !isCustom,
+    });
+  }, [check.phase, checkedFields, isCustom, refused, followKeyDraft]);
   const customFailureReason =
-    !customKey.trim() && check.failure?.errorCode === "credentialsRejected"
-      ? t("reasoning.custom.endpointUnauthorized")
-      : undefined;
+    !customKey.trim() && refused ? t("reasoning.custom.endpointUnauthorized") : undefined;
 
   const cloudModelOptions = useMemo(() => {
     if (!currentCloudProvider) return [];

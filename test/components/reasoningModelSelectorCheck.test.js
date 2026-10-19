@@ -86,17 +86,26 @@ test("a key saves trimmed once its check passes or its field is left, never half
   assert.equal(panel.state().openaiApiKey, "sk-pasted", "a passing key saves at once");
   await panel.type(KEY, "sk-other");
   await panel.blur(KEY, { windowSwitch: true });
+  await panel.wait(500); // the field keeps its pause while another window has focus
+  assert.equal(panel.state().openaiApiKey, "sk-pasted", "nothing is saved before its answer");
+  await panel.answer({ success: false, errorCode: "network", unverified: true });
   assert.equal(panel.state().openaiApiKey, "sk-other", "leaving the window saves it");
 });
 
-test("a typed key saves when another provider takes its field or the panel unmounts", async (t) => {
+test("a typed key is kept when another provider takes its field, and saves on unmount", async (t) => {
   const panel = await mount(t);
   await panel.type(KEY, "sk-typed");
   // The scope's provider changes elsewhere, so the focused field shows Anthropic's key.
   await panel.setProps({ localReasoningProvider: "anthropic" });
   await panel.type(KEY, "sk-ant-typed");
-  assert.equal(panel.state().openaiApiKey, "sk-typed");
+  await panel.wait(500);
+  await panel.answer({ success: true });
+  assert.equal(panel.state().anthropicApiKey, "sk-ant-typed");
+  assert.equal(panel.state().openaiApiKey, "", "another provider's answer settles nothing here");
+  await panel.setProps({ localReasoningProvider: "openai" });
+  assert.equal(panel.field(KEY).props.value, "sk-typed", "and is still there to come back to");
   await panel.unmount(); // Escape closing Settings fires no blur
+  assert.equal(panel.state().openaiApiKey, "sk-typed");
   assert.equal(panel.state().anthropicApiKey, "sk-ant-typed");
 });
 
@@ -193,4 +202,146 @@ test("local mode, OpenRouter and Custom send nothing from this panel", async (t)
       }
     });
   }
+});
+
+test("a key the provider refuses is never saved, and the saved key stays in use", async (t) => {
+  const panel = await mount(t, { secrets: { openaiApiKey: "sk-saved" } });
+  await panel.wait(0);
+  await panel.answer({ success: true });
+  await panel.type(KEY, "sk-wrong");
+  await panel.wait(500);
+  await panel.answer(REJECTED);
+  await panel.blur(KEY);
+  assert.equal(panel.state().openaiApiKey, "sk-saved", "leaving the field keeps the saved key");
+  assert.equal(panel.field(KEY).props.value, "sk-wrong", "the refused key stays to be fixed");
+  // Another provider takes the field, then Settings closes: neither saves the refused key.
+  await panel.setProps({ localReasoningProvider: "anthropic" });
+  await panel.type(KEY, "sk-ant-typed");
+  await panel.unmount();
+  assert.equal(panel.state().openaiApiKey, "sk-saved");
+  assert.equal(panel.state().anthropicApiKey, "sk-ant-typed");
+});
+
+for (const [answered, answer, saved] of [
+  ["a refusal", REJECTED, "sk-saved"],
+  ["no verdict", { success: false, errorCode: "network", unverified: true }, "sk-typed"],
+  [
+    "a failure about the account",
+    { success: false, errorCode: "providerStatus", status: 402 },
+    "sk-typed",
+  ],
+]) {
+  test(`a key left while its check runs waits for the answer: ${answered}`, async (t) => {
+    const panel = await mount(t, { secrets: { openaiApiKey: "sk-saved" } });
+    await panel.wait(0);
+    await panel.answer({ success: true });
+    await panel.type(KEY, "sk-typed");
+    await panel.blur(KEY);
+    await panel.wait(0); // leaving the field checks at once
+    assert.equal(panel.state().openaiApiKey, "sk-saved", "nothing is saved before the answer");
+    await panel.answer(answer);
+    assert.equal(panel.state().openaiApiKey, saved);
+  });
+}
+
+test("a refused key saves once a later check of it passes", async (t) => {
+  const panel = await mount(t, { secrets: { openaiApiKey: "sk-saved" } });
+  await panel.wait(0);
+  await panel.answer({ success: true });
+  await panel.type(KEY, "sk-new");
+  await panel.wait(500);
+  await panel.answer(REJECTED);
+  await panel.blur(KEY);
+  await panel.retry(); // the key was only just activated
+  await panel.answer({ success: true });
+  assert.equal(panel.state().openaiApiKey, "sk-new");
+});
+
+test("a refused key stays unsaved when a later check gives no verdict", async (t) => {
+  const panel = await mount(t, { secrets: { openaiApiKey: "sk-saved" } });
+  await panel.wait(0);
+  await panel.answer({ success: true });
+  await panel.type(KEY, "sk-wrong");
+  await panel.wait(500);
+  await panel.answer(REJECTED);
+  await panel.blur(KEY);
+  await panel.retry();
+  await panel.answer({
+    success: false,
+    errorCode: "providerStatus",
+    status: 503,
+    unverified: true,
+  });
+  await panel.unmount();
+  assert.equal(panel.state().openaiApiKey, "sk-saved");
+});
+
+test("a key left before its answer is saved as it stands when its panel is hidden", async (t) => {
+  const panel = await mount(t, { secrets: { openaiApiKey: "sk-old" } });
+  await panel.wait(0);
+  await panel.answer({ success: true });
+  await panel.type(KEY, "sk-new");
+  await panel.blur(KEY);
+  await panel.wait(0); // leaving the field checks at once
+  assert.equal(panel.state().openaiApiKey, "sk-old");
+  await panel.setVisible(false); // another Settings tab: no answer is coming for it
+  assert.equal(panel.state().openaiApiKey, "sk-new");
+});
+
+test("a refused key stays in its field across a hidden panel and is never saved", async (t) => {
+  const panel = await mount(t, { secrets: { openaiApiKey: "sk-saved" } });
+  await panel.wait(0);
+  await panel.answer({ success: true });
+  await panel.type(KEY, "sk-wrong");
+  await panel.wait(500);
+  await panel.answer(REJECTED);
+  await panel.blur(KEY);
+  await panel.setVisible(false);
+  await panel.setStore({ openaiApiKey: "sk-fixed" }); // another panel saves a working key
+  await panel.setVisible(true);
+  await panel.wait(0);
+  assert.equal(panel.field(KEY).props.value, "sk-wrong", "the refused key waits to be fixed");
+  await panel.answer(REJECTED);
+  await panel.unmount();
+  assert.equal(panel.state().openaiApiKey, "sk-fixed");
+});
+
+test("every refused key stays refused, not only the last one", async (t) => {
+  const panel = await mount(t, { secrets: { openaiApiKey: "sk-saved" } });
+  await panel.wait(0);
+  await panel.answer({ success: true });
+  for (const key of ["sk-bad1", "sk-bad2"]) {
+    await panel.type(KEY, key);
+    await panel.wait(500);
+    await panel.answer(REJECTED);
+  }
+  await panel.type(KEY, "sk-bad1");
+  await panel.blur(KEY);
+  await panel.wait(0);
+  await panel.answer({ success: false, errorCode: "network", unverified: true });
+  await panel.unmount();
+  assert.equal(panel.state().openaiApiKey, "sk-saved");
+});
+
+test("closing Settings saves a key typed for a provider that is no longer shown", async (t) => {
+  const panel = await mount(t);
+  await panel.type(KEY, "sk-typed");
+  await panel.setProps({ localReasoningProvider: "anthropic" }); // the field stays focused
+  await panel.unmount();
+  assert.equal(panel.state().openaiApiKey, "sk-typed");
+});
+
+test("a refused key typed again is held back before its new answer", async (t) => {
+  const panel = await mount(t, { secrets: { openaiApiKey: "sk-saved" } });
+  await panel.wait(0);
+  await panel.answer({ success: true });
+  await panel.type(KEY, "sk-bad");
+  await panel.wait(500);
+  await panel.answer(REJECTED);
+  await panel.type(KEY, "sk-saved");
+  await panel.wait(500);
+  await panel.answer({ success: true });
+  await panel.type(KEY, "sk-bad"); // pasted back, and Settings closes before the check
+  await panel.unmount();
+  assert.equal(panel.state().openaiApiKey, "sk-saved");
 });
