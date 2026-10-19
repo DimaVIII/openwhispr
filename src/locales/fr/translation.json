@@ -3745,6 +3745,7 @@
       "typeNamePlaceholder": "Saisir un nom",
       "nameOrEmailPlaceholder": "Tapez un nom ou un e-mail",
       "knownSpeakers": "Interlocuteurs connus",
+      "thisIsMe": "C'est moi",
       "meetingAttendees": "Participants à la réunion",
       "createNewPrefix": "Créer",
       "addContact": "Ajouter un contact",
