@@ -64,6 +64,9 @@ struct LiveActivityResolverTests {
     check(
       LiveActivityResolver.resolve(meeting: nil, keyboardRecording: true, dictationMode: true, appAwake: false, now: now)
         == keyboardOnly, "a keyboard recording keeps its card while backgrounded")
+    check(
+      LiveActivityResolver.resolve(meeting: nil, keyboardRecording: false, dictationMode: false, appAwake: false, now: now)
+        == nil, "nothing to show while backgrounded ends the activity")
 
     // Stale dates.
     let meetingState = RecordingActivityContentState(

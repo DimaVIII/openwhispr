@@ -116,10 +116,10 @@ final class LiveActivityController {
         Notification.Name(self.warmMicReleasedNotificationName),
       ].map { name in
         NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { _ in
-          self.reconcile(requestOnly: true)
+          self.reconcileBeforeSuspension()
         }
       }
-      self.log.info("Observing keyboard, dictation-mode, and end-meeting notifications")
+      self.log.info("Observing keyboard, dictation-mode, end-meeting, and app lifecycle notifications")
     }
   }
 
@@ -240,6 +240,20 @@ final class LiveActivityController {
     guard backgroundTask != .invalid else { return }
     UIApplication.shared.endBackgroundTask(backgroundTask)
     backgroundTask = .invalid
+  }
+
+  /// The app can suspend as soon as the notification handler returns, before the
+  /// queued end lands, so a short background task holds it until the reconcile is done.
+  private func reconcileBeforeSuspension() {
+    var task = UIBackgroundTaskIdentifier.invalid
+    let finish = {
+      guard task != .invalid else { return }
+      UIApplication.shared.endBackgroundTask(task)
+      task = .invalid
+    }
+    task = UIApplication.shared.beginBackgroundTask(
+      withName: "OpenWhisprLiveActivitySuspend", expirationHandler: finish)
+    reconcile(requestOnly: true, completion: finish)
   }
 
   // MARK: - Resolve + apply
@@ -366,7 +380,8 @@ final class LiveActivityController {
     #if canImport(ActivityKit)
     if #available(iOS 16.2, *) {
       let done = DispatchSemaphore(value: 0)
-      Task.detached {
+      // High priority: the blocked main thread can't donate its priority through a semaphore.
+      Task.detached(priority: .high) {
         for activity in Activity<RecordingActivityAttributes>.activities {
           await activity.end(nil, dismissalPolicy: .immediate)
         }
