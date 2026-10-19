@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import type { LucideIconName } from '@/components/ui/SystemIcon';
 import type { InferenceSelection, MobileInferenceScope } from '@/lib/mobileProviders';
+import { isDictationAgentEnabled } from '@/lib/dictationAgent';
 import {
   inferenceToProcessingMode,
   type InferenceMode,
@@ -72,6 +73,7 @@ export function localModeDefault(
 ): InferenceMode {
   const onCloud =
     scope === 'agent' ||
+    scope === 'noteChat' ||
     (scope === 'upload' && cloudAccess !== 'none') ||
     (scope === 'cleanup' && cloudAccess === 'account');
   return onCloud ? 'openwhispr' : 'local';
@@ -80,7 +82,7 @@ export function localModeDefault(
 type DictationModeConfig = Pick<UserConfig, 'defaultMode' | 'inference' | 'pinnedInference'>;
 
 // The workflows besides dictation, which a dictation change never moves.
-const OTHER_WORKFLOWS = ['upload', 'cleanup', 'notes', 'agent'] as const;
+const OTHER_WORKFLOWS = ['upload', 'cleanup', 'notes', 'noteChat', 'agent'] as const;
 type OtherWorkflow = (typeof OTHER_WORKFLOWS)[number];
 
 // The on-device model picked for a workflow, else Automatic.
@@ -93,9 +95,10 @@ export function localSelection(
 
 // What a workflow with nothing saved runs in `mode`, or undefined when there is nothing to hold:
 // cleanup and the voice assistant are skipped under Bring Your Own Key until a provider is saved
-// for them, and Local Mode turns the voice assistant off and asks before note chat leaves the phone.
-// Note formatting saved as On-Device never falls back to Cloud, so Local Mode's is held on this
-// iPhone only while Apple Intelligence can run it; otherwise Local Mode asks before using Cloud.
+// for them, and Local Mode turns the voice assistant off. Note formatting saved as On-Device never
+// falls back to Cloud, so Local Mode's is held on this iPhone only while Apple Intelligence can run
+// it; otherwise Local Mode asks before using Cloud. Local Mode also asks before note chat leaves the
+// phone, which no other mode does, so note chat is held On-Device rather than sent to Cloud unasked.
 function unsavedRunsIn(
   config: Pick<UserConfig, 'rememberedInference'> | null,
   scope: OtherWorkflow,
@@ -107,8 +110,9 @@ function unsavedRunsIn(
   if (mode === 'private' && scope === 'agent') return undefined;
   const onDevice =
     mode === 'private' &&
-    localModeDefault(scope, cloudAccess) === 'local' &&
-    (scope !== 'notes' || localReasoningReady);
+    (scope === 'noteChat' ||
+      (localModeDefault(scope, cloudAccess) === 'local' &&
+        (scope !== 'notes' || localReasoningReady)));
   return onDevice ? localSelection(config, scope) : { mode: 'openwhispr' };
 }
 
@@ -240,4 +244,26 @@ export function holdOnDeviceConfig(
 export function localModeUpgradeConfig(config: UserConfig): Partial<UserConfig> {
   if (config.defaultMode !== 'private') return { localModeUpgraded: true };
   return { localModeUpgraded: true, ...holdOnDeviceConfig(config) };
+}
+
+// Note chat once used the voice assistant's selection (agent), so a config from then gives it the
+// same selection, remembered providers and hold, leaving anything saved for note chat alone.
+export function noteChatSplitConfig(config: UserConfig): Partial<UserConfig> {
+  const agent = config.inference?.agent;
+  const copied = !!agent && !config.inference?.noteChat;
+  const rememberedAgent = config.rememberedInference?.agent;
+  return {
+    noteChatSplit: true,
+    // Note chat's switch followed the voice assistant's until set; saving it keeps it put.
+    ...(config.noteChatEnabled === undefined
+      ? { noteChatEnabled: isDictationAgentEnabled(config) }
+      : {}),
+    ...(copied ? { inference: { ...config.inference, noteChat: agent } } : {}),
+    ...(rememberedAgent && !config.rememberedInference?.noteChat
+      ? { rememberedInference: { ...config.rememberedInference, noteChat: rememberedAgent } }
+      : {}),
+    ...(copied && config.pinnedInference?.includes('agent')
+      ? { pinnedInference: [...config.pinnedInference, 'noteChat'] }
+      : {}),
+  };
 }

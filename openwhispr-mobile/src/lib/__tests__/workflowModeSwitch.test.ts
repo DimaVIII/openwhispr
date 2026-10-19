@@ -45,9 +45,10 @@ const LOCAL_FROM_CLOUD = {
     upload: { mode: 'openwhispr' },
     cleanup: { mode: 'openwhispr' },
     notes: { mode: 'openwhispr' },
+    noteChat: { mode: 'openwhispr' },
     agent: { mode: 'openwhispr' },
   },
-  pinnedInference: ['upload', 'cleanup', 'notes', 'agent'],
+  pinnedInference: ['upload', 'cleanup', 'notes', 'noteChat', 'agent'],
 };
 
 beforeEach(() => {
@@ -234,7 +235,8 @@ describe('switching dictation', () => {
   });
 
   // Only dictation moves: note formatting stays on this phone, where Local Mode ran it, and with an
-  // account, uploads and cleanup stay on Cloud, where Local Mode ran them.
+  // account, uploads and cleanup stay on Cloud, where Local Mode ran them. Note chat, which Local
+  // Mode asked about before sending it to Cloud, stays on this phone.
   it('to OpenWhispr Cloud turns Local Mode off and leaves the other workflows where they ran', async () => {
     mockActiveMode = 'private';
     mockConfig = { defaultMode: 'private', inference: { dictation: { mode: 'local' } } };
@@ -247,8 +249,9 @@ describe('switching dictation', () => {
         upload: { mode: 'openwhispr' },
         cleanup: { mode: 'openwhispr' },
         notes: { mode: 'local' },
+        noteChat: { mode: 'local' },
       },
-      pinnedInference: ['upload', 'cleanup', 'notes'],
+      pinnedInference: ['upload', 'cleanup', 'notes', 'noteChat'],
     });
   });
 
@@ -304,8 +307,9 @@ describe('switching dictation', () => {
         upload: { mode: 'openwhispr' },
         cleanup: { mode: 'local' },
         notes: { mode: 'local' },
+        noteChat: { mode: 'local' },
       },
-      pinnedInference: ['upload', 'cleanup', 'notes'],
+      pinnedInference: ['upload', 'cleanup', 'notes', 'noteChat'],
     });
   });
 

@@ -1,6 +1,7 @@
 import {
   cleanupRunsOnDevice,
   cloudCleanupNeedsAccount,
+  unsetSelection,
   workflowSelection,
   workflowSummary,
 } from '@/lib/aiWorkflows';
@@ -9,6 +10,23 @@ import type { UserConfig } from '@/types';
 function config(overrides: Partial<UserConfig> = {}): UserConfig {
   return { defaultMode: 'private', ...overrides } as UserConfig;
 }
+
+describe('Note Chat with nothing saved', () => {
+  it.each(['cloud', 'private', 'providers'] as const)(
+    'runs on OpenWhispr Cloud in %s mode',
+    (mode) => {
+      expect(unsetSelection('noteChat', mode)).toEqual({ mode: 'openwhispr' });
+    },
+  );
+
+  it('is summarized as OpenWhispr Cloud in Local Mode', () => {
+    expect(workflowSummary(config({}), 'noteChat', 'private')).toBe('OpenWhispr Cloud');
+  });
+
+  it('leaves the voice assistant skipped under Bring Your Own Key', () => {
+    expect(workflowSummary(config({}), 'agent', 'providers')).toBe('Not set');
+  });
+});
 
 describe('workflowSummary for Text Cleanup', () => {
   // With nothing saved, Local Mode cleans on OpenWhispr Cloud for a signed-in account and on this
@@ -199,7 +217,7 @@ describe('workflowSummary for Uploads', () => {
 // A Cloud selection held when dictation left another mode runs as if unsaved in Local Mode, where
 // the default already uses Cloud wherever the user's access lets it.
 describe('workflowSelection in Local Mode for a Cloud hold', () => {
-  const heldOnCloud = (scope: 'upload' | 'notes' | 'agent'): UserConfig =>
+  const heldOnCloud = (scope: 'upload' | 'notes' | 'noteChat'): UserConfig =>
     config({ inference: { [scope]: { mode: 'openwhispr' } }, pinnedInference: [scope] });
 
   it.each([
@@ -219,7 +237,7 @@ describe('workflowSelection in Local Mode for a Cloud hold', () => {
     expect(workflowSelection(heldOnCloud('notes'), 'notes', 'private', 'account')).toEqual({
       mode: 'local',
     });
-    expect(workflowSelection(heldOnCloud('agent'), 'agent', 'private', 'none')).toEqual({
+    expect(workflowSelection(heldOnCloud('noteChat'), 'noteChat', 'private', 'none')).toEqual({
       mode: 'openwhispr',
     });
   });
@@ -227,5 +245,29 @@ describe('workflowSelection in Local Mode for a Cloud hold', () => {
   it('keeps a Cloud upload the user saved', () => {
     const saved = config({ inference: { upload: { mode: 'openwhispr' } } });
     expect(workflowSelection(saved, 'upload', 'private', 'none')).toEqual({ mode: 'openwhispr' });
+  });
+});
+
+describe('workflowSummary for switched-off workflows', () => {
+  const groq = { mode: 'providers' as const, providerId: 'groq', modelId: 'llama' };
+
+  it('says Off for Note Chat and the Voice Assistant switched off, even with a key missing', () => {
+    const saved = config({
+      defaultMode: 'cloud',
+      noteChatEnabled: false,
+      dictationAgentEnabled: false,
+      inference: { noteChat: groq, agent: groq },
+    });
+    expect(workflowSummary(saved, 'noteChat', 'cloud', { keyMissing: true })).toBe('Off');
+    expect(workflowSummary(saved, 'agent', 'cloud', { keyMissing: true })).toBe('Off');
+  });
+
+  it('keeps Note Chat on when only the Voice Assistant is switched off', () => {
+    const saved = config({ defaultMode: 'cloud', dictationAgentEnabled: false });
+    expect(workflowSummary(saved, 'noteChat', 'cloud')).toBe('OpenWhispr Cloud');
+  });
+
+  it('says the Voice Assistant is Off in Local Mode, which turns it off', () => {
+    expect(workflowSummary(config({}), 'agent', 'private')).toBe('Off');
   });
 });

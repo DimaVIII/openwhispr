@@ -106,11 +106,18 @@ export async function resolveMobileProviderRoute(
 export type TranscriptionJobRoute = Pick<TranscriptionRequest, 'provider' | 'inferenceRoute'> &
   TextInferenceSnapshot;
 
-export function snapshotTextInference(provider: TranscriptionProvider): TextInferenceSnapshot {
+type TextScope = 'cleanup' | 'agent';
+
+// Dictation and uploads take only the cleanup route. A keyboard recording also takes the voice
+// assistant's, since the same snapshot serves a wand job.
+export function snapshotTextInference(
+  provider: TranscriptionProvider,
+  scopes: readonly TextScope[] = ['cleanup'],
+): TextInferenceSnapshot {
   const result: TextInferenceSnapshot = {};
   const { activeMode } = useProcessingModeStore.getState();
   const cloudAccess = provider === 'local' ? currentCloudAccess() : 'none';
-  for (const scope of ['cleanup', 'agent'] as const) {
+  for (const scope of scopes) {
     const routeKey = scope === 'cleanup' ? 'cleanupRoute' : 'agentRoute';
     const errorKey = scope === 'cleanup' ? 'cleanupUnavailable' : 'agentUnavailable';
     const selection = getInferenceSelection(scope);
@@ -150,9 +157,12 @@ export function snapshotTextInference(provider: TranscriptionProvider): TextInfe
   return result;
 }
 
-export function snapshotTranscriptionJob(scope: 'dictation' | 'upload'): TranscriptionJobRoute {
+export function snapshotTranscriptionJob(
+  scope: 'dictation' | 'upload',
+  textScopes?: readonly TextScope[],
+): TranscriptionJobRoute {
   const provider = getTranscriptionProvider(scope);
-  const job: TranscriptionJobRoute = { provider, ...snapshotTextInference(provider) };
+  const job: TranscriptionJobRoute = { provider, ...snapshotTextInference(provider, textScopes) };
   if (provider === 'byok') {
     const selection = getInferenceSelection(scope);
     if (!selection)
