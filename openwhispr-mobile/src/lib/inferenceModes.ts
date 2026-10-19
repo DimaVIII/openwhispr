@@ -253,3 +253,29 @@ export function localModeUpgradeConfig(config: UserConfig): Partial<UserConfig> 
   if (config.defaultMode !== 'private') return { localModeUpgraded: true };
   return { localModeUpgraded: true, ...holdOnDeviceConfig(config) };
 }
+
+// Note chat once used the voice assistant's selection (agent), so a config from then gives it the
+// same selection, remembered providers and hold, leaving anything saved for note chat alone.
+export function noteChatSplitConfig(config: UserConfig): Partial<UserConfig> {
+  const agent = config.inference?.agent;
+  const copied = !!agent && !config.inference?.noteChat;
+  const rememberedAgent = config.rememberedInference?.agent;
+  const heldAgent = config.privateModeReturn?.pinned.agent;
+  return {
+    noteChatSplit: true,
+    ...(copied ? { inference: { ...config.inference, noteChat: agent } } : {}),
+    ...(rememberedAgent && !config.rememberedInference?.noteChat
+      ? { rememberedInference: { ...config.rememberedInference, noteChat: rememberedAgent } }
+      : {}),
+    ...(copied && config.pinnedInference?.includes('agent')
+      ? { pinnedInference: [...config.pinnedInference, 'noteChat'] }
+      : {}),
+    ...(heldAgent && !config.privateModeReturn?.pinned.noteChat
+      ? {
+          privateModeReturn: {
+            pinned: { ...config.privateModeReturn?.pinned, noteChat: heldAgent },
+          },
+        }
+      : {}),
+  };
+}

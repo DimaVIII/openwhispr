@@ -5,6 +5,7 @@ import {
   dictationModeConfig,
   getInferenceModes,
   localModeUpgradeConfig,
+  noteChatSplitConfig,
   workflowSaveConfig,
 } from '../inferenceModes';
 import type { UserConfig } from '@/types';
@@ -409,5 +410,54 @@ it('switches dictation back to On-Device with the model the user picked', () => 
   expect(dictationModeConfig(config, 'private').inference?.dictation).toEqual({
     mode: 'local',
     modelId: 'parakeet-v3',
+  });
+});
+
+// Note chat once shared the voice assistant's setting, so an existing config gives it the same one.
+describe('noteChatSplitConfig', () => {
+  const groqChat = {
+    mode: 'providers' as const,
+    providerId: 'groq',
+    modelId: 'llama-3.3-70b-versatile',
+    credentialRef: 'provider.groq',
+  };
+
+  it('copies a provider selection and its remembered providers', () => {
+    expect(
+      noteChatSplitConfig({
+        defaultMode: 'cloud',
+        inference: { agent: groqChat },
+        rememberedInference: { agent: { groq: groqChat } },
+      }),
+    ).toEqual({
+      noteChatSplit: true,
+      inference: { agent: groqChat, noteChat: groqChat },
+      rememberedInference: { agent: { groq: groqChat }, noteChat: { groq: groqChat } },
+    });
+  });
+
+  it('holds note chat where the voice assistant was held', () => {
+    const next = noteChatSplitConfig({
+      defaultMode: 'private',
+      inference: { agent: { mode: 'openwhispr' } },
+      pinnedInference: ['upload', 'agent'],
+      privateModeReturn: { pinned: { agent: groqChat } },
+    });
+    expect(next.pinnedInference).toEqual(['upload', 'agent', 'noteChat']);
+    expect(next.privateModeReturn).toEqual({ pinned: { agent: groqChat, noteChat: groqChat } });
+  });
+
+  it('never overwrites a saved note chat', () => {
+    const next = noteChatSplitConfig({
+      defaultMode: 'cloud',
+      inference: { agent: groqChat, noteChat: { mode: 'local' } },
+      rememberedInference: { agent: { groq: groqChat }, noteChat: {} },
+      pinnedInference: ['agent'],
+    });
+    expect(next).toEqual({ noteChatSplit: true });
+  });
+
+  it('only marks a config with nothing saved for the voice assistant', () => {
+    expect(noteChatSplitConfig({ defaultMode: 'cloud' })).toEqual({ noteChatSplit: true });
   });
 });
