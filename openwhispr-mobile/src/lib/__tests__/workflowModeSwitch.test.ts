@@ -121,18 +121,25 @@ it.each(['appleIntelligenceOff', 'modelNotReady'])(
     await expect(switchWorkflowMode('cleanup', 'local')).resolves.toBe('not-ready');
     expect(alert).toHaveBeenCalledWith(
       'On-Device Unavailable',
-      'Apple Intelligence is turned off. On-Device turns on here once Apple Intelligence is ready.',
+      'Apple Intelligence is turned off. Keep this page open and On-Device turns on once Apple Intelligence is ready.',
     );
     expect(mockUpdateConfig).not.toHaveBeenCalled();
   },
 );
 
-it('refuses a text workflow on an iPhone that can never run it on-device', async () => {
-  mockLocalReasoningReadiness.mockResolvedValue({ status: 'unsupportedDevice' });
-  await expect(switchWorkflowMode('cleanup', 'local')).resolves.toBe('refused');
-  expect(alert).toHaveBeenCalledWith('On-Device Unavailable', 'Apple Intelligence is turned off.');
-  expect(mockUpdateConfig).not.toHaveBeenCalled();
-});
+// Nothing in iOS Settings makes these ready, so the page must not wait for them.
+it.each(['unsupportedDevice', 'disabled', 'unavailable'])(
+  'refuses a text workflow on-device when Apple Intelligence is %s',
+  async (status) => {
+    mockLocalReasoningReadiness.mockResolvedValue({ status });
+    await expect(switchWorkflowMode('cleanup', 'local')).resolves.toBe('refused');
+    expect(alert).toHaveBeenCalledWith(
+      'On-Device Unavailable',
+      'Apple Intelligence is turned off.',
+    );
+    expect(mockUpdateConfig).not.toHaveBeenCalled();
+  },
+);
 
 it('switches a text workflow to On-Device when Apple Intelligence is ready', async () => {
   await expect(switchWorkflowMode('notes', 'local')).resolves.toBe('switched');

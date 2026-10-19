@@ -57,7 +57,7 @@ async function appleIntelligenceReady(): Promise<ModeSwitchResult | null> {
   }
   Alert.alert(
     'On-Device Unavailable',
-    `${message} On-Device turns on here once Apple Intelligence is ready.`,
+    `${message} Keep this page open and On-Device turns on once Apple Intelligence is ready.`,
   );
   return 'not-ready';
 }

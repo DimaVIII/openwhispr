@@ -63,7 +63,7 @@ import {
 } from '@/lib/dictationAgent';
 import { safeHaptics } from '@/lib/utils';
 import { SystemIcon, type LucideIconName } from '@/components/ui/SystemIcon';
-import { switchWorkflowMode } from '@/lib/workflowModeSwitch';
+import { type ModeSwitchResult, switchWorkflowMode } from '@/lib/workflowModeSwitch';
 import { getPrivateModeReadiness } from '@/lib/privateMode';
 import {
   getLocalReasoningReadiness,
@@ -379,7 +379,7 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
     !speechScope && onDeviceUnsupported && selection.mode === 'local' ? null : selection.mode;
   const modeNote =
     (onDeviceWanted && !speechScope
-      ? 'Switches to On-Device once Apple Intelligence is ready.'
+      ? 'Switches to On-Device once Apple Intelligence is ready, while this page stays open.'
       : undefined) ??
     (scope === 'cleanup' && selection.mode === 'local' && onDeviceUnsupported
       ? ON_DEVICE_CLEANUP_UNSUPPORTED_NOTE
@@ -490,20 +490,28 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
   useFocusEffect(
     useCallback(() => {
       if (!onDeviceWanted) return undefined;
-      let finished = false;
+      let cancelled = false;
+      let switching = false;
       const finishWhenReady = async (): Promise<void> => {
         let ready: boolean;
         if (speechScope) {
           ready = (await getPrivateModeReadiness()).status === 'ready';
         } else {
           const readiness = await getLocalReasoningReadiness({ refresh: true });
-          if (!finished) setAppleIntelligence(readiness);
+          if (!cancelled) setAppleIntelligence(readiness);
           ready = readiness.status === 'ready';
         }
-        if (finished || !ready) return;
-        finished = true;
+        if (cancelled || switching || !ready) return;
+        switching = true;
+        const result = await switchWorkflowMode(scope, 'local').catch(
+          (): ModeSwitchResult => 'refused',
+        );
+        switching = false;
+        // The switch checks Apple Intelligence again and can find it not ready after all. Its
+        // alert says the page keeps waiting, so the request stays.
+        if (result === 'not-ready') return;
         setOnDeviceWanted(false);
-        if ((await switchWorkflowMode(scope, 'local')) !== 'switched') return;
+        if (result !== 'switched') return;
         setSelection(useConfigStore.getState().config?.inference?.[scope] ?? { mode: 'local' });
         showToast('Switched to On-Device.', 'success');
       };
@@ -513,7 +521,7 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
       check();
       if (speechScope) {
         return (): void => {
-          finished = true;
+          cancelled = true;
         };
       }
       const appStateSubscription = AppState.addEventListener('change', (state) => {
@@ -521,7 +529,7 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
       });
       const poll = setInterval(check, APPLE_INTELLIGENCE_POLL_MS);
       return (): void => {
-        finished = true;
+        cancelled = true;
         appStateSubscription.remove();
         clearInterval(poll);
       };

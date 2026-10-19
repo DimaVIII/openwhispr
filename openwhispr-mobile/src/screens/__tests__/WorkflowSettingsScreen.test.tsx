@@ -625,6 +625,8 @@ it('forgets a pending On-Device switch once another mode is chosen', async () =>
 });
 
 describe('a text workflow waiting on Apple Intelligence', () => {
+  const WAITING_NOTE =
+    'Switches to On-Device once Apple Intelligence is ready, while this page stays open.';
   let appStateListeners: ((state: string) => void)[];
   let leavePage: (() => void) | undefined;
 
@@ -657,9 +659,7 @@ describe('a text workflow waiting on Apple Intelligence', () => {
 
   it('says the switch finishes by itself', async () => {
     await tapOnDevice();
-    expect(
-      screen.getByText('Switches to On-Device once Apple Intelligence is ready.'),
-    ).toBeTruthy();
+    expect(screen.getByText(WAITING_NOTE)).toBeTruthy();
     expect(mockSwitchMode).toHaveBeenCalledTimes(1);
     expect(selectedMode()).toBe('OpenWhispr Cloud');
   });
@@ -687,12 +687,51 @@ describe('a text workflow waiting on Apple Intelligence', () => {
     expect(selectedMode()).toBe('On-Device');
   });
 
+  // The switch checks Apple Intelligence again, and its alert promises the page keeps waiting.
+  it('keeps waiting when Apple Intelligence is not ready by the time it switches', async () => {
+    await tapOnDevice();
+    mockLocalReadiness.mockResolvedValue({ status: 'ready', tokenCounting: true });
+    mockSwitchMode.mockResolvedValueOnce('not-ready');
+    await act(async () => appStateListeners.forEach((listener) => listener('active')));
+    await waitFor(() => expect(mockSwitchMode).toHaveBeenCalledTimes(2));
+    expect(screen.getByText(WAITING_NOTE)).toBeTruthy();
+    expect(screen.queryByTestId('toast-success')).toBeNull();
+    expect(selectedMode()).toBe('OpenWhispr Cloud');
+
+    await act(async () => appStateListeners.forEach((listener) => listener('active')));
+    await waitFor(() => expect(mockSwitchMode).toHaveBeenCalledTimes(3));
+    expect(await screen.findByTestId('toast-success')).toHaveTextContent('Switched to On-Device.');
+    expect(selectedMode()).toBe('On-Device');
+    expect(screen.queryByText(WAITING_NOTE)).toBeNull();
+  });
+
+  it('stops checking once the page is left', async () => {
+    jest.useFakeTimers();
+    await tapOnDevice();
+    leavePage?.();
+    leavePage = undefined;
+    mockLocalReadiness.mockResolvedValue({ status: 'ready', tokenCounting: true });
+    await act(async () => {
+      appStateListeners.forEach((listener) => listener('active'));
+      jest.advanceTimersByTime(10_000);
+    });
+    expect(mockSwitchMode).toHaveBeenCalledTimes(1);
+  });
+
   it('stops waiting once another mode is chosen', async () => {
     await tapOnDevice();
-    fireEvent.press(screen.getByText('OpenWhispr Cloud'));
-    expect(
-      screen.queryByText('Switches to On-Device once Apple Intelligence is ready.'),
-    ).toBeNull();
+    await act(async () => {
+      fireEvent.press(screen.getByText('OpenWhispr Cloud'));
+    });
+    expect(screen.queryByText(WAITING_NOTE)).toBeNull();
+
+    // React cleans up the waiting effect and runs the current one, which no longer waits.
+    leavePage?.();
+    leavePage = mockFocusEffect?.();
+    expect(leavePage).toBeUndefined();
+    mockLocalReadiness.mockResolvedValue({ status: 'ready', tokenCounting: true });
+    await act(async () => appStateListeners.forEach((listener) => listener('active')));
+    expect(mockSwitchMode).toHaveBeenCalledTimes(1);
   });
 });
 
