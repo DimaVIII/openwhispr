@@ -204,7 +204,7 @@ export function getLocalReasoningUnavailableMessage(readiness?: LocalReasoningRe
     case 'appleIntelligenceOff':
       return "Apple Intelligence is turned off in iOS Settings, so this can't run on-device.";
     case 'modelNotReady':
-      return 'Apple Intelligence is still preparing its local model. Try again later.';
+      return 'Apple Intelligence is still downloading its model. Check Settings → Apple Intelligence & Siri, and keep your iPhone on Wi-Fi and charging.';
     case 'unavailable':
     default:
       return 'Local Apple Intelligence is unavailable on this device.';

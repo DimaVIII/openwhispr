@@ -1,5 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Keyboard, Linking, Platform, Pressable, View } from 'react-native';
+import {
+  ActivityIndicator,
+  AppState,
+  Keyboard,
+  Linking,
+  Platform,
+  Pressable,
+  View,
+} from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useNavigation, usePreventRemove } from '@react-navigation/native';
@@ -84,6 +92,8 @@ import {
 } from '@/lib/mobileProviders';
 
 type Picker = 'provider' | 'model';
+// How often an open page checks whether Apple Intelligence finished downloading its model.
+const APPLE_INTELLIGENCE_POLL_MS = 10_000;
 const PROVIDER_SETUP_URLS: Record<string, string> = {
   openai: 'https://platform.openai.com/api-keys',
   groq: 'https://console.groq.com/keys',
@@ -312,7 +322,8 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
   const [configured, setConfigured] = useState(false);
   const [busy, setBusy] = useState(false);
   const [checking, setChecking] = useState<'test' | 'discover' | null>(null);
-  // Set when On-Device was tapped with no model on this phone and the model list opened.
+  // Set when On-Device was tapped with no model on this phone and the model list opened, or
+  // before Apple Intelligence was ready.
   const [onDeviceWanted, setOnDeviceWanted] = useState(false);
   const [discoveredModels, setDiscoveredModels] = useState<{ id: string; name: string }[]>([]);
   const { toast, showToast } = useToast();
@@ -355,6 +366,9 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
   const pickedMode =
     !speechScope && onDeviceUnsupported && selection.mode === 'local' ? null : selection.mode;
   const modeNote =
+    (onDeviceWanted && !speechScope
+      ? 'Switches to On-Device once Apple Intelligence is ready.'
+      : undefined) ??
     (scope === 'cleanup' && selection.mode === 'local' && onDeviceUnsupported
       ? ON_DEVICE_CLEANUP_UNSUPPORTED_NOTE
       : undefined) ??
@@ -456,23 +470,42 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
   }
 
   // Coming back from the model list with a model downloaded finishes the On-Device switch.
+  // Apple Intelligence is turned on and downloads its model outside the app, so it is also
+  // checked on return to the app and while this page stays open.
   useFocusEffect(
     useCallback(() => {
       if (!onDeviceWanted) return undefined;
-      let cancelled = false;
-      getPrivateModeReadiness()
-        .then(async (readiness) => {
-          if (cancelled || readiness.status !== 'ready') return;
-          setOnDeviceWanted(false);
-          if ((await switchWorkflowMode(scope, 'local')) !== 'switched') return;
-          setSelection(useConfigStore.getState().config?.inference?.[scope] ?? { mode: 'local' });
-          showToast('Switched to On-Device.', 'success');
-        })
-        .catch(() => undefined);
-      return (): void => {
-        cancelled = true;
+      let finished = false;
+      const finishWhenReady = async (): Promise<void> => {
+        const ready = speechScope
+          ? (await getPrivateModeReadiness()).status === 'ready'
+          : (await getLocalReasoningReadiness({ refresh: true })).status === 'ready';
+        if (finished || !ready) return;
+        finished = true;
+        setOnDeviceWanted(false);
+        if ((await switchWorkflowMode(scope, 'local')) !== 'switched') return;
+        setSelection(useConfigStore.getState().config?.inference?.[scope] ?? { mode: 'local' });
+        showToast('Switched to On-Device.', 'success');
       };
-    }, [onDeviceWanted, scope, showToast]),
+      const check = (): void => {
+        finishWhenReady().catch(() => undefined);
+      };
+      check();
+      if (speechScope) {
+        return (): void => {
+          finished = true;
+        };
+      }
+      const appStateSubscription = AppState.addEventListener('change', (state) => {
+        if (state === 'active') check();
+      });
+      const poll = setInterval(check, APPLE_INTELLIGENCE_POLL_MS);
+      return (): void => {
+        finished = true;
+        appStateSubscription.remove();
+        clearInterval(poll);
+      };
+    }, [onDeviceWanted, scope, speechScope, showToast]),
   );
 
   async function chooseMode(mode: InferenceMode): Promise<void> {
@@ -500,7 +533,7 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
       if (result === 'switched') {
         setSelection(useConfigStore.getState().config?.inference?.[scope] ?? { mode });
       }
-      setOnDeviceWanted(result === 'needs-model');
+      setOnDeviceWanted(result === 'needs-model' || result === 'not-ready');
     } finally {
       setBusy(false);
     }

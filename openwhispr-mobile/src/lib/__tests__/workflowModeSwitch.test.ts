@@ -28,6 +28,7 @@ jest.mock('@/lib/privateMode', () => ({
   getPrivateModeUnavailableMessage: () => 'Native modules are missing.',
 }));
 jest.mock('@/lib/localReasoning', () => ({
+  ...jest.requireActual('@/lib/localReasoning'),
   getLocalReasoningReadiness: () => mockLocalReasoningReadiness(),
   getLocalReasoningUnavailableMessage: () => 'Apple Intelligence is turned off.',
 }));
@@ -112,8 +113,22 @@ it('switches uploads to On-Device with the model picked for them before', async 
   expect(mockSetActiveMode).not.toHaveBeenCalled();
 });
 
-it('explains why a text workflow cannot run on-device', async () => {
-  mockLocalReasoningReadiness.mockResolvedValue({ status: 'appleIntelligenceOff' });
+// Settings can fix these, so the page finishes the switch once Apple Intelligence is ready.
+it.each(['appleIntelligenceOff', 'modelNotReady'])(
+  'waits for Apple Intelligence when it is %s',
+  async (status) => {
+    mockLocalReasoningReadiness.mockResolvedValue({ status });
+    await expect(switchWorkflowMode('cleanup', 'local')).resolves.toBe('not-ready');
+    expect(alert).toHaveBeenCalledWith(
+      'On-Device Unavailable',
+      'Apple Intelligence is turned off. On-Device turns on here once Apple Intelligence is ready.',
+    );
+    expect(mockUpdateConfig).not.toHaveBeenCalled();
+  },
+);
+
+it('refuses a text workflow on an iPhone that can never run it on-device', async () => {
+  mockLocalReasoningReadiness.mockResolvedValue({ status: 'unsupportedDevice' });
   await expect(switchWorkflowMode('cleanup', 'local')).resolves.toBe('refused');
   expect(alert).toHaveBeenCalledWith('On-Device Unavailable', 'Apple Intelligence is turned off.');
   expect(mockUpdateConfig).not.toHaveBeenCalled();
