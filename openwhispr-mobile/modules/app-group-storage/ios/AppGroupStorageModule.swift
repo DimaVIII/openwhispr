@@ -1163,6 +1163,10 @@ public class AppGroupStorageModule: Module {
     } catch {
       logMarker("audioEngine.deactivateSessionFailed", extra: "reason=\(reason) error=\(error.localizedDescription)")
     }
+    // A backgrounded app can suspend now, so LiveActivityController drops the idle
+    // session card before iOS can kill the app without warning.
+    NotificationCenter.default.post(
+      name: Notification.Name("\(Self.notificationPrefix).warmMicReleased"), object: nil)
 
     logMarker("audioEngine.stopped", extra: "reason=\(reason)")
   }
