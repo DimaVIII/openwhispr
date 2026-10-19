@@ -12975,7 +12975,7 @@ class IPCHandlers {
   // that result's ids in the seed nor its embeddings stored yet, so the session's
   // reserved ceiling counts too.
   _resolveMeetingSpeakerIndexBase(noteId, requestedBase) {
-    if (noteId == null) return resolveSpeakerIndexBase(requestedBase);
+    if (noteId == null) return normalizeSpeakerIndexBase(requestedBase);
     let base = normalizeSpeakerIndexBase(requestedBase);
     for (const reservation of this._diarizationSpeakerReservations.values()) {
       if (reservation.noteId === noteId) base = Math.max(base, reservation.ceiling);

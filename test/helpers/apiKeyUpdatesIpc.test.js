@@ -162,6 +162,7 @@ Module._load = function (request, parent, isMain) {
 test.after(() => {
   Module._load = originalLoad;
 });
+const liveSpeakerIdentifier = require("../../src/helpers/liveSpeakerIdentifier");
 
 function anything() {
   return new Proxy(function () {}, {
@@ -590,7 +591,6 @@ test("a prepare after a mid-meeting renewal leaves the live meeting alone", asyn
 
 // Main's base (past the note's stored ids), not the renderer's, numbers the live
 // identifier, reaches the renderer, and is what each stop path hands diarization.
-const liveSpeakerIdentifier = require("../../src/helpers/liveSpeakerIdentifier");
 for (const options of [{ provider: "local" }, { provider: "deepgram-realtime", mode: "byok" }]) {
   test(`${options.provider}: a meeting's speaker index base reaches live identification, the renderer and diarization`, async (t) => {
     resetMeeting(t);

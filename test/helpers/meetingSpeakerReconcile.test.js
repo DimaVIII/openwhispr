@@ -252,11 +252,8 @@ test("mic mode counts the user among the expected speakers", () => {
 // A resumed note's mappings and embeddings can hold ids no transcript row
 // carries any more; the session's base must clear them too, or a new voice
 // would inherit that stored name.
-test("a resumed meeting's speaker base clears the note's stored ids", (t) => {
+test("a resumed meeting's speaker base clears the note's stored ids", () => {
   const { IPCHandlers } = loadHandlers();
-  t.after(() => {
-    Module._load = originalLoad;
-  });
   const resolveBase = IPCHandlers.prototype._resolveMeetingSpeakerIndexBase;
   const handlers = {
     _diarizationSpeakerReservations: new Map(),

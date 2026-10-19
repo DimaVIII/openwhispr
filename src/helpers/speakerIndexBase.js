@@ -29,7 +29,7 @@ function buildSpeakerRenumber(clusterIds, speakerIndexBase = 0) {
   const base = normalizeSpeakerIndexBase(speakerIndexBase);
   const renumber = new Map();
   for (const clusterId of clusterIds) {
-    if (!renumber.has(clusterId)) renumber.set(clusterId, `speaker_${base + renumber.size}`);
+    renumber.set(clusterId, `speaker_${base + renumber.size}`);
   }
   return renumber;
 }

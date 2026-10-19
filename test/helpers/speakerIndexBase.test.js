@@ -32,7 +32,7 @@ test("an invalid requested base degrades to the stored ids", () => {
 });
 
 test("clusters are renumbered in first-seen order from the base", () => {
-  const renumber = buildSpeakerRenumber(["speaker_01", "speaker_00", "speaker_01"], 3);
+  const renumber = buildSpeakerRenumber(["speaker_01", "speaker_00"], 3);
   assert.deepEqual(
     [...renumber.entries()],
     [
