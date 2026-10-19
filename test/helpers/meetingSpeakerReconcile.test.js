@@ -248,3 +248,33 @@ test("mic mode counts the user among the expected speakers", () => {
     "the no-signal fallback caps at the default expected total, user included"
   );
 });
+
+// A resumed note's mappings and embeddings can hold ids no transcript row
+// carries any more; the session's base must clear them too, or a new voice
+// would inherit that stored name.
+test("a resumed meeting's speaker base clears the note's stored ids", (t) => {
+  const { IPCHandlers } = loadHandlers();
+  t.after(() => {
+    Module._load = originalLoad;
+  });
+  const resolveBase = IPCHandlers.prototype._resolveMeetingSpeakerIndexBase;
+  const handlers = {
+    databaseManager: {
+      getSpeakerMappings: () => [{ speaker_id: "speaker_0" }, { speaker_id: "speaker_3" }],
+      getNoteSpeakerEmbeddings: () => [{ speaker_id: "speaker_1" }],
+    },
+  };
+
+  assert.equal(resolveBase.call(handlers, NOTE_ID, 2), 4);
+  assert.equal(resolveBase.call(handlers, NOTE_ID, 6), 6);
+  assert.equal(resolveBase.call(handlers, null, 2), 2);
+
+  const failing = {
+    databaseManager: {
+      getSpeakerMappings: () => {
+        throw new Error("db closed");
+      },
+    },
+  };
+  assert.equal(resolveBase.call(failing, NOTE_ID, 2), 2);
+});

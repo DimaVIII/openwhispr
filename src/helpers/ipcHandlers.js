@@ -175,6 +175,7 @@ const {
   isSpeakerLocked,
 } = require("./speakerAssignmentPolicy");
 const { normalizeStoredSpeakerCount } = require("./speakerCount");
+const { buildSpeakerRenumber, resolveSpeakerIndexBase } = require("./speakerIndexBase");
 const { downsample24kTo16k, pcm16ToWav } = require("../utils/audioUtils");
 const postMigrationDetector = require("./postMigrationDetector");
 const screenContextCapture = require("./screenContextCapture");
@@ -8055,6 +8056,8 @@ class IPCHandlers {
     let meetingOneOnOneAttendee = null;
     let meetingOneOnOneProfileBound = false;
     let meetingNoteId = null;
+    // First speaker index this session may mint; past a resumed note's ids.
+    let meetingSpeakerIndexBase = 0;
 
     const getLiveSpeakerProfiles = () => {
       const attendees = this._getNoteNonSelfParticipants(meetingNoteId);
@@ -8368,6 +8371,7 @@ class IPCHandlers {
             getSpeakerProfiles: getLiveSpeakerProfiles,
             maxSpeakers: resolveSessionMaxSpeakers(),
             enabled: true,
+            speakerIndexBase: meetingSpeakerIndexBase,
           }
         )
         .catch((error) => {
@@ -8627,6 +8631,7 @@ class IPCHandlers {
       meetingOneOnOneAttendee = null;
       meetingOneOnOneProfileBound = false;
       meetingNoteId = null;
+      meetingSpeakerIndexBase = 0;
       this._activeMeetingNoteId = null;
       meetingLocalMode = false;
       meetingLocalBuffers = { mic: [], system: [] };
@@ -9199,7 +9204,11 @@ class IPCHandlers {
           armMeetingSystemAudioSilenceTimer(meetingConnectionWin, result.systemAudioStrategy);
           startMeetingSystemAudioWatchdog(meetingConnectionWin, result.systemAudioStrategy);
         }
-        return { ...result, sessionId: recordingSessionId };
+        return {
+          ...result,
+          sessionId: recordingSessionId,
+          speakerIndexBase: meetingSpeakerIndexBase,
+        };
       };
 
       try {
@@ -9210,6 +9219,10 @@ class IPCHandlers {
         meetingOneOnOneAttendee = resolveOneOnOneAttendeeForNote(options.noteId);
         meetingOneOnOneProfileBound = false;
         meetingNoteId = options.noteId ?? null;
+        meetingSpeakerIndexBase = this._resolveMeetingSpeakerIndexBase(
+          meetingNoteId,
+          options.speakerIndexBase
+        );
         this._activeMeetingNoteId = meetingNoteId;
 
         // Seed the speaker cap from the note/calendar participants up front so live
@@ -9633,6 +9646,7 @@ class IPCHandlers {
             buildOrderedTranscriptText(diarizationSegments) || meetingLocalTranscript;
           const sessionSpeakerConfigSnapshot = this.activeMeetingSpeakerConfig;
           const noteIdSnapshot = meetingNoteId;
+          const speakerIndexBaseSnapshot = meetingSpeakerIndexBase;
           this.activeMeetingSpeakerConfig = null;
           resetMeetingLocalState();
 
@@ -9646,7 +9660,8 @@ class IPCHandlers {
             liveSpeakerState,
             sessionSpeakerConfigSnapshot,
             noteIdSnapshot,
-            diarizedSource
+            diarizedSource,
+            speakerIndexBaseSnapshot
           );
 
           return { success: true, transcript, diarizationSessionId };
@@ -9661,6 +9676,7 @@ class IPCHandlers {
 
         const sessionSpeakerConfigSnapshot = this.activeMeetingSpeakerConfig;
         const noteIdSnapshot = meetingNoteId;
+        const speakerIndexBaseSnapshot = meetingSpeakerIndexBase;
         this.activeMeetingSpeakerConfig = null;
 
         // Fire-and-forget background diarization (or notify skip)
@@ -9673,7 +9689,8 @@ class IPCHandlers {
           liveSpeakerState,
           sessionSpeakerConfigSnapshot,
           noteIdSnapshot,
-          diarizedSource
+          diarizedSource,
+          speakerIndexBaseSnapshot
         );
 
         return { success: true, transcript, diarizationSessionId };
@@ -12944,6 +12961,27 @@ class IPCHandlers {
     return reconciledSpeakers;
   }
 
+  // The renderer's base covers the transcript it resumes; mappings and embeddings
+  // can also hold ids no row carries any more (merged clusters, a cluster that
+  // owned no segment), and a reused one would still name the new voice.
+  _resolveMeetingSpeakerIndexBase(noteId, requestedBase) {
+    if (noteId == null) return resolveSpeakerIndexBase(requestedBase);
+    try {
+      const storedIds = [
+        ...this.databaseManager.getSpeakerMappings(noteId).map((m) => m.speaker_id),
+        ...this.databaseManager.getNoteSpeakerEmbeddings(noteId).map((e) => e.speaker_id),
+      ];
+      return resolveSpeakerIndexBase(requestedBase, storedIds);
+    } catch (error) {
+      debugLogger.warn(
+        "Could not read stored speaker ids for the meeting note",
+        { noteId, error: error.message },
+        "speaker"
+      );
+      return resolveSpeakerIndexBase(requestedBase);
+    }
+  }
+
   _resolveSpeakerExpectation({ sessionConfig, noteId, observedSpeakerIds, diarizedSource }) {
     // Only a count the user set explicitly outranks the note: participants added
     // mid-meeting postdate the config snapshot taken at recording start.
@@ -12991,7 +13029,8 @@ class IPCHandlers {
     liveSpeakerState = null,
     sessionConfig = null,
     noteId = null,
-    diarizedSource = "system"
+    diarizedSource = "system",
+    speakerIndexBase = 0
   ) {
     const send = (payload) => {
       if (win && !win.isDestroyed()) {
@@ -13068,16 +13107,11 @@ class IPCHandlers {
         const enrichedSegments = this.diarizationManager.mergeWithTranscript(
           normalized,
           diarizationSegments,
-          { diarizedSource }
+          { diarizedSource, speakerIndexBase }
         );
 
         const speakerSet = new Set(diarizationSegments.map((d) => d.speaker));
-        const speakerRenumber = new Map();
-        let sIdx = 0;
-        for (const sp of speakerSet) {
-          speakerRenumber.set(sp, `speaker_${sIdx}`);
-          sIdx++;
-        }
+        const speakerRenumber = buildSpeakerRenumber(speakerSet, speakerIndexBase);
 
         // Mirrors the mic-mode single-cluster softening in mergeWithTranscript:
         // every segment stays "you", so persisting an embedding keyed to a

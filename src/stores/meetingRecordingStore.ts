@@ -425,6 +425,11 @@ let preparePromise: Promise<void> | null = null;
 let ipcCleanups: Array<() => void> = [];
 let speakerIdentifications: SpeakerIdentification[] = [];
 let nextPlaceholderSpeakerIndex = 0;
+// First speaker index this session owns. A resumed note's earlier sessions keep
+// the ids below it, so this session's speakers never share their names, locks,
+// mappings or embeddings. Main may raise it past ids only the note's stored
+// mappings and embeddings still use.
+let sessionSpeakerIndexBase = 0;
 let systemPartialSpeakerIdValue: string | null = null;
 let recentSystemSpeaker: RecentSystemSpeaker | null = null;
 let speakerLocks: Map<string, string> = new Map();
@@ -600,12 +605,25 @@ function reserveSpeakerIndex(speakerId?: string) {
   nextPlaceholderSpeakerIndex = Math.max(nextPlaceholderSpeakerIndex, idx + 1);
 }
 
+function isEarlierSessionSpeaker(speakerId?: string): boolean {
+  const idx = getSpeakerNumericIndex(speakerId);
+  return idx != null && idx < sessionSpeakerIndexBase;
+}
+
+function adoptSpeakerIndexBase(base: unknown): void {
+  if (typeof base !== "number" || !Number.isSafeInteger(base)) return;
+  if (base <= sessionSpeakerIndexBase) return;
+  sessionSpeakerIndexBase = base;
+  nextPlaceholderSpeakerIndex = Math.max(nextPlaceholderSpeakerIndex, base);
+}
+
 // Other-speaker cap is expectedCount - 1 (the mic track is "you"); mirrors the
-// backend cap so live labels can't climb past the count the user expects.
+// backend cap so live labels can't climb past the count the user expects. The
+// cap counts this session's speakers, so it starts at the session's base.
 function mintPlaceholderSpeakerId(): string {
   const expected = useMeetingRecordingStore.getState().sessionExpectedCount;
   const cap = Math.max(1, expected - 1);
-  const index = Math.min(nextPlaceholderSpeakerIndex, cap - 1);
+  const index = Math.min(nextPlaceholderSpeakerIndex, sessionSpeakerIndexBase + cap - 1);
   nextPlaceholderSpeakerIndex = Math.max(nextPlaceholderSpeakerIndex, index + 1);
   return `speaker_${index}`;
 }
@@ -636,15 +654,15 @@ function assignProvisionalSpeaker(segment: TranscriptSegment): TranscriptSegment
     });
   }
 
-  const previousSystemSegment = [...segmentsRefValue]
-    .reverse()
-    .find(
-      (candidate) =>
-        candidate.source === "system" &&
-        candidate.speaker &&
-        candidate.timestamp != null &&
-        nowMs - candidate.timestamp <= SYSTEM_SPEAKER_CARRY_FORWARD_MS
-    );
+  const previousSystemSegment = [...segmentsRefValue].reverse().find(
+    (candidate) =>
+      candidate.source === "system" &&
+      candidate.speaker &&
+      // A seeded row from a session that just ended is not this session's voice.
+      !isEarlierSessionSpeaker(candidate.speaker) &&
+      candidate.timestamp != null &&
+      nowMs - candidate.timestamp <= SYSTEM_SPEAKER_CARRY_FORWARD_MS
+  );
 
   if (previousSystemSegment?.speaker) {
     reserveSpeakerIndex(previousSystemSegment.speaker);
@@ -815,7 +833,8 @@ export async function startRecording(args: StartRecordingArgs): Promise<boolean>
 
     segmentsRefValue = seed;
     speakerIdentifications = [];
-    nextPlaceholderSpeakerIndex = maxSpeakerIndex + 1;
+    sessionSpeakerIndexBase = maxSpeakerIndex + 1;
+    nextPlaceholderSpeakerIndex = sessionSpeakerIndexBase;
     recentSystemSpeaker = null;
     speakerLocks = locks;
     systemPartialSpeakerIdValue = null;
@@ -943,6 +962,7 @@ export async function startRecording(args: StartRecordingArgs): Promise<boolean>
         sessionId,
         autoEndEligible: args.autoEndEligible,
         aecEnabled: getSettings().meetingAecEnabled,
+        speakerIndexBase: sessionSpeakerIndexBase,
       });
       const micCapturePromise = getMeetingMicConstraints().then(async (constraints) => {
         if (!isCurrentStart()) return null;
@@ -1031,6 +1051,7 @@ export async function startRecording(args: StartRecordingArgs): Promise<boolean>
         releaseSession();
         return;
       }
+      adoptSpeakerIndexBase(startResult.speakerIndexBase);
       const systemAudioMode = startResult.systemAudioMode || initialSystemAudioAccess.mode;
       const systemAudioStrategy = startResult.systemAudioStrategy || initialSystemAudioStrategy;
       systemCaptureResult = await ensureRendererSystemAudioCapture({
@@ -1267,7 +1288,8 @@ export async function startRecording(args: StartRecordingArgs): Promise<boolean>
 
       if (startResult.oneOnOneAttendee) {
         const synthetic: SpeakerIdentification = {
-          speakerId: "speaker_0",
+          // Main's live identifier mints the session's first cluster at the base too.
+          speakerId: `speaker_${sessionSpeakerIndexBase}`,
           displayName: startResult.oneOnOneAttendee.displayName,
           startTime: 0,
           endTime: Number.MAX_SAFE_INTEGER,
