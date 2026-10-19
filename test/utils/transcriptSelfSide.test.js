@@ -98,3 +98,20 @@ test("a You saved in another UI language still counts as the user", async () => 
   assert.equal(isSelfSideSegment(cluster, { speaker_0: "Du" }, "Du"), true);
   assert.equal(isSelfSideSegment(cluster, { speaker_0: "Youssef" }, "Du"), false);
 });
+
+test("a remote voice matched to the user's voice profile stays on the other side", async () => {
+  const { isSelfSideSegment } = await load();
+  const remote = { source: "system", speaker: "speaker_0" };
+  assert.equal(isSelfSideSegment({ ...remote, suggestedName: "You" }, {}, YOU), false);
+  assert.equal(isSelfSideSegment({ ...remote, speakerName: "You" }, {}, YOU), false);
+  // The user's own naming still moves it, as before.
+  assert.equal(isSelfSideSegment(userLocked(remote, "You"), {}, YOU), true);
+  assert.equal(isSelfSideSegment(remote, { speaker_0: "You" }, YOU), true);
+});
+
+test("isYouSpeakerName accepts English You and the current label", async () => {
+  const { isYouSpeakerName } = await load();
+  assert.equal(isYouSpeakerName(" YOU ", "Du"), true);
+  assert.equal(isYouSpeakerName("du", "Du"), true);
+  assert.equal(isYouSpeakerName("Youssef", "Du"), false);
+});

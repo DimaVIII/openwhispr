@@ -1,6 +1,6 @@
 import type { TranscriptSegment } from "../stores/meetingRecordingStore";
 import type { CalendarAttendee } from "../types/calendar";
-import { resolveSegmentSpeakerName } from "./transcriptSpeakerState";
+import { isYouSpeakerName, resolveSegmentSpeakerName } from "./transcriptSpeakerState";
 import type { MentionPerson } from "./mentionMarkdown";
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;
@@ -28,11 +28,7 @@ export function resolveLlmSpeakerLabel(
   t: Translate
 ): string {
   const resolved = resolveSegmentSpeakerName(segment, speakerMappings);
-  if (resolved) {
-    return resolved.trim().toLowerCase() === t("notes.speaker.you").toLowerCase()
-      ? selfLabel
-      : resolved;
-  }
+  if (resolved) return isYouSpeakerName(resolved, t("notes.speaker.you")) ? selfLabel : resolved;
   if (segment.speaker === "you") return selfLabel;
   if (segment.speaker) {
     const num = Number.parseInt(segment.speaker.replace("speaker_", ""), 10);

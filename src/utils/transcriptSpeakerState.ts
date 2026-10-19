@@ -220,25 +220,43 @@ export const resolveSegmentSpeakerName = (
   return mapped || segment.speakerName;
 };
 
+// Naming a speaker "You" is how the user marks their own voice. The name is
+// stored in the UI language it was saved in, so English "You" counts in every
+// language alongside the current one.
+export const isYouSpeakerName = (name: string, youLabel: string): boolean => {
+  const normalized = name.trim().toLowerCase();
+  return normalized === "you" || normalized === youLabel.trim().toLowerCase();
+};
+
 // Which side of the transcript a bubble sits on follows the name its chip shows,
 // so a stretch the user reassigned moves with its new name. An in-person meeting
 // is diarized on the mic without knowing which voice is the note taker, so its
 // numbered clusters, the user's own included, sit with the other speakers until
 // one is named "You". A remote call stores the mic as "you". An unconfirmed
-// "You?" suggestion sits where confirming it would put it.
+// "You?" suggestion on the mic sits where confirming it would put it.
 export const isSelfSideSegment = (
   segment: TranscriptSegment,
   speakerMappings: Record<string, string> | undefined,
   youLabel: string
 ): boolean => {
-  // A name mapped to "You" is stored in the UI language it was saved in.
-  const isYou = (name: string): boolean => {
-    const normalized = name.trim().toLowerCase();
-    return normalized === "you" || normalized === youLabel.toLowerCase();
-  };
   const name = resolveSegmentSpeakerName(segment, speakerMappings);
-  if (name) return isYou(name);
-  if (segment.suggestedName && isYou(segment.suggestedName)) return true;
+  if (name) {
+    // On a call the user is the mic, so a remote voice that recording matched to
+    // their voice profile is a misidentification; only a mapping or a name the
+    // user set moves it across.
+    const autoNamedRemote =
+      segment.source === "system" &&
+      !isTranscriptSpeakerLocked(segment) &&
+      !(segment.speaker && speakerMappings?.[segment.speaker]);
+    return !autoNamedRemote && isYouSpeakerName(name, youLabel);
+  }
+  if (
+    segment.source === "mic" &&
+    segment.suggestedName &&
+    isYouSpeakerName(segment.suggestedName, youLabel)
+  ) {
+    return true;
+  }
   if (segment.speaker === "you") return true;
   if (segment.speaker) return false;
   return segment.source === "mic";
