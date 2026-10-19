@@ -433,9 +433,7 @@ export function useKeyboardHandoff() {
             ? rawText
             : await cleanupTranscript(rawText, {
                 inferenceRoute: recoveredRoute.cleanupRoute,
-                agentRoute: recoveredRoute.agentRoute,
                 cleanupUnavailable: recoveredRoute.cleanupUnavailable,
-                agentUnavailable: recoveredRoute.agentUnavailable,
                 requireProvider: recoveredRoute.provider === 'byok',
                 onSkipped: (reason): void => {
                   cleanupWarning = reason;
@@ -789,9 +787,8 @@ export function useKeyboardHandoff() {
         };
 
         // Agent job path: the recorded audio is a *spoken instruction*, not
-        // dictation to insert. Transcribe it RAW (no cleanup — so the wake-word
-        // agentName detection that lives in cleanupTranscript never fires — no
-        // snippets, no history/pending-transcript write, no insert) and hand the
+        // dictation to insert. Transcribe it RAW (no cleanup, no snippets, no
+        // history/pending-transcript write, no insert) and hand the
         // instruction to the composer, which writes the result and the terminal
         // agent_ready/agent_error status itself and validates job currency. As
         // with the normal path, endProcessingTask (via cleanup) is deferred to

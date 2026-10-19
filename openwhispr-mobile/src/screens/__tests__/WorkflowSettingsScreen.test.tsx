@@ -953,11 +953,7 @@ describe('the Voice Assistant page', () => {
     expect(screen.getByLabelText('Voice Assistant').props.value).toBe(false);
     expect(screen.queryByText('OpenWhispr Cloud')).toBeNull();
     expect(screen.queryByText('Voice Assistant Settings')).toBeNull();
-    expect(
-      screen.getByText(
-        'Saying your assistant’s name gives no commands; what you dictate is inserted as usual.',
-      ),
-    ).toBeTruthy();
+    expect(screen.getByText('The OpenWhispr keyboard shows no wand.')).toBeTruthy();
   });
 
   it('shows the voice assistant off in Local Mode', () => {

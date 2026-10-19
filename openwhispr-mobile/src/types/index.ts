@@ -47,7 +47,7 @@ export interface UserConfig {
   // Apple Foundation Models local generation for notes. Default on; users can
   // disable it from AI Models.
   appleLocalIntelligenceEnabled?: boolean;
-  // Dictation agent (cloud-only, default on)
+  // Voice assistant: the keyboard's compose wand (Cloud and Bring Your Own Key, default on)
   dictationAgentEnabled?: boolean;
   // Note chat, which once shared dictationAgentEnabled's switch (saved apart by noteChatSplitConfig).
   noteChatEnabled?: boolean;
@@ -111,12 +111,11 @@ export interface ReasoningRequest {
   // tone; the API appends a matching instruction in cleanup mode.
   tone?: KeyboardTone;
   // User's custom cleanup prompt, sent as a TEMPLATE: the API substitutes
-  // {{agentName}} and still appends language, dictionary and tone. Goes out
-  // with promptMode "cleanup", which pins cleanup semantics and disables the
-  // server's agent-name detection — cleanupTranscript gates it on its own
-  // detection. Ignored when systemPrompt (a raw action-mode override) is set.
+  // {{agentName}} and still appends language, dictionary and tone. Ignored when
+  // systemPrompt is set.
   customPrompt?: string;
-  // When set, the backend enters Action Mode (dictation agent).
+  // Fills {{agentName}} in the cleanup prompt, which keeps the assistant's name
+  // as dictated words.
   agentName?: string;
   routing?: ReasoningRoutingOptions;
 }

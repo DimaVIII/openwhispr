@@ -59,9 +59,10 @@ export function DictationAgentScreen(): React.JSX.Element {
       <SettingsScreen keyboardShouldPersistTaps="handled">
         <View className="mx-4 mb-2 px-4">
           <Text className="text-[13px] text-secondaryLabel">
-            When you say your assistant’s name while dictating, OpenWhispr rewrites what you said
-            into polished, ready-to-use text instead of inserting it word for word. Requires Cloud
-            or Bring Your Own Key mode.
+            Tap the wand on the OpenWhispr keyboard and say what to write, like a reply or a rewrite
+            of the selected text. Your assistant drafts it for you to insert, regenerate or change.
+            Saying its name while dictating gives no command. Requires Cloud or Bring Your Own Key
+            mode.
           </Text>
         </View>
 
@@ -82,7 +83,7 @@ export function DictationAgentScreen(): React.JSX.Element {
             icon="person.wave.2"
             mdIcon="UserRoundCog"
             title="Enable Voice Assistant"
-            description="Say your assistant’s name while dictating to have OpenWhispr rewrite what you said."
+            description="Show the wand on the OpenWhispr keyboard."
             rightElement={
               <SettingsSwitch
                 // Shows what runs: the voice assistant is off wherever it can't run.
@@ -115,9 +116,7 @@ export function DictationAgentScreen(): React.JSX.Element {
         </SettingsSection>
         <View className="mx-4 -mt-5 mb-7 px-4">
           <Text className="text-[13px] text-secondaryLabel">
-            Start with this name, or say &quot;Hey&quot; and the name, to trigger the voice
-            assistant. A mention mid-sentence is transcribed as usual. The name is automatically
-            added to your transcription hints so the speech model recognises it.
+            Shown on the keyboard while you tell your assistant what to write.
           </Text>
         </View>
 

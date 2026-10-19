@@ -1,6 +1,6 @@
 import React from 'react';
-import { Alert, Platform } from 'react-native';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { Alert, AppState, Platform, type AppStateStatus } from 'react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 
 const mockPush = jest.fn();
 const mockClearCredentials = jest.fn().mockResolvedValue(undefined);
@@ -209,6 +209,23 @@ it('says cleanup is skipped, and why, while Apple Intelligence is off', async ()
   mockConfig = { defaultMode: 'private', inference: { dictation: { mode: 'local' } } };
   render(<AIModelsScreen />);
   expect(await screen.findByText('Skipped · Apple Intelligence off')).toBeTruthy();
+});
+
+// Apple Intelligence is turned on in iOS Settings, outside the app.
+it('stops saying skipped once Apple Intelligence is on when the app comes back', async () => {
+  mockReadiness.mockResolvedValue({ status: 'appleIntelligenceOff', tokenCounting: false });
+  mockActiveMode = 'private';
+  mockConfig = { defaultMode: 'private', inference: { dictation: { mode: 'local' } } };
+  render(<AIModelsScreen />);
+  expect(await screen.findByText('Skipped · Apple Intelligence off')).toBeTruthy();
+
+  const onAppState = (AppState.addEventListener as jest.Mock).mock.calls.at(-1)?.[1] as (
+    state: AppStateStatus,
+  ) => void;
+  mockReadiness.mockResolvedValue({ status: 'ready', tokenCounting: false });
+  await act(async () => onAppState('active'));
+
+  expect(screen.queryByText('Skipped · Apple Intelligence off')).toBeNull();
 });
 
 it('shows provider note chat as On-Device, which answers it on this iPhone first', async () => {

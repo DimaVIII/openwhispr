@@ -63,7 +63,10 @@ export class ReasoningService {
       // and skip server-side resolution.
       body.systemPrompt = options.systemPrompt;
     } else {
-      // Let the API resolve a localized cleanup prompt from these fields.
+      // Let the API resolve a localized cleanup prompt from these fields. promptMode "cleanup" keeps
+      // the API from treating a dictation that addresses the assistant by name as a command: the
+      // voice assistant is the keyboard's compose button.
+      body.promptMode = 'cleanup';
       if (options.language) body.language = options.language;
       if (options.locale) body.locale = options.locale;
       if (options.customDictionary && options.customDictionary.length > 0) {
@@ -72,10 +75,7 @@ export class ReasoningService {
       if (options.tone && options.tone !== 'default') {
         body.tone = options.tone;
       }
-      if (options.customPrompt) {
-        body.customPrompt = options.customPrompt;
-        body.promptMode = 'cleanup';
-      }
+      if (options.customPrompt) body.customPrompt = options.customPrompt;
     }
 
     if (options.agentName) {

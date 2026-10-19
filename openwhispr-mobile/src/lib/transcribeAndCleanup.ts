@@ -4,7 +4,6 @@ import {
   TranscriptionService,
   isLocalModelMissingError,
 } from '@/services/transcription/TranscriptionService';
-import { ReasoningService } from '@/services/reasoning/ReasoningService';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useConfigStore } from '@/store/useConfigStore';
 import { getActiveCustomCleanupPrompt } from '@/store/useCustomPromptsStore';
@@ -12,12 +11,7 @@ import { useProcessingModeStore } from '@/store/useProcessingModeStore';
 import { useSnippetsStore } from '@/store/useSnippetsStore';
 import { requiresRealAccount } from './accountAccess';
 import { cleanupRunsOnDevice } from './aiWorkflows';
-import { cleanupTranscript, AGENT_ACTION_TIMEOUT_MS } from './cleanupTranscript';
-import {
-  getDictationAgentName,
-  isDictationAgentApplicable,
-  detectAgentMention,
-} from './dictationAgent';
+import { cleanupTranscript } from './cleanupTranscript';
 import { isDictationContext } from './dictationHints';
 import { isToneApplicable } from './keyboardTone';
 import { getLocalReasoningReadiness } from './localReasoning';
@@ -231,9 +225,7 @@ async function runSerialTranscribeAndCleanup(
   // contexts (recording/keyboard) — never to file uploads.
   const finalText = await cleanupTranscript(originalText, {
     inferenceRoute: request.cleanupRoute,
-    agentRoute: request.agentRoute,
     cleanupUnavailable: request.cleanupUnavailable,
-    agentUnavailable: request.agentUnavailable,
     requireProvider: transcription.provider === 'byok',
     onSkipped: (message) => {
       cleanupWarning = message;
@@ -262,66 +254,6 @@ async function runSerialTranscribeAndCleanup(
   };
 }
 
-// When the fused transcribe+clean endpoint reports cleanupApplied: true, Action
-// Mode has NOT run (the fused endpoint is cleanup-only server-side). If the user
-// mentioned the agent in a dictation context, make one serial /api/reason call
-// so Action Mode fires. Returns the action text, or undefined on no-op/failure.
-async function maybeRunAgentActionOnFusedResult(
-  rawText: string,
-  request: TranscriptionRequest,
-  onSkipped: (reason: string) => void,
-): Promise<string | undefined> {
-  if (!isDictationContext(request.requestContext)) return undefined;
-
-  const cfg = useConfigStore.getState().config;
-  const activeMode = useProcessingModeStore.getState().activeMode;
-  if (!isDictationAgentApplicable(activeMode, cfg ?? { defaultMode: activeMode })) return undefined;
-
-  const agentName = getDictationAgentName(cfg ?? { defaultMode: activeMode });
-  if (!detectAgentMention(rawText, agentName)) return undefined;
-
-  try {
-    if (request.agentUnavailable) {
-      onSkipped(request.agentUnavailable);
-      return undefined;
-    }
-    // Same rule as cleanupTranscript: a Cloud agent route never takes the
-    // privacy hint, which would make ReasoningService demand local reasoning.
-    const agentMode = request.agentRoute?.mode;
-    const routing =
-      agentMode === 'providers' || agentMode === 'local'
-        ? { isPrivateNote: useProcessingModeStore.getState().activeMode === 'private' }
-        : undefined;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), AGENT_ACTION_TIMEOUT_MS);
-    try {
-      const response = await ReasoningService.processText({
-        text: rawText,
-        inferenceScope: 'agent',
-        ...(routing ? { routing } : {}),
-        inferenceRoute: request.agentRoute,
-        agentName,
-        timeoutMs: AGENT_ACTION_TIMEOUT_MS,
-        signal: controller.signal,
-      });
-      if (!response.text.trim()) {
-        onSkipped('The voice assistant returned no text. Your transcript is saved.');
-        return undefined;
-      }
-      return response.text;
-    } finally {
-      clearTimeout(timeout);
-    }
-  } catch (err) {
-    // On failure, the fused text (already cleaned) is used — same failure
-    // semantics as desktop: raw/pre-existing text inserts on agent error.
-    onSkipped('The voice assistant failed. Your raw transcript is saved.');
-    if (request.agentRoute?.mode !== 'providers')
-      console.warn('[transcribeAndCleanup] agent action call failed, using fused text:', err);
-    return undefined;
-  }
-}
-
 async function runTranscribeAndCleanup(
   request: TranscriptionRequest,
   lifecycle: DictationProcessingLifecycle = {},
@@ -339,29 +271,14 @@ async function runTranscribeAndCleanup(
       lifecycle.onRawTranscript?.(originalText, transcription);
       if (transcription.cleanupApplied) {
         if (lifecycle.shouldCancel?.()) return rawTranscriptResult(transcription);
-        let cleanupWarning: string | undefined;
-        const fusedText = await maybeRunAgentActionOnFusedResult(
+        lifecycle.onCleanupDone?.(transcription);
+        return {
+          text: transcription.text,
           originalText,
-          request,
-          (reason) => {
-            cleanupWarning = reason;
-          },
-        );
-        const finalFusedText = fusedText ?? transcription.text;
-        const fusedTranscription: TranscriptionResponse = {
-          ...transcription,
-          cleanupWarning,
-          text: finalFusedText,
-        };
-        const result: DictationProcessingResult = {
-          text: finalFusedText,
-          originalText,
-          transcription: fusedTranscription,
+          transcription,
           cleanupApplied: true,
           fusedCleanup: true,
         };
-        lifecycle.onCleanupDone?.(fusedTranscription);
-        return result;
       }
 
       // Fused cleanup didn't apply; a separate cleanup pass would follow. Skip
@@ -377,8 +294,6 @@ async function runTranscribeAndCleanup(
           cleanupWarning = reason;
         },
         inferenceRoute: request.cleanupRoute,
-        agentRoute: request.agentRoute,
-        agentUnavailable: request.agentUnavailable,
         tone: cleanupToneForRequest(request),
         includeSnippetTriggers: isDictationContext(request.requestContext),
         context: cleanupContextForRequest(request.requestContext),

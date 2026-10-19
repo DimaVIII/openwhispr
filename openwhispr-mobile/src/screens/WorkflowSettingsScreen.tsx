@@ -223,7 +223,7 @@ function VoiceAssistantSettings({ enabled }: { enabled: boolean }): React.JSX.El
       description={
         privateMode
           ? PRIVATE_MODE_LOCKED_REASON
-          : 'Say your assistant’s name while dictating to give it commands.'
+          : 'Tap the wand on the OpenWhispr keyboard and say what to write.'
       }
       icon="person.wave.2"
       mdIcon="UserRoundCog"
@@ -233,7 +233,7 @@ function VoiceAssistantSettings({ enabled }: { enabled: boolean }): React.JSX.El
         safeHaptics('light');
         void updateConfig({ dictationAgentEnabled: value });
       }}
-      offNote="Saying your assistant’s name gives no commands; what you dictate is inserted as usual."
+      offNote="The OpenWhispr keyboard shows no wand."
     >
       <SettingsRow
         iconStyle="line"
