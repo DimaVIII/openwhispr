@@ -15,7 +15,7 @@ test("speakerIndexOf reads only exact speaker_N ids", () => {
 });
 
 test("a fresh meeting starts at 0", () => {
-  assert.equal(resolveSpeakerIndexBase(undefined), 0);
+  assert.equal(resolveSpeakerIndexBase(undefined, []), 0);
   assert.equal(resolveSpeakerIndexBase(0, []), 0);
 });
 
@@ -40,5 +40,5 @@ test("clusters are renumbered in first-seen order from the base", () => {
       ["speaker_00", "speaker_4"],
     ]
   );
-  assert.equal(buildSpeakerRenumber(["a"]).get("a"), "speaker_0");
+  assert.equal(buildSpeakerRenumber(["a"], 0).get("a"), "speaker_0");
 });

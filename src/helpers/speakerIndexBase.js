@@ -15,7 +15,7 @@ function normalizeSpeakerIndexBase(value) {
 }
 
 // The first index free of both the requested base and every id already in use.
-function resolveSpeakerIndexBase(requested, speakerIds = []) {
+function resolveSpeakerIndexBase(requested, speakerIds) {
   let base = normalizeSpeakerIndexBase(requested);
   for (const speakerId of speakerIds) {
     const index = speakerIndexOf(speakerId);
@@ -25,7 +25,7 @@ function resolveSpeakerIndexBase(requested, speakerIds = []) {
 }
 
 // Diarization clusters are renumbered in first-seen order from the session's base.
-function buildSpeakerRenumber(clusterIds, speakerIndexBase = 0) {
+function buildSpeakerRenumber(clusterIds, speakerIndexBase) {
   const base = normalizeSpeakerIndexBase(speakerIndexBase);
   const renumber = new Map();
   for (const clusterId of clusterIds) {

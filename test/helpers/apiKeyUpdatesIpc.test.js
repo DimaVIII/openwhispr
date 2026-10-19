@@ -162,6 +162,8 @@ Module._load = function (request, parent, isMain) {
 test.after(() => {
   Module._load = originalLoad;
 });
+
+// Loaded after the electron stub above, and shared with ipcHandlers so tests can mock it.
 const liveSpeakerIdentifier = require("../../src/helpers/liveSpeakerIdentifier");
 
 function anything() {
