@@ -72,6 +72,7 @@ it('shows what each workflow runs, naming the provider or on-device model', asyn
       dictation: { mode: 'providers', providerId: 'openai', modelId: 'whisper-1' },
       upload: { mode: 'local', modelId: 'whisper-base' },
       notes: { mode: 'openwhispr' },
+      noteChat: { mode: 'providers', providerId: 'custom', modelId: 'llama' },
       agent: { mode: 'providers', providerId: 'custom', modelId: 'llama' },
     },
   };
@@ -81,7 +82,7 @@ it('shows what each workflow runs, naming the provider or on-device model', asyn
   // Bring Your Own Key dictation skips cleanup until a provider is saved for it.
   expect(screen.getByText('Not set')).toBeTruthy();
   expect(screen.getByText('OpenWhispr Cloud')).toBeTruthy();
-  expect(screen.getByText('Custom server')).toBeTruthy();
+  expect(screen.getAllByText('Custom server')).toHaveLength(2);
   expect(screen.queryByText(/Meeting/)).toBeNull();
   await screen.findByText(/Status: Ready/);
 });
@@ -209,7 +210,7 @@ it('shows provider note chat as On-Device, which answers it on this iPhone first
   mockCredentialStatus.mockResolvedValue({ isConfigured: true });
   mockConfig = {
     defaultMode: 'private',
-    inference: { agent: { mode: 'providers', providerId: 'groq', modelId: 'llama' } },
+    inference: { noteChat: { mode: 'providers', providerId: 'groq', modelId: 'llama' } },
   };
   render(<AIModelsScreen />);
   expect(screen.queryByText('Groq')).toBeNull();

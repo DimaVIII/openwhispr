@@ -29,7 +29,8 @@ const WORKFLOW_ICONS: Record<MobileInferenceScope, { icon: string; mdIcon: Lucid
   upload: { icon: 'square.and.arrow.up', mdIcon: 'Upload' },
   cleanup: { icon: 'sparkles', mdIcon: 'Sparkles' },
   notes: { icon: 'doc.text', mdIcon: 'FileText' },
-  agent: { icon: 'bubble.left.and.bubble.right', mdIcon: 'MessagesSquare' },
+  noteChat: { icon: 'bubble.left.and.bubble.right', mdIcon: 'MessagesSquare' },
+  agent: { icon: 'person.wave.2', mdIcon: 'UserRoundCog' },
 };
 
 function localReasoningStatusLabel(readiness: LocalReasoningReadiness | null): string {

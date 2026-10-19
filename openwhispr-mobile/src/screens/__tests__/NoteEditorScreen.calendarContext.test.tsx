@@ -1010,7 +1010,7 @@ describe('NoteEditorScreen On-Device and provider routes', () => {
 
   it('lets a signed-out user chat with a note when chat is On-Device', async () => {
     mockAuthState.user = null;
-    mockConfigState.config.inference = { agent: { mode: 'local' } };
+    mockConfigState.config.inference = { noteChat: { mode: 'local' } };
     (ReasoningService.chatOverNote as jest.Mock).mockResolvedValue({ text: 'Answer', model: 'x' });
     const { getByTestId } = render(<NoteEditorScreen />);
     fireEvent.changeText(getByTestId('chat-draft'), 'Who owns the launch?');

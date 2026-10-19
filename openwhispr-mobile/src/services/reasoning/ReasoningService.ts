@@ -245,13 +245,13 @@ export class ReasoningService {
     const payload = buildChatOverNotePayload(request);
     const { getInferenceSelection } =
       require('@/lib/inferenceRouting') as typeof import('@/lib/inferenceRouting');
-    const selection = request.inferenceRoute ?? getInferenceSelection('agent');
+    const selection = request.inferenceRoute ?? getInferenceSelection('noteChat');
     if (selection?.mode === 'providers' || selection?.mode === 'local') {
       return this.processText({
         text: payload.text,
         systemPrompt: payload.systemPrompt,
         signal: request.signal,
-        inferenceScope: 'agent',
+        inferenceScope: 'noteChat',
         inferenceRoute: request.inferenceRoute,
         routing: request.routing,
       });

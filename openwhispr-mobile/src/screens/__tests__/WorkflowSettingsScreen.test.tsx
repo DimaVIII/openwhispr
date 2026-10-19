@@ -920,10 +920,8 @@ it.each([
 });
 
 it.each([
-  [
-    'agent',
-    'In Local Mode the voice assistant is off, and note chat asks before sending a note off this iPhone.',
-  ],
+  ['agent', 'In Local Mode the voice assistant is off.'],
+  ['noteChat', 'In Local Mode note chat asks before sending a note off this iPhone.'],
   [
     'notes',
     'Local Mode formats notes on this iPhone and asks before sending one to your choice here.',
@@ -954,7 +952,7 @@ function modeDisabled(title: string): boolean {
 
 // Every page offers every mode in Local Mode; on Dictation's, picking OpenWhispr Cloud or Bring Your
 // Own Key is how Local Mode is turned off.
-it.each(['dictation', 'upload', 'cleanup', 'notes', 'agent'])(
+it.each(['dictation', 'upload', 'cleanup', 'notes', 'noteChat', 'agent'])(
   'locks no mode for %s in Local Mode',
   (scope) => {
     mockConfig = { defaultMode: 'private' };

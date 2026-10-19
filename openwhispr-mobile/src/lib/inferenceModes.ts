@@ -73,6 +73,7 @@ export function localModeDefault(
 ): InferenceMode {
   const onCloud =
     scope === 'agent' ||
+    scope === 'noteChat' ||
     (scope === 'upload' && cloudAccess !== 'none') ||
     (scope === 'cleanup' && cloudAccess === 'account');
   return onCloud ? 'openwhispr' : 'local';

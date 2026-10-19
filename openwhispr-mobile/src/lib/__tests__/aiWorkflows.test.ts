@@ -1,9 +1,26 @@
-import { workflowSummary } from '@/lib/aiWorkflows';
+import { unsetSelection, workflowSummary } from '@/lib/aiWorkflows';
 import type { UserConfig } from '@/types';
 
 function config(overrides: Partial<UserConfig> = {}): UserConfig {
   return { defaultMode: 'private', ...overrides } as UserConfig;
 }
+
+describe('Note Chat with nothing saved', () => {
+  it.each(['cloud', 'private', 'providers'] as const)(
+    'runs on OpenWhispr Cloud in %s mode',
+    (mode) => {
+      expect(unsetSelection('noteChat', mode)).toEqual({ mode: 'openwhispr' });
+    },
+  );
+
+  it('is summarized as OpenWhispr Cloud in Local Mode', () => {
+    expect(workflowSummary(config({}), 'noteChat', 'private')).toBe('OpenWhispr Cloud');
+  });
+
+  it('leaves the voice assistant skipped under Bring Your Own Key', () => {
+    expect(workflowSummary(config({}), 'agent', 'providers')).toBe('Not set');
+  });
+});
 
 describe('workflowSummary for Text Cleanup', () => {
   // With nothing saved, Local Mode cleans on OpenWhispr Cloud for a signed-in account and on this
