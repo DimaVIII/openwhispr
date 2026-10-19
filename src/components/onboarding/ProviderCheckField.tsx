@@ -27,7 +27,8 @@ type ProviderCheckFieldProps = Omit<
 
 /**
  * The field that completes the provider form. It carries the automatic check's status at
- * its end and, when the check fails, the reason with Retry directly underneath.
+ * its end and, when the check fails or gets no verdict, the reason with Retry directly
+ * underneath.
  */
 export function ProviderCheckField({
   label,
@@ -65,15 +66,28 @@ export function ProviderCheckField({
           />
           {phase !== "idle" && (
             <ConnectionStatusIcon
-              state={phase === "connected" || phase === "failed" ? phase : "checking"}
+              state={phase === "waiting" ? "checking" : phase}
               className="pointer-events-none absolute end-2.5 top-1/2 -translate-y-1/2"
             />
           )}
         </span>
       </label>
-      <p className={failure ? "mt-1 px-1 text-xs leading-[1.4] text-destructive" : undefined}>
+      <p
+        className={
+          failure
+            ? cn(
+                "mt-1 px-1 text-xs leading-[1.4]",
+                // Amber text needs the darker shade to stay readable on white.
+                phase === "unverified" ? "text-amber-700 dark:text-amber-300" : "text-destructive"
+              )
+            : undefined
+        }
+      >
         <span id={reasonId} role="alert">
-          {failure && describe(failure)}
+          {failure &&
+            (phase === "unverified"
+              ? t("onboarding.rehaul.provider.unverified", { reason: describe(failure) })
+              : describe(failure))}
         </span>
         {failure && (
           <>

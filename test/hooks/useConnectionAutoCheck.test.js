@@ -239,3 +239,18 @@ test("unmounting cancels the pending request", async (t) => {
   await auto.wait(1000);
   assert.equal(auto.requests.length, 0);
 });
+
+test("no verdict settles as unverified, keeps its reason and announces nothing", async (t) => {
+  const auto = await mountCheck(t);
+  await auto.wait(500);
+  const noVerdict = { success: false, errorCode: "timeout", unverified: true };
+  await auto.answer(noVerdict);
+  assert.equal(auto.state().phase, "unverified");
+  assert.deepEqual(auto.state().failure, noVerdict);
+  assert.equal(auto.state().announcement, null);
+  await auto.retry();
+  assert.equal(auto.requests.length, 2, "Retry asks again");
+  await auto.answer(PASS);
+  assert.equal(auto.state().phase, "connected");
+  assert.equal(auto.state().failure, null);
+});

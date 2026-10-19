@@ -18,7 +18,7 @@ async function loadIcon(t) {
 
 test("one decorative SVG carries every state, so a change animates in place", async (t) => {
   const ConnectionStatusIcon = await loadIcon(t);
-  for (const state of ["checking", "connected", "failed"]) {
+  for (const state of ["checking", "connected", "unverified", "failed"]) {
     const markup = renderToStaticMarkup(React.createElement(ConnectionStatusIcon, { state }));
     const root = markup.match(/^<svg[^>]*>/)?.[0] ?? "";
     assert.match(root, /aria-hidden="true"/, state);
@@ -32,11 +32,12 @@ test("one decorative SVG carries every state, so a change animates in place", as
   }
 });
 
-test("it uses the onboarding grey and the app's readable success and error colours", () => {
+test("it uses the onboarding grey and the app's readable status colours", () => {
   const css = source(ICON_CSS);
   assert.match(css, /var\(--onboarding-text-secondary, var\(--color-muted-foreground\)\)/);
   assert.match(css, /color: var\(--color-success\);/);
   assert.match(css, /color: var\(--color-destructive\);/);
+  assert.match(css, /\[data-state="unverified"\] \{\s*color: var\(--color-warning\);/);
   assert.doesNotMatch(css, /--onboarding-(success|danger)/);
   assert.match(css, /animation: spinner-rotate 0\.75s linear infinite/);
   assert.match(source("src/index.css"), /@keyframes spinner-rotate \{[\s\S]*?rotate\(360deg\)/);

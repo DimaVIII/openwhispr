@@ -221,3 +221,31 @@ test("the live region is always there and says only what the check found", async
     assert.equal(step.liveRegion().props.children, "");
   });
 });
+
+test("no verdict unlocks Proceed; an answer that faults the setup does not", async (t) => {
+  const step = await mountByokStep(t, {
+    settings: HOSTED_GROQ,
+    secrets: { groqApiKey: "gsk-saved" },
+  });
+  await step.wait(500);
+  await step.answerConnection({
+    success: false,
+    errorCode: "providerStatus",
+    status: 503,
+    unverified: true,
+  });
+  assert.equal(phase(step, LABEL.apiKey), "unverified");
+  assert.equal(step.proceedDisabled(), false);
+
+  for (const answer of [{ success: false, errorCode: "providerStatus", status: 402 }, REJECTED]) {
+    await step.retryCheck(LABEL.apiKey);
+    await step.answerConnection(answer);
+    assert.equal(phase(step, LABEL.apiKey), "failed", answer.errorCode);
+    assert.equal(step.proceedDisabled(), true, answer.errorCode);
+  }
+
+  await step.retryCheck(LABEL.apiKey);
+  await step.answerConnection({ success: false, errorCode: "network", unverified: true });
+  await step.proceed();
+  assert.equal(step.proceeded(), 1);
+});

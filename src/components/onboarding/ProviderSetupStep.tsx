@@ -323,7 +323,7 @@ export function ByokProviderStep({
   /** Set when the user picked "Self-hosted" on setup-choice rather than BYOK. */
   selfHostedRequested?: boolean;
   onSelfHostedChange: (requested: boolean) => void;
-  onConnectionChange: (connected: boolean) => void;
+  onConnectionChange: (usable: boolean) => void;
   onProceed: () => void;
   resumeState?: OnboardingByokDraft;
   onResumeStateChange?: (state: OnboardingByokDraft) => void;
@@ -514,10 +514,12 @@ export function ByokProviderStep({
     // A half-typed address may belong to someone else: nothing is sent while it is edited.
     hold: selfHosted && endpointFocused,
   });
-  const connected = check.phase === "connected";
+  // A provider that gave no verdict (busy, slow or unreachable) refused nothing, so its
+  // setup can be used; only a failure that faults it keeps Proceed locked.
+  const usable = check.phase === "connected" || check.phase === "unverified";
   useEffect(() => {
-    onConnectionChange(connected);
-  }, [connected, onConnectionChange]);
+    onConnectionChange(usable);
+  }, [usable, onConnectionChange]);
 
   // Switching to another app blurs the field but leaves it focused in the page, and the
   // address there may still be half typed.
@@ -759,11 +761,7 @@ export function ByokProviderStep({
           </>
         )}
 
-        <StepPrimaryAction
-          onClick={commitAndProceed}
-          disabled={!connected}
-          className="mt-4! w-full"
-        >
+        <StepPrimaryAction onClick={commitAndProceed} disabled={!usable} className="mt-4! w-full">
           {t("onboarding.rehaul.provider.proceed")}
         </StepPrimaryAction>
       </div>

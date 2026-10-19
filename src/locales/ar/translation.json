@@ -2769,6 +2769,7 @@
         "testing": "جاري الاختبار...",
         "connected": "متصل",
         "connectionFailed": "تعذر التحقق من الاتصال.",
+        "unverified": "تعذر التحقق: {{reason}}",
         "errors": {
           "endpointRequired": "أدخل عنوان URL لنقطة النهاية قبل الاختبار.",
           "invalidUrl": "يجب أن تكون نقطة النهاية عنوان URL صالحًا لـ HTTP أو HTTPS.",

@@ -417,6 +417,7 @@
         "testing": "測試中…",
         "connected": "已連接",
         "connectionFailed": "無法驗證這個連線。",
+        "unverified": "無法驗證：{{reason}}",
         "errors": {
           "endpointRequired": "測試前請先輸入端點 URL。",
           "invalidUrl": "端點必須是有效的 HTTP 或 HTTPS URL。",

@@ -15,7 +15,7 @@ async function loadField(t) {
     noExternal: ["react-i18next"],
     mockModules: {
       "react-i18next": `
-        const t = (key) => key;
+        const t = (key, options) => (options?.reason ? key + "(" + options.reason + ")" : key);
         export function useTranslation() { return { t }; }
       `,
     },
@@ -133,4 +133,28 @@ test("Retry runs the check again, and the icon changes state in place", async (t
   assert.equal(retries, 1);
   const input = findElement(container, (element) => element.tagName === "INPUT");
   assert.ok(container.ownerDocument.activeElement === input, "focus moves off Retry to the field");
+});
+
+test("no verdict shows its reason in amber with Retry, and the value stays valid", async (t) => {
+  const Field = await loadField(t);
+  for (const errorCode of ["timeout", "network", "providerStatus"]) {
+    const html = markup(Field, {
+      phase: "unverified",
+      failure: { success: false, errorCode, status: 503, unverified: true },
+    });
+    assert.match(html, /data-state="unverified"/, errorCode);
+    assert.doesNotMatch(html, /aria-invalid="/, errorCode);
+    assert.match(
+      html,
+      /<p class="mt-1 px-1 text-xs leading-\[1\.4\] text-amber-700 dark:text-amber-300">/,
+      errorCode
+    );
+    const reason = `role="alert">onboarding\\.rehaul\\.provider\\.unverified\\(onboarding\\.rehaul\\.provider\\.errors\\.${errorCode}\\)<`;
+    assert.match(html, new RegExp(reason), errorCode);
+    assert.match(html, /<button type="button"[^>]*>common\.retry<\/button>/, errorCode);
+  }
+  assert.match(
+    markup(Field, failed("credentialsRejected")),
+    /<p class="mt-1 px-1 text-xs leading-\[1\.4\] text-destructive">/
+  );
 });
