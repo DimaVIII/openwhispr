@@ -103,3 +103,29 @@ test("an in-person meeting draws numbered mic speakers on the other side", async
   assert.equal(selfSide, 1, "a mic line without a speaker stays on the user's side");
   assert.ok(html.includes("Speaker 1") && html.includes("Speaker 2"));
 });
+
+test("a stretch of the user's lines reassigned to someone gets its own colour", async () => {
+  const html = await renderChat({
+    segments: [
+      { id: "y1", text: "my own line", source: "mic", timestamp: 1, speaker: "you" },
+      { id: "r1", text: "remote line", source: "system", timestamp: 2, speaker: "speaker_0" },
+      {
+        id: "y2",
+        text: "actually bob",
+        source: "mic",
+        timestamp: 3,
+        speaker: "you",
+        speakerName: "Bob",
+        speakerLocked: true,
+        speakerLockSource: "user",
+        speakerStatus: "locked",
+      },
+    ],
+  });
+  assert.equal(
+    html.split("border-s-blue-400/50").length - 1,
+    1,
+    "Speaker 1 keeps the first colour"
+  );
+  assert.equal(html.split("border-s-green-400/50").length - 1, 1, "Bob gets the next one");
+});

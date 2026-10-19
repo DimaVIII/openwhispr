@@ -813,13 +813,15 @@ export function MeetingTranscriptChat({
 
   // Per-segment derivations hoisted out of the row map: rows receive them as
   // stable props, so partial ticks (which change neither input) skip every row.
+  const youLabel = t("notes.speaker.you");
   const rowMeta = useMemo(
     () =>
       segments.map((segment) => ({
         key: getEffectiveSpeakerKey(segment, speakerMappings),
         activeName: resolveSegmentSpeakerName(segment, speakerMappings),
+        selfSide: isSelfSideSegment(segment, speakerMappings, youLabel),
       })),
-    [segments, speakerMappings]
+    [segments, speakerMappings, youLabel]
   );
 
   const colorByKey = useMemo(() => {
@@ -827,7 +829,8 @@ export function MeetingTranscriptChat({
     let nextIdx = 0;
     segments.forEach((segment, i) => {
       if (segment.source === "mic" && !segment.speaker) return;
-      if (segment.speaker === "you") return;
+      // A "you" stretch reassigned to someone else sits with the other speakers.
+      if (segment.speaker === "you" && rowMeta[i].selfSide) return;
       const key = rowMeta[i].key;
       if (!map.has(key)) {
         map.set(key, nextIdx % SPEAKER_COLORS.length);
@@ -859,8 +862,6 @@ export function MeetingTranscriptChat({
       </div>
     );
   }
-
-  const youLabel = t("notes.speaker.you");
 
   const showAssumedHint =
     !isDiarizing &&
@@ -964,9 +965,8 @@ export function MeetingTranscriptChat({
             {virtualizer.getVirtualItems().map((virtualItem) => {
               const i = virtualItem.index;
               const segment = segments[i];
-              const selfSide = isSelfSideSegment(segment, speakerMappings, youLabel);
+              const { key, activeName, selfSide } = rowMeta[i];
               const isSystemSpeaker = !!segment.speaker && !selfSide;
-              const { key, activeName } = rowMeta[i];
               return (
                 <div
                   key={segment.id}

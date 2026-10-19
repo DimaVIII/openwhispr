@@ -224,14 +224,21 @@ export const resolveSegmentSpeakerName = (
 // so a stretch the user reassigned moves with its new name. An in-person meeting
 // is diarized on the mic without knowing which voice is the note taker, so its
 // numbered clusters, the user's own included, sit with the other speakers until
-// one is named "You". A remote call stores the mic as "you".
+// one is named "You". A remote call stores the mic as "you". An unconfirmed
+// "You?" suggestion sits where confirming it would put it.
 export const isSelfSideSegment = (
   segment: TranscriptSegment,
   speakerMappings: Record<string, string> | undefined,
   youLabel: string
 ): boolean => {
+  // A name mapped to "You" is stored in the UI language it was saved in.
+  const isYou = (name: string): boolean => {
+    const normalized = name.trim().toLowerCase();
+    return normalized === "you" || normalized === youLabel.toLowerCase();
+  };
   const name = resolveSegmentSpeakerName(segment, speakerMappings);
-  if (name) return name.trim().toLowerCase() === youLabel.toLowerCase();
+  if (name) return isYou(name);
+  if (segment.suggestedName && isYou(segment.suggestedName)) return true;
   if (segment.speaker === "you") return true;
   if (segment.speaker) return false;
   return segment.source === "mic";

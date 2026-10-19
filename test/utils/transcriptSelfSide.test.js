@@ -69,3 +69,32 @@ test("a reassigned stretch follows its new name over the cluster mapping", async
   assert.equal(isSelfSideSegment(userLocked(cluster, "You"), { speaker_0: "Alice" }, YOU), true);
   assert.equal(isSelfSideSegment(userLocked(cluster, "You"), {}, YOU), true);
 });
+
+test("a You suggestion sits on the user's side until it is confirmed or dismissed", async () => {
+  const { isSelfSideSegment } = await load();
+  assert.equal(
+    isSelfSideSegment({ source: "mic", speaker: "speaker_0", suggestedName: "You" }, {}, YOU),
+    true
+  );
+  assert.equal(
+    isSelfSideSegment({ source: "mic", speaker: "speaker_0", suggestedName: "Alice" }, {}, YOU),
+    false
+  );
+  // A confirmed or mapped name outranks the suggestion, as it does on the chip.
+  assert.equal(
+    isSelfSideSegment(
+      { source: "mic", speaker: "speaker_0", suggestedName: "You" },
+      { speaker_0: "Alice" },
+      YOU
+    ),
+    false
+  );
+});
+
+test("a You saved in another UI language still counts as the user", async () => {
+  const { isSelfSideSegment } = await load();
+  const cluster = { source: "mic", speaker: "speaker_0" };
+  assert.equal(isSelfSideSegment(cluster, { speaker_0: "You" }, "Du"), true);
+  assert.equal(isSelfSideSegment(cluster, { speaker_0: "Du" }, "Du"), true);
+  assert.equal(isSelfSideSegment(cluster, { speaker_0: "Youssef" }, "Du"), false);
+});
