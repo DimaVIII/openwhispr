@@ -4,8 +4,8 @@ import { Platform } from 'react-native';
 import {
   dictationModeConfig,
   getInferenceModes,
+  holdOnDeviceConfig,
   localModeUpgradeConfig,
-  onboardingModeConfig,
   workflowSaveConfig,
 } from '../inferenceModes';
 import type { UserConfig } from '@/types';
@@ -284,65 +284,64 @@ describe('workflowSaveConfig', () => {
       notes: { mode: 'openwhispr' },
     });
   });
-});
 
-describe('onboardingModeConfig', () => {
-  it('saves every workflow on Cloud for Cloud', () => {
-    expect(onboardingModeConfig(null, 'cloud', true)).toEqual({
-      defaultMode: 'cloud',
-      inference: {
-        dictation: { mode: 'openwhispr' },
-        upload: { mode: 'openwhispr' },
-        cleanup: { mode: 'openwhispr' },
-        notes: { mode: 'openwhispr' },
-        agent: { mode: 'openwhispr' },
-      },
-      pinnedInference: ['upload', 'cleanup', 'notes', 'agent'],
-    });
-  });
-
-  it('keeps everything but note chat on this phone for Local', () => {
-    expect(onboardingModeConfig({ defaultMode: 'cloud' }, 'private', true)).toEqual({
-      defaultMode: 'private',
-      inference: {
-        dictation: { mode: 'local' },
-        upload: { mode: 'local' },
-        cleanup: { mode: 'local' },
-        notes: { mode: 'local' },
-        agent: { mode: 'openwhispr' },
-      },
-      pinnedInference: ['upload', 'cleanup', 'notes', 'agent'],
-    });
-  });
-
-  it('saves notes on Cloud for Local when Apple Intelligence cannot run them', () => {
-    expect(onboardingModeConfig(null, 'private', false).inference?.notes).toEqual({
-      mode: 'openwhispr',
-    });
-  });
-
-  it('keeps what the user saved, and decides its own picks again', () => {
-    const config: UserConfig = {
-      defaultMode: 'private',
-      inference: {
-        dictation: { mode: 'local' },
-        upload: { mode: 'local' },
-        cleanup: groqCleanup,
-      },
-      pinnedInference: ['upload'],
+  // Local Mode cleaned on Cloud for an account, so that is what leaving it holds, even for a
+  // cleanup Bring Your Own Key skipped before Local Mode was turned on.
+  it('holds cleanup on Cloud when an account leaves Local Mode for Bring Your Own Key', () => {
+    const providers: UserConfig = {
+      defaultMode: 'providers',
+      inference: { dictation: groqDictation },
     };
-    const next = onboardingModeConfig(config, 'cloud', true);
-    expect(next.inference?.cleanup).toEqual(groqCleanup);
-    expect(next.inference?.upload).toEqual({ mode: 'openwhispr' });
-    expect(next.pinnedInference).toEqual(['upload', 'notes', 'agent']);
+    const on = {
+      ...providers,
+      ...workflowSaveConfig(providers, 'dictation', { mode: 'local' }, 'providers', 'account'),
+    };
+    const off = {
+      ...on,
+      ...workflowSaveConfig(on, 'dictation', groqDictation, 'private', 'account'),
+    };
+    expect(off.inference?.cleanup).toEqual({ mode: 'openwhispr' });
+    expect(off.inference).not.toHaveProperty('agent');
   });
 
-  it('keeps its picks when the same mode is chosen again', () => {
-    const config: UserConfig = onboardingModeConfig(null, 'cloud', true);
-    expect(onboardingModeConfig(config, 'cloud', true)).toEqual({
+  // Setup in Local Mode holds only uploads and cleanup; the voice assistant is off there, so a
+  // later switch to Bring Your Own Key leaves it skipped rather than sending it to Cloud.
+  it('leaves the voice assistant unsaved when Local setup is followed by Bring Your Own Key', () => {
+    const setup = dictationModeConfig({ defaultMode: 'cloud' }, 'private');
+    const local: UserConfig = { ...setup, ...holdOnDeviceConfig(setup) };
+    const next = workflowSaveConfig(local, 'dictation', groqDictation, 'private', 'session', true);
+    expect(next.inference).toEqual({
+      dictation: groqDictation,
+      upload: { mode: 'local' },
+      cleanup: { mode: 'local' },
+      notes: { mode: 'local' },
+    });
+    expect(next.pinnedInference).toEqual(['upload', 'cleanup', 'notes']);
+  });
+
+  // Cloud cleanup held for an anonymous session can't run in Local Mode, which cleans on this
+  // phone instead (workflowSelection); returning to Cloud finds it on Cloud again.
+  it('ends a Cloud round trip through Local Mode on Cloud for an anonymous session', () => {
+    const cloud: UserConfig = {
       defaultMode: 'cloud',
-      inference: config.inference,
-      pinnedInference: config.pinnedInference,
+      inference: { dictation: { mode: 'openwhispr' } },
+    };
+    const on = {
+      ...cloud,
+      ...workflowSaveConfig(cloud, 'dictation', { mode: 'local' }, 'cloud', 'session'),
+    };
+    expect(on.inference?.cleanup).toEqual({ mode: 'openwhispr' });
+    expect(on.pinnedInference).toContain('cleanup');
+    const off = {
+      ...on,
+      ...workflowSaveConfig(on, 'dictation', { mode: 'openwhispr' }, 'private', 'session'),
+    };
+    expect(off.inference).toEqual({
+      dictation: { mode: 'openwhispr' },
+      upload: { mode: 'openwhispr' },
+      cleanup: { mode: 'openwhispr' },
+      notes: { mode: 'openwhispr' },
+      agent: { mode: 'openwhispr' },
     });
   });
 });

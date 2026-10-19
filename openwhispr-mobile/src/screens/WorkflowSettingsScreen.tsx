@@ -44,7 +44,7 @@ import {
   cloudAccessFor,
   cloudCleanupNeedsAccount,
   parseWorkflow,
-  unsetSelection,
+  workflowSelection,
 } from '@/lib/aiWorkflows';
 import { isLocalModelKey } from '@/lib/localModelCatalog';
 import {
@@ -295,8 +295,7 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
   const setActiveMode = useProcessingModeStore((state) => state.setActiveMode);
   const activeMode = useProcessingModeStore((state) => state.activeMode);
   const cloudAccess = useAuthStore((state) => cloudAccessFor(state.user));
-  const storedSelection =
-    config?.inference?.[scope] ?? unsetSelection(scope, activeMode, cloudAccess);
+  const storedSelection = workflowSelection(config, scope, activeMode, cloudAccess);
   // Local Mode runs dictation on this phone whatever is saved, so a saved Cloud dictation (a guest
   // held in Local Mode) shows as On-Device (Automatic), which is what runs.
   const lockedByPrivateMode =
@@ -488,7 +487,7 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
       return;
     }
     // Tapping the shown mode saves it when nothing of the user's own is saved, since an unsaved
-    // default follows the mode and the account (unsetSelection), and onboarding decides a pin again.
+    // default follows the mode and the account (unsetSelection), and a pin is held automatically.
     const ownChoice = !!config?.inference?.[scope] && !config.pinnedInference?.includes(scope);
     if (mode === savedSelection.mode && ownChoice) {
       setSelection(savedSelection);
@@ -603,7 +602,11 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
     try {
       const saved = await prepareSelection();
       if (!saved) return;
-      const localReasoningReady = await leavingLocalModeWithLocalReasoning(scope, activeMode);
+      const localReasoningReady = await leavingLocalModeWithLocalReasoning(
+        scope,
+        activeMode,
+        saved.mode,
+      );
       await updateConfig(
         workflowSaveConfig(
           useConfigStore.getState().config,

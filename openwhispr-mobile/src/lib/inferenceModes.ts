@@ -111,9 +111,9 @@ function unsavedRunsIn(
   return onDevice ? localSelection(config, scope) : { mode: 'openwhispr' };
 }
 
-// Onboarding's base for the dictation mode it picks. It releases the automatic pins, so onboarding
-// decides those workflows again; selections the user saved themselves stay. Replaying the same
-// choice keeps them.
+// Onboarding's config for the dictation mode it picks. It releases the automatic pins, so those
+// workflows follow the picked mode again; selections the user saved themselves stay. Replaying the
+// same choice keeps them.
 export function dictationModeConfig(
   config: UserConfig | null,
   mode: 'cloud' | 'private',
@@ -133,35 +133,6 @@ export function dictationModeConfig(
       dictation: mode === 'private' ? localSelection(config, 'dictation') : { mode: 'openwhispr' },
     },
     ...(modeChanged && config?.pinnedInference ? { pinnedInference: undefined } : {}),
-  };
-}
-
-// Onboarding saves every workflow for the mode it picks, as automatic pins (pinnedInference):
-// Cloud runs them all there; Local keeps uploads, cleanup and, while Apple Intelligence can run
-// it, note formatting on this iPhone, with note chat on Cloud. A selection the user saved stays,
-// except that Local holds uploads and cleanup here over a saved Cloud choice (holdOnDeviceConfig).
-export function onboardingModeConfig(
-  config: UserConfig | null,
-  mode: 'cloud' | 'private',
-  localReasoningReady: boolean,
-): DictationModeConfig {
-  const next = dictationModeConfig(config, mode);
-  const held =
-    mode === 'private' ? { ...next, ...holdOnDeviceConfig({ ...config, ...next }) } : next;
-  const merged = { ...config, ...held };
-  const inference = { ...merged.inference };
-  const pinnedInference = [...(merged.pinnedInference ?? [])];
-  for (const scope of OTHER_WORKFLOWS) {
-    if (inference[scope]) continue;
-    inference[scope] = unsavedRunsIn(merged, scope, mode, 'none', localReasoningReady) ?? {
-      mode: 'openwhispr',
-    };
-    if (!pinnedInference.includes(scope)) pinnedInference.push(scope);
-  }
-  return {
-    ...held,
-    inference,
-    pinnedInference: pinnedInference.length ? pinnedInference : undefined,
   };
 }
 
@@ -247,8 +218,8 @@ export function workflowSaveConfig(
 }
 
 // Holds uploads and cleanup on this iPhone unless the user saved On-Device or a provider for them.
-// They are automatic pins, so only onboarding decides them again (a dictation change keeps them),
-// and a pinned cleanup Apple Intelligence can't run yet is skipped quietly (skipsLocalModeCleanup).
+// They are automatic pins, which a dictation change keeps and only onboarding releases, and a
+// pinned cleanup Apple Intelligence can't run yet is skipped quietly (skipsLocalModeCleanup).
 export function holdOnDeviceConfig(
   config: Pick<UserConfig, 'inference' | 'pinnedInference' | 'rememberedInference'>,
 ): Pick<UserConfig, 'inference' | 'pinnedInference'> {

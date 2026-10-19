@@ -13,8 +13,9 @@ export type InferenceMode = 'openwhispr' | 'local' | 'providers';
 export interface UserConfig {
   inference?: Partial<Record<InferenceScope, InferenceSelection>>;
   rememberedInference?: Partial<Record<InferenceScope, Record<string, InferenceSelection>>>;
-  // Workflows set automatically, by onboarding or a dictation change that kept them where they ran,
-  // as opposed to ones the user chose on their own page; only onboarding decides these again.
+  // Workflows set automatically, by Local Mode holding them on this iPhone or a dictation change
+  // keeping them where they ran, as opposed to ones the user chose on their own page; a dictation
+  // change keeps these and only onboarding releases them.
   pinnedInference?: MobileInferenceScope[];
   // Set once a config follows Local Mode's OpenWhispr Cloud defaults for uploads and cleanup. New
   // installs start with it; older configs get it from localModeUpgradeConfig at launch.
@@ -50,10 +51,6 @@ export interface UserConfig {
 
 export function inferenceToProcessingMode(mode: InferenceMode): ProcessingMode {
   return mode === 'local' ? 'private' : mode === 'providers' ? 'providers' : 'cloud';
-}
-
-export function processingToInferenceMode(mode: ProcessingMode): InferenceMode {
-  return mode === 'private' ? 'local' : mode === 'providers' ? 'providers' : 'openwhispr';
 }
 
 export interface TextInferenceSnapshot {

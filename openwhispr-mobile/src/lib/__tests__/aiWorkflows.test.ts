@@ -1,4 +1,9 @@
-import { workflowSummary } from '@/lib/aiWorkflows';
+import {
+  cleanupRunsOnDevice,
+  cloudCleanupNeedsAccount,
+  workflowSelection,
+  workflowSummary,
+} from '@/lib/aiWorkflows';
 import type { UserConfig } from '@/types';
 
 function config(overrides: Partial<UserConfig> = {}): UserConfig {
@@ -36,6 +41,35 @@ describe('workflowSummary for Text Cleanup', () => {
       ).toBe('OpenWhispr Cloud');
     },
   );
+
+  // A Cloud cleanup held automatically when dictation left Cloud isn't the user's own choice, so
+  // where Local Mode can't run it there, it cleans on this phone like an unsaved one.
+  it.each(['session', 'none'] as const)(
+    'cleans on this phone for a Cloud cleanup held automatically, with %s access',
+    (cloudAccess) => {
+      const held = config({
+        inference: { cleanup: { mode: 'openwhispr' } },
+        pinnedInference: ['cleanup'],
+      });
+      expect(workflowSummary(held, 'cleanup', 'private', { cloudAccess })).toBe('On-Device');
+      expect(cleanupRunsOnDevice(held, 'private', cloudAccess)).toBe(true);
+      expect(cloudCleanupNeedsAccount(held, 'private', cloudAccess)).toBe(false);
+      expect(workflowSelection(held, 'cleanup', 'cloud', cloudAccess)).toEqual({
+        mode: 'openwhispr',
+      });
+    },
+  );
+
+  it('keeps a Cloud cleanup held automatically on Cloud for a signed-in account', () => {
+    const held = config({
+      inference: { cleanup: { mode: 'openwhispr' } },
+      pinnedInference: ['cleanup'],
+    });
+    expect(workflowSummary(held, 'cleanup', 'private', { cloudAccess: 'account' })).toBe(
+      'OpenWhispr Cloud',
+    );
+    expect(cleanupRunsOnDevice(held, 'private', 'account')).toBe(false);
+  });
 
   it('is skipped in Local Mode when Apple Intelligence cannot run', () => {
     expect(

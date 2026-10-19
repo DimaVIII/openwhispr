@@ -28,7 +28,7 @@ jest.mock('@/lib/privateMode', () => ({
   getPrivateModeUnavailableMessage: () => 'Native modules are missing.',
 }));
 jest.mock('@/lib/localReasoning', () => ({
-  getLocalReasoningReadiness: () => mockLocalReasoningReadiness(),
+  getLocalReasoningReadiness: (...args: unknown[]) => mockLocalReasoningReadiness(...args),
   getLocalReasoningUnavailableMessage: () => 'Apple Intelligence is turned off.',
 }));
 
@@ -224,6 +224,35 @@ describe('switching dictation', () => {
     mockConfig = { defaultMode: 'private', inference: { dictation: { mode: 'local' } } };
     await expect(switchWorkflowMode('dictation', 'openwhispr')).resolves.toBe('switched');
     expect(mockUpdateConfig.mock.calls[0][0].inference.notes).toEqual({ mode: 'openwhispr' });
+  });
+
+  // The cached readiness outlives a change in iOS Settings, so leaving Local Mode asks again.
+  it('asks afresh whether Apple Intelligence can run only when leaving Local Mode', async () => {
+    mockActiveMode = 'private';
+    mockConfig = { defaultMode: 'private', inference: { dictation: { mode: 'local' } } };
+    await switchWorkflowMode('dictation', 'openwhispr');
+    expect(mockLocalReasoningReadiness).toHaveBeenCalledWith({ refresh: true });
+
+    mockLocalReasoningReadiness.mockClear();
+    mockActiveMode = 'cloud';
+    mockConfig = { defaultMode: 'cloud', inference: { dictation: { mode: 'openwhispr' } } };
+    await switchWorkflowMode('dictation', 'local');
+    expect(mockLocalReasoningReadiness).not.toHaveBeenCalled();
+  });
+
+  // The readiness check is awaited before the config is read, so a save made meanwhile is kept.
+  it('builds the saved config from the config as it is after the readiness check', async () => {
+    mockActiveMode = 'private';
+    mockConfig = { defaultMode: 'private', inference: { dictation: { mode: 'local' } } };
+    mockLocalReasoningReadiness.mockImplementation(async () => {
+      mockConfig = {
+        defaultMode: 'private',
+        inference: { dictation: { mode: 'local' }, agent: { mode: 'openwhispr' } },
+      };
+      return { status: 'ready', tokenCounting: false };
+    });
+    await switchWorkflowMode('dictation', 'openwhispr');
+    expect(mockUpdateConfig.mock.calls[0][0].inference.agent).toEqual({ mode: 'openwhispr' });
   });
 
   // Without an account Local Mode cleaned on this phone, while a session uploaded to Cloud.

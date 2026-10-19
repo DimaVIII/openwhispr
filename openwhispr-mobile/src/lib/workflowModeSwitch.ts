@@ -16,7 +16,7 @@ import {
 } from '@/lib/localReasoning';
 import type { LocalModelKey } from '@/lib/localModelCatalog';
 import { type InferenceSelection, type MobileInferenceScope } from '@/lib/mobileProviders';
-import type { ProcessingMode } from '@/types';
+import type { InferenceMode, ProcessingMode } from '@/types';
 import { getPrivateModeReadiness, getPrivateModeUnavailableMessage } from '@/lib/privateMode';
 
 type SpeechScope = 'dictation' | 'upload';
@@ -55,13 +55,15 @@ async function appleIntelligenceReady(): Promise<boolean> {
 }
 
 // Whether Apple Intelligence can run here, which decides where note formatting with nothing saved
-// is held when dictation leaves Local Mode (workflowSaveConfig). Asked only then.
+// is held when dictation leaves Local Mode (workflowSaveConfig). Asked only then, and afresh, since
+// the cached answer outlives a change in iOS Settings.
 export async function leavingLocalModeWithLocalReasoning(
   scope: MobileInferenceScope,
   activeMode: ProcessingMode,
+  target: InferenceMode,
 ): Promise<boolean> {
-  if (scope !== 'dictation' || activeMode !== 'private') return false;
-  return (await getLocalReasoningReadiness().catch(() => null))?.status === 'ready';
+  if (scope !== 'dictation' || activeMode !== 'private' || target === 'local') return false;
+  return (await getLocalReasoningReadiness({ refresh: true })).status === 'ready';
 }
 
 // Applies OpenWhispr Cloud or On-Device to a workflow as soon as it is tapped, after its sign-in
@@ -94,6 +96,11 @@ export async function switchWorkflowMode(
     if (blocked) return blocked;
   }
 
+  const localReasoningReady = await leavingLocalModeWithLocalReasoning(
+    scope,
+    useProcessingModeStore.getState().activeMode,
+    mode,
+  );
   const { config, updateConfig } = useConfigStore.getState();
   const { activeMode, setActiveMode } = useProcessingModeStore.getState();
   if (scope === 'dictation') setActiveMode(mode === 'local' ? 'private' : 'cloud', true);
@@ -108,7 +115,7 @@ export async function switchWorkflowMode(
       selection,
       activeMode,
       cloudAccessFor(user),
-      await leavingLocalModeWithLocalReasoning(scope, activeMode),
+      localReasoningReady,
     ),
   );
   return 'switched';
@@ -130,7 +137,7 @@ export async function pickLocalModel(
       ...config?.rememberedInference,
       [scope]: { ...config?.rememberedInference?.[scope], local: selection },
     },
-    // A picked model is the user's own choice, so leaving Bring Your Own Key keeps it.
+    // A picked model is the user's own choice, so onboarding never releases it.
     ...(config?.pinnedInference
       ? { pinnedInference: config.pinnedInference.filter((pinned) => pinned !== scope) }
       : {}),

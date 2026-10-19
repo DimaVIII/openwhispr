@@ -61,8 +61,8 @@ export function cloudCleanupNeedsAccount(
 ): boolean {
   return (
     activeMode === 'private' &&
-    config?.inference?.cleanup?.mode === 'openwhispr' &&
-    cloudAccess !== 'account'
+    cloudAccess !== 'account' &&
+    workflowSelection(config, 'cleanup', activeMode, cloudAccess).mode === 'openwhispr'
   );
 }
 
@@ -73,10 +73,29 @@ export function cleanupRunsOnDevice(
   activeMode: ProcessingMode,
   cloudAccess: CloudAccess = 'none',
 ): boolean {
-  return (
-    (config?.inference?.cleanup ?? unsetSelection('cleanup', activeMode, cloudAccess)).mode ===
-    'local'
-  );
+  return workflowSelection(config, 'cleanup', activeMode, cloudAccess).mode === 'local';
+}
+
+// What a workflow runs: its saved selection, else the mode's default (unsetSelection). A Cloud
+// cleanup held automatically (pinnedInference) when dictation left Cloud can't clean a transcript
+// made on this iPhone without an account, so in Local Mode it runs as if unsaved; leaving Local Mode
+// finds it on Cloud again.
+export function workflowSelection(
+  config: UserConfig | null,
+  scope: MobileInferenceScope,
+  activeMode: ProcessingMode,
+  cloudAccess: CloudAccess = 'none',
+): InferenceSelection {
+  const saved = config?.inference?.[scope];
+  const heldCloudCleanupWithoutAccount =
+    scope === 'cleanup' &&
+    activeMode === 'private' &&
+    saved?.mode === 'openwhispr' &&
+    cloudAccess !== 'account' &&
+    !!config?.pinnedInference?.includes('cleanup');
+  return saved && !heldCloudCleanupWithoutAccount
+    ? saved
+    : unsetSelection(scope, activeMode, cloudAccess);
 }
 
 export function parseWorkflow(value: unknown): MobileInferenceScope | null {
@@ -119,7 +138,7 @@ export function workflowSummary(
       return `Skipped · ${onDeviceUnavailable}`;
     if (cloudCleanupNeedsAccount(config, activeMode, cloudAccess)) return 'Skipped · Sign in';
   }
-  const selection = config?.inference?.[scope] ?? unsetSelection(scope, activeMode, cloudAccess);
+  const selection = workflowSelection(config, scope, activeMode, cloudAccess);
   // Local Mode runs dictation, note formatting and provider note chat on this phone first, whatever
   // is saved; note chat set to OpenWhispr, or not set, goes straight to Cloud. Uploads and cleanup
   // run what is saved for them.
