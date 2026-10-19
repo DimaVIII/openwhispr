@@ -63,6 +63,8 @@ function localCleanupTimeoutMs(transcriptTokens: number): number {
   );
 }
 
+const TOO_LONG_FOR_ON_DEVICE = 'This transcript is too long for On-Device cleanup.';
+
 // Why an on-device pass can't run, or, for cleanup, the transcript's length in tokens.
 async function prepareLocalRun(
   text: string,
@@ -77,16 +79,19 @@ async function prepareLocalRun(
   if (scope !== 'cleanup') return {};
   const tokens = (await countLocalReasoningTokens({ prompt: text })) ?? estimateLocalTokens(text);
   return tokens > LOCAL_CLEANUP_MAX_TRANSCRIPT_TOKENS
-    ? { skipReason: 'This transcript is too long for On-Device cleanup.' }
+    ? { skipReason: TOO_LONG_FOR_ON_DEVICE }
     : { tokens };
 }
 
-// Apple Intelligence's two common failures say what happened. The only signal a cleanup run gets
-// is its timeout, so a cancelled one took too long.
+// Apple Intelligence's common failures say what happened. The only signal a cleanup run gets is
+// its timeout, so a cancelled one took too long.
 function cleanupFailureReason(error: unknown): string {
   if (error instanceof LocalReasoningError) {
     if (error.code === 'APPLE_LLM_CANCELLED') return 'Apple Intelligence took too long.';
     if (error.code === 'APPLE_LLM_RATE_LIMITED') return 'Apple Intelligence was busy.';
+    if (error.code === 'LOCAL_CONTEXT_LIMIT' || error.code === 'APPLE_LLM_CONTEXT_LIMIT') {
+      return TOO_LONG_FOR_ON_DEVICE;
+    }
   }
   return 'Cleanup failed.';
 }

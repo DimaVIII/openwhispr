@@ -267,8 +267,9 @@ export function isLocalContextLimitError(error: unknown): boolean {
   );
 }
 
-// Guided generation that reaches the output cap mid-structure can't be decoded, so FoundationModels
-// throws (decodingFailure, or a ParsingError on iOS 27) instead of returning a cut-off copy.
+// FoundationModels throws decodingFailure (a ParsingError on iOS 27) when guided generation's
+// output can't be decoded. That is most often the output cap cutting it off mid-structure, but
+// malformed output reads the same; either way, less material per run is what helps.
 export function isLocalOutputLimitError(error: unknown): boolean {
   return (
     typeof error === 'object' &&

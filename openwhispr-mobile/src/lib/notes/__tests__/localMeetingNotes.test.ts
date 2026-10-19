@@ -264,6 +264,28 @@ describe('local meeting notes', () => {
   });
 
   it.each([
+    [2896, 2896],
+    [6992, 2896],
+  ])("caps a merge at iOS 26's input budget (budget %i)", async (inputBudget, mergeBudget) => {
+    mockGetInputBudget.mockReturnValue(inputBudget);
+    mockGetSegments.mockReturnValue(segmentsOf(2));
+    mockFitsBudget.mockImplementation(
+      async ({ prompt }: { prompt: string }) =>
+        prompt.includes('Merge these') || !(prompt.includes('Line 0') && prompt.includes('Line 1')),
+    );
+    mockGenerateMeetingNotes.mockResolvedValue(partialNotes('Notes'));
+
+    await generateLocalMeetingNotes(7);
+
+    expect(mockFitsBudget).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: expect.stringContaining('Merge these'),
+        budget: mergeBudget,
+      }),
+    );
+  });
+
+  it.each([
     // The default instructions leave a chunk of about 2,000 tokens, whatever the context.
     [2896, 700, 2000],
     [6992, 700, 2000],

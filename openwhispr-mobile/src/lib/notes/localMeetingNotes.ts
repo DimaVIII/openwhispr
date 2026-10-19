@@ -30,9 +30,15 @@ const DEFAULT_LOCAL_MEETING_ACTION_PROMPT =
 // instructions, a full chunk is about 2,000 tokens.
 const LOCAL_MEETING_CHUNK_MAX_TRANSCRIPT_TOKENS = 1_300;
 
-// A chunk whose notes still run past the cap is halved at most this many times, so a model that
-// keeps looping can't turn one chunk into dozens of slow runs.
+// A chunk whose notes still run past the cap is halved, and each half can be halved again, at most
+// this many times in a row: up to 7 runs for one chunk, so a model that keeps looping can't turn it
+// into dozens of slow runs. A piece that still overflows fails the note.
 const MAX_OUTPUT_LIMIT_SPLITS = 2;
+
+// Merged notes have to fit LOCAL_OUTPUT_TOKEN_RESERVE too, so a merge reads at most iOS 26's whole
+// input budget (4,096 - 900 - 300), the size merges run at there, however large the context. A
+// bigger merge is more likely to run to the cap, a full slow run before the hand merge.
+const LOCAL_MEETING_MERGE_MAX_INPUT_TOKENS = 2_896;
 
 const emptyMeetingNotes = (): StructuredMeetingNotes => ({
   summary: '',
@@ -401,7 +407,7 @@ export async function generateLocalMeetingNotes(
   const reduced = await reduceStructuredNotes({
     notes: mapped,
     instructions,
-    budget,
+    budget: Math.min(budget, LOCAL_MEETING_MERGE_MAX_INPUT_TOKENS),
   });
   const markdown = renderStructuredMeetingNotesToMarkdown(reduced);
 
