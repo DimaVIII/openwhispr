@@ -417,6 +417,7 @@
         "testing": "Probando…",
         "connected": "Conectado",
         "connectionFailed": "No se pudo verificar la conexión.",
+        "unverified": "No se pudo verificar: {{reason}}",
         "errors": {
           "endpointRequired": "Introduce la URL del endpoint antes de probar.",
           "invalidUrl": "El endpoint debe ser una URL HTTP o HTTPS válida.",

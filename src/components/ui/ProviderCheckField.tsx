@@ -45,7 +45,8 @@ type ProviderCheckFieldProps = Omit<
 /**
  * The app's field for a credential. A saved secret shows its first and last characters
  * until it is focused, and focusing it selects all of it, so a paste replaces it. With a
- * check, the status sits at the field's end and a failure's reason, with Retry, under it.
+ * check, the status sits at the field's end, and the reason for a failure or for no verdict,
+ * with Retry, under it.
  */
 export function ProviderCheckField({
   label,
@@ -112,7 +113,7 @@ export function ProviderCheckField({
       )}
       {phase !== "idle" && (
         <ConnectionStatusIcon
-          state={phase === "connected" || phase === "failed" ? phase : "checking"}
+          state={phase === "waiting" ? "checking" : phase}
           className="pointer-events-none absolute end-2.5 top-1/2 -translate-y-1/2"
         />
       )}
@@ -130,9 +131,24 @@ export function ProviderCheckField({
         field
       )}
       {check && (
-        <p className={failure ? "mt-1 px-1 text-xs leading-[1.4] text-destructive" : undefined}>
+        <p
+          className={
+            failure
+              ? cn(
+                  "mt-1 px-1 text-xs leading-[1.4]",
+                  // Amber text needs the darker shade to stay readable on white.
+                  phase === "unverified" ? "text-amber-700 dark:text-amber-300" : "text-destructive"
+                )
+              : undefined
+          }
+        >
           <span id={reasonId} role="alert">
-            {failure && (failureReason ?? describe(failure))}
+            {failure &&
+              (phase === "unverified"
+                ? t("onboarding.rehaul.provider.unverified", {
+                    reason: failureReason ?? describe(failure),
+                  })
+                : (failureReason ?? describe(failure)))}
           </span>
           {failure && (
             <>

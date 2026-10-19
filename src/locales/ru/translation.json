@@ -417,6 +417,7 @@
         "testing": "Проверка…",
         "connected": "Подключено",
         "connectionFailed": "Не удалось проверить подключение.",
+        "unverified": "Не удалось проверить: {{reason}}",
         "errors": {
           "endpointRequired": "Перед тестом введите URL endpoint.",
           "invalidUrl": "Endpoint должен быть корректным HTTP- или HTTPS-URL.",

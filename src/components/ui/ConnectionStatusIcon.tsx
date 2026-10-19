@@ -1,12 +1,13 @@
 import "../../styles/connection-status-icon.css";
 import { cn } from "../lib/utils";
 
-type ConnectionStatusIconState = "checking" | "connected" | "failed";
+type ConnectionStatusIconState = "checking" | "connected" | "unverified" | "failed";
 
 /**
  * The status of a field that checks itself: a spinning arc while checking, which closes
- * into a tick on success or a ring with "!" on failure. One SVG changes state in place so
- * the change animates. Decorative: the state must also be given in text.
+ * into a tick on success or a ring with "!" on failure (amber when unverified). One SVG
+ * changes state in place so the change animates. Decorative: the state must also be given
+ * in text.
  */
 export function ConnectionStatusIcon({
   state,

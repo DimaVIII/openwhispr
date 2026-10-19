@@ -21,7 +21,7 @@ async function loadField(t) {
     noExternal: ["react-i18next"],
     mockModules: {
       "react-i18next": `
-        const t = (key) => key;
+        const t = (key, options) => (options?.reason ? key + "(" + options.reason + ")" : key);
         export function useTranslation() { return { t }; }
       `,
     },
@@ -301,4 +301,28 @@ test("a reason override replaces the default text and leaves the field valid", a
   assert.doesNotMatch(html, /aria-invalid="/, "the value is not what is wrong");
   const plain = markup(Field, failed("credentialsRejected"));
   assert.match(plain, /aria-invalid="true"/, "without an override, a rejection marks it");
+});
+
+test("no verdict shows its reason in amber with Retry, and the value stays valid", async (t) => {
+  const Field = await loadField(t);
+  for (const errorCode of ["timeout", "network", "providerStatus"]) {
+    const html = markup(Field, {
+      phase: "unverified",
+      failure: { success: false, errorCode, status: 503, unverified: true },
+    });
+    assert.match(html, /data-state="unverified"/, errorCode);
+    assert.doesNotMatch(html, /aria-invalid="/, errorCode);
+    assert.match(
+      html,
+      /<p class="mt-1 px-1 text-xs leading-\[1\.4\] text-amber-700 dark:text-amber-300">/,
+      errorCode
+    );
+    const reason = `role="alert">onboarding\\.rehaul\\.provider\\.unverified\\(onboarding\\.rehaul\\.provider\\.errors\\.${errorCode}\\)<`;
+    assert.match(html, new RegExp(reason), errorCode);
+    assert.match(html, /<button type="button"[^>]*>common\.retry<\/button>/, errorCode);
+  }
+  assert.match(
+    markup(Field, failed("credentialsRejected")),
+    /<p class="mt-1 px-1 text-xs leading-\[1\.4\] text-destructive">/
+  );
 });

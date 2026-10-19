@@ -3,7 +3,7 @@ const http = require("node:http");
 const test = require("node:test");
 const providerTest = require("../../src/helpers/providerConnectionTest.js");
 
-const { resolveProviderRequest, testProviderConnection } = providerTest;
+const { describeCortiTokenFailure, resolveProviderRequest, testProviderConnection } = providerTest;
 
 test("builds provider tests without placing credentials in the URL", () => {
   const request = resolveProviderRequest({ provider: "openai", apiKey: "secret" });
@@ -166,7 +166,12 @@ test("maps authentication and transport failures to safe messages", async () => 
     await testProviderConnection({ provider: "openai", apiKey: "bad" }, async () => {
       throw new Error("secret upstream detail");
     }),
-    { success: false, errorCode: "network", error: "The provider could not be reached." }
+    {
+      success: false,
+      errorCode: "network",
+      error: "The provider could not be reached.",
+      unverified: true,
+    }
   );
 
   assert.deepEqual(
@@ -179,8 +184,119 @@ test("maps authentication and transport failures to safe messages", async () => 
       errorCode: "providerStatus",
       error: "The provider returned status 500.",
       status: 500,
+      unverified: true,
     }
   );
+});
+
+test("a provider that is slow, busy or down gives no verdict, so the failure is unverified", async () => {
+  for (const status of [408, 429, 500, 502, 503, 504]) {
+    const result = await testProviderConnection({ provider: "openai", apiKey: "k" }, async () => ({
+      ok: false,
+      status,
+    }));
+    assert.equal(result.success, false, String(status));
+    assert.equal(result.errorCode, "providerStatus", String(status));
+    assert.equal(result.unverified, true, String(status));
+  }
+  const aborted = Object.assign(new Error("This operation was aborted"), { name: "AbortError" });
+  for (const [error, errorCode] of [
+    [aborted, "timeout"],
+    [new TypeError("fetch failed"), "network"],
+  ]) {
+    const result = await testProviderConnection({ provider: "openai", apiKey: "k" }, async () => {
+      throw error;
+    });
+    assert.equal(result.errorCode, errorCode);
+    assert.equal(result.unverified, true, errorCode);
+  }
+});
+
+test("an answer that faults the key or the setup is never unverified", async () => {
+  const cases = [
+    [
+      { provider: "openai", apiKey: "bad" },
+      () => ({ ok: false, status: 401 }),
+      "credentialsRejected",
+    ],
+    [
+      { provider: "openai", apiKey: "bad" },
+      () => ({ ok: false, status: 403 }),
+      "credentialsRejected",
+    ],
+    [{ provider: "openai", apiKey: "k" }, () => ({ ok: false, status: 400 }), "providerStatus"],
+    [{ provider: "openai", apiKey: "k" }, () => ({ ok: false, status: 402 }), "providerStatus"],
+    [{ provider: "openai", apiKey: "k" }, () => ({ ok: false, status: 404 }), "providerStatus"],
+    [
+      { provider: "openai", apiKey: "k", model: "gone" },
+      () => ({ ok: true, status: 200, json: async () => ({ data: [{ id: "other" }] }) }),
+      "modelNotFound",
+    ],
+    [
+      { provider: "custom", baseUrl: "http://localhost:1234" },
+      () => ({ ok: false, status: 404 }),
+      "endpointNotFound",
+    ],
+    [
+      { provider: "gemini", apiKey: "made-up" },
+      () => ({
+        ok: false,
+        status: 400,
+        json: async () => ({ error: { details: [{ reason: "API_KEY_INVALID" }] } }),
+      }),
+      "credentialsRejected",
+    ],
+  ];
+  for (const [config, answer, errorCode] of cases) {
+    const result = await testProviderConnection(config, async () => answer());
+    assert.equal(result.errorCode, errorCode, `${config.provider} ${errorCode}`);
+    assert.equal(result.unverified, undefined, `${config.provider} ${errorCode}`);
+  }
+});
+
+test("across a custom server's addresses, an answer outranks no answer", async () => {
+  const base = "http://localhost:1234";
+  const aborted = Object.assign(new Error("This operation was aborted"), { name: "AbortError" });
+  const answer = (models, v1) => async (url) => {
+    const reply = url.includes("/v1/models") ? v1 : models;
+    if (reply instanceof Error) throw reply;
+    return reply;
+  };
+  const check = (config, fetchImpl) =>
+    testProviderConnection({ provider: "custom", baseUrl: base, ...config }, fetchImpl);
+  const listWithout = {
+    ok: true,
+    status: 200,
+    json: async () => ({ data: [{ id: "other" }] }),
+  };
+
+  // A busy address never hides a refused key or a missing model on the other one.
+  const missing = await check({ model: "m" }, answer({ ok: false, status: 503 }, listWithout));
+  assert.equal(missing.errorCode, "modelNotFound");
+  assert.equal(missing.unverified, undefined);
+  const refused = await check({ apiKey: "bad" }, answer(aborted, { ok: false, status: 401 }));
+  assert.equal(refused.errorCode, "credentialsRejected");
+
+  // A real status wins whichever address answered it.
+  for (const [first, second] of [
+    [400, 503],
+    [503, 400],
+  ]) {
+    const result = await check(
+      {},
+      answer({ ok: false, status: first }, { ok: false, status: second })
+    );
+    assert.equal(result.status, 400, `${first} then ${second}`);
+    assert.equal(result.unverified, undefined, `${first} then ${second}`);
+  }
+
+  // No answer outranks an address without a model list, which the server may not use.
+  const busy = await check({}, answer({ ok: false, status: 404 }, { ok: false, status: 503 }));
+  assert.equal(busy.status, 503);
+  assert.equal(busy.unverified, true);
+  const slow = await check({}, answer({ ok: false, status: 404 }, aborted));
+  assert.equal(slow.errorCode, "timeout");
+  assert.equal(slow.unverified, true);
 });
 
 test("succeeds when only the /v1 candidate responds", async () => {
@@ -774,4 +890,152 @@ test("only a speech check with every model list missing asks that address", asyn
   const unreachable = await testProviderConnection(speech("http://127.0.0.1:9"), down.fetchImpl);
   assert.equal(unreachable.errorCode, "network");
   assert.equal(down.calls.length, 2);
+});
+
+const TINFOIL_MODELS = { data: [{ id: "voxtral-small-24b" }, { id: "gpt-oss-120b" }] };
+const TINFOIL_KEY_ROUTE = "https://inference.tinfoil.sh/v1/embeddings";
+
+function tinfoilFetch(keyAnswer, models = jsonResponse(200, TINFOIL_MODELS)) {
+  return recordingFetch((url) => (url === TINFOIL_KEY_ROUTE ? keyAnswer() : models));
+}
+
+test("a made-up Tinfoil key is refused, though Tinfoil's model list is public", async () => {
+  const { calls, fetchImpl } = tinfoilFetch(() => jsonResponse(401));
+  const result = await testProviderConnection(
+    { provider: "tinfoil", apiKey: " made-up ", model: "voxtral-small-24b" },
+    fetchImpl
+  );
+  assert.equal(result.errorCode, "credentialsRejected");
+  assert.deepEqual(
+    calls.map((call) => [call.url, call.init.method]),
+    [
+      ["https://inference.tinfoil.sh/v1/models", "GET"],
+      [TINFOIL_KEY_ROUTE, "POST"],
+    ]
+  );
+  const keyCheck = calls[1].init;
+  assert.equal(keyCheck.headers.Authorization, "Bearer made-up");
+  assert.equal(keyCheck.headers["Content-Type"], "application/json");
+  assert.deepEqual(JSON.parse(keyCheck.body), { model: "nomic-embed-text", input: "." });
+  assert.equal(keyCheck.redirect, "error");
+});
+
+test("Tinfoil's key check spends a token, so it runs through runPaidCheck", async () => {
+  const paid = [];
+  const runPaidCheck = async (key, check) => {
+    paid.push(key);
+    return check();
+  };
+  const { fetchImpl } = tinfoilFetch(() => jsonResponse(200, { data: [] }));
+  assert.deepEqual(
+    await testProviderConnection(
+      { provider: "tinfoil", apiKey: " tf-key ", model: "gpt-oss-120b" },
+      fetchImpl,
+      runPaidCheck
+    ),
+    { success: true }
+  );
+  assert.deepEqual(paid, ["tf-key"], "keyed by the trimmed key");
+
+  // A key the caller already paid for is not checked again.
+  const { calls, fetchImpl: remembered } = tinfoilFetch(() => assert.fail("paid twice"));
+  assert.deepEqual(
+    await testProviderConnection(
+      { provider: "tinfoil", apiKey: "tf-key", model: "gpt-oss-120b" },
+      remembered,
+      async () => ({ success: true })
+    ),
+    { success: true }
+  );
+  assert.equal(calls.length, 1, "the free model list still runs");
+});
+
+test("Tinfoil's model is checked on its public list before anything is paid for", async () => {
+  for (const [models, errorCode] of [
+    [jsonResponse(200, TINFOIL_MODELS), "modelNotFound"],
+    [jsonResponse(503), "providerStatus"],
+  ]) {
+    const { calls, fetchImpl } = tinfoilFetch(() => assert.fail("paid"), models);
+    const result = await testProviderConnection(
+      { provider: "tinfoil", apiKey: "tf-key", model: "retired-model" },
+      fetchImpl,
+      () => assert.fail("paid")
+    );
+    assert.equal(result.errorCode, errorCode);
+    assert.equal(calls.length, 1);
+  }
+});
+
+test("a busy Tinfoil, or a retired check model, gives no verdict on the key", async () => {
+  for (const status of [404, 429, 503]) {
+    const { fetchImpl } = tinfoilFetch(() => jsonResponse(status));
+    const result = await testProviderConnection(
+      { provider: "tinfoil", apiKey: "tf-key", model: "gpt-oss-120b" },
+      fetchImpl
+    );
+    assert.equal(result.errorCode, "providerStatus", String(status));
+    assert.equal(result.unverified, true, String(status));
+  }
+  const { fetchImpl } = tinfoilFetch(() => jsonResponse(402));
+  const unpaid = await testProviderConnection(
+    { provider: "tinfoil", apiKey: "tf-key", model: "gpt-oss-120b" },
+    fetchImpl
+  );
+  assert.equal(unpaid.status, 402);
+  assert.equal(unpaid.unverified, undefined, "an account Tinfoil refuses is an answer");
+});
+
+test("only Corti's own answer refuses its credentials; no answer is unverified", () => {
+  const cortiError = (message, status) => Object.assign(new Error(message), { status });
+  const aborted = Object.assign(new Error("This operation was aborted"), { name: "AbortError" });
+  for (const [error, errorCode, unverified] of [
+    [aborted, "timeout", true],
+    [new TypeError("fetch failed"), "network", true],
+    [
+      cortiError("Corti authentication failed: 503 Service Unavailable", 503),
+      "providerStatus",
+      true,
+    ],
+    [cortiError("Corti authentication failed: 429", 429), "providerStatus", true],
+    [cortiError("Corti authentication failed: 401 invalid_client", 401), "credentialsRejected"],
+    [
+      cortiError("Corti authentication failed: 400 unauthorized_client", 400),
+      "credentialsRejected",
+    ],
+    [cortiError("Corti authentication failed: no access token in response"), "credentialsRejected"],
+    [cortiError("Invalid Corti tenant name"), "credentialsRejected"],
+  ]) {
+    const result = describeCortiTokenFailure(error);
+    assert.equal(result.success, false, error.message);
+    assert.equal(result.errorCode, errorCode, error.message);
+    assert.equal(result.unverified, unverified, error.message);
+    assert.doesNotMatch(result.error, /invalid_client|unauthorized_client/, "no upstream detail");
+  }
+});
+
+test("a model list whose body never arrives is no verdict, not a missing model", async () => {
+  const aborted = Object.assign(new Error("This operation was aborted"), { name: "AbortError" });
+  for (const [error, errorCode] of [
+    [aborted, "timeout"],
+    [new TypeError("terminated"), "network"],
+  ]) {
+    const fetchImpl = async () => ({
+      ok: true,
+      status: 200,
+      json: async () => {
+        throw error;
+      },
+    });
+    const result = await testProviderConnection(
+      { provider: "openai", apiKey: "k", model: "gpt-test" },
+      fetchImpl
+    );
+    assert.equal(result.errorCode, errorCode);
+    assert.equal(result.unverified, true);
+  }
+  const unreadable = await testProviderConnection(
+    { provider: "openai", apiKey: "k", model: "gpt-test" },
+    async () => jsonResponse(200, "not json")
+  );
+  assert.equal(unreadable.errorCode, "modelNotFound", "a list that can't be read offers nothing");
 });

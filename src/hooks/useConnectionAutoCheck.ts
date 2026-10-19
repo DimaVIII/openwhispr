@@ -4,12 +4,15 @@ import { useDelayedFlag } from "./useDelayedFlag";
 type TestProviderConnection = NonNullable<Window["electronAPI"]["testProviderConnection"]>;
 export type ProviderConnectionConfig = Parameters<TestProviderConnection>[0];
 export type ProviderConnectionResult = Awaited<ReturnType<TestProviderConnection>>;
-/** "waiting": the pause runs and nothing is sent; "checking": a request is out. */
-type ConnectionCheckPhase = "idle" | "waiting" | "checking" | "connected" | "failed";
+/**
+ * "waiting": the pause runs and nothing is sent; "checking": a request is out; "unverified":
+ * the provider gave no verdict, so the entry may be used but is not known to work.
+ */
+type ConnectionCheckPhase = "idle" | "waiting" | "checking" | "connected" | "unverified" | "failed";
 
 export interface ConnectionAutoCheck {
   phase: ConnectionCheckPhase;
-  /** The answer while phase is "failed". */
+  /** The answer while phase is "failed" or "unverified". */
   failure: ProviderConnectionResult | null;
   /** Re-sends the current entry at once. */
   retry: () => void;
@@ -85,7 +88,9 @@ export function useConnectionAutoCheck({
     : settled
       ? settled.success
         ? "connected"
-        : "failed"
+        : settled.unverified
+          ? "unverified"
+          : "failed"
       : inFlight === revision
         ? "checking"
         : hold
@@ -103,7 +108,7 @@ export function useConnectionAutoCheck({
 
   return {
     phase,
-    failure: phase === "failed" ? settled : null,
+    failure: phase === "failed" || phase === "unverified" ? settled : null,
     retry,
     announcement:
       phase === "connected" ? "connected" : phase === "checking" && slow ? "testing" : null,

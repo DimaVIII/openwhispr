@@ -10,6 +10,7 @@ const ENDPOINTS = {
   // describes the key that calls it.
   openrouter: "https://openrouter.ai/api/v1/key",
   corti: "https://ai.eu.corti.app/v1/models",
+  // Public too, so it vouches only for the model; testTinfoilKey checks the key.
   tinfoil: "https://inference.tinfoil.sh/v1/models",
   // Deepgram's model list answers without a key, so it cannot vouch for one. This is
   // Deepgram's documented key check.
@@ -19,6 +20,8 @@ const ENDPOINTS = {
 };
 // Listing the key's projects proves the key too: used only if Deepgram retires the route above.
 const DEEPGRAM_PROJECTS_ENDPOINT = "https://api.deepgram.com/v1/projects";
+// Turns a made-up key away before embedding anything; a valid key pays for one token.
+const TINFOIL_KEY_ENDPOINT = "https://inference.tinfoil.sh/v1/embeddings";
 
 // Renderers translate errorCode via onboarding.rehaul.provider.errors.*; the
 // English `error` string stays for logs and older callers.
@@ -238,19 +241,29 @@ function resolveProviderRequest(config) {
   return { endpoint: endpoints[0], endpoints, headers, redirect, transcriptionEndpoint };
 }
 
-// When several candidate endpoints fail, report the most actionable failure.
+// When several candidate endpoints fail, report the most actionable failure. An answer that
+// faults the setup outranks no answer (unverified), so a busy candidate never hides a refused
+// key or a missing model. No answer outranks a candidate without a model list, which may only
+// be an address the server doesn't use.
 const FAILURE_PRIORITY = {
-  credentialsRejected: 4,
-  providerStatus: 3,
-  modelNotFound: 2.5,
-  endpointNotFound: 2,
-  timeout: 1,
-  network: 0,
+  credentialsRejected: 6,
+  providerStatus: 5,
+  modelNotFound: 4,
+  endpointNotFound: 0,
 };
+const UNVERIFIED_PRIORITY = { providerStatus: 3, timeout: 2, network: 1 };
 
 function pickFailure(current, next) {
   if (!current) return next;
-  return FAILURE_PRIORITY[next.errorCode] > FAILURE_PRIORITY[current.errorCode] ? next : current;
+  const rank = (failure) =>
+    (failure.unverified ? UNVERIFIED_PRIORITY : FAILURE_PRIORITY)[failure.errorCode];
+  return rank(next) > rank(current) ? next : current;
+}
+
+// A provider that is slow, busy or down gives no verdict on the credentials. Such a failure is
+// marked unverified: the app may go ahead with them, and only a later check can tell.
+function isUnverifiedStatus(status) {
+  return status === 408 || status === 429 || status >= 500;
 }
 
 function describeStatusFailure(status, provider) {
@@ -268,15 +281,28 @@ function describeStatusFailure(status, provider) {
       status,
     };
   }
-  return { errorCode: "providerStatus", error: `The provider returned status ${status}.`, status };
+  const failure = {
+    errorCode: "providerStatus",
+    error: `The provider returned status ${status}.`,
+    status,
+  };
+  return isUnverifiedStatus(status) ? { ...failure, unverified: true } : failure;
 }
 
 const MODEL_NOT_FOUND = {
   errorCode: "modelNotFound",
   error: "The selected model is not available from this provider.",
 };
-const TIMEOUT_FAILURE = { errorCode: "timeout", error: "The connection test timed out." };
-const NETWORK_FAILURE = { errorCode: "network", error: "The provider could not be reached." };
+const TIMEOUT_FAILURE = {
+  errorCode: "timeout",
+  error: "The connection test timed out.",
+  unverified: true,
+};
+const NETWORK_FAILURE = {
+  errorCode: "network",
+  error: "The provider could not be reached.",
+  unverified: true,
+};
 
 // An empty or non-JSON body reads as undefined. A body that never arrives (the 12 s cap
 // firing, a dropped connection) is not an answer, so its error goes on to probe's catch.
@@ -344,15 +370,10 @@ function isDatedSnapshot(id, model) {
 
 async function responseOffersModel(response, model, provider) {
   if (!model) return true;
-  try {
-    const payload = await response.json();
-    const selected = normalizeModelId(model);
-    return responseModelIds(payload).some(
-      (id) => id === selected || (provider === "anthropic" && isDatedSnapshot(id, selected))
-    );
-  } catch {
-    return false;
-  }
+  const selected = normalizeModelId(model);
+  return responseModelIds(await readJson(response)).some(
+    (id) => id === selected || (provider === "anthropic" && isDatedSnapshot(id, selected))
+  );
 }
 
 // One request (a GET unless `init` says otherwise) under the 12 s cap. `judge` reads the
@@ -376,7 +397,13 @@ async function probe(endpoint, request, fetchImpl, judge, init = { method: "GET"
   }
 }
 
-async function testProviderConnection(config, fetchImpl = fetch) {
+// `runPaidCheck(key, check)` runs a check that spends the user's credits. The main process
+// passes one that runs it once per key (paidKeyCheck.js).
+async function testProviderConnection(
+  config,
+  fetchImpl = fetch,
+  runPaidCheck = (_key, check) => check()
+) {
   let request;
   try {
     request = resolveProviderRequest(config);
@@ -404,7 +431,11 @@ async function testProviderConnection(config, fetchImpl = fetch) {
       }
       return MODEL_NOT_FOUND;
     });
-    if (!next) return { success: true };
+    if (!next) {
+      return provider === "tinfoil"
+        ? testTinfoilKey(request, config.apiKey.trim(), fetchImpl, runPaidCheck)
+        : { success: true };
+    }
     everyListMissing = everyListMissing && next.status === 404;
     failure = pickFailure(failure, next);
   }
@@ -470,4 +501,48 @@ async function testDeepgramKey(request, fetchImpl) {
   return fallback ? { success: false, ...fallback } : { success: true };
 }
 
-module.exports = { resolveProviderRequest, testProviderConnection };
+// Runs once Tinfoil's public model list has vouched for the model. A valid key pays for one
+// embedded token, hence runPaidCheck. A 404 means this check's own model was retired, which
+// says nothing about the key.
+function testTinfoilKey(request, apiKey, fetchImpl, runPaidCheck) {
+  const jsonRequest = {
+    ...request,
+    headers: { ...request.headers, "Content-Type": "application/json" },
+  };
+  return runPaidCheck(apiKey, async () => {
+    const failure = await probe(
+      TINFOIL_KEY_ENDPOINT,
+      jsonRequest,
+      fetchImpl,
+      async (response) => {
+        if (response.ok) return null;
+        const statusFailure = describeStatusFailure(response.status, "tinfoil");
+        return response.status === 404 ? { ...statusFailure, unverified: true } : statusFailure;
+      },
+      { method: "POST", body: JSON.stringify({ model: "nomic-embed-text", input: "." }) }
+    );
+    return failure ? { success: false, ...failure } : { success: true };
+  });
+}
+
+// Corti's speech credentials are exchanged for a token (cortiAuth.js). Only an answer from
+// Corti can refuse them, and getCortiToken prefixes those errors and attaches the status. A
+// token request that never reached Corti, or found it busy or down, gives no verdict, and
+// reporting it as "credentials rejected" sends the user to re-type a key that was never the
+// issue.
+function describeCortiTokenFailure(error) {
+  if (error?.name === "AbortError") return { success: false, ...TIMEOUT_FAILURE };
+  if (!/^(Corti authentication failed|Invalid Corti)/.test(error?.message || "")) {
+    return { success: false, ...NETWORK_FAILURE };
+  }
+  if (isUnverifiedStatus(error.status)) {
+    return { success: false, ...describeStatusFailure(error.status, "corti") };
+  }
+  return {
+    success: false,
+    errorCode: "credentialsRejected",
+    error: "Corti rejected these credentials.",
+  };
+}
+
+module.exports = { describeCortiTokenFailure, resolveProviderRequest, testProviderConnection };
