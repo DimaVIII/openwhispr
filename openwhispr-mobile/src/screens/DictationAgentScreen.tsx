@@ -30,7 +30,7 @@ export function DictationAgentScreen(): React.JSX.Element {
     activeMode === 'private'
       ? `${PRIVATE_MODE_LOCKED_REASON} Your settings are saved and apply once Local Mode is off.`
       : activeMode === 'providers' && !agentSelected
-        ? 'Bring Your Own Key skips the voice assistant until Chat & Voice Assistant has a selection. Your settings are saved and apply once it does.'
+        ? 'Bring Your Own Key skips the voice assistant until Voice Assistant has a selection. Your settings are saved and apply once it does.'
         : null;
   const isAvailable = !unavailableNotice;
   const enabled = config ? isDictationAgentEnabled(config) : true;

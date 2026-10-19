@@ -19,7 +19,7 @@ jest.mock('@/store/useProcessingModeStore', () => ({
     selector({ activeMode: mockActiveMode }),
 }));
 
-const NOTICE = /skips the voice assistant until Chat & Voice Assistant has a selection/;
+const NOTICE = /skips the voice assistant until Voice Assistant has a selection/;
 
 beforeEach(() => {
   jest.clearAllMocks();

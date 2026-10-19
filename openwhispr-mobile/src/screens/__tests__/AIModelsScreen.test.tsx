@@ -262,3 +262,11 @@ it('puts the Apple Intelligence status on its own line', async () => {
     'Status: Ready\nRuns On-Device text workflows, and private and signed-out note generation.',
   );
 });
+
+it('lists Note Chat and Voice Assistant as separate workflows', async () => {
+  render(<AIModelsScreen />);
+  expect(screen.getByText('Note Chat')).toBeTruthy();
+  expect(screen.getByText('Voice Assistant')).toBeTruthy();
+  expect(screen.queryByText('Chat & Voice Assistant')).toBeNull();
+  await screen.findByText(/Status: Ready/);
+});

@@ -169,73 +169,75 @@ function CleanupSettings({ enabled }: { enabled: boolean }): React.JSX.Element {
   );
 }
 
-// Note chat and the voice assistant share this workflow's model but switch on and off apart, so
-// Private mode can turn the voice assistant off while note chat keeps working.
-function AssistantSettings(): React.JSX.Element {
+// Note chat has a switch of its own, which it followed from the voice assistant's until set.
+function NoteChatSettings(): React.JSX.Element {
+  const config = useConfigStore((state) => state.config);
+  const toggleNoteChat = useConfigToggle('noteChatEnabled');
+  return (
+    <SettingsSection>
+      <SettingsRow
+        iconStyle="line"
+        icon="bubble.left.and.bubble.right"
+        mdIcon="MessagesSquare"
+        title="Note Chat"
+        description="Ask questions about your notes and get answers from them."
+        rightElement={
+          <SettingsSwitch
+            accessibilityLabel="Note Chat"
+            value={config ? isNoteChatEnabled(config) : true}
+            onValueChange={toggleNoteChat}
+          />
+        }
+        showChevron={false}
+      />
+    </SettingsSection>
+  );
+}
+
+// Local Mode turns the voice assistant off.
+function VoiceAssistantSettings(): React.JSX.Element {
   const config = useConfigStore((state) => state.config);
   const updateConfig = useConfigStore((state) => state.updateConfig);
   const privateMode = useProcessingModeStore((state) => state.activeMode === 'private');
-  const toggleNoteChat = useConfigToggle('noteChatEnabled');
-  const chatEnabled = config ? isNoteChatEnabled(config) : true;
   const voiceEnabled = config ? isDictationAgentEnabled(config) : true;
   const agentName = config ? getDictationAgentName(config) : undefined;
   return (
-    <>
-      <SettingsSection>
-        <SettingsRow
-          iconStyle="line"
-          icon="bubble.left.and.bubble.right"
-          mdIcon="MessagesSquare"
-          title="Note Chat"
-          description="Ask questions about your notes and get answers from them."
-          rightElement={
-            <SettingsSwitch
-              accessibilityLabel="Note Chat"
-              value={chatEnabled}
-              onValueChange={toggleNoteChat}
-            />
-          }
-          showChevron={false}
-        />
-        <SettingsRow
-          iconStyle="line"
-          icon="person.wave.2"
-          mdIcon="UserRoundCog"
-          title="Voice Assistant"
-          description={
-            privateMode
-              ? PRIVATE_MODE_LOCKED_REASON
-              : 'Say your assistant’s name while dictating to give it commands.'
-          }
-          disabled={privateMode}
-          rightElement={
-            <SettingsSwitch
-              accessibilityLabel="Voice Assistant"
-              value={voiceEnabled && !privateMode}
-              disabled={privateMode}
-              onValueChange={(enabled) => {
-                safeHaptics('light');
-                void updateConfig(voiceAssistantToggleConfig(config, enabled));
-              }}
-            />
-          }
-          showChevron={false}
-        />
-        {voiceEnabled && !privateMode ? (
-          <SettingsRow
-            iconStyle="line"
-            icon="slider.horizontal.3"
-            mdIcon="SlidersHorizontal"
-            title="Voice Assistant Settings"
-            subtitle={agentName}
-            onPress={() => router.push('/(account)/dictation-agent')}
+    <SettingsSection>
+      <SettingsRow
+        iconStyle="line"
+        icon="person.wave.2"
+        mdIcon="UserRoundCog"
+        title="Voice Assistant"
+        description={
+          privateMode
+            ? PRIVATE_MODE_LOCKED_REASON
+            : 'Say your assistant’s name while dictating to give it commands.'
+        }
+        disabled={privateMode}
+        rightElement={
+          <SettingsSwitch
+            accessibilityLabel="Voice Assistant"
+            value={voiceEnabled && !privateMode}
+            disabled={privateMode}
+            onValueChange={(enabled) => {
+              safeHaptics('light');
+              void updateConfig(voiceAssistantToggleConfig(config, enabled));
+            }}
           />
-        ) : null}
-      </SettingsSection>
-      {chatEnabled || voiceEnabled ? null : (
-        <SectionFooter>Note chat and the voice assistant are off.</SectionFooter>
-      )}
-    </>
+        }
+        showChevron={false}
+      />
+      {voiceEnabled && !privateMode ? (
+        <SettingsRow
+          iconStyle="line"
+          icon="slider.horizontal.3"
+          mdIcon="SlidersHorizontal"
+          title="Voice Assistant Settings"
+          subtitle={agentName}
+          onPress={() => router.push('/(account)/dictation-agent')}
+        />
+      ) : null}
+    </SettingsSection>
   );
 }
 
@@ -381,13 +383,11 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
   // Keys are stored per provider (per server for Custom), so every workflow on it shares one.
   const keyOwner =
     provider?.id === 'custom' ? 'this server' : providerDisplayName(provider?.id ?? '');
-  // Text Cleanup, and note chat with the voice assistant, can be switched off; then they use no key.
+  // Text Cleanup, Note Chat and the Voice Assistant can be switched off; then they use no key.
   const switchedOff = (workflow: MobileInferenceScope): boolean =>
     (workflow === 'cleanup' && !(config?.cleanupEnabled ?? true)) ||
-    (workflow === 'agent' &&
-      !!config &&
-      !isNoteChatEnabled(config) &&
-      !isDictationAgentEnabled(config));
+    (workflow === 'noteChat' && !!config && !isNoteChatEnabled(config)) ||
+    (workflow === 'agent' && !!config && !isDictationAgentEnabled(config));
   const workflowOff = switchedOff(scope);
   const sharedWith = WORKFLOWS.filter((other) => {
     const saved = config?.inference?.[other];
@@ -758,7 +758,8 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
         keyboardDismissMode="interactive"
       >
         {scope === 'cleanup' ? <CleanupSettings enabled={!workflowOff} /> : null}
-        {scope === 'agent' ? <AssistantSettings /> : null}
+        {scope === 'noteChat' ? <NoteChatSettings /> : null}
+        {scope === 'agent' ? <VoiceAssistantSettings /> : null}
         {workflowOff ? null : (
           <>
             <InferenceModePicker
