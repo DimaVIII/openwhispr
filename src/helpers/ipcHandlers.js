@@ -175,7 +175,11 @@ const {
   isSpeakerLocked,
 } = require("./speakerAssignmentPolicy");
 const { normalizeStoredSpeakerCount } = require("./speakerCount");
-const { buildSpeakerRenumber, resolveSpeakerIndexBase } = require("./speakerIndexBase");
+const {
+  buildSpeakerRenumber,
+  normalizeSpeakerIndexBase,
+  resolveSpeakerIndexBase,
+} = require("./speakerIndexBase");
 const { downsample24kTo16k, pcm16ToWav } = require("../utils/audioUtils");
 const postMigrationDetector = require("./postMigrationDetector");
 const screenContextCapture = require("./screenContextCapture");
@@ -709,6 +713,9 @@ class IPCHandlers {
     // off until the renderer syncs (see meetingDetectionPreferencePolicy.js).
     this.meetingProcessDetection = true;
     this.activeMeetingSpeakerConfig = null;
+    // Diarization session id → { noteId, ceiling }: speaker ids a stopped session's
+    // diarization may still write to its note (see _resolveMeetingSpeakerIndexBase).
+    this._diarizationSpeakerReservations = new Map();
     this.whisperVadSettings = {
       dictationSileroEnabled: false,
       noteRecordingSileroEnabled: true,
@@ -12964,21 +12971,28 @@ class IPCHandlers {
   // The renderer's base covers the transcript it resumes; mappings and embeddings
   // can also hold ids no row carries any more (merged clusters, a cluster that
   // owned no segment), and a reused one would still name the new voice.
+  // A note recorded again before its last session's diarization lands has neither
+  // that result's ids in the seed nor its embeddings stored yet, so the session's
+  // reserved ceiling counts too.
   _resolveMeetingSpeakerIndexBase(noteId, requestedBase) {
     if (noteId == null) return resolveSpeakerIndexBase(requestedBase);
+    let base = normalizeSpeakerIndexBase(requestedBase);
+    for (const reservation of this._diarizationSpeakerReservations.values()) {
+      if (reservation.noteId === noteId) base = Math.max(base, reservation.ceiling);
+    }
     try {
       const storedIds = [
         ...this.databaseManager.getSpeakerMappings(noteId).map((m) => m.speaker_id),
         ...this.databaseManager.getNoteSpeakerEmbeddings(noteId).map((e) => e.speaker_id),
       ];
-      return resolveSpeakerIndexBase(requestedBase, storedIds);
+      return resolveSpeakerIndexBase(base, storedIds);
     } catch (error) {
       debugLogger.warn(
         "Could not read stored speaker ids for the meeting note",
         { noteId, error: error.message },
         "speaker"
       );
-      return resolveSpeakerIndexBase(requestedBase);
+      return base;
     }
   }
 
@@ -13052,31 +13066,40 @@ class IPCHandlers {
 
     const fs = require("fs");
 
+    const observedSpeakerIds = new Set(
+      transcriptSegments
+        .filter((segment) => segment.source === "system" && segment.speaker)
+        .map((segment) => segment.speaker)
+    );
+    for (const speakerId of Object.keys(liveSpeakerState || {})) {
+      observedSpeakerIds.add(speakerId);
+    }
+
+    if (observedSpeakerIds.size > 10) {
+      debugLogger.warn("Excessive speaker count from live identification", {
+        observedSpeakers: observedSpeakerIds.size,
+      });
+    }
+
+    const { numSpeakers, cap } = this._resolveSpeakerExpectation({
+      sessionConfig,
+      noteId,
+      observedSpeakerIds,
+      diarizedSource,
+    });
+    // Reserved before the async work so a "record more" started while this runs
+    // numbers its speakers past every cluster the result can name.
+    if (noteId != null) {
+      this._diarizationSpeakerReservations.set(sessionId, {
+        noteId,
+        ceiling: speakerIndexBase + cap,
+      });
+    }
+
     (async () => {
       let tmpWav = null;
       try {
         tmpWav = await this.diarizationManager.convertRawPcmToWav(rawPcmPath, 24000);
-        const observedSpeakerIds = new Set(
-          transcriptSegments
-            .filter((segment) => segment.source === "system" && segment.speaker)
-            .map((segment) => segment.speaker)
-        );
-        for (const speakerId of Object.keys(liveSpeakerState || {})) {
-          observedSpeakerIds.add(speakerId);
-        }
-
-        if (observedSpeakerIds.size > 10) {
-          debugLogger.warn("Excessive speaker count from live identification", {
-            observedSpeakers: observedSpeakerIds.size,
-          });
-        }
-
-        const { numSpeakers, cap } = this._resolveSpeakerExpectation({
-          sessionConfig,
-          noteId,
-          observedSpeakerIds,
-          diarizedSource,
-        });
         let diarizationSegments = await this.diarizationManager.diarize(
           tmpWav,
           numSpeakers > 0 ? { numSpeakers } : {}
@@ -13112,6 +13135,14 @@ class IPCHandlers {
 
         const speakerSet = new Set(diarizationSegments.map((d) => d.speaker));
         const speakerRenumber = buildSpeakerRenumber(speakerSet, speakerIndexBase);
+        // Narrowed to the ids the result actually names; kept until quit, since the
+        // renderer persists them only after this send.
+        if (noteId != null) {
+          this._diarizationSpeakerReservations.set(sessionId, {
+            noteId,
+            ceiling: speakerIndexBase + speakerRenumber.size,
+          });
+        }
 
         // Mirrors the mic-mode single-cluster softening in mergeWithTranscript:
         // every segment stays "you", so persisting an embedding keyed to a
@@ -13215,6 +13246,7 @@ class IPCHandlers {
         send({ segments: enrichedSegments, speakerEmbeddings: speakerEmbeddingsMap });
       } catch (err) {
         debugLogger.warn("Background diarization failed", { error: err.message });
+        this._diarizationSpeakerReservations.delete(sessionId);
         send({ segments: [] });
       } finally {
         try {

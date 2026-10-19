@@ -20,7 +20,7 @@ const START_ARGS = {
 
 function createElectronAPI({ startResult = {} } = {}) {
   const noopListener = () => () => {};
-  const state = { startOptions: [], segmentCallback: null, speakerCallback: null };
+  const state = { startOptions: [], segmentCallback: null };
   const api = {
     checkSystemAudioAccess: async () => ({
       granted: true,
@@ -50,12 +50,7 @@ function createElectronAPI({ startResult = {} } = {}) {
         state.segmentCallback = null;
       };
     },
-    onMeetingSpeakerIdentified: (callback) => {
-      state.speakerCallback = callback;
-      return () => {
-        state.speakerCallback = null;
-      };
-    },
+    onMeetingSpeakerIdentified: noopListener,
     onMeetingSpeakersMerged: noopListener,
     onMeetingSessionSpeakerConfigUpdated: noopListener,
     onMeetingTranscriptionError: noopListener,
@@ -149,6 +144,16 @@ test("main can raise the base past ids only the note's stored mappings use", asy
   assert.equal(await store.startRecording({ ...START_ARGS, seedSegments: earlierSession() }), true);
   emitSystemFinal(state, "new voice");
   assert.equal(segmentWithText(store, "new voice").speaker, "speaker_5");
+  await store.stopRecording();
+});
+
+test("a lower base from main never pulls the session back onto earlier ids", async (t) => {
+  const { api, state } = createElectronAPI({ startResult: { speakerIndexBase: 0 } });
+  const store = await loadStore(t, api);
+
+  assert.equal(await store.startRecording({ ...START_ARGS, seedSegments: earlierSession() }), true);
+  emitSystemFinal(state, "new voice");
+  assert.equal(segmentWithText(store, "new voice").speaker, "speaker_2");
   await store.stopRecording();
 });
 

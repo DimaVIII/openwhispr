@@ -137,10 +137,12 @@ const buildTranscriptText = (segments: TranscriptSegment[]) =>
     .join(" ")
     .trim();
 
+// Seeds come from synced transcript JSON, so an index past safe integers is ignored.
 const getSpeakerNumericIndex = (speakerId?: string): number | null => {
   if (!speakerId) return null;
-  const match = speakerId.match(/speaker_(\d+)/);
-  return match ? Number(match[1]) : null;
+  const match = /^speaker_(\d+)$/.exec(speakerId);
+  const index = match ? Number(match[1]) : null;
+  return index != null && Number.isSafeInteger(index) ? index : null;
 };
 
 const isSegmentWithinIdentificationWindow = (
@@ -425,10 +427,8 @@ let preparePromise: Promise<void> | null = null;
 let ipcCleanups: Array<() => void> = [];
 let speakerIdentifications: SpeakerIdentification[] = [];
 let nextPlaceholderSpeakerIndex = 0;
-// First speaker index this session owns. A resumed note's earlier sessions keep
-// the ids below it, so this session's speakers never share their names, locks,
-// mappings or embeddings. Main may raise it past ids only the note's stored
-// mappings and embeddings still use.
+// First speaker index this session owns; a resumed note's earlier sessions keep the
+// ids below it. Main may raise it (see _resolveMeetingSpeakerIndexBase).
 let sessionSpeakerIndexBase = 0;
 let systemPartialSpeakerIdValue: string | null = null;
 let recentSystemSpeaker: RecentSystemSpeaker | null = null;
@@ -610,9 +610,8 @@ function isEarlierSessionSpeaker(speakerId?: string): boolean {
   return idx != null && idx < sessionSpeakerIndexBase;
 }
 
-function adoptSpeakerIndexBase(base: unknown): void {
-  if (typeof base !== "number" || !Number.isSafeInteger(base)) return;
-  if (base <= sessionSpeakerIndexBase) return;
+function adoptSpeakerIndexBase(base: number | undefined): void {
+  if (base == null || base <= sessionSpeakerIndexBase) return;
   sessionSpeakerIndexBase = base;
   nextPlaceholderSpeakerIndex = Math.max(nextPlaceholderSpeakerIndex, base);
 }
