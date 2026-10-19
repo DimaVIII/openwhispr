@@ -338,12 +338,9 @@ async function processTranscriptionJob(
   const pinnedRequest: TranscriptionRequest = {
     ...request,
     cleanupRoute: request.cleanupRoute ?? captured.cleanupRoute,
-    agentRoute: request.agentRoute ?? captured.agentRoute,
     cleanupUnavailable:
       request.cleanupUnavailable ??
       (request.cleanupRoute ? undefined : captured.cleanupUnavailable),
-    agentUnavailable:
-      request.agentUnavailable ?? (request.agentRoute ? undefined : captured.agentUnavailable),
   };
   if (request.provider === 'byok' && !request.inferenceRoute) {
     throw new Error('The original provider route is unavailable. Start a new transcription.');
@@ -352,9 +349,7 @@ async function processTranscriptionJob(
   result.transcription = {
     ...result.transcription,
     cleanupRoute: pinnedRequest.cleanupRoute,
-    agentRoute: pinnedRequest.agentRoute,
     cleanupUnavailable: pinnedRequest.cleanupUnavailable,
-    agentUnavailable: pinnedRequest.agentUnavailable,
   };
   if (!isDictationContext(request.requestContext)) return result;
 

@@ -486,9 +486,7 @@ export function useKeyboardHandoff() {
           provider: recoveredRoute?.provider ?? 'cloud',
           inferenceRoute: recoveredRoute?.inferenceRoute,
           cleanupRoute: recoveredRoute?.cleanupRoute,
-          agentRoute: recoveredRoute?.agentRoute,
           cleanupUnavailable: recoveredRoute?.cleanupUnavailable,
-          agentUnavailable: recoveredRoute?.agentUnavailable,
           cleanupWarning,
           requestContext: 'keyboard',
         });
@@ -886,9 +884,7 @@ export function useKeyboardHandoff() {
               provider,
               inferenceRoute: jobRoute.inferenceRoute,
               cleanupRoute: jobRoute.cleanupRoute,
-              agentRoute: jobRoute.agentRoute,
               cleanupUnavailable: jobRoute.cleanupUnavailable,
-              agentUnavailable: jobRoute.agentUnavailable,
               requestContext: 'keyboard',
               keyboardTone,
               jobId,
@@ -948,9 +944,11 @@ export function useKeyboardHandoff() {
           let cleanupStartedAt = Date.now();
           const processed = await transcribeAndCleanup(
             {
-              ...jobRoute,
               audioUri: retainedAudioUrl,
               provider,
+              inferenceRoute: jobRoute.inferenceRoute,
+              cleanupRoute: jobRoute.cleanupRoute,
+              cleanupUnavailable: jobRoute.cleanupUnavailable,
               language: getPreferredTranscriptionLanguage(),
               fileName,
               mimeType,
@@ -1066,9 +1064,7 @@ export function useKeyboardHandoff() {
             provider: processed.transcription.provider,
             inferenceRoute: processed.transcription.inferenceRoute,
             cleanupRoute: processed.transcription.cleanupRoute,
-            agentRoute: processed.transcription.agentRoute,
             cleanupUnavailable: processed.transcription.cleanupUnavailable,
-            agentUnavailable: processed.transcription.agentUnavailable,
             cleanupWarning: processed.transcription.cleanupWarning,
             requestContext: 'keyboard',
             keyboardTone,

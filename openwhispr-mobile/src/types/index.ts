@@ -70,7 +70,14 @@ export interface TextInferenceSnapshot {
   agentUnavailable?: string;
 }
 
-export interface Transcript extends TextInferenceSnapshot {
+// Dictation and uploads only take the cleanup route; the voice assistant's route belongs to the
+// keyboard's wand jobs.
+export type CleanupInferenceSnapshot = Pick<
+  TextInferenceSnapshot,
+  'cleanupRoute' | 'cleanupUnavailable'
+>;
+
+export interface Transcript extends CleanupInferenceSnapshot {
   cleanupWarning?: string;
   inferenceRoute?: Extract<InferenceRoute, { mode: 'providers' }>;
   id: string;
@@ -178,7 +185,7 @@ export interface StructuredMeetingNotes {
   followUps: string[];
 }
 
-export interface TranscriptionRequest extends TextInferenceSnapshot {
+export interface TranscriptionRequest extends CleanupInferenceSnapshot {
   inferenceRoute?: Extract<InferenceRoute, { mode: 'providers' }>;
   audioUri: string;
   provider: TranscriptionProvider;
@@ -194,7 +201,7 @@ export interface TranscriptionRequest extends TextInferenceSnapshot {
   timeoutSeconds?: number;
 }
 
-export interface TranscriptionResponse extends TextInferenceSnapshot {
+export interface TranscriptionResponse extends CleanupInferenceSnapshot {
   cleanupWarning?: string;
   inferenceRoute?: Extract<InferenceRoute, { mode: 'providers' }>;
   text: string;

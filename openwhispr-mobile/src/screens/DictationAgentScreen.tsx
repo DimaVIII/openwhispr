@@ -83,7 +83,7 @@ export function DictationAgentScreen(): React.JSX.Element {
             icon="person.wave.2"
             mdIcon="UserRoundCog"
             title="Enable Voice Assistant"
-            description="Show the wand on the OpenWhispr keyboard."
+            description="Use the wand on the OpenWhispr keyboard."
             rightElement={
               <SettingsSwitch
                 // Shows what runs: the voice assistant is off wherever it can't run.

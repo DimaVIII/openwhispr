@@ -85,7 +85,8 @@ describe('cleanupTranscript agentName', () => {
 describe('a dictation that addresses the assistant by name', () => {
   it.each([
     ['in Cloud mode', 'cloud', {}],
-    ['in Local Mode', 'private', {}],
+    // On-Device cleanup of an addressed dictation is covered in cleanupTranscript.onDevice.test.ts.
+    ['in Local Mode on a Cloud fallback', 'private', {}],
     ['with the voice assistant switched off', 'cloud', { dictationAgentEnabled: false }],
   ])('is cleaned, not run as a command, %s', async (_label, mode, settings) => {
     mockActiveMode = mode;
@@ -101,5 +102,6 @@ describe('a dictation that addresses the assistant by name', () => {
     expect(req.inferenceScope).toBe('cleanup');
     expect(req.inferenceRoute).toEqual({ mode: 'openwhispr', scope: 'cleanup' });
     expect(req.timeoutMs).toBe(CLEANUP_TIMEOUT_MS);
+    expect(req.agentName).toBe('OpenWhispr');
   });
 });
