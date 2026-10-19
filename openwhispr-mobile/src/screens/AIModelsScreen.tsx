@@ -41,7 +41,7 @@ function localReasoningStatusLabel(readiness: LocalReasoningReadiness | null): s
     case 'appleIntelligenceOff':
       return 'Apple Intelligence off';
     case 'modelNotReady':
-      return 'Model not ready';
+      return 'Downloading model';
     case 'unavailable':
       return 'Not eligible';
     case 'unsupportedDevice':

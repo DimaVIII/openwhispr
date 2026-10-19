@@ -1332,13 +1332,45 @@ describe('an iPhone that cannot run Apple Intelligence', () => {
     expect(modeRow('On-Device').props.accessibilityState?.disabled).toBeFalsy();
   });
 
-  it('keeps On-Device available while Apple Intelligence is only turned off', async () => {
-    mockLocalReadiness.mockResolvedValue({ status: 'appleIntelligenceOff', tokenCounting: false });
+  it.each([
+    ['appleIntelligenceOff', 'Apple Intelligence is turned off in iOS Settings.'],
+    ['modelNotReady', 'Apple Intelligence is downloading its model.'],
+  ])('keeps On-Device available and says why while it is %s', async (status, reason) => {
+    mockLocalReadiness.mockResolvedValue({ status, tokenCounting: false });
     mockScope = 'cleanup';
     render(<WorkflowSettingsScreen />);
 
-    await act(async () => {});
+    expect(await screen.findByText(reason)).toBeTruthy();
+    expect(screen.queryByText('Text never leaves this phone.')).not.toBeOnTheScreen();
     expect(modeRow('On-Device').props.accessibilityState?.disabled).toBeFalsy();
+  });
+
+  it('checks again on return to the app, as Apple Intelligence is set up in iOS Settings', async () => {
+    const appStateListeners: ((state: string) => void)[] = [];
+    jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, listener) => {
+      appStateListeners.push(listener as (state: string) => void);
+      return { remove: jest.fn() } as unknown as ReturnType<typeof AppState.addEventListener>;
+    });
+    mockLocalReadiness.mockResolvedValue({ status: 'modelNotReady', tokenCounting: false });
+    mockScope = 'cleanup';
+    render(<WorkflowSettingsScreen />);
+    expect(await screen.findByText('Apple Intelligence is downloading its model.')).toBeTruthy();
+
+    mockLocalReadiness.mockResolvedValue({ status: 'ready', tokenCounting: true });
+    await act(async () => appStateListeners.forEach((listener) => listener('active')));
+    expect(await screen.findByText('Text never leaves this phone.')).toBeTruthy();
+    expect(mockLocalReadiness).toHaveBeenLastCalledWith({ refresh: true });
+  });
+
+  it('shows no Apple Intelligence status on Dictation, which runs its own speech model', async () => {
+    mockLocalReadiness.mockResolvedValue({ status: 'modelNotReady', tokenCounting: false });
+    mockScope = 'dictation';
+    render(<WorkflowSettingsScreen />);
+
+    await act(async () => {});
+    expect(
+      screen.queryByText('Apple Intelligence is downloading its model.'),
+    ).not.toBeOnTheScreen();
   });
 
   it('says Local Mode cleanup is skipped, shows nothing picked and points at Cloud', async () => {

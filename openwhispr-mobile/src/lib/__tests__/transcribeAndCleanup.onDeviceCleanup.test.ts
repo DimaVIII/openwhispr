@@ -232,7 +232,7 @@ it('keeps an On-Device transcript raw when cleanup is turned off', async () => {
 it.each([
   [
     'appleIntelligenceOff',
-    "Apple Intelligence is turned off in iOS Settings, so this can't run on-device.",
+    "Apple Intelligence is turned off, so this can't run on-device. Turn it on in Settings → Apple Intelligence & Siri.",
   ],
   ['disabled', 'Local Apple Intelligence is turned off in AI Models.'],
   [

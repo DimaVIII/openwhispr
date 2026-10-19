@@ -29,7 +29,7 @@ import { resolveCustomPrompt } from '@/config/prompts/registry';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useConfigStore } from '@/store/useConfigStore';
 import { useProcessingModeStore } from '@/store/useProcessingModeStore';
-import type { UserConfig } from '@/types';
+import type { LocalReasoningReadiness, UserConfig } from '@/types';
 import {
   type ProviderCredential,
   getProviderCredential,
@@ -94,6 +94,11 @@ import {
 type Picker = 'provider' | 'model';
 // How often an open page checks whether Apple Intelligence finished downloading its model.
 const APPLE_INTELLIGENCE_POLL_MS = 10_000;
+// Shown on the On-Device row while iOS Settings has Apple Intelligence to finish.
+const APPLE_INTELLIGENCE_STATUSES: Partial<Record<LocalReasoningReadiness['status'], string>> = {
+  appleIntelligenceOff: 'Apple Intelligence is turned off in iOS Settings.',
+  modelNotReady: 'Apple Intelligence is downloading its model.',
+};
 const PROVIDER_SETUP_URLS: Record<string, string> = {
   openai: 'https://platform.openai.com/api-keys',
   groq: 'https://console.groq.com/keys',
@@ -343,25 +348,32 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
   const providerId = provider?.id;
   const models = provider?.models.length ? provider.models : discoveredModels;
   const speechScope = scope === 'dictation' || scope === 'upload' ? scope : null;
-  // On-Device text workflows run on Apple Intelligence, which some iPhones can never run.
-  const [onDeviceUnsupported, setOnDeviceUnsupported] = useState<string | null>(null);
+  // On-Device text workflows run on Apple Intelligence, which some iPhones can never run and
+  // others have to finish setting up in iOS Settings, so it's checked again on return to the app.
+  const [appleIntelligence, setAppleIntelligence] = useState<LocalReasoningReadiness | null>(null);
   useEffect(() => {
     if (speechScope) return undefined;
     let cancelled = false;
-    getLocalReasoningReadiness()
-      .then((readiness) => {
-        if (cancelled) return;
-        setOnDeviceUnsupported(
-          isLocalReasoningUnsupported(readiness)
-            ? getLocalReasoningUnavailableMessage(readiness)
-            : null,
-        );
-      })
-      .catch(() => undefined);
+    const check = (): void => {
+      getLocalReasoningReadiness({ refresh: true })
+        .then((readiness) => {
+          if (!cancelled) setAppleIntelligence(readiness);
+        })
+        .catch(() => undefined);
+    };
+    check();
+    const appStateSubscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') check();
+    });
     return (): void => {
       cancelled = true;
+      appStateSubscription.remove();
     };
   }, [speechScope]);
+  const onDeviceUnsupported = isLocalReasoningUnsupported(appleIntelligence)
+    ? getLocalReasoningUnavailableMessage(appleIntelligence ?? undefined)
+    : null;
+  const onDeviceStatus = appleIntelligence && APPLE_INTELLIGENCE_STATUSES[appleIntelligence.status];
   // Nothing is shown as picked when the On-Device text workflow can never run on this iPhone.
   const pickedMode =
     !speechScope && onDeviceUnsupported && selection.mode === 'local' ? null : selection.mode;
@@ -391,6 +403,9 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
       : undefined);
   const modeUnavailable: Partial<Record<InferenceMode, string>> = onDeviceUnsupported
     ? { local: onDeviceUnsupported }
+    : {};
+  const modeStatuses: Partial<Record<InferenceMode, string>> = onDeviceStatus
+    ? { local: onDeviceStatus }
     : {};
   // Keys are stored per provider (per server for Custom), so every workflow on it shares one.
   const keyOwner =
@@ -477,9 +492,14 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
       if (!onDeviceWanted) return undefined;
       let finished = false;
       const finishWhenReady = async (): Promise<void> => {
-        const ready = speechScope
-          ? (await getPrivateModeReadiness()).status === 'ready'
-          : (await getLocalReasoningReadiness({ refresh: true })).status === 'ready';
+        let ready: boolean;
+        if (speechScope) {
+          ready = (await getPrivateModeReadiness()).status === 'ready';
+        } else {
+          const readiness = await getLocalReasoningReadiness({ refresh: true });
+          if (!finished) setAppleIntelligence(readiness);
+          ready = readiness.status === 'ready';
+        }
         if (finished || !ready) return;
         finished = true;
         setOnDeviceWanted(false);
@@ -799,6 +819,7 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
               selectedMode={pickedMode}
               onSelect={chooseMode}
               unavailable={modeUnavailable}
+              statuses={modeStatuses}
             />
             {modeNote ? <SectionFooter>{modeNote}</SectionFooter> : null}
             {selection.mode === 'local' && speechScope ? (
