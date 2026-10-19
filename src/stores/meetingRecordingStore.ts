@@ -33,7 +33,6 @@ import { isTranscriptionContextAllowed } from "./policyRules";
 import { usePolicyStore } from "./policyStore";
 import {
   lockTranscriptSpeaker,
-  mergeTranscriptSegments,
   normalizeTranscriptSegment,
   serializeTranscriptSegments,
   type TranscriptSpeakerLockSource,
@@ -41,9 +40,9 @@ import {
 } from "../utils/transcriptSpeakerState";
 import { parseTranscriptSegments } from "../utils/parseTranscriptSegments";
 import {
+  mergeSessionDiarization,
   resolveDiarizationTarget,
   selectBaseSegments,
-  withoutRemovedSegments,
 } from "../utils/diarizationCompletion";
 import { createSerialQueue } from "../utils/serialQueue";
 import { reduceMeetingSegmentEvent, type MeetingSegmentEvent } from "./meetingSegmentReducer";
@@ -1862,17 +1861,12 @@ if (typeof window !== "undefined") {
         recordingNoteId,
         targetNoteId,
       });
-      const seededCount = Math.min(seedLength, existing.length);
-      const enriched = [
-        ...existing.slice(0, seededCount),
-        ...mergeTranscriptSegments(
-          withoutRemovedSegments(existing.slice(seededCount), data.removedSegments),
-          data.segments.map((segment, index) => ({
-            ...segment,
-            id: segment.id || `diarized-${index}`,
-          }))
-        ),
-      ];
+      const enriched = mergeSessionDiarization({
+        existing,
+        seedLength,
+        segments: data.segments,
+        removedSegments: data.removedSegments,
+      });
 
       try {
         // Awaited so the next queued completion's getNote is guaranteed to

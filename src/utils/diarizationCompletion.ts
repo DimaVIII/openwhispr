@@ -1,3 +1,6 @@
+import type { TranscriptSegment } from "../stores/meetingRecordingStore";
+import { mergeTranscriptSegments } from "./transcriptSpeakerState";
+
 // Routing rules for meeting-diarization-complete events (issue #1495): a result
 // must be persisted to the note that owns the recording session, never to
 // whichever note happens to be rendered when the event arrives.
@@ -60,8 +63,9 @@ export interface RemovedTranscriptSegment {
 
 // Main drops echo duplicates and late retracts from its copy, so its result
 // never matches those rows and the merge would keep them with their raw
-// epoch-ms timestamps and no speaker (#2781). Removes one persisted row per
-// removed entry, keyed like a live retract.
+// epoch-ms timestamps and no speaker (#2781). Matches on source, timestamp and
+// exact text like a live retract, but removes only one persisted row per
+// removed entry.
 export function withoutRemovedSegments<
   Segment extends { text: string; source: string; timestamp?: number },
 >(segments: Segment[], removed: RemovedTranscriptSegment[] | null | undefined): Segment[] {
@@ -82,4 +86,23 @@ export function withoutRemovedSegments<
     pending.set(key, count - 1);
     return false;
   });
+}
+
+// Merges main's result into this session's rows only: the first `seedLength`
+// rows are a resumed note's earlier sessions and stay as saved.
+export function mergeSessionDiarization(params: {
+  existing: TranscriptSegment[];
+  seedLength: number;
+  segments: Array<Omit<TranscriptSegment, "id"> & { id?: string }>;
+  removedSegments?: RemovedTranscriptSegment[] | null;
+}): TranscriptSegment[] {
+  const { existing, seedLength, segments, removedSegments } = params;
+  const seededCount = Math.min(seedLength, existing.length);
+  return [
+    ...existing.slice(0, seededCount),
+    ...mergeTranscriptSegments(
+      withoutRemovedSegments(existing.slice(seededCount), removedSegments),
+      segments.map((segment, index) => ({ ...segment, id: segment.id || `diarized-${index}` }))
+    ),
+  ];
 }

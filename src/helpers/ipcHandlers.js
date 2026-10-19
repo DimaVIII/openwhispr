@@ -13067,29 +13067,57 @@ class IPCHandlers {
     speakerIndexBase = 0,
     retractedSegments = []
   ) {
+    const startMs =
+      (Number.isFinite(audioStartedAt) && audioStartedAt) ||
+      transcriptSegments.find((segment) => segment.source === diarizedSource)?.timestamp ||
+      transcriptSegments[0]?.timestamp ||
+      0;
+    const isEpochMs = startMs > 1e9;
+    const normalized = transcriptSegments.map((seg) => ({
+      ...seg,
+      timestamp:
+        seg.timestamp != null
+          ? isEpochMs
+            ? (seg.timestamp - startMs) / 1000
+            : seg.timestamp
+          : undefined,
+    }));
+
+    // Split before any send so diarized, skipped and failed runs drop the same
+    // echo rows.
+    const { kept, removed: echoDuplicates } = this.diarizationManager?.splitMicEchoDuplicates(
+      normalized
+    ) ?? { kept: normalized, removed: [] };
+    const echoDuplicateSet = new Set(echoDuplicates);
+    const isEchoDuplicate = (index) => echoDuplicateSet.has(normalized[index]);
     // Rows main dropped that the renderer may still hold in the transcript it
     // persisted at stop. Raw (epoch-ms) timestamps, matching that copy (#2781).
-    const toRemovedSegment = ({ text, source, timestamp }) => ({ text, source, timestamp });
-    const send = ({ removedSegments = [], ...payload }) => {
+    const removedSegments = [
+      ...retractedSegments,
+      ...transcriptSegments.filter((_, index) => isEchoDuplicate(index)),
+    ].map(({ text, source, timestamp }) => ({ text, source, timestamp }));
+    const send = (payload) => {
       if (win && !win.isDestroyed()) {
         win.webContents.send("meeting-diarization-complete", {
           sessionId,
           noteId,
           ...payload,
-          removedSegments: [...retractedSegments, ...removedSegments].map(toRemovedSegment),
+          removedSegments,
         });
       }
     };
+    // Raw rows, sent when there is no diarization to merge.
+    const sendUndiarized = () =>
+      send({
+        segments: transcriptSegments
+          .map((segment, index) => ({ ...segment, id: segment.id || `segment-${index}` }))
+          .filter((_, index) => !isEchoDuplicate(index)),
+      });
 
     const diarizationEnabled = (sessionConfig?.enabled ?? this.speakerDiarizationEnabled) !== false;
 
     if (!diarizationEnabled || !this.diarizationManager?.isAvailable() || !rawPcmPath) {
-      send({
-        segments: transcriptSegments.map((segment, index) => ({
-          ...segment,
-          id: segment.id || `segment-${index}`,
-        })),
-      });
+      sendUndiarized();
       return;
     }
 
@@ -13139,29 +13167,6 @@ class IPCHandlers {
             cap
           );
         }
-
-        const startMs =
-          (Number.isFinite(audioStartedAt) && audioStartedAt) ||
-          transcriptSegments.find((segment) => segment.source === diarizedSource)?.timestamp ||
-          transcriptSegments[0]?.timestamp ||
-          0;
-        const isEpochMs = startMs > 1e9;
-        const normalized = transcriptSegments.map((seg) => ({
-          ...seg,
-          timestamp:
-            seg.timestamp != null
-              ? isEpochMs
-                ? (seg.timestamp - startMs) / 1000
-                : seg.timestamp
-              : undefined,
-        }));
-
-        const { kept, removed: echoDuplicates } =
-          this.diarizationManager.splitMicEchoDuplicates(normalized);
-        const echoDuplicateSet = new Set(echoDuplicates);
-        const removedEchoSegments = transcriptSegments.filter((_, index) =>
-          echoDuplicateSet.has(normalized[index])
-        );
 
         const enrichedSegments = this.diarizationManager.mergeWithTranscript(
           kept,
@@ -13279,15 +13284,13 @@ class IPCHandlers {
           }
         }
 
-        send({
-          segments: enrichedSegments,
-          speakerEmbeddings: speakerEmbeddingsMap,
-          removedSegments: removedEchoSegments,
-        });
+        send({ segments: enrichedSegments, speakerEmbeddings: speakerEmbeddingsMap });
       } catch (err) {
         debugLogger.warn("Background diarization failed", { error: err.message });
         this._diarizationSpeakerReservations.delete(sessionId);
-        send({ segments: [] });
+        // The renderer only applies removedSegments alongside segments, so a
+        // failed run falls back to the skip result rather than an empty one.
+        sendUndiarized();
       } finally {
         try {
           fs.unlinkSync(rawPcmPath);

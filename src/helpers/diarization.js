@@ -457,15 +457,16 @@ class DiarizationManager {
     return segments.map((s) => (keep.has(s.speaker) ? s : { ...s, speaker: primary }));
   }
 
+  // Expects echo duplicates already removed with splitMicEchoDuplicates, so
+  // the caller can report them to the renderer.
   mergeWithTranscript(
     transcriptSegments,
     diarizationSegments,
     { diarizedSource = "system", speakerIndexBase = 0 } = {}
   ) {
     if (!transcriptSegments || transcriptSegments.length === 0) return [];
-    const deduped = splitMicEchoDuplicates(transcriptSegments).kept;
     if (!diarizationSegments || diarizationSegments.length === 0) {
-      return deduped.map((seg) => ({ ...seg }));
+      return transcriptSegments.map((seg) => ({ ...seg }));
     }
 
     // Renumber clusters (speaker_00 → speaker_0), offset past a resumed note's ids.
@@ -478,8 +479,8 @@ class DiarizationManager {
     const micSingleCluster = diarizedSource === "mic" && speakerSet.size === 1;
 
     const nextTimestampAt = (startIndex, source) => {
-      for (let i = startIndex + 1; i < deduped.length; i += 1) {
-        const candidate = deduped[i];
+      for (let i = startIndex + 1; i < transcriptSegments.length; i += 1) {
+        const candidate = transcriptSegments[i];
         if (candidate.source === source && candidate.timestamp != null) {
           return candidate.timestamp;
         }
@@ -487,7 +488,7 @@ class DiarizationManager {
       return null;
     };
 
-    return deduped.map((seg, index) => {
+    return transcriptSegments.map((seg, index) => {
       const enriched = { ...seg };
 
       if (seg.source === "mic" && (diarizedSource !== "mic" || micSingleCluster)) {
