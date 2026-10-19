@@ -544,7 +544,7 @@ it('keeps uploads on Cloud when a user with a session leaves Local Mode for a pr
   await waitFor(() => expect(mockUpdateConfig).toHaveBeenCalled());
   expect(mockUpdateConfig.mock.calls[0][0]).toMatchObject({
     inference: { upload: { mode: 'openwhispr' } },
-    pinnedInference: ['upload', 'notes', 'agent'],
+    pinnedInference: ['upload', 'notes', 'agent', 'noteChat'],
   });
 });
 
@@ -557,8 +557,8 @@ it('keeps notes and chat on this phone when dictation leaves Local Mode for a pr
   fireEvent.press(screen.getByText('Save'));
   await waitFor(() => expect(mockUpdateConfig).toHaveBeenCalled());
   expect(mockUpdateConfig.mock.calls[0][0]).toMatchObject({
-    inference: { notes: { mode: 'local' }, agent: { mode: 'local' } },
-    pinnedInference: ['upload', 'notes', 'agent'],
+    inference: { notes: { mode: 'local' }, agent: { mode: 'local' }, noteChat: { mode: 'local' } },
+    pinnedInference: ['upload', 'notes', 'agent', 'noteChat'],
   });
 });
 

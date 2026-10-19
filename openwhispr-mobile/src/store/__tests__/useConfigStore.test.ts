@@ -34,6 +34,7 @@ it('upgrades a Local Mode config from before the Cloud defaults before anything 
     defaultMode: 'private',
     localModeUpgraded: true,
     noteChatSplit: true,
+    noteChatEnabled: true,
     inference: {
       dictation: { mode: 'local' },
       upload: { mode: 'local' },
@@ -100,6 +101,7 @@ it('splits note chat from the voice assistant before anything reads the config',
     defaultMode: 'cloud',
     localModeUpgraded: true,
     noteChatSplit: true,
+    noteChatEnabled: true,
     inference: { agent: groq, noteChat: groq },
   };
   expect(useConfigStore.getState().config).toEqual(split);

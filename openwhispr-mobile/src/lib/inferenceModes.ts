@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import type { LucideIconName } from '@/components/ui/SystemIcon';
 import type { InferenceSelection, MobileInferenceScope } from '@/lib/mobileProviders';
+import { isNoteChatEnabled } from '@/lib/dictationAgent';
 import {
   inferenceToProcessingMode,
   processingToInferenceMode,
@@ -86,10 +87,11 @@ type DictationModeConfig = Pick<
 
 // These workflows follow the dictation mode until they have a selection of their own, so they
 // would silently change destination when dictation moves to Bring Your Own Key. Cleanup is left
-// out: unsaved, it is skipped in that mode, which sends nothing anywhere. The voice assistant is
-// pinned only when leaving On-Device; unsaved, it is skipped rather than sent to Cloud.
+// out: unsaved, it is skipped in that mode, which sends nothing anywhere. The voice assistant and
+// note chat are pinned only when leaving On-Device; unsaved, the voice assistant is skipped rather
+// than sent to Cloud, and note chat stays where it was before it had a setting of its own.
 function scopesToPin(leavingMode: ProcessingMode): MobileInferenceScope[] {
-  return leavingMode === 'private' ? ['upload', 'notes', 'agent'] : ['upload', 'notes'];
+  return leavingMode === 'private' ? ['upload', 'notes', 'agent', 'noteChat'] : ['upload', 'notes'];
 }
 
 // The Dictation page and onboarding own the dictation mode;
@@ -263,6 +265,8 @@ export function noteChatSplitConfig(config: UserConfig): Partial<UserConfig> {
   const heldAgent = config.privateModeReturn?.pinned.agent;
   return {
     noteChatSplit: true,
+    // Note chat's switch followed the voice assistant's until set; saving it keeps it put.
+    ...(config.noteChatEnabled === undefined ? { noteChatEnabled: isNoteChatEnabled(config) } : {}),
     ...(copied ? { inference: { ...config.inference, noteChat: agent } } : {}),
     ...(rememberedAgent && !config.rememberedInference?.noteChat
       ? { rememberedInference: { ...config.rememberedInference, noteChat: rememberedAgent } }
