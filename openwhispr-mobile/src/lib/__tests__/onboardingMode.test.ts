@@ -32,6 +32,10 @@ let mockAccountHistory = false;
 jest.mock('@/sync/syncIdentity', () => ({
   hasRealAccountHistory: () => mockAccountHistory,
 }));
+let mockLocalReasoningStatus = 'ready';
+jest.mock('@/lib/localReasoning', () => ({
+  getLocalReasoningReadiness: async () => ({ status: mockLocalReasoningStatus }),
+}));
 jest.mock('@/store/useAuthStore', () => ({
   useAuthStore: {
     getState: () => ({
@@ -42,6 +46,19 @@ jest.mock('@/store/useAuthStore', () => ({
   },
 }));
 
+// Setup saves every workflow for the mode it picks, so changing Dictation later moves only it.
+const CLOUD_SETUP = {
+  defaultMode: 'cloud',
+  inference: {
+    dictation: { mode: 'openwhispr' },
+    upload: { mode: 'openwhispr' },
+    cleanup: { mode: 'openwhispr' },
+    notes: { mode: 'openwhispr' },
+    agent: { mode: 'openwhispr' },
+  },
+  pinnedInference: ['upload', 'cleanup', 'notes', 'agent'],
+};
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockError = null;
@@ -50,6 +67,7 @@ beforeEach(() => {
   mockAccountHistory = false;
   mockCurrentStep = 'privacy-mode';
   mockConfig = { defaultMode: 'private' };
+  mockLocalReasoningStatus = 'ready';
   mockUpdateConfig.mockResolvedValue(undefined);
   mockChooseMode.mockResolvedValue(undefined);
   mockEnsureSession.mockResolvedValue(undefined);
@@ -60,10 +78,7 @@ it('retries anonymous authentication before allowing Cloud', async () => {
   });
   await chooseOnboardingMode('cloud', 'privacy-mode');
   expect(mockChooseMode).toHaveBeenCalledWith('cloud', 'privacy-mode');
-  expect(mockUpdateConfig).toHaveBeenCalledWith({
-    defaultMode: 'cloud',
-    inference: { dictation: { mode: 'openwhispr' } },
-  });
+  expect(mockUpdateConfig).toHaveBeenCalledWith(CLOUD_SETUP);
 });
 it('rejects Cloud without a session from download fallbacks too', async () => {
   mockCurrentStep = 'private-download';
@@ -113,10 +128,7 @@ it('lets a guest leave a stuck download for Cloud', async () => {
   mockCurrentStep = 'private-download';
   await chooseOnboardingMode('cloud', 'private-download');
   expect(mockEnsureSession).not.toHaveBeenCalled();
-  expect(mockUpdateConfig).toHaveBeenCalledWith({
-    defaultMode: 'cloud',
-    inference: { dictation: { mode: 'openwhispr' } },
-  });
+  expect(mockUpdateConfig).toHaveBeenCalledWith(CLOUD_SETUP);
   expect(mockChooseMode).toHaveBeenCalledWith('cloud', 'private-download');
 });
 
@@ -136,8 +148,10 @@ it('moves the dictation route with the chosen mode and restores both on failure'
       dictation: { mode: 'local' },
       upload: { mode: 'local' },
       cleanup: { mode: 'local' },
+      notes: { mode: 'local' },
+      agent: { mode: 'openwhispr' },
     },
-    pinnedInference: ['upload', 'cleanup'],
+    pinnedInference: ['upload', 'cleanup', 'notes', 'agent'],
   });
   expect(mockUpdateConfig).toHaveBeenLastCalledWith({
     defaultMode: 'providers',
@@ -146,8 +160,9 @@ it('moves the dictation route with the chosen mode and restores both on failure'
   });
 });
 
-// Choosing Local in setup keeps uploads and cleanup on this iPhone, even for a signed-in account,
-// whose Local Mode defaults would send them to Cloud. They are automatic pins, not the user's own.
+// Choosing Local in setup keeps uploads, cleanup and notes on this iPhone, even for a signed-in
+// account, whose Local Mode defaults would send uploads and cleanup to Cloud. They are automatic
+// pins, not the user's own.
 it('keeps uploads and cleanup on this iPhone when setup picks Local', async () => {
   mockUser = { id: 'u', isAnonymous: false };
   mockConfig = {
@@ -162,9 +177,19 @@ it('keeps uploads and cleanup on this iPhone when setup picks Local', async () =
       dictation: { mode: 'local' },
       upload: { mode: 'local', modelId: 'whisper-base' },
       cleanup: { mode: 'local' },
+      notes: { mode: 'local' },
+      agent: { mode: 'openwhispr' },
     },
-    pinnedInference: ['upload', 'cleanup'],
+    pinnedInference: ['upload', 'cleanup', 'notes', 'agent'],
   });
+});
+
+// Saved On-Device notes never fall back to Cloud, so without Apple Intelligence they are saved on
+// Cloud, which Local Mode still asks before using.
+it('saves notes on Cloud when setup picks Local without Apple Intelligence', async () => {
+  mockLocalReasoningStatus = 'unavailable';
+  await chooseOnboardingMode('private', 'privacy-mode');
+  expect(mockUpdateConfig.mock.calls[0][0].inference.notes).toEqual({ mode: 'openwhispr' });
 });
 
 it.each([
@@ -176,11 +201,11 @@ it.each([
   const { inference, pinnedInference } = mockUpdateConfig.mock.calls[0][0];
   expect(inference.upload).toEqual(saved);
   expect(inference.cleanup).toEqual(saved);
-  expect(pinnedInference).toEqual([]);
+  expect(pinnedInference).toEqual(['notes', 'agent']);
 });
 
-// Going back to Cloud in setup changes the mode, which releases what Local held.
-it('releases them when setup goes back to Cloud', async () => {
+// Going back to Cloud in setup decides what Local held again.
+it('moves them to Cloud when setup goes back to Cloud', async () => {
   mockUser = { id: 'u', isAnonymous: false };
   mockConfig = {
     defaultMode: 'private',
@@ -192,11 +217,7 @@ it('releases them when setup goes back to Cloud', async () => {
     pinnedInference: ['upload', 'cleanup'],
   };
   await chooseOnboardingMode('cloud', 'privacy-mode');
-  expect(mockUpdateConfig.mock.calls[0][0]).toEqual({
-    defaultMode: 'cloud',
-    inference: { dictation: { mode: 'openwhispr' } },
-    pinnedInference: undefined,
-  });
+  expect(mockUpdateConfig.mock.calls[0][0]).toEqual(CLOUD_SETUP);
 });
 
 it('keeps a cleanup the user saved when setup picks Cloud', async () => {

@@ -22,6 +22,7 @@ const mockDispatch = jest.fn();
 let mockStoredPrompt = '';
 const mockPush = jest.fn();
 const mockSwitchMode = jest.fn();
+let mockLocalReasoningReady = false;
 const mockPrivateReadiness = jest.fn();
 let mockFocusEffect: (() => void) | undefined;
 const MockText = require('react-native').Text;
@@ -47,6 +48,7 @@ jest.mock('@/lib/privateMode', () => ({
 }));
 jest.mock('@/lib/workflowModeSwitch', () => ({
   switchWorkflowMode: (...args: unknown[]) => mockSwitchMode(...args),
+  leavingLocalModeWithLocalReasoning: async () => mockLocalReasoningReady,
 }));
 jest.mock('@/components/settings/OnDeviceModelSection', () => ({
   OnDeviceModelSection: ({
@@ -145,6 +147,7 @@ function selectedMode(): string | undefined {
 }
 
 beforeEach(() => {
+  mockLocalReasoningReady = false;
   jest.clearAllMocks();
   mockConfig = null;
   mockScope = 'dictation';
@@ -543,12 +546,15 @@ it('keeps uploads on Cloud when a user with a session leaves Local Mode for a pr
   fireEvent.press(screen.getByText('Save'));
   await waitFor(() => expect(mockUpdateConfig).toHaveBeenCalled());
   expect(mockUpdateConfig.mock.calls[0][0]).toMatchObject({
-    inference: { upload: { mode: 'openwhispr' } },
-    pinnedInference: ['upload', 'notes', 'agent'],
+    inference: { upload: { mode: 'openwhispr' }, cleanup: { mode: 'local' } },
+    pinnedInference: ['upload', 'cleanup', 'notes'],
   });
 });
 
-it('keeps notes and chat on this phone when dictation leaves Local Mode for a provider', async () => {
+// Local Mode formatted notes with Apple Intelligence. It turned the voice assistant off, so that
+// stays unset and is skipped until a provider is saved for it.
+it('keeps notes on this phone when dictation leaves Local Mode for a provider', async () => {
+  mockLocalReasoningReady = true;
   mockConfig = { defaultMode: 'private' };
   mockActiveMode = 'private';
   mockCredentialStatus.mockResolvedValue({ isConfigured: true });
@@ -557,9 +563,10 @@ it('keeps notes and chat on this phone when dictation leaves Local Mode for a pr
   fireEvent.press(screen.getByText('Save'));
   await waitFor(() => expect(mockUpdateConfig).toHaveBeenCalled());
   expect(mockUpdateConfig.mock.calls[0][0]).toMatchObject({
-    inference: { notes: { mode: 'local' }, agent: { mode: 'local' } },
-    pinnedInference: ['upload', 'notes', 'agent'],
+    inference: { notes: { mode: 'local' } },
+    pinnedInference: ['upload', 'cleanup', 'notes'],
   });
+  expect(mockUpdateConfig.mock.calls[0][0].inference.agent).toBeUndefined();
 });
 
 it('switches dictation from Bring Your Own Key to Cloud on tap, without Save', async () => {

@@ -55,7 +55,7 @@ import {
 } from '@/lib/dictationAgent';
 import { safeHaptics } from '@/lib/utils';
 import { SystemIcon, type LucideIconName } from '@/components/ui/SystemIcon';
-import { switchWorkflowMode } from '@/lib/workflowModeSwitch';
+import { leavingLocalModeWithLocalReasoning, switchWorkflowMode } from '@/lib/workflowModeSwitch';
 import { getPrivateModeReadiness } from '@/lib/privateMode';
 import {
   getLocalReasoningReadiness,
@@ -488,7 +488,7 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
       return;
     }
     // Tapping the shown mode saves it when nothing of the user's own is saved, since an unsaved
-    // default follows the mode and the account (unsetSelection), and a pin is released with them.
+    // default follows the mode and the account (unsetSelection), and onboarding decides a pin again.
     const ownChoice = !!config?.inference?.[scope] && !config.pinnedInference?.includes(scope);
     if (mode === savedSelection.mode && ownChoice) {
       setSelection(savedSelection);
@@ -603,8 +603,16 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
     try {
       const saved = await prepareSelection();
       if (!saved) return;
+      const localReasoningReady = await leavingLocalModeWithLocalReasoning(scope, activeMode);
       await updateConfig(
-        workflowSaveConfig(useConfigStore.getState().config, scope, saved, activeMode, cloudAccess),
+        workflowSaveConfig(
+          useConfigStore.getState().config,
+          scope,
+          saved,
+          activeMode,
+          cloudAccess,
+          localReasoningReady,
+        ),
       );
       if (useConfigStore.getState().error) {
         showError('Unable to save your selection. Please try again.');

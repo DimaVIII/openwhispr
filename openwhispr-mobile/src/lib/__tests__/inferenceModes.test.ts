@@ -5,6 +5,7 @@ import {
   dictationModeConfig,
   getInferenceModes,
   localModeUpgradeConfig,
+  onboardingModeConfig,
   workflowSaveConfig,
 } from '../inferenceModes';
 import type { UserConfig } from '@/types';
@@ -22,7 +23,7 @@ const groqDictation = {
   credentialRef: 'provider.groq',
 };
 
-it('releases only the automatic pins when dictation leaves Bring Your Own Key', () => {
+it('releases only the automatic pins when onboarding picks another mode', () => {
   const pinned: UserConfig = {
     defaultMode: 'providers',
     inference: {
@@ -101,62 +102,137 @@ it('keeps the dictation selection in step with Local Mode', () => {
 });
 
 describe('workflowSaveConfig', () => {
-  it('keeps unsaved workflows on this phone when dictation moves from On-Device to a provider', () => {
-    const config: UserConfig = {
-      defaultMode: 'private',
-      inference: { dictation: { mode: 'local' } },
-    };
-    const next = workflowSaveConfig(config, 'dictation', groqDictation, 'private');
-    expect(next.defaultMode).toBe('providers');
+  const local: UserConfig = { defaultMode: 'private', inference: { dictation: { mode: 'local' } } };
+  const allSaved: UserConfig['inference'] = {
+    upload: { mode: 'local' },
+    cleanup: groqCleanup,
+    notes: { mode: 'openwhispr' },
+    agent: { mode: 'local' },
+  };
+
+  // Changing Dictation changes only dictation, from and to every mode.
+  it.each([
+    ['cloud', 'private', { mode: 'local' as const }],
+    ['cloud', 'providers', groqDictation],
+    ['private', 'cloud', { mode: 'openwhispr' as const }],
+    ['private', 'providers', groqDictation],
+    ['providers', 'cloud', { mode: 'openwhispr' as const }],
+    ['providers', 'private', { mode: 'local' as const }],
+  ] as const)(
+    'leaves saved workflows alone when dictation moves from %s to %s',
+    (from, to, dictation) => {
+      const config: UserConfig = {
+        defaultMode: from,
+        inference: { dictation: { mode: 'openwhispr' }, ...allSaved },
+        pinnedInference: ['upload', 'agent'],
+      };
+      const next = workflowSaveConfig(config, 'dictation', dictation, from, 'account', true);
+      expect(next.defaultMode).toBe(to);
+      expect(next.inference).toEqual({ ...allSaved, dictation });
+      expect(next.pinnedInference).toEqual(['upload', 'agent']);
+    },
+  );
+
+  it('holds unsaved workflows on Cloud when dictation leaves Cloud', () => {
+    const next = workflowSaveConfig({ defaultMode: 'cloud' }, 'dictation', groqDictation, 'cloud');
     expect(next.inference).toEqual({
       dictation: groqDictation,
-      upload: { mode: 'local' },
-      notes: { mode: 'local' },
-      agent: { mode: 'local' },
-    });
-    expect(next.pinnedInference).toEqual(['upload', 'notes', 'agent']);
-  });
-
-  it('keeps uploads and notes on Cloud when dictation moves from Cloud to a provider', () => {
-    const next = workflowSaveConfig({ defaultMode: 'cloud' }, 'dictation', groqDictation, 'cloud');
-    expect(next.inference).toMatchObject({
       upload: { mode: 'openwhispr' },
+      cleanup: { mode: 'openwhispr' },
       notes: { mode: 'openwhispr' },
+      agent: { mode: 'openwhispr' },
     });
-    expect(next.pinnedInference).toEqual(['upload', 'notes']);
+    expect(next.pinnedInference).toEqual(['upload', 'cleanup', 'notes', 'agent']);
   });
 
-  it('leaves the voice assistant unset when leaving Cloud, so it is skipped, not sent to Cloud', () => {
-    const next = workflowSaveConfig({ defaultMode: 'cloud' }, 'dictation', groqDictation, 'cloud');
-    expect(next.inference?.agent).toBeUndefined();
-  });
-
-  it('never pins cleanup or a workflow the user already chose', () => {
+  // Unsaved cleanup and voice assistant were skipped under Bring Your Own Key, so there is nothing
+  // to hold; uploads and notes ran on Cloud.
+  it('holds only what ran when dictation leaves Bring Your Own Key', () => {
     const config: UserConfig = {
-      defaultMode: 'private',
-      inference: { notes: { mode: 'openwhispr' } },
+      defaultMode: 'providers',
+      inference: { dictation: groqDictation },
     };
-    const next = workflowSaveConfig(config, 'dictation', groqDictation, 'private');
-    expect(next.inference?.cleanup).toBeUndefined();
-    expect(next.inference?.notes).toEqual({ mode: 'openwhispr' });
-    expect(next.pinnedInference).toEqual(['upload', 'agent']);
+    const next = workflowSaveConfig(config, 'dictation', { mode: 'openwhispr' }, 'providers');
+    expect(next).toEqual({
+      defaultMode: 'cloud',
+      inference: {
+        dictation: { mode: 'openwhispr' },
+        upload: { mode: 'openwhispr' },
+        notes: { mode: 'openwhispr' },
+      },
+      pinnedInference: ['upload', 'notes'],
+    });
   });
 
-  it('adds no pins when a Bring Your Own Key user re-saves dictation', () => {
+  describe('leaving Local Mode', () => {
+    it.each(['cloud', 'providers'] as const)(
+      'holds what ran on this phone without a session when going to %s',
+      (to) => {
+        const dictation = to === 'cloud' ? { mode: 'openwhispr' as const } : groqDictation;
+        const next = workflowSaveConfig(local, 'dictation', dictation, 'private', 'none', true);
+        expect(next.inference).toEqual({
+          dictation,
+          upload: { mode: 'local' },
+          cleanup: { mode: 'local' },
+          notes: { mode: 'local' },
+        });
+        expect(next.pinnedInference).toEqual(['upload', 'cleanup', 'notes']);
+      },
+    );
+
+    // Local Mode used OpenWhispr Cloud for uploads with a session, and for cleanup with an account.
+    it.each([
+      ['session', 'openwhispr', 'local'],
+      ['account', 'openwhispr', 'openwhispr'],
+    ] as const)(
+      'holds uploads and cleanup where they ran with %s access',
+      (access, upload, cleanup) => {
+        const next = workflowSaveConfig(
+          local,
+          'dictation',
+          { mode: 'openwhispr' },
+          'private',
+          access,
+        );
+        expect(next.inference?.upload).toEqual({ mode: upload });
+        expect(next.inference?.cleanup).toEqual({ mode: cleanup });
+      },
+    );
+
+    // Saved On-Device notes never fall back to Cloud; Local Mode asked before using it instead.
+    it('holds notes on Cloud when Apple Intelligence cannot run them', () => {
+      const next = workflowSaveConfig(local, 'dictation', { mode: 'openwhispr' }, 'private');
+      expect(next.inference?.notes).toEqual({ mode: 'openwhispr' });
+    });
+
+    it('holds the on-device model picked for a workflow', () => {
+      const whisper = { mode: 'local' as const, modelId: 'whisper-base' };
+      const config: UserConfig = { ...local, rememberedInference: { upload: { local: whisper } } };
+      const next = workflowSaveConfig(config, 'dictation', { mode: 'openwhispr' }, 'private');
+      expect(next.inference?.upload).toEqual(whisper);
+    });
+  });
+
+  it('turns Local Mode on with the model picked on the Dictation page', () => {
+    const whisper = { mode: 'local' as const, modelId: 'whisper-base' };
+    const config: UserConfig = {
+      defaultMode: 'cloud',
+      rememberedInference: { dictation: { local: whisper } },
+    };
+    const next = workflowSaveConfig(config, 'dictation', { mode: 'local' }, 'cloud');
+    expect(next.inference?.dictation).toEqual(whisper);
+  });
+
+  it('holds nothing when dictation is saved to the mode it is already in', () => {
     const config: UserConfig = {
       defaultMode: 'providers',
       inference: { dictation: groqDictation, upload: { mode: 'local' } },
       pinnedInference: ['upload'],
     };
-    const next = workflowSaveConfig(
-      config,
-      'dictation',
-      { ...groqDictation, providerId: 'openai', modelId: 'whisper-1' },
-      'providers',
-    );
-    expect(next.inference?.notes).toBeUndefined();
-    expect(next.inference?.agent).toBeUndefined();
-    expect(next.pinnedInference).toEqual(['upload']);
+    const openai = { ...groqDictation, providerId: 'openai', modelId: 'whisper-1' };
+    const next = workflowSaveConfig(config, 'dictation', openai, 'providers');
+    expect(next.inference).toEqual({ dictation: openai, upload: { mode: 'local' } });
+    expect(next).not.toHaveProperty('pinnedInference');
   });
 
   it('makes a pinned workflow explicit once the user saves it', () => {
@@ -189,229 +265,84 @@ describe('workflowSaveConfig', () => {
     expect(next.rememberedInference?.cleanup?.openai).toEqual(openai);
   });
 
-  it('switches dictation back to Cloud and keeps the pins', () => {
-    const config: UserConfig = {
-      defaultMode: 'providers',
-      inference: { dictation: groqDictation, upload: { mode: 'local' } },
-      pinnedInference: ['upload'],
-    };
-    const next = workflowSaveConfig(config, 'dictation', { mode: 'openwhispr' }, 'providers');
-    expect(next).toEqual({
-      defaultMode: 'cloud',
-      inference: { dictation: { mode: 'openwhispr' }, upload: { mode: 'local' } },
-      pinnedInference: ['upload'],
-    });
-  });
-
-  // Unsaved cleanup and voice assistant were skipped under Bring Your Own Key; there is no
-  // selection to hold, so they run on Cloud with dictation.
-  it('holds nothing new when dictation leaves Bring Your Own Key for Cloud', () => {
-    const config: UserConfig = {
+  it('keeps the voice assistant skipped through a round trip in Local Mode', () => {
+    const providers: UserConfig = {
       defaultMode: 'providers',
       inference: { dictation: groqDictation },
     };
-    const next = workflowSaveConfig(config, 'dictation', { mode: 'openwhispr' }, 'providers');
-    expect(next).toEqual({
+    const on = {
+      ...providers,
+      ...workflowSaveConfig(providers, 'dictation', { mode: 'local' }, 'providers'),
+    };
+    const off = { ...on, ...workflowSaveConfig(on, 'dictation', groqDictation, 'private') };
+    expect(off.defaultMode).toBe('providers');
+    // Skipped cleanup has no selection to hold, so it keeps the on-device cleanup Local Mode ran.
+    expect(off.inference).toEqual({
+      dictation: groqDictation,
+      upload: { mode: 'openwhispr' },
+      cleanup: { mode: 'local' },
+      notes: { mode: 'openwhispr' },
+    });
+  });
+});
+
+describe('onboardingModeConfig', () => {
+  it('saves every workflow on Cloud for Cloud', () => {
+    expect(onboardingModeConfig(null, 'cloud', true)).toEqual({
       defaultMode: 'cloud',
-      inference: { dictation: { mode: 'openwhispr' } },
-    });
-  });
-
-  describe('moving dictation from Local Mode to Cloud', () => {
-    const local: UserConfig = {
-      defaultMode: 'private',
-      inference: { dictation: { mode: 'local' } },
-    };
-
-    it('holds every unsaved workflow Local Mode ran on this phone', () => {
-      const next = workflowSaveConfig(local, 'dictation', { mode: 'openwhispr' }, 'private');
-      expect(next).toEqual({
-        defaultMode: 'cloud',
-        inference: {
-          dictation: { mode: 'openwhispr' },
-          upload: { mode: 'local' },
-          cleanup: { mode: 'local' },
-          notes: { mode: 'local' },
-        },
-        pinnedInference: ['upload', 'cleanup', 'notes'],
-      });
-    });
-
-    it('holds only note formatting for an account, whose uploads and cleanup already ran on Cloud', () => {
-      const next = workflowSaveConfig(
-        local,
-        'dictation',
-        { mode: 'openwhispr' },
-        'private',
-        'account',
-      );
-      expect(next.inference).toEqual({
+      inference: {
         dictation: { mode: 'openwhispr' },
-        notes: { mode: 'local' },
-      });
-      expect(next.pinnedInference).toEqual(['notes']);
-    });
-
-    it('keeps the workflows onboarding held on this phone, and the user saved', () => {
-      const config: UserConfig = {
-        ...local,
-        inference: {
-          ...local.inference,
-          upload: { mode: 'local' },
-          cleanup: { mode: 'local' },
-          notes: groqCleanup,
-          agent: { mode: 'openwhispr' },
-        },
-        pinnedInference: ['upload', 'cleanup'],
-      };
-      const next = workflowSaveConfig(
-        config,
-        'dictation',
-        { mode: 'openwhispr' },
-        'private',
-        'account',
-      );
-      expect(next.inference).toEqual({ ...config.inference, dictation: { mode: 'openwhispr' } });
-      expect(next.pinnedInference).toEqual(['upload', 'cleanup']);
-    });
-
-    it('holds the on-device model picked for a workflow', () => {
-      const whisper = { mode: 'local' as const, modelId: 'whisper-base' };
-      const config: UserConfig = { ...local, rememberedInference: { upload: { local: whisper } } };
-      const next = workflowSaveConfig(config, 'dictation', { mode: 'openwhispr' }, 'private');
-      expect(next.inference?.upload).toEqual(whisper);
+        upload: { mode: 'openwhispr' },
+        cleanup: { mode: 'openwhispr' },
+        notes: { mode: 'openwhispr' },
+        agent: { mode: 'openwhispr' },
+      },
+      pinnedInference: ['upload', 'cleanup', 'notes', 'agent'],
     });
   });
 
-  describe('where Local Mode returns to', () => {
-    const fromProviders: UserConfig = {
+  it('keeps everything but note chat on this phone for Local', () => {
+    expect(onboardingModeConfig({ defaultMode: 'cloud' }, 'private', true)).toEqual({
       defaultMode: 'private',
-      privateModeReturn: { pinned: { upload: { mode: 'openwhispr' } } },
-      inference: { dictation: { mode: 'local' } },
-    };
-
-    it('is Bring Your Own Key, with what it held, when Local Mode is turned on from it', () => {
-      const config: UserConfig = {
-        defaultMode: 'providers',
-        inference: {
-          dictation: groqDictation,
-          upload: { mode: 'openwhispr' },
-          notes: { mode: 'local' },
-        },
-        pinnedInference: ['upload'],
-      };
-      const next = workflowSaveConfig(config, 'dictation', { mode: 'local' }, 'providers');
-      // Notes is the user's own choice, so only the held upload is recorded.
-      expect(next.privateModeReturn).toEqual({ pinned: { upload: { mode: 'openwhispr' } } });
-      expect(next.inference).toEqual({ dictation: { mode: 'local' }, notes: { mode: 'local' } });
-    });
-
-    it.each([
-      ['On-Device', { mode: 'local' as const }],
-      ['OpenWhispr Cloud', { mode: 'openwhispr' as const }],
-    ])(
-      'keeps a %s cleanup when Local Mode is turned on from Bring Your Own Key and off again',
-      (_label, cleanup) => {
-        const providers: UserConfig = {
-          defaultMode: 'providers',
-          inference: { dictation: groqDictation, cleanup },
-          rememberedInference: { dictation: { groq: groqDictation } },
-        };
-        const on = {
-          ...providers,
-          ...workflowSaveConfig(providers, 'dictation', { mode: 'local' }, 'providers'),
-        };
-        const off = { ...on, ...workflowSaveConfig(on, 'dictation', groqDictation, 'private') };
-        expect(off.defaultMode).toBe('providers');
-        expect(off.inference?.cleanup).toEqual(cleanup);
+      inference: {
+        dictation: { mode: 'local' },
+        upload: { mode: 'local' },
+        cleanup: { mode: 'local' },
+        notes: { mode: 'local' },
+        agent: { mode: 'openwhispr' },
       },
-    );
-
-    it('is not set when Local Mode is turned on from Cloud', () => {
-      const config: UserConfig = { defaultMode: 'cloud' };
-      expect(
-        workflowSaveConfig(config, 'dictation', { mode: 'local' }, 'cloud'),
-      ).not.toHaveProperty('privateModeReturn');
+      pinnedInference: ['upload', 'cleanup', 'notes', 'agent'],
     });
+  });
 
-    it('survives picking another on-device model', () => {
-      const next = workflowSaveConfig(
-        fromProviders,
-        'dictation',
-        { mode: 'local', modelId: 'whisper-base' },
-        'private',
-      );
-      expect(next.privateModeReturn).toEqual(fromProviders.privateModeReturn);
+  it('saves notes on Cloud for Local when Apple Intelligence cannot run them', () => {
+    expect(onboardingModeConfig(null, 'private', false).inference?.notes).toEqual({
+      mode: 'openwhispr',
     });
+  });
 
-    it.each([
-      ['Cloud', { mode: 'openwhispr' as const }],
-      ['Bring Your Own Key', groqDictation],
-    ])('is cleared when dictation leaves Local Mode for %s', (_label, selection) => {
-      const next = workflowSaveConfig(fromProviders, 'dictation', selection, 'private');
-      expect(next).toHaveProperty('privateModeReturn', undefined);
-    });
+  it('keeps what the user saved, and decides its own picks again', () => {
+    const config: UserConfig = {
+      defaultMode: 'private',
+      inference: {
+        dictation: { mode: 'local' },
+        upload: { mode: 'local' },
+        cleanup: groqCleanup,
+      },
+      pinnedInference: ['upload'],
+    };
+    const next = onboardingModeConfig(config, 'cloud', true);
+    expect(next.inference?.cleanup).toEqual(groqCleanup);
+    expect(next.inference?.upload).toEqual({ mode: 'openwhispr' });
+    expect(next.pinnedInference).toEqual(['upload', 'notes', 'agent']);
+  });
 
-    it('holds what Bring Your Own Key held when dictation goes back to it', () => {
-      const next = workflowSaveConfig(fromProviders, 'dictation', groqDictation, 'private');
-      expect(next.inference).toEqual({ dictation: groqDictation, upload: { mode: 'openwhispr' } });
-      expect(next.pinnedInference).toEqual(['upload']);
-    });
-
-    it('keeps a choice made in Local Mode over what Bring Your Own Key held', () => {
-      const config: UserConfig = {
-        ...fromProviders,
-        inference: {
-          dictation: { mode: 'local' },
-          upload: { mode: 'local', modelId: 'whisper-base' },
-        },
-      };
-      const next = workflowSaveConfig(config, 'dictation', groqDictation, 'private');
-      expect(next.inference?.upload).toEqual({ mode: 'local', modelId: 'whisper-base' });
-      expect(next).not.toHaveProperty('pinnedInference');
-    });
-
-    // Local Mode uploaded to OpenWhispr Cloud with nothing saved and a session, so that is held.
-    it.each([
-      ['session', 'openwhispr'],
-      ['account', 'openwhispr'],
-      ['none', 'local'],
-    ] as const)('holds uploads where Local Mode ran them with %s access', (cloudAccess, mode) => {
-      const config: UserConfig = {
-        defaultMode: 'private',
-        inference: { dictation: { mode: 'local' } },
-      };
-      const next = workflowSaveConfig(config, 'dictation', groqDictation, 'private', cloudAccess);
-      expect(next.inference?.upload).toEqual({ mode });
-      expect(next.inference?.notes).toEqual({ mode: 'local' });
-    });
-
-    it('holds what Bring Your Own Key held over a workflow Local Mode held automatically', () => {
-      const config: UserConfig = {
-        ...fromProviders,
-        inference: { dictation: { mode: 'local' }, upload: { mode: 'local' } },
-        pinnedInference: ['upload'],
-      };
-      const next = workflowSaveConfig(config, 'dictation', groqDictation, 'private');
-      expect(next.inference?.upload).toEqual({ mode: 'openwhispr' });
-      expect(next.pinnedInference).toEqual(['upload']);
-    });
-
-    it('holds workflows on this phone when Local Mode was not turned on from it', () => {
-      const config: UserConfig = {
-        defaultMode: 'private',
-        inference: { dictation: { mode: 'local' } },
-      };
-      const next = workflowSaveConfig(config, 'dictation', groqDictation, 'private');
-      expect(next.pinnedInference).toEqual(['upload', 'notes', 'agent']);
-    });
-
-    // Replaying onboarding writes the mode directly, and must not leave a stale return behind.
-    it.each(['cloud', 'private'] as const)('is cleared by choosing %s outright', (mode) => {
-      expect(dictationModeConfig(fromProviders, mode)).toHaveProperty(
-        'privateModeReturn',
-        undefined,
-      );
+  it('keeps its picks when the same mode is chosen again', () => {
+    const config: UserConfig = onboardingModeConfig(null, 'cloud', true);
+    expect(onboardingModeConfig(config, 'cloud', true)).toEqual({
+      defaultMode: 'cloud',
+      inference: config.inference,
+      pinnedInference: config.pinnedInference,
     });
   });
 });
@@ -452,15 +383,21 @@ describe('localModeUpgradeConfig', () => {
     expect(localModeUpgradeConfig({ defaultMode })).toEqual({ localModeUpgraded: true });
   });
 
-  it('is released when dictation leaves Local Mode, so Cloud runs them again', () => {
+  it('is kept when dictation leaves Local Mode', () => {
     const config: UserConfig = {
       defaultMode: 'private',
       inference: { dictation: { mode: 'local' } },
     };
     const upgraded = { ...config, ...localModeUpgradeConfig(config) };
-    const next = dictationModeConfig(upgraded, 'cloud');
-    expect(next.inference).toEqual({ dictation: { mode: 'openwhispr' } });
-    expect(next.pinnedInference).toBeUndefined();
+    const next = workflowSaveConfig(
+      upgraded,
+      'dictation',
+      { mode: 'openwhispr' },
+      'private',
+      'account',
+    );
+    expect(next.inference?.upload).toEqual({ mode: 'local' });
+    expect(next.inference?.cleanup).toEqual({ mode: 'local' });
   });
 });
 

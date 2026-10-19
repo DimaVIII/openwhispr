@@ -4,7 +4,8 @@ import { useOnboardingStore } from '@/store/useOnboardingStore';
 import { useProcessingModeStore } from '@/store/useProcessingModeStore';
 import { hasRealAccountHistory } from '@/sync/syncIdentity';
 import type { UserConfig } from '@/types';
-import { dictationModeConfig, holdOnDeviceConfig } from './inferenceModes';
+import { onboardingModeConfig } from './inferenceModes';
+import { getLocalReasoningReadiness } from './localReasoning';
 import { OnboardingError } from './onboardingErrors';
 
 // updateConfig reports persistence errors in its store instead of rejecting.
@@ -50,12 +51,12 @@ export async function chooseOnboardingMode(
     pinnedInference: config?.pinnedInference,
   };
   // The dictation route moves with the mode, so a replayed pick also leaves a Providers route.
-  // Choosing Local in setup also keeps uploads and cleanup on this iPhone; going back to Cloud
-  // releases them, since the mode changes.
-  const next = dictationModeConfig(config, mode);
-  await saveOnboardingConfig(
-    mode === 'private' ? { ...next, ...holdOnDeviceConfig({ ...config, ...next }) } : next,
-  );
+  // Every other workflow is saved for the picked mode too, so changing Dictation later in AI
+  // Models moves only dictation.
+  const localReasoningReady =
+    mode === 'private' &&
+    (await getLocalReasoningReadiness().catch(() => null))?.status === 'ready';
+  await saveOnboardingConfig(onboardingModeConfig(config, mode, localReasoningReady));
   useProcessingModeStore.getState().resetToDefault(mode);
   try {
     await useOnboardingStore.getState().chooseMode(mode, from);

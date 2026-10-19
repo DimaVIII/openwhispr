@@ -16,6 +16,7 @@ import {
 } from '@/lib/localReasoning';
 import type { LocalModelKey } from '@/lib/localModelCatalog';
 import { type InferenceSelection, type MobileInferenceScope } from '@/lib/mobileProviders';
+import type { ProcessingMode } from '@/types';
 import { getPrivateModeReadiness, getPrivateModeUnavailableMessage } from '@/lib/privateMode';
 
 type SpeechScope = 'dictation' | 'upload';
@@ -51,6 +52,16 @@ async function appleIntelligenceReady(): Promise<boolean> {
   if (readiness.status === 'ready') return true;
   Alert.alert('On-Device Unavailable', getLocalReasoningUnavailableMessage(readiness));
   return false;
+}
+
+// Whether Apple Intelligence can run here, which decides where note formatting with nothing saved
+// is held when dictation leaves Local Mode (workflowSaveConfig). Asked only then.
+export async function leavingLocalModeWithLocalReasoning(
+  scope: MobileInferenceScope,
+  activeMode: ProcessingMode,
+): Promise<boolean> {
+  if (scope !== 'dictation' || activeMode !== 'private') return false;
+  return (await getLocalReasoningReadiness().catch(() => null))?.status === 'ready';
 }
 
 // Applies OpenWhispr Cloud or On-Device to a workflow as soon as it is tapped, after its sign-in
@@ -91,7 +102,14 @@ export async function switchWorkflowMode(
       ? (config?.rememberedInference?.[scope]?.local ?? { mode: 'local' })
       : { mode: 'openwhispr' };
   await updateConfig(
-    workflowSaveConfig(config, scope, selection, activeMode, cloudAccessFor(user)),
+    workflowSaveConfig(
+      config,
+      scope,
+      selection,
+      activeMode,
+      cloudAccessFor(user),
+      await leavingLocalModeWithLocalReasoning(scope, activeMode),
+    ),
   );
   return 'switched';
 }

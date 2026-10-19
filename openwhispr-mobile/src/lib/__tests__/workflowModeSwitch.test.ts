@@ -36,6 +36,19 @@ import { pickLocalModel, switchWorkflowMode } from '../workflowModeSwitch';
 
 let alert: jest.SpyInstance;
 
+// Turning Local Mode on from Cloud moves only dictation; the rest stay on Cloud, where they ran.
+const LOCAL_FROM_CLOUD = {
+  defaultMode: 'private',
+  inference: {
+    dictation: { mode: 'local' },
+    upload: { mode: 'openwhispr' },
+    cleanup: { mode: 'openwhispr' },
+    notes: { mode: 'openwhispr' },
+    agent: { mode: 'openwhispr' },
+  },
+  pinnedInference: ['upload', 'cleanup', 'notes', 'agent'],
+};
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockConfig = { defaultMode: 'cloud', inference: { dictation: { mode: 'openwhispr' } } };
@@ -81,10 +94,7 @@ it('lets an anonymous user pick Cloud cleanup outside Local Mode, where Cloud di
 it('switches dictation to On-Device along with the app mode', async () => {
   await expect(switchWorkflowMode('dictation', 'local')).resolves.toBe('switched');
   expect(mockSetActiveMode).toHaveBeenCalledWith('private', true);
-  expect(mockUpdateConfig).toHaveBeenCalledWith({
-    defaultMode: 'private',
-    inference: { dictation: { mode: 'local' } },
-  });
+  expect(mockUpdateConfig).toHaveBeenCalledWith(LOCAL_FROM_CLOUD);
 });
 
 it('opens the model list when no on-device transcription model is downloaded', async () => {
@@ -184,14 +194,11 @@ describe('switching dictation', () => {
   it('to On-Device turns Local Mode on', async () => {
     await expect(switchWorkflowMode('dictation', 'local')).resolves.toBe('switched');
     expect(mockSetActiveMode).toHaveBeenCalledWith('private', true);
-    expect(mockUpdateConfig).toHaveBeenCalledWith({
-      defaultMode: 'private',
-      inference: { dictation: { mode: 'local' } },
-    });
+    expect(mockUpdateConfig).toHaveBeenCalledWith(LOCAL_FROM_CLOUD);
   });
 
-  // Only dictation moves: note formatting stays on this phone, where Local Mode ran it. With an
-  // account, Local Mode already ran uploads and cleanup on Cloud, so they have nothing to hold.
+  // Only dictation moves: note formatting stays on this phone, where Local Mode ran it, and with an
+  // account, uploads and cleanup stay on Cloud, where Local Mode ran them.
   it('to OpenWhispr Cloud turns Local Mode off and leaves the other workflows where they ran', async () => {
     mockActiveMode = 'private';
     mockConfig = { defaultMode: 'private', inference: { dictation: { mode: 'local' } } };
@@ -199,9 +206,24 @@ describe('switching dictation', () => {
     expect(mockSetActiveMode).toHaveBeenCalledWith('cloud', true);
     expect(mockUpdateConfig).toHaveBeenCalledWith({
       defaultMode: 'cloud',
-      inference: { dictation: { mode: 'openwhispr' }, notes: { mode: 'local' } },
-      pinnedInference: ['notes'],
+      inference: {
+        dictation: { mode: 'openwhispr' },
+        upload: { mode: 'openwhispr' },
+        cleanup: { mode: 'openwhispr' },
+        notes: { mode: 'local' },
+      },
+      pinnedInference: ['upload', 'cleanup', 'notes'],
     });
+  });
+
+  // Saved On-Device notes never fall back to Cloud, so without Apple Intelligence they stay on
+  // Cloud, which Local Mode asked before using.
+  it('to OpenWhispr Cloud holds notes on Cloud when Apple Intelligence cannot run them', async () => {
+    mockLocalReasoningReadiness.mockResolvedValue({ status: 'unavailable', tokenCounting: false });
+    mockActiveMode = 'private';
+    mockConfig = { defaultMode: 'private', inference: { dictation: { mode: 'local' } } };
+    await expect(switchWorkflowMode('dictation', 'openwhispr')).resolves.toBe('switched');
+    expect(mockUpdateConfig.mock.calls[0][0].inference.notes).toEqual({ mode: 'openwhispr' });
   });
 
   // Without an account Local Mode cleaned on this phone, while a session uploaded to Cloud.
@@ -214,10 +236,11 @@ describe('switching dictation', () => {
       defaultMode: 'cloud',
       inference: {
         dictation: { mode: 'openwhispr' },
+        upload: { mode: 'openwhispr' },
         cleanup: { mode: 'local' },
         notes: { mode: 'local' },
       },
-      pinnedInference: ['cleanup', 'notes'],
+      pinnedInference: ['upload', 'cleanup', 'notes'],
     });
   });
 
