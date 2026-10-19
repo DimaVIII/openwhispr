@@ -13,7 +13,7 @@ import {
 } from './dictationAgent';
 import { buildDictationHints } from './dictationHints';
 import {
-  LOCAL_OUTPUT_TOKEN_RESERVE,
+  LOCAL_CLEANUP_MAX_TRANSCRIPT_TOKENS,
   countLocalReasoningTokens,
   estimateLocalTokens,
   getLocalReasoningReadiness,
@@ -48,11 +48,6 @@ function createTimeoutSignal(timeoutMs: number): { signal: AbortSignal; cancel: 
     cancel: () => clearTimeout(timeout),
   };
 }
-
-// Apple Intelligence stops at LOCAL_OUTPUT_TOKEN_RESERVE without an error, so a transcript
-// whose cleaned copy might not fit would come back cut short. The margin covers the
-// punctuation and capitals cleanup adds.
-const LOCAL_CLEANUP_MAX_TRANSCRIPT_TOKENS = Math.floor(LOCAL_OUTPUT_TOKEN_RESERVE * 0.8);
 
 // Apple Intelligence writes a cleaned copy about as long as the transcript, at roughly 30 tokens a
 // second on an iPhone 15 Pro (Apple's figure), so a long one can't finish in Cloud's 12 s. The rate

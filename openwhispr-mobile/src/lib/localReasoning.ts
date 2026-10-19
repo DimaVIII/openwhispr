@@ -12,6 +12,12 @@ export const LOCAL_OUTPUT_TOKEN_RESERVE = 900;
 export const LOCAL_CONTEXT_SAFETY_TOKENS = 300;
 export const LOCAL_TOKEN_CHAR_RATIO = 3.5;
 
+// Apple Intelligence stops at LOCAL_OUTPUT_TOKEN_RESERVE without an error, and a larger context
+// (iOS 27's 8,192) doesn't raise that cap. Cleanup writes back about as many tokens as it reads, so
+// a transcript whose cleaned copy might not fit would come back cut short. The margin covers the
+// punctuation and capitals cleanup adds.
+export const LOCAL_CLEANUP_MAX_TRANSCRIPT_TOKENS = Math.floor(LOCAL_OUTPUT_TOKEN_RESERVE * 0.8);
+
 let cachedReadiness: Promise<LocalReasoningReadiness> | null = null;
 
 export class LocalReasoningError extends Error {
@@ -178,6 +184,11 @@ export async function fitsLocalReasoningBudget(input: {
   return count < budget;
 }
 
+export async function fitsLocalCleanupOutput(text: string): Promise<boolean> {
+  const tokens = (await countLocalReasoningTokens({ prompt: text })) ?? estimateLocalTokens(text);
+  return tokens <= LOCAL_CLEANUP_MAX_TRANSCRIPT_TOKENS;
+}
+
 // This iPhone runs Apple Intelligence, even if it is turned off in Settings or still preparing
 // its model. Disabled in AI Models or unavailable says nothing about the device either way.
 export function canRunLocalReasoning(readiness?: LocalReasoningReadiness | null): boolean {
@@ -225,6 +236,7 @@ export function toLocalReasoningError(error: unknown): LocalReasoningError {
   switch (code) {
     case 'APPLE_LLM_GUARDRAIL':
     case 'APPLE_LLM_CONTEXT_LIMIT':
+    case 'APPLE_LLM_OUTPUT_LIMIT':
     case 'APPLE_LLM_RATE_LIMITED':
     case 'APPLE_LLM_UNAVAILABLE':
     case 'APPLE_LLM_FAILED':
@@ -244,5 +256,16 @@ export function isLocalContextLimitError(error: unknown): boolean {
     error !== null &&
     'code' in error &&
     (error as { code?: unknown }).code === 'APPLE_LLM_CONTEXT_LIMIT'
+  );
+}
+
+// Guided generation that reaches the output cap mid-structure can't be decoded, so FoundationModels
+// throws (decodingFailure, or a ParsingError on iOS 27) instead of returning a cut-off copy.
+export function isLocalOutputLimitError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: unknown }).code === 'APPLE_LLM_OUTPUT_LIMIT'
   );
 }

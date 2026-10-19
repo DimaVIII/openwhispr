@@ -6,6 +6,7 @@ import {
   getLocalInputTokenBudget,
   getLocalReasoningReadiness,
   isLocalContextLimitError,
+  isLocalOutputLimitError,
   LOCAL_OUTPUT_TOKEN_RESERVE,
   toLocalReasoningError,
 } from '@/lib/localReasoning';
@@ -20,6 +21,15 @@ import type { StructuredMeetingNotes } from '@/types';
 
 const DEFAULT_LOCAL_MEETING_ACTION_PROMPT =
   'Transform this meeting transcript into concise, actionable meeting notes.';
+
+// Each chunk's notes have to fit LOCAL_OUTPUT_TOKEN_RESERVE, which stays the same when the context
+// grows (iOS 27's 8,192). Chunks the size of iOS 26's whole input budget already ran past it, so a
+// chunk is held to less than that, whatever the context.
+const LOCAL_MEETING_CHUNK_MAX_INPUT_TOKENS = 2_000;
+
+// A chunk whose notes still run past the cap is halved at most this many times, so a model that
+// keeps looping can't turn one chunk into dozens of slow runs.
+const MAX_OUTPUT_LIMIT_SPLITS = 2;
 
 const emptyMeetingNotes = (): StructuredMeetingNotes => ({
   summary: '',
@@ -212,7 +222,9 @@ async function mapChunkWithRetry(input: {
   meetingContext?: MeetingNotesContext;
   instructions: string;
   previousSummary?: string;
+  outputLimitSplitsLeft?: number;
 }): Promise<StructuredMeetingNotes[]> {
+  const outputLimitSplitsLeft = input.outputLimitSplitsLeft ?? MAX_OUTPUT_LIMIT_SPLITS;
   const chunkInput = buildChunkInput({
     note: input.note,
     lines: input.lines,
@@ -230,25 +242,36 @@ async function mapChunkWithRetry(input: {
       }),
     ];
   } catch (error) {
-    if (!isLocalContextLimitError(error)) throw error;
+    const outputLimit = isLocalOutputLimitError(error);
+    if (!isLocalContextLimitError(error) && !(outputLimit && outputLimitSplitsLeft > 0)) {
+      throw error;
+    }
 
+    // Notes too long for the output cap come from too much material, so fewer lines fix them.
+    // One line's notes overflowing means the model is looping, and half a line won't help.
     const split =
       input.lines.length > 1
         ? [
             input.lines.slice(0, Math.ceil(input.lines.length / 2)),
             input.lines.slice(Math.ceil(input.lines.length / 2)),
           ]
-        : splitTranscriptLine(input.lines[0])?.map((line) => [line]);
+        : outputLimit
+          ? null
+          : splitTranscriptLine(input.lines[0])?.map((line) => [line]);
 
     if (!split) throw error;
 
-    const left = await mapChunkWithRetry({
+    const next = {
       ...input,
+      outputLimitSplitsLeft: outputLimit ? outputLimitSplitsLeft - 1 : outputLimitSplitsLeft,
+    };
+    const left = await mapChunkWithRetry({
+      ...next,
       lines: split[0],
     });
     const nextSummary = left[left.length - 1]?.summary || input.previousSummary;
     const right = await mapChunkWithRetry({
-      ...input,
+      ...next,
       lines: split[1],
       previousSummary: nextSummary,
     });
@@ -279,10 +302,15 @@ async function reduceStructuredNotes(input: {
       budget: input.budget,
     })
   ) {
-    return generateStructuredNotes({
-      instructions: input.instructions,
-      prompt,
-    });
+    try {
+      return await generateStructuredNotes({
+        instructions: input.instructions,
+        prompt,
+      });
+    } catch (error) {
+      // Merged notes too long for the output cap are merged like ones too long to read.
+      if (!isLocalOutputLimitError(error)) throw error;
+    }
   }
 
   if (input.notes.length === 2) {
@@ -326,6 +354,7 @@ export async function generateLocalMeetingNotes(
   });
   const readiness = await getLocalReasoningReadiness();
   const budget = getLocalInputTokenBudget(readiness);
+  const chunkBudget = Math.min(budget, LOCAL_MEETING_CHUNK_MAX_INPUT_TOKENS);
   const meetingContext = resolveMeetingContext(note);
   const lines = transcriptLines(segments, notesRepository.getSpeakers(noteId));
   const chunks = await buildTranscriptChunks({
@@ -333,7 +362,7 @@ export async function generateLocalMeetingNotes(
     lines,
     meetingContext,
     instructions,
-    budget,
+    budget: chunkBudget,
   });
 
   const mapped: StructuredMeetingNotes[] = [];
