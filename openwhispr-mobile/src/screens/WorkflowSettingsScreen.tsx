@@ -551,8 +551,9 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
       );
       return;
     }
-    // Tapping the shown mode saves it when nothing of the user's own is saved, since an unsaved
-    // default follows the mode and the account (unsetSelection), and a pin is held automatically.
+    // Tapping the shown mode saves it as the user's own when nothing of theirs is saved, since an
+    // unsaved default follows the mode and the account (unsetSelection), and onboarding releases a
+    // pin.
     const ownChoice = !!config?.inference?.[scope] && !config.pinnedInference?.includes(scope);
     if (mode === savedSelection.mode && ownChoice) {
       setSelection(savedSelection);

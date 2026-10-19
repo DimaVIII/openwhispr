@@ -258,15 +258,24 @@ it.each([
 });
 
 // Uploads in Local Mode run what is saved for them, or OpenWhispr Cloud when there is a session.
+const HELD = { mode: 'openwhispr' };
 it.each([
   ['nothing saved, with a session', undefined, { id: 'a', isAnonymous: true }, 'cloud'],
   ['nothing saved, with no session', undefined, null, 'local'],
   ['a provider saved', { mode: 'providers', providerId: 'groq' }, null, 'byok'],
   ['On-Device saved', { mode: 'local' }, { id: 'u', isAnonymous: false }, 'local'],
+  ['Cloud saved, with no session', { mode: 'openwhispr' }, null, 'cloud'],
+  ['Cloud held automatically, with a session', HELD, { id: 'a', isAnonymous: true }, 'cloud'],
+  // Held when dictation left Cloud, before the user signed out and continued as a guest.
+  ['Cloud held automatically, with no session', HELD, null, 'local'],
 ])('routes a Local Mode upload with %s', (_label, upload, user, provider) => {
   mockProcessing.activeMode = 'private';
   mockUser = user;
-  mockState.config.inference = upload ? { upload } : {};
+  mockState.config = {
+    defaultMode: 'private',
+    inference: upload ? { upload } : {},
+    ...(upload === HELD ? { pinnedInference: ['upload'] } : {}),
+  };
   expect(getTranscriptionProvider('upload')).toBe(provider);
   expect(getTranscriptionProvider('dictation')).toBe('local');
 });

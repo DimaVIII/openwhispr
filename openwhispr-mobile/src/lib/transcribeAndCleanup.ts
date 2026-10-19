@@ -65,21 +65,23 @@ function rawTranscriptResult(transcription: TranscriptionResponse): DictationPro
 
 // The pinned route decides where cleanup runs: a local job pins a local one unless the mode saved
 // for cleanup, or Local Mode's Cloud default, sends it off this iPhone (snapshotTextInference).
-// Whether a pinned On-Device cleanup still runs is read live, like cleanupEnabled.
+// Whether a pinned On-Device cleanup still runs is read live, like cleanupEnabled. Apart from a
+// saved On-Device cleanup, the local route is pinned only without an account, so it is read as one.
 function cleansLocalTranscript(request: TranscriptionRequest): boolean {
   if (!request.cleanupRoute) return false;
   if (request.cleanupRoute.mode !== 'local') return true;
   return cleanupRunsOnDevice(
     useConfigStore.getState().config,
     useProcessingModeStore.getState().activeMode,
+    'none',
   );
 }
 
-// Local Mode cleans On-Device with nothing of its own saved for cleanup: unset, or held there
-// automatically (pinnedInference). When Apple Intelligence can't run, AI Models already says that
-// cleanup is skipped, so it is skipped quietly rather than warning on every transcript the user
-// never asked to clean. The cached readiness outlives a fix in iOS Settings, so it is checked again
-// before skipping.
+// Cleanup runs On-Device without the user having saved On-Device for it: unset or held on Cloud in
+// Local Mode, or held there automatically (pinnedInference), which a dictation change keeps in any
+// mode. When Apple Intelligence can't run, AI Models already says that cleanup is skipped, so it is
+// skipped quietly rather than warning on every transcript the user never asked to clean. The cached
+// readiness outlives a fix in iOS Settings, so it is checked again before skipping.
 async function skipsLocalModeCleanup(request: TranscriptionRequest): Promise<boolean> {
   if (request.cleanupRoute?.mode !== 'local') return false;
   const config = useConfigStore.getState().config;

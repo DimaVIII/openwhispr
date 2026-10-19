@@ -83,7 +83,8 @@ type DictationModeConfig = Pick<UserConfig, 'defaultMode' | 'inference' | 'pinne
 const OTHER_WORKFLOWS = ['upload', 'cleanup', 'notes', 'agent'] as const;
 type OtherWorkflow = (typeof OTHER_WORKFLOWS)[number];
 
-function localSelection(
+// The on-device model picked for a workflow, else Automatic.
+export function localSelection(
   config: Pick<UserConfig, 'rememberedInference'> | null,
   scope: MobileInferenceScope,
 ): InferenceSelection {
@@ -111,15 +112,14 @@ function unsavedRunsIn(
   return onDevice ? localSelection(config, scope) : { mode: 'openwhispr' };
 }
 
-// Onboarding's config for the dictation mode it picks. It releases the automatic pins, so those
-// workflows follow the picked mode again; selections the user saved themselves stay. Replaying the
-// same choice keeps them.
+// Onboarding's config for the dictation mode it picks. It releases the automatic pins, replaying the
+// same choice included, since a Dictation change in AI Models may have held them in that mode, so
+// those workflows follow the picked mode again; selections the user saved themselves stay.
 export function dictationModeConfig(
   config: UserConfig | null,
   mode: 'cloud' | 'private',
 ): DictationModeConfig {
-  const modeChanged = config?.defaultMode !== mode;
-  const pinned = modeChanged ? (config?.pinnedInference ?? []) : [];
+  const pinned = config?.pinnedInference ?? [];
   const inference = Object.fromEntries(
     Object.entries(config?.inference ?? {}).filter(
       ([scope]) => !pinned.includes(scope as MobileInferenceScope),
@@ -132,7 +132,7 @@ export function dictationModeConfig(
       // On-Device restores the model picked on the Dictation page.
       dictation: mode === 'private' ? localSelection(config, 'dictation') : { mode: 'openwhispr' },
     },
-    ...(modeChanged && config?.pinnedInference ? { pinnedInference: undefined } : {}),
+    ...(config?.pinnedInference ? { pinnedInference: undefined } : {}),
   };
 }
 
@@ -228,7 +228,7 @@ export function holdOnDeviceConfig(
   for (const scope of ['upload', 'cleanup'] as const) {
     const saved = inference[scope];
     if (saved && saved.mode !== 'openwhispr') continue;
-    inference[scope] = config.rememberedInference?.[scope]?.local ?? { mode: 'local' };
+    inference[scope] = localSelection(config, scope);
     if (!pinnedInference.includes(scope)) pinnedInference.push(scope);
   }
   return { inference, pinnedInference };

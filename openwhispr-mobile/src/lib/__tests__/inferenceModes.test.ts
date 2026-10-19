@@ -55,16 +55,16 @@ it.each([
   }
 });
 
-// Picking another on-device model, or replaying Local Mode in onboarding, is not a mode change.
-it('keeps the automatic pins when dictation is saved to the mode it is already in', () => {
+// A Dictation change in AI Models may have held workflows in the mode onboarding picks again.
+it('releases the automatic pins when onboarding replays the mode it is in', () => {
   const held: UserConfig = {
-    defaultMode: 'private',
-    inference: { dictation: { mode: 'local' }, upload: { mode: 'local' } },
+    defaultMode: 'cloud',
+    inference: { dictation: { mode: 'openwhispr' }, upload: { mode: 'local' } },
     pinnedInference: ['upload'],
   };
-  const next = dictationModeConfig(held, 'private');
-  expect(next.inference?.upload).toEqual({ mode: 'local' });
-  expect(next).not.toHaveProperty('pinnedInference');
+  const next = dictationModeConfig(held, 'cloud');
+  expect(next.inference).toEqual({ dictation: { mode: 'openwhispr' } });
+  expect(next.pinnedInference).toBeUndefined();
 });
 
 it('keeps an explicit On-Device upload choice when dictation leaves Bring Your Own Key', () => {
@@ -308,8 +308,15 @@ describe('workflowSaveConfig', () => {
   // later switch to Bring Your Own Key leaves it skipped rather than sending it to Cloud.
   it('leaves the voice assistant unsaved when Local setup is followed by Bring Your Own Key', () => {
     const setup = dictationModeConfig({ defaultMode: 'cloud' }, 'private');
-    const local: UserConfig = { ...setup, ...holdOnDeviceConfig(setup) };
-    const next = workflowSaveConfig(local, 'dictation', groqDictation, 'private', 'session', true);
+    const localSetup: UserConfig = { ...setup, ...holdOnDeviceConfig(setup) };
+    const next = workflowSaveConfig(
+      localSetup,
+      'dictation',
+      groqDictation,
+      'private',
+      'session',
+      true,
+    );
     expect(next.inference).toEqual({
       dictation: groqDictation,
       upload: { mode: 'local' },

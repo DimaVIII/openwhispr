@@ -9,7 +9,7 @@ import {
   showAccountRequiredAlert,
 } from '@/lib/accountAccess';
 import { cloudAccessFor } from '@/lib/aiWorkflows';
-import { workflowSaveConfig } from '@/lib/inferenceModes';
+import { localSelection, workflowSaveConfig } from '@/lib/inferenceModes';
 import {
   canRunLocalReasoning,
   getLocalReasoningReadiness,
@@ -87,11 +87,11 @@ export async function switchWorkflowMode(
     showAccountRequiredAlert(isSpeechScope(scope) ? 'cloud transcription' : 'cloud AI');
     return 'refused';
   }
-  // Local Mode dictates on this iPhone, so Cloud cleanup is a separate pass that needs an account.
+  // Outside Cloud dictation, Cloud cleanup is a separate pass that needs an account.
   if (
     mode === 'openwhispr' &&
     scope === 'cleanup' &&
-    useProcessingModeStore.getState().activeMode === 'private' &&
+    useProcessingModeStore.getState().activeMode !== 'cloud' &&
     requiresRealAccount(user)
   ) {
     showAccountRequiredAlert('cloud cleanup');
@@ -104,18 +104,12 @@ export async function switchWorkflowMode(
     if (blocked) return blocked;
   }
 
-  const localReasoningReady = await leavingLocalModeWithLocalReasoning(
-    scope,
-    useProcessingModeStore.getState().activeMode,
-    mode,
-  );
-  const { config, updateConfig } = useConfigStore.getState();
   const { activeMode, setActiveMode } = useProcessingModeStore.getState();
+  const localReasoningReady = await leavingLocalModeWithLocalReasoning(scope, activeMode, mode);
+  const { config, updateConfig } = useConfigStore.getState();
   if (scope === 'dictation') setActiveMode(mode === 'local' ? 'private' : 'cloud', true);
   const selection: InferenceSelection =
-    mode === 'local'
-      ? (config?.rememberedInference?.[scope]?.local ?? { mode: 'local' })
-      : { mode: 'openwhispr' };
+    mode === 'local' ? localSelection(config, scope) : { mode: 'openwhispr' };
   await updateConfig(
     workflowSaveConfig(
       config,

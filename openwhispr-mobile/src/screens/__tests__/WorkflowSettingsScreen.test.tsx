@@ -127,7 +127,7 @@ jest.mock('@/services/providers/ProviderCredentials', () => ({
 }));
 
 import { WorkflowSettingsScreen } from '../WorkflowSettingsScreen';
-import { PRIVATE_MODE_LOCKED_REASON } from '@/lib/aiWorkflows';
+import { CLOUD_CLEANUP_NEEDS_ACCOUNT_NOTE, PRIVATE_MODE_LOCKED_REASON } from '@/lib/aiWorkflows';
 
 function chooseProvider(provider: string): void {
   fireEvent.press(screen.getByText('Provider'));
@@ -498,11 +498,40 @@ it('says why a saved Cloud cleanup is skipped in Local Mode without an account',
   mockScope = 'cleanup';
   render(<WorkflowSettingsScreen />);
   expect(selectedMode()).toBe('OpenWhispr Cloud');
-  expect(
-    screen.getByText(
-      'In Local Mode, OpenWhispr Cloud cleans transcripts only for a signed-in account, so cleanup is skipped until you sign in.',
-    ),
-  ).toBeTruthy();
+  expect(screen.getByText(CLOUD_CLEANUP_NEEDS_ACCOUNT_NOTE)).toBeTruthy();
+});
+
+// Bring Your Own Key dictation also needs the separate Cloud pass, so a Cloud cleanup held when
+// dictation left Cloud says why it is skipped rather than looking as if it runs.
+it('says why a held Cloud cleanup is skipped under Bring Your Own Key without an account', () => {
+  mockUser = { id: 'a', isAnonymous: true };
+  mockConfig = {
+    defaultMode: 'providers',
+    inference: {
+      dictation: { mode: 'providers', providerId: 'openai', modelId: 'whisper-1' },
+      cleanup: { mode: 'openwhispr' },
+    },
+    pinnedInference: ['cleanup'],
+  };
+  mockActiveMode = 'providers';
+  mockScope = 'cleanup';
+  render(<WorkflowSettingsScreen />);
+  expect(selectedMode()).toBe('OpenWhispr Cloud');
+  expect(screen.getByText(CLOUD_CLEANUP_NEEDS_ACCOUNT_NOTE)).toBeTruthy();
+});
+
+// Local Mode formats notes on this phone first, so a Cloud hold shows what runs, as the AI Models
+// row does.
+it('shows note formatting held on Cloud as On-Device in Local Mode', () => {
+  mockConfig = {
+    defaultMode: 'private',
+    inference: { dictation: { mode: 'local' }, notes: { mode: 'openwhispr' } },
+    pinnedInference: ['notes'],
+  };
+  mockActiveMode = 'private';
+  mockScope = 'notes';
+  render(<WorkflowSettingsScreen />);
+  expect(selectedMode()).toBe('On-Device');
 });
 
 it('keeps On-Device cleanup selected once a private-mode user has saved it', () => {

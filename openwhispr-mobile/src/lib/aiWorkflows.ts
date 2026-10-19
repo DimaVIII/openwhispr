@@ -42,44 +42,46 @@ export const ON_DEVICE_MODE_NOTES: Partial<Record<MobileInferenceScope, string>>
 export const PRIVATE_MODE_LOCKED_REASON =
   'Off while Local Mode is on. Change Dictation in AI Models to turn it off.';
 
-// Local Mode dictates on this iPhone, so cleaning with OpenWhispr Cloud is a separate Cloud pass,
-// which needs a signed-in account.
+// Outside Cloud dictation, cleaning with OpenWhispr Cloud is a separate Cloud pass, which needs a
+// signed-in account.
 export const CLOUD_CLEANUP_NEEDS_ACCOUNT_NOTE =
-  'In Local Mode, OpenWhispr Cloud cleans transcripts only for a signed-in account, so cleanup is skipped until you sign in.';
+  'OpenWhispr Cloud cleans transcripts made on this iPhone or with your own key only for a signed-in account, so cleanup is skipped until you sign in.';
 
 export function cloudAccessFor(user: AuthUser | null): CloudAccess {
   if (!user) return 'none';
   return user.isAnonymous ? 'session' : 'account';
 }
 
-// OpenWhispr Cloud is saved for cleanup in Local Mode without an account to run it, so it is skipped
-// (snapshotTextInference). Unset cleanup only defaults to Cloud with an account (unsetSelection).
+// OpenWhispr Cloud runs for cleanup in Local Mode or Bring Your Own Key without an account to run
+// it, so it is skipped (cleanupTranscript). In Local Mode that is a Cloud cleanup the user saved;
+// unset or held there automatically, it runs on this iPhone without an account (workflowSelection).
 export function cloudCleanupNeedsAccount(
   config: UserConfig | null,
   activeMode: ProcessingMode,
   cloudAccess: CloudAccess,
 ): boolean {
   return (
-    activeMode === 'private' &&
+    activeMode !== 'cloud' &&
     cloudAccess !== 'account' &&
     workflowSelection(config, 'cleanup', activeMode, cloudAccess).mode === 'openwhispr'
   );
 }
 
-// Cleanup runs On-Device when it is saved as On-Device, or in Local Mode when nothing is saved and
-// OpenWhispr Cloud can't clean (unsetSelection).
+// Cleanup runs On-Device when it is saved as On-Device, or in Local Mode when it is unset or held on
+// Cloud automatically and OpenWhispr Cloud can't clean (workflowSelection).
 export function cleanupRunsOnDevice(
   config: UserConfig | null,
   activeMode: ProcessingMode,
-  cloudAccess: CloudAccess = 'none',
+  cloudAccess: CloudAccess,
 ): boolean {
   return workflowSelection(config, 'cleanup', activeMode, cloudAccess).mode === 'local';
 }
 
-// What a workflow runs: its saved selection, else the mode's default (unsetSelection). A Cloud
-// cleanup held automatically (pinnedInference) when dictation left Cloud can't clean a transcript
-// made on this iPhone without an account, so in Local Mode it runs as if unsaved; leaving Local Mode
-// finds it on Cloud again.
+// What a workflow runs: its saved selection, else the mode's default (unsetSelection). In Local
+// Mode, a Cloud selection held automatically (pinnedInference) when dictation left another mode runs
+// as if unsaved, since Local Mode's default already uses Cloud wherever the user's access lets it:
+// without a session uploads stay on this iPhone, and without an account so does cleanup. Leaving
+// Local Mode finds it on Cloud again.
 export function workflowSelection(
   config: UserConfig | null,
   scope: MobileInferenceScope,
@@ -87,15 +89,11 @@ export function workflowSelection(
   cloudAccess: CloudAccess = 'none',
 ): InferenceSelection {
   const saved = config?.inference?.[scope];
-  const heldCloudCleanupWithoutAccount =
-    scope === 'cleanup' &&
+  const heldOnCloudInLocalMode =
     activeMode === 'private' &&
     saved?.mode === 'openwhispr' &&
-    cloudAccess !== 'account' &&
-    !!config?.pinnedInference?.includes('cleanup');
-  return saved && !heldCloudCleanupWithoutAccount
-    ? saved
-    : unsetSelection(scope, activeMode, cloudAccess);
+    !!config?.pinnedInference?.includes(scope);
+  return saved && !heldOnCloudInLocalMode ? saved : unsetSelection(scope, activeMode, cloudAccess);
 }
 
 export function parseWorkflow(value: unknown): MobileInferenceScope | null {

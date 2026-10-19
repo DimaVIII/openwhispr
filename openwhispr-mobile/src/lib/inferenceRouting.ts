@@ -9,7 +9,7 @@ import {
 } from '@/lib/mobileProviders';
 import type { TranscriptionProvider, TranscriptionRequest, TextInferenceSnapshot } from '@/types';
 import { isLocalModelKey, type LocalModelKey } from '@/lib/localModelCatalog';
-import { cloudAccessFor, unsetSelection } from '@/lib/aiWorkflows';
+import { cloudAccessFor, unsetSelection, workflowSelection } from '@/lib/aiWorkflows';
 import type { CloudAccess } from '@/lib/inferenceModes';
 
 export type ProviderRoute = Extract<InferenceRoute, { mode: 'providers' }>;
@@ -35,13 +35,17 @@ function currentCloudAccess(): CloudAccess {
 export function getTranscriptionProvider(scope: InferenceScope): TranscriptionProvider {
   const { activeMode } = useProcessingModeStore.getState();
   // Local Mode keeps dictation on this iPhone. Uploads run what is saved for them, or with nothing
-  // saved, OpenWhispr Cloud when there is a session (unsetSelection).
+  // saved or Cloud held automatically, OpenWhispr Cloud when there is a session (workflowSelection).
   if (activeMode === 'private' && scope !== 'upload') return 'local';
   const selection =
-    getInferenceSelection(scope) ??
-    (activeMode === 'private'
-      ? unsetSelection('upload', activeMode, currentCloudAccess())
-      : undefined);
+    activeMode === 'private'
+      ? workflowSelection(
+          useConfigStore.getState().config,
+          'upload',
+          activeMode,
+          currentCloudAccess(),
+        )
+      : getInferenceSelection(scope);
   if (selection?.mode === 'providers') return 'byok';
   if (selection?.mode === 'local') return 'local';
   // Bring Your Own Key mode without a dictation choice must refuse (see

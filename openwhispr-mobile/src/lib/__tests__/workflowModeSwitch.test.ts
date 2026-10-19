@@ -86,6 +86,20 @@ it('asks an anonymous user to create an account before Cloud cleanup in Local Mo
   expect(mockUpdateConfig).not.toHaveBeenCalled();
 });
 
+// Bring Your Own Key dictation also needs the separate Cloud pass.
+it('asks an anonymous user to create an account before Cloud cleanup under Bring Your Own Key', async () => {
+  mockUser = { id: 'a', isAnonymous: true };
+  mockActiveMode = 'providers';
+  mockConfig = { defaultMode: 'providers' };
+  await expect(switchWorkflowMode('cleanup', 'openwhispr')).resolves.toBe('refused');
+  expect(alert).toHaveBeenCalledWith(
+    'Create an account',
+    'Create an account to use cloud cleanup with cloud processing, or set Dictation to On-Device in Account → AI Models.',
+    expect.any(Array),
+  );
+  expect(mockUpdateConfig).not.toHaveBeenCalled();
+});
+
 it('lets an anonymous user pick Cloud cleanup outside Local Mode, where Cloud dictates', async () => {
   mockUser = { id: 'a', isAnonymous: true };
   await expect(switchWorkflowMode('cleanup', 'openwhispr')).resolves.toBe('switched');
