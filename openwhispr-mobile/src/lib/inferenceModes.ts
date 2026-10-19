@@ -166,6 +166,32 @@ function providerDictationConfig(
   };
 }
 
+// Moving dictation to Cloud changes only dictation: the automatic pins stay, and each unsaved
+// workflow Local Mode ran on this iPhone is held there. Unsaved workflows that already ran on
+// Cloud, or were skipped under Bring Your Own Key, have nothing to hold.
+function cloudDictationConfig(
+  config: UserConfig | null,
+  leavingMode: ProcessingMode,
+  cloudAccess: CloudAccess,
+): DictationModeConfig {
+  if (leavingMode === 'cloud') return dictationModeConfig(config, 'cloud');
+  const inference = { ...config?.inference, dictation: { mode: 'openwhispr' as const } };
+  const pinnedInference = [...(config?.pinnedInference ?? [])];
+  if (leavingMode === 'private') {
+    for (const scope of ['upload', 'cleanup', 'notes', 'agent'] as const) {
+      if (inference[scope] || localModeDefault(scope, cloudAccess) !== 'local') continue;
+      inference[scope] = config?.rememberedInference?.[scope]?.local ?? { mode: 'local' };
+      if (!pinnedInference.includes(scope)) pinnedInference.push(scope);
+    }
+  }
+  return {
+    defaultMode: 'cloud',
+    inference,
+    ...(pinnedInference.length ? { pinnedInference } : {}),
+    ...(config?.privateModeReturn ? { privateModeReturn: undefined } : {}),
+  };
+}
+
 // What Bring Your Own Key holds on the mode dictation came from, kept while Private mode is on.
 function pinnedSelections(
   config: UserConfig | null,
@@ -215,7 +241,9 @@ export function workflowSaveConfig(
       ...rememberedInference,
       ...(mode === 'providers'
         ? providerDictationConfig(config, selection, activeMode, cloudAccess)
-        : dictationModeConfig(config, mode)),
+        : mode === 'cloud'
+          ? cloudDictationConfig(config, activeMode, cloudAccess)
+          : dictationModeConfig(config, mode)),
       ...(privateModeReturn || config?.privateModeReturn ? { privateModeReturn } : {}),
     };
   }
@@ -229,7 +257,8 @@ export function workflowSaveConfig(
 }
 
 // Holds uploads and cleanup on this iPhone unless the user saved On-Device or a provider for them.
-// They are automatic pins, so changing the mode releases them to its defaults, and a pinned
+// They are automatic pins, so turning Local Mode on or picking a mode in onboarding releases them
+// to its defaults (moving dictation to Cloud keeps them, cloudDictationConfig), and a pinned
 // cleanup Apple Intelligence can't run yet is skipped quietly (skipsLocalModeCleanup).
 export function holdOnDeviceConfig(
   config: Pick<UserConfig, 'inference' | 'pinnedInference' | 'rememberedInference'>,

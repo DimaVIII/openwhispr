@@ -8,6 +8,7 @@ import {
   requiresRealAccount,
   showAccountRequiredAlert,
 } from '@/lib/accountAccess';
+import { cloudAccessFor } from '@/lib/aiWorkflows';
 import { workflowSaveConfig } from '@/lib/inferenceModes';
 import {
   getLocalReasoningReadiness,
@@ -89,7 +90,9 @@ export async function switchWorkflowMode(
     mode === 'local'
       ? (config?.rememberedInference?.[scope]?.local ?? { mode: 'local' })
       : { mode: 'openwhispr' };
-  await updateConfig(workflowSaveConfig(config, scope, selection, activeMode));
+  await updateConfig(
+    workflowSaveConfig(config, scope, selection, activeMode, cloudAccessFor(user)),
+  );
   return 'switched';
 }
 
