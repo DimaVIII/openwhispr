@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, Keyboard, ScrollView } from 'react-native';
+import { Alert, AppState, Keyboard, ScrollView } from 'react-native';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 const mockUpdateConfig = jest.fn().mockResolvedValue(undefined);
@@ -24,7 +24,7 @@ const mockPush = jest.fn();
 const mockSwitchMode = jest.fn();
 let mockLocalReasoningReady = false;
 const mockPrivateReadiness = jest.fn();
-let mockFocusEffect: (() => void) | undefined;
+let mockFocusEffect: (() => (() => void) | undefined) | undefined;
 const MockText = require('react-native').Text;
 
 jest.mock('@/components/ui/Text', () => ({ Text: require('react-native').Text }));
@@ -34,7 +34,7 @@ jest.mock('expo-router', () => ({
   router: { push: (...args: unknown[]) => mockPush(...args) },
   useLocalSearchParams: () => ({ scope: mockScope }),
   // Tests call the latest effect to act out returning to the page.
-  useFocusEffect: (effect: () => void) => {
+  useFocusEffect: (effect: () => (() => void) | undefined) => {
     mockFocusEffect = effect;
   },
 }));
@@ -629,6 +629,117 @@ it('forgets a pending On-Device switch once another mode is chosen', async () =>
   await act(async () => mockFocusEffect?.());
   expect(mockSwitchMode).toHaveBeenCalledTimes(1);
   expect(selectedMode()).toBe('OpenWhispr Cloud');
+});
+
+describe('a text workflow waiting on Apple Intelligence', () => {
+  const WAITING_NOTE =
+    'Switches to On-Device once Apple Intelligence is ready, while this page stays open.';
+  let appStateListeners: ((state: string) => void)[];
+  let leavePage: (() => void) | undefined;
+
+  beforeEach(() => {
+    appStateListeners = [];
+    jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, listener) => {
+      appStateListeners.push(listener as (state: string) => void);
+      return { remove: jest.fn() } as unknown as ReturnType<typeof AppState.addEventListener>;
+    });
+    mockConfig = { defaultMode: 'cloud', inference: { cleanup: { mode: 'openwhispr' } } };
+    mockScope = 'cleanup';
+    mockSwitchMode.mockResolvedValueOnce('not-ready');
+    mockLocalReadiness.mockResolvedValue({ status: 'modelNotReady', tokenCounting: false });
+  });
+
+  afterEach(() => {
+    leavePage?.();
+    leavePage = undefined;
+    jest.useRealTimers();
+  });
+
+  async function tapOnDevice(): Promise<void> {
+    render(<WorkflowSettingsScreen />);
+    fireEvent.press(screen.getByText('On-Device'));
+    await waitFor(() => expect(mockSwitchMode).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      leavePage = mockFocusEffect?.();
+    });
+  }
+
+  it('says the switch finishes by itself', async () => {
+    await tapOnDevice();
+    expect(screen.getByText(WAITING_NOTE)).toBeTruthy();
+    expect(mockSwitchMode).toHaveBeenCalledTimes(1);
+    expect(selectedMode()).toBe('OpenWhispr Cloud');
+  });
+
+  // Apple Intelligence is turned on and downloads its model in iOS Settings.
+  it('switches once it is ready on return from Settings', async () => {
+    await tapOnDevice();
+    mockLocalReadiness.mockResolvedValue({ status: 'ready', tokenCounting: true });
+    await act(async () => appStateListeners.forEach((listener) => listener('active')));
+    await waitFor(() => expect(mockSwitchMode).toHaveBeenCalledTimes(2));
+    expect(mockSwitchMode).toHaveBeenLastCalledWith('cleanup', 'local');
+    expect(mockLocalReadiness).toHaveBeenLastCalledWith({ refresh: true });
+    expect(await screen.findByTestId('toast-success')).toHaveTextContent('Switched to On-Device.');
+    expect(selectedMode()).toBe('On-Device');
+  });
+
+  it('switches once it is ready while the page stays open', async () => {
+    jest.useFakeTimers();
+    await tapOnDevice();
+    mockLocalReadiness.mockResolvedValue({ status: 'ready', tokenCounting: true });
+    await act(async () => {
+      jest.advanceTimersByTime(10_000);
+    });
+    await waitFor(() => expect(mockSwitchMode).toHaveBeenCalledTimes(2));
+    expect(selectedMode()).toBe('On-Device');
+  });
+
+  // The switch checks Apple Intelligence again, and its alert promises the page keeps waiting.
+  it('keeps waiting when Apple Intelligence is not ready by the time it switches', async () => {
+    await tapOnDevice();
+    mockLocalReadiness.mockResolvedValue({ status: 'ready', tokenCounting: true });
+    mockSwitchMode.mockResolvedValueOnce('not-ready');
+    await act(async () => appStateListeners.forEach((listener) => listener('active')));
+    await waitFor(() => expect(mockSwitchMode).toHaveBeenCalledTimes(2));
+    expect(screen.getByText(WAITING_NOTE)).toBeTruthy();
+    expect(screen.queryByTestId('toast-success')).toBeNull();
+    expect(selectedMode()).toBe('OpenWhispr Cloud');
+
+    await act(async () => appStateListeners.forEach((listener) => listener('active')));
+    await waitFor(() => expect(mockSwitchMode).toHaveBeenCalledTimes(3));
+    expect(await screen.findByTestId('toast-success')).toHaveTextContent('Switched to On-Device.');
+    expect(selectedMode()).toBe('On-Device');
+    expect(screen.queryByText(WAITING_NOTE)).toBeNull();
+  });
+
+  it('stops checking once the page is left', async () => {
+    jest.useFakeTimers();
+    await tapOnDevice();
+    leavePage?.();
+    leavePage = undefined;
+    mockLocalReadiness.mockResolvedValue({ status: 'ready', tokenCounting: true });
+    await act(async () => {
+      appStateListeners.forEach((listener) => listener('active'));
+      jest.advanceTimersByTime(10_000);
+    });
+    expect(mockSwitchMode).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops waiting once another mode is chosen', async () => {
+    await tapOnDevice();
+    await act(async () => {
+      fireEvent.press(screen.getByText('OpenWhispr Cloud'));
+    });
+    expect(screen.queryByText(WAITING_NOTE)).toBeNull();
+
+    // React cleans up the waiting effect and runs the current one, which no longer waits.
+    leavePage?.();
+    leavePage = mockFocusEffect?.();
+    expect(leavePage).toBeUndefined();
+    mockLocalReadiness.mockResolvedValue({ status: 'ready', tokenCounting: true });
+    await act(async () => appStateListeners.forEach((listener) => listener('active')));
+    expect(mockSwitchMode).toHaveBeenCalledTimes(1);
+  });
 });
 
 it('shows the on-device model list once On-Device is applied', async () => {
@@ -1267,13 +1378,45 @@ describe('an iPhone that cannot run Apple Intelligence', () => {
     expect(modeRow('On-Device').props.accessibilityState?.disabled).toBeFalsy();
   });
 
-  it('keeps On-Device available while Apple Intelligence is only turned off', async () => {
-    mockLocalReadiness.mockResolvedValue({ status: 'appleIntelligenceOff', tokenCounting: false });
+  it.each([
+    ['appleIntelligenceOff', 'Apple Intelligence is turned off in iOS Settings.'],
+    ['modelNotReady', 'Apple Intelligence is downloading its model.'],
+  ])('keeps On-Device available and says why while it is %s', async (status, reason) => {
+    mockLocalReadiness.mockResolvedValue({ status, tokenCounting: false });
     mockScope = 'cleanup';
     render(<WorkflowSettingsScreen />);
 
-    await act(async () => {});
+    expect(await screen.findByText(reason)).toBeTruthy();
+    expect(screen.queryByText('Text never leaves this phone.')).not.toBeOnTheScreen();
     expect(modeRow('On-Device').props.accessibilityState?.disabled).toBeFalsy();
+  });
+
+  it('checks again on return to the app, as Apple Intelligence is set up in iOS Settings', async () => {
+    const appStateListeners: ((state: string) => void)[] = [];
+    jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, listener) => {
+      appStateListeners.push(listener as (state: string) => void);
+      return { remove: jest.fn() } as unknown as ReturnType<typeof AppState.addEventListener>;
+    });
+    mockLocalReadiness.mockResolvedValue({ status: 'modelNotReady', tokenCounting: false });
+    mockScope = 'cleanup';
+    render(<WorkflowSettingsScreen />);
+    expect(await screen.findByText('Apple Intelligence is downloading its model.')).toBeTruthy();
+
+    mockLocalReadiness.mockResolvedValue({ status: 'ready', tokenCounting: true });
+    await act(async () => appStateListeners.forEach((listener) => listener('active')));
+    expect(await screen.findByText('Text never leaves this phone.')).toBeTruthy();
+    expect(mockLocalReadiness).toHaveBeenLastCalledWith({ refresh: true });
+  });
+
+  it('shows no Apple Intelligence status on Dictation, which runs its own speech model', async () => {
+    mockLocalReadiness.mockResolvedValue({ status: 'modelNotReady', tokenCounting: false });
+    mockScope = 'dictation';
+    render(<WorkflowSettingsScreen />);
+
+    await act(async () => {});
+    expect(
+      screen.queryByText('Apple Intelligence is downloading its model.'),
+    ).not.toBeOnTheScreen();
   });
 
   it('says Local Mode cleanup is skipped, shows nothing picked and points at Cloud', async () => {

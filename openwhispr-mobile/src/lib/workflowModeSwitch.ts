@@ -11,6 +11,7 @@ import {
 import { cloudAccessFor } from '@/lib/aiWorkflows';
 import { workflowSaveConfig } from '@/lib/inferenceModes';
 import {
+  canRunLocalReasoning,
   getLocalReasoningReadiness,
   getLocalReasoningUnavailableMessage,
 } from '@/lib/localReasoning';
@@ -22,7 +23,8 @@ import { getPrivateModeReadiness, getPrivateModeUnavailableMessage } from '@/lib
 type SpeechScope = 'dictation' | 'upload';
 
 // 'needs-model' means the model list was opened because nothing on this phone can run it yet.
-export type ModeSwitchResult = 'switched' | 'needs-model' | 'refused';
+// 'not-ready' means Apple Intelligence is off in iOS Settings or still downloading its model.
+export type ModeSwitchResult = 'switched' | 'needs-model' | 'not-ready' | 'refused';
 
 function isSpeechScope(scope: MobileInferenceScope): scope is SpeechScope {
   return scope === 'dictation' || scope === 'upload';
@@ -47,11 +49,19 @@ async function transcriptionModelReady(): Promise<ModeSwitchResult | null> {
   return null;
 }
 
-async function appleIntelligenceReady(): Promise<boolean> {
+async function appleIntelligenceReady(): Promise<ModeSwitchResult | null> {
   const readiness = await getLocalReasoningReadiness({ refresh: true });
-  if (readiness.status === 'ready') return true;
-  Alert.alert('On-Device Unavailable', getLocalReasoningUnavailableMessage(readiness));
-  return false;
+  if (readiness.status === 'ready') return null;
+  const message = getLocalReasoningUnavailableMessage(readiness);
+  if (!canRunLocalReasoning(readiness)) {
+    Alert.alert('On-Device Unavailable', message);
+    return 'refused';
+  }
+  Alert.alert(
+    'On-Device Unavailable',
+    `${message} Keep this page open and On-Device turns on once Apple Intelligence is ready.`,
+  );
+  return 'not-ready';
 }
 
 // Whether Apple Intelligence can run here, which decides where note formatting with nothing saved
@@ -90,9 +100,7 @@ export async function switchWorkflowMode(
   if (mode === 'local') {
     const blocked = isSpeechScope(scope)
       ? await transcriptionModelReady()
-      : (await appleIntelligenceReady())
-        ? null
-        : 'refused';
+      : await appleIntelligenceReady();
     if (blocked) return blocked;
   }
 

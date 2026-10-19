@@ -104,6 +104,12 @@ it('keeps the meeting speaker model with the other on-device settings', async ()
   await screen.findByText(/Status: Ready/);
 });
 
+it('says Apple Intelligence is downloading its model while it is not ready', async () => {
+  mockReadiness.mockResolvedValue({ status: 'modelNotReady', tokenCounting: false });
+  render(<AIModelsScreen />);
+  await screen.findByText(/Status: Downloading model/);
+});
+
 it('removes every saved provider key after confirmation', async () => {
   jest
     .spyOn(Alert, 'alert')

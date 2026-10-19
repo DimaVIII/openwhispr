@@ -148,6 +148,7 @@ export interface LocalReasoningReadiness {
 export type LocalReasoningErrorCode =
   | 'APPLE_LLM_GUARDRAIL'
   | 'APPLE_LLM_CONTEXT_LIMIT'
+  | 'APPLE_LLM_OUTPUT_LIMIT'
   | 'APPLE_LLM_RATE_LIMITED'
   | 'APPLE_LLM_UNAVAILABLE'
   | 'APPLE_LLM_FAILED'
