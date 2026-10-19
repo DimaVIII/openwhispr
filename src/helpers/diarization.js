@@ -23,33 +23,42 @@ const {
 } = require("./transcriptionTimeout");
 
 const DIARIZATION_TIMEOUT_MS = 3600000; // 60 minutes
-const POST_MERGE_CONTEXT_WINDOW_MS = 6000;
+// mergeWithTranscript runs on timestamps already normalized to seconds from
+// the start of the recording, so this window is in seconds too.
+const POST_MERGE_CONTEXT_WINDOW_S = 6;
 const POST_MERGE_CONTEXT_MERGE_LIMIT = 3;
 
-const dedupeMicAgainstSystem = (segments) => {
+// Splits out echo-flagged mic segments whose text matches nearby system audio.
+// `removed` holds the same objects that were passed in, so callers can map
+// them back to their original rows.
+const splitMicEchoDuplicates = (segments) => {
   const systemSegments = segments.filter((seg) => seg.source === "system" && seg.text);
-  if (!systemSegments.length) return segments;
+  if (!systemSegments.length) return { kept: segments, removed: [] };
 
-  return segments.filter((seg) => {
-    if (seg.source !== "mic" || !seg.text) return true;
-    if (
-      !seg.likelyRenderBleed &&
-      !seg.hasBleedEvidence &&
-      seg.suppressionReason !== "double_talk"
-    ) {
-      return true;
-    }
+  const kept = [];
+  const removed = [];
+  for (const seg of segments) {
+    if (isMicEchoDuplicate(seg, systemSegments)) removed.push(seg);
+    else kept.push(seg);
+  }
+  return { kept, removed };
+};
 
-    const matcher =
-      seg.suppressionReason === "double_talk" ? transcriptsLooselyOverlap : transcriptsOverlap;
-    const candidates = buildMergedCandidates({
-      segments: systemSegments,
-      timestamp: seg.timestamp,
-      windowMs: POST_MERGE_CONTEXT_WINDOW_MS,
-      mergeLimit: POST_MERGE_CONTEXT_MERGE_LIMIT,
-    });
-    return !candidates.some((candidateText) => matcher(seg.text, candidateText));
+const isMicEchoDuplicate = (seg, systemSegments) => {
+  if (seg.source !== "mic" || !seg.text) return false;
+  if (!seg.likelyRenderBleed && !seg.hasBleedEvidence && seg.suppressionReason !== "double_talk") {
+    return false;
+  }
+
+  const matcher =
+    seg.suppressionReason === "double_talk" ? transcriptsLooselyOverlap : transcriptsOverlap;
+  const candidates = buildMergedCandidates({
+    segments: systemSegments,
+    timestamp: seg.timestamp,
+    windowMs: POST_MERGE_CONTEXT_WINDOW_S,
+    mergeLimit: POST_MERGE_CONTEXT_MERGE_LIMIT,
   });
+  return candidates.some((candidateText) => matcher(seg.text, candidateText));
 };
 
 const SEGMENTATION_MODEL_URL =
@@ -430,6 +439,10 @@ class DiarizationManager {
     return segments;
   }
 
+  splitMicEchoDuplicates(segments) {
+    return splitMicEchoDuplicates(segments || []);
+  }
+
   capSpeakerClusters(segments, cap) {
     if (!cap || !segments?.length) return segments;
     const totals = new Map();
@@ -450,7 +463,7 @@ class DiarizationManager {
     { diarizedSource = "system", speakerIndexBase = 0 } = {}
   ) {
     if (!transcriptSegments || transcriptSegments.length === 0) return [];
-    const deduped = dedupeMicAgainstSystem(transcriptSegments);
+    const deduped = splitMicEchoDuplicates(transcriptSegments).kept;
     if (!diarizationSegments || diarizationSegments.length === 0) {
       return deduped.map((seg) => ({ ...seg }));
     }

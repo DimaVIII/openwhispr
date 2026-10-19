@@ -40,7 +40,11 @@ import {
   type TranscriptSpeakerStatus,
 } from "../utils/transcriptSpeakerState";
 import { parseTranscriptSegments } from "../utils/parseTranscriptSegments";
-import { resolveDiarizationTarget, selectBaseSegments } from "../utils/diarizationCompletion";
+import {
+  resolveDiarizationTarget,
+  selectBaseSegments,
+  withoutRemovedSegments,
+} from "../utils/diarizationCompletion";
 import { createSerialQueue } from "../utils/serialQueue";
 import { reduceMeetingSegmentEvent, type MeetingSegmentEvent } from "./meetingSegmentReducer";
 import {
@@ -1862,7 +1866,7 @@ if (typeof window !== "undefined") {
       const enriched = [
         ...existing.slice(0, seededCount),
         ...mergeTranscriptSegments(
-          existing.slice(seededCount),
+          withoutRemovedSegments(existing.slice(seededCount), data.removedSegments),
           data.segments.map((segment, index) => ({
             ...segment,
             id: segment.id || `diarized-${index}`,

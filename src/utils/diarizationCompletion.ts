@@ -51,3 +51,35 @@ export function selectBaseSegments<Segment>(params: {
   if (recordingNoteId === targetNoteId && liveSegments.length > 0) return liveSegments;
   return [];
 }
+
+export interface RemovedTranscriptSegment {
+  text: string;
+  source: "mic" | "system";
+  timestamp?: number;
+}
+
+// Main drops echo duplicates and late retracts from its copy, so its result
+// never matches those rows and the merge would keep them with their raw
+// epoch-ms timestamps and no speaker (#2781). Removes one persisted row per
+// removed entry, keyed like a live retract.
+export function withoutRemovedSegments<
+  Segment extends { text: string; source: string; timestamp?: number },
+>(segments: Segment[], removed: RemovedTranscriptSegment[] | null | undefined): Segment[] {
+  if (!removed?.length) return segments;
+
+  const keyOf = (segment: { text: string; source: string; timestamp?: number }): string =>
+    `${segment.source}|${segment.timestamp ?? ""}|${segment.text}`;
+  const pending = new Map<string, number>();
+  for (const segment of removed) {
+    const key = keyOf(segment);
+    pending.set(key, (pending.get(key) ?? 0) + 1);
+  }
+
+  return segments.filter((segment) => {
+    const key = keyOf(segment);
+    const count = pending.get(key) ?? 0;
+    if (count === 0) return true;
+    pending.set(key, count - 1);
+    return false;
+  });
+}

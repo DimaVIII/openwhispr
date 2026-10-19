@@ -3388,6 +3388,11 @@ declare global {
             speakerLockSource?: "user" | "diarization" | "suggestion";
           }>;
           speakerEmbeddings?: Record<string, number[]> | null;
+          removedSegments?: Array<{
+            text: string;
+            source: "mic" | "system";
+            timestamp?: number;
+          }>;
         }) => void
       ) => () => void;
 

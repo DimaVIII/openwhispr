@@ -7295,6 +7295,9 @@ class IPCHandlers {
         removed.push(meetingDiarizationSegments[index]);
         meetingDiarizationSegments.splice(index, 1);
       }
+      // The renderer stops applying retracts once a stop begins, so the
+      // diarization result must name them for its persisted copy (#2781).
+      meetingRetractedMicSegments.push(...removed);
       return removed;
     };
 
@@ -7454,6 +7457,7 @@ class IPCHandlers {
       const micStartedAt = meetingMicDiarizationStartedAt;
       const systemAudioHeard = meetingSystemAudioHeard;
       const diarizationSegments = meetingDiarizationSegments;
+      const retractedSegments = meetingRetractedMicSegments;
       if (meetingDiarizationStream) {
         await new Promise((resolve) => meetingDiarizationStream.end(resolve));
         meetingDiarizationStream = null;
@@ -7469,6 +7473,7 @@ class IPCHandlers {
       meetingSystemAudioHeard = false;
       meetingSystemAudioHandover.reset();
       meetingDiarizationSegments = [];
+      meetingRetractedMicSegments = [];
       const { pcmPath, startedAt, diarizedSource, cleanupPcmPaths } = resolveDiarizationInput({
         systemPcmPath,
         micPcmPath,
@@ -7482,6 +7487,7 @@ class IPCHandlers {
       return {
         diarizationPcmPath: pcmPath,
         diarizationSegments,
+        retractedSegments,
         diarizationStartedAt: startedAt,
         diarizedSource,
       };
@@ -8042,6 +8048,7 @@ class IPCHandlers {
     let meetingSystemAudioHeard = false;
     const meetingSystemAudioHandover = createMeetingSystemAudioHandover();
     let meetingDiarizationSegments = [];
+    let meetingRetractedMicSegments = [];
     let meetingLiveSpeakerActive = false;
     let meetingLiveSpeakerState = null;
     let meetingLiveSpeakerStartedAt = null;
@@ -8655,6 +8662,7 @@ class IPCHandlers {
       meetingSystemAudioHeard = false;
       meetingSystemAudioHandover.reset();
       meetingDiarizationSegments = [];
+      meetingRetractedMicSegments = [];
       meetingLocalWin = null;
       meetingLocalTranscript = "";
       meetingLocalProvider = null;
@@ -9647,8 +9655,13 @@ class IPCHandlers {
             debugLogger.error("Local meeting final transcription failed", { error: err.message });
           }
           flushPendingMicFinals(true);
-          const { diarizationPcmPath, diarizationSegments, diarizationStartedAt, diarizedSource } =
-            await captureMeetingDiarizationState();
+          const {
+            diarizationPcmPath,
+            diarizationSegments,
+            retractedSegments,
+            diarizationStartedAt,
+            diarizedSource,
+          } = await captureMeetingDiarizationState();
           const transcript =
             buildOrderedTranscriptText(diarizationSegments) || meetingLocalTranscript;
           const sessionSpeakerConfigSnapshot = this.activeMeetingSpeakerConfig;
@@ -9668,15 +9681,21 @@ class IPCHandlers {
             sessionSpeakerConfigSnapshot,
             noteIdSnapshot,
             diarizedSource,
-            speakerIndexBaseSnapshot
+            speakerIndexBaseSnapshot,
+            retractedSegments
           );
 
           return { success: true, transcript, diarizationSessionId };
         }
 
         const results = await disconnectMeetingStreaming({ flushPending: true });
-        const { diarizationPcmPath, diarizationSegments, diarizationStartedAt, diarizedSource } =
-          await captureMeetingDiarizationState();
+        const {
+          diarizationPcmPath,
+          diarizationSegments,
+          retractedSegments,
+          diarizationStartedAt,
+          diarizedSource,
+        } = await captureMeetingDiarizationState();
         const transcript =
           buildOrderedTranscriptText(diarizationSegments) ||
           [results[0]?.text, results[1]?.text].filter(Boolean).join(" ");
@@ -9697,7 +9716,8 @@ class IPCHandlers {
           sessionSpeakerConfigSnapshot,
           noteIdSnapshot,
           diarizedSource,
-          speakerIndexBaseSnapshot
+          speakerIndexBaseSnapshot,
+          retractedSegments
         );
 
         return { success: true, transcript, diarizationSessionId };
@@ -13044,11 +13064,20 @@ class IPCHandlers {
     sessionConfig = null,
     noteId = null,
     diarizedSource = "system",
-    speakerIndexBase = 0
+    speakerIndexBase = 0,
+    retractedSegments = []
   ) {
-    const send = (payload) => {
+    // Rows main dropped that the renderer may still hold in the transcript it
+    // persisted at stop. Raw (epoch-ms) timestamps, matching that copy (#2781).
+    const toRemovedSegment = ({ text, source, timestamp }) => ({ text, source, timestamp });
+    const send = ({ removedSegments = [], ...payload }) => {
       if (win && !win.isDestroyed()) {
-        win.webContents.send("meeting-diarization-complete", { sessionId, noteId, ...payload });
+        win.webContents.send("meeting-diarization-complete", {
+          sessionId,
+          noteId,
+          ...payload,
+          removedSegments: [...retractedSegments, ...removedSegments].map(toRemovedSegment),
+        });
       }
     };
 
@@ -13127,8 +13156,15 @@ class IPCHandlers {
               : undefined,
         }));
 
+        const { kept, removed: echoDuplicates } =
+          this.diarizationManager.splitMicEchoDuplicates(normalized);
+        const echoDuplicateSet = new Set(echoDuplicates);
+        const removedEchoSegments = transcriptSegments.filter((_, index) =>
+          echoDuplicateSet.has(normalized[index])
+        );
+
         const enrichedSegments = this.diarizationManager.mergeWithTranscript(
-          normalized,
+          kept,
           diarizationSegments,
           { diarizedSource, speakerIndexBase }
         );
@@ -13243,7 +13279,11 @@ class IPCHandlers {
           }
         }
 
-        send({ segments: enrichedSegments, speakerEmbeddings: speakerEmbeddingsMap });
+        send({
+          segments: enrichedSegments,
+          speakerEmbeddings: speakerEmbeddingsMap,
+          removedSegments: removedEchoSegments,
+        });
       } catch (err) {
         debugLogger.warn("Background diarization failed", { error: err.message });
         this._diarizationSpeakerReservations.delete(sessionId);
