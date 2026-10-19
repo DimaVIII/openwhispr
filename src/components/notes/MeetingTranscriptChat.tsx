@@ -11,6 +11,7 @@ import type { TranscriptSegment } from "../../stores/meetingRecordingStore";
 import {
   isSelfSideSegment,
   isTranscriptSpeakerLocked,
+  isYouSpeakerName,
   resolveSegmentSpeakerName,
   type TranscriptSpeakerStatus,
 } from "../../utils/transcriptSpeakerState";
@@ -153,7 +154,10 @@ interface SpeakerPickerProps {
   speakerProfiles?: SpeakerProfileLite[];
   participants?: Array<{ email: string; displayName: string | null }>;
   onSelectName: (name: string, email?: string | null, profileId?: number) => void;
-  offerSelf?: boolean;
+  // "offer": a voice that may be the user's gets a "This is me" row, which the
+  // user's own voice profile folds into. "exclude": a call's remote voice is
+  // never the user, so it can't be named after them.
+  self?: "offer" | "exclude";
   t: (key: string, opts?: Record<string, unknown>) => string;
 }
 
@@ -250,7 +254,7 @@ function SpeakerPicker({
   speakerProfiles,
   participants,
   onSelectName,
-  offerSelf = false,
+  self,
   t,
 }: SpeakerPickerProps) {
   const [search, setSearch] = useState("");
@@ -260,12 +264,27 @@ function SpeakerPicker({
 
   // Naming a speaker "You" is how the transcript knows a voice is the user's.
   const youLabel = t("notes.speaker.you");
-  const youLower = youLabel.toLowerCase();
+  const youLower = youLabel.trim().toLowerCase();
+  const thisIsMe = t("notes.speaker.thisIsMe");
+  const selfProfiles = self
+    ? (speakerProfiles || []).filter((p) => isYouSpeakerName(p.display_name, youLabel))
+    : [];
+  // Naming the speaker after the existing profile adds this voice to it rather
+  // than to a second "You" profile.
+  const selfProfile =
+    selfProfiles.find((p) => p.display_name.trim().toLowerCase() === youLower) ?? selfProfiles[0];
+  const matchesSelf =
+    !!self &&
+    !!trimmed &&
+    (isYouSpeakerName(trimmed, youLabel) ||
+      selfProfiles.some((p) => p.email?.toLowerCase() === trimmedLower));
   const showSelf =
-    offerSelf &&
-    (!search ||
-      youLower.includes(lower) ||
-      t("notes.speaker.thisIsMe").toLowerCase().includes(lower));
+    self === "offer" &&
+    (!trimmed ||
+      matchesSelf ||
+      youLower.includes(trimmedLower) ||
+      thisIsMe.toLowerCase().includes(trimmedLower) ||
+      !!selfProfile?.email?.toLowerCase().includes(trimmedLower));
 
   const filteredParticipants = (participants || []).filter(
     (p) =>
@@ -275,15 +294,14 @@ function SpeakerPicker({
   );
   const filteredProfiles = (speakerProfiles || []).filter(
     (p) =>
-      // The voice profile saved under "You" is the "This is me" row.
-      !(offerSelf && p.display_name.trim().toLowerCase() === youLower) &&
+      !selfProfiles.includes(p) &&
       (!search ||
         p.display_name.toLowerCase().includes(lower) ||
         (p.email && p.email.toLowerCase().includes(lower)))
   );
 
   const hasExactMatch =
-    (showSelf && trimmedLower === youLower) ||
+    matchesSelf ||
     filteredParticipants.some(
       (p) =>
         (p.displayName || "").toLowerCase() === trimmedLower ||
@@ -308,8 +326,19 @@ function SpeakerPicker({
     setSearch("");
   };
 
+  const selectSelf = () =>
+    onSelectName(
+      selfProfile?.display_name ?? youLabel,
+      selfProfile?.email ?? null,
+      selfProfile?.id
+    );
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && canCreate) {
+    if (e.key !== "Enter") return;
+    if (showSelf && matchesSelf) {
+      e.preventDefault();
+      selectSelf();
+    } else if (canCreate) {
       e.preventDefault();
       submitCreate();
     }
@@ -335,14 +364,11 @@ function SpeakerPicker({
         {showSelf && (
           <div className="p-1 border-b border-border/70">
             <button
-              onClick={() => {
-                onSelectName(youLabel, null);
-                setSearch("");
-              }}
+              onClick={selectSelf}
               className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-xs text-foreground/70 hover:bg-foreground/5 transition-colors cursor-pointer"
             >
               <span dir="auto" className="truncate flex-1 text-start">
-                {t("notes.speaker.thisIsMe")}
+                {thisIsMe}
               </span>
             </button>
           </div>
@@ -437,7 +463,7 @@ function SpeakerLabel({
   participants,
   colorIdx,
   isOriginallyYou,
-  offerSelf,
+  self,
   onMap,
   onConfirm,
   onDismiss,
@@ -450,7 +476,7 @@ function SpeakerLabel({
   participants?: Array<{ email: string; displayName: string | null }>;
   colorIdx: number;
   isOriginallyYou: boolean;
-  offerSelf: boolean;
+  self?: "offer" | "exclude";
   onMap?: (speakerId: string, name: string, email?: string | null, profileId?: number) => void;
   onConfirm?: (speakerId: string, name: string, profileId: number) => void;
   onDismiss?: (speakerId: string) => void;
@@ -528,7 +554,7 @@ function SpeakerLabel({
             onMap?.(speakerId, name, email, profileId);
             setOpen(false);
           }}
-          offerSelf={offerSelf}
+          self={self}
           t={t}
         />
       </PopoverContent>
@@ -571,6 +597,7 @@ export function SelectionBar({
   speakerProfiles,
   participants,
   onAssignName,
+  offerSelf,
   t,
 }: {
   count: number;
@@ -578,6 +605,8 @@ export function SelectionBar({
   speakerProfiles?: SpeakerProfileLite[];
   participants?: Array<{ email: string; displayName: string | null }>;
   onAssignName: (name: string, email?: string | null, profileId?: number) => void;
+  // False when every selected line is already the user's.
+  offerSelf: boolean;
   t: (key: string, opts?: Record<string, unknown>) => string;
 }) {
   const [open, setOpen] = useState(false);
@@ -604,7 +633,7 @@ export function SelectionBar({
               onAssignName(name, email, profileId);
               setOpen(false);
             }}
-            offerSelf
+            self={offerSelf ? "offer" : undefined}
             t={t}
           />
         </PopoverContent>
@@ -671,12 +700,16 @@ const SegmentRow = memo(function SegmentRow({
   const hasSpeaker = !!segment.speaker;
   const isOriginallyYou = segment.speaker === "you";
   const isSystemSpeaker = hasSpeaker && !selfSide;
-  // Only a mic cluster can be the user: an in-person meeting can't tell which
-  // voice is theirs, while a call's remote voices never are.
-  const offerSelf = segment.source === "mic" && !selfSide;
+  // Only an in-person mic cluster may be the user: diarization can't tell which
+  // voice is theirs. A call's remote voices never are, and its mic is already
+  // "you", where naming one line remaps every line of the mic.
+  const self =
+    segment.source === "system" ? "exclude" : !selfSide && !isOriginallyYou ? "offer" : undefined;
   const selectable = !!onToggleSelect;
 
+  // The user's own voice profile isn't a contact.
   const canAddContact =
+    !selfSide &&
     !!matchedProfile &&
     matchedProfile.id != null &&
     !matchedProfile.email &&
@@ -692,7 +725,7 @@ const SegmentRow = memo(function SegmentRow({
         participants={participants}
         colorIdx={colorIdx}
         isOriginallyYou={isOriginallyYou}
-        offerSelf={offerSelf}
+        self={self}
         onMap={onMapSpeaker}
         onConfirm={onConfirmSuggestion}
         onDismiss={onDismissSuggestion}

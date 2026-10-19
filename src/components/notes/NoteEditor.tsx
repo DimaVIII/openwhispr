@@ -94,6 +94,7 @@ import { noteChatTranscript } from "../../utils/transcriptEvidence";
 import { parseTranscriptSegments } from "../../utils/parseTranscriptSegments";
 import {
   applyTranscriptSpeakerPatch,
+  isSelfSideSegment,
   lockTranscriptSpeaker,
   serializeTranscriptSegments,
 } from "../../utils/transcriptSpeakerState";
@@ -1476,6 +1477,11 @@ export default function NoteEditor({
                 speakerProfiles={knownSpeakers}
                 participants={parsedParticipants}
                 onAssignName={handleBulkAssignName}
+                offerSelf={displaySegments.some(
+                  (segment) =>
+                    selectedSegmentIds.has(segment.id) &&
+                    !isSelfSideSegment(segment, speakerMappings, t("notes.speaker.you"))
+                )}
                 t={t}
               />
             </div>

@@ -81,8 +81,25 @@ const buttonWithText = (text) =>
 // Booleans, never the element: printing a happy-dom element in a failed assert
 // runs the test process out of memory.
 const hasButton = (text) => !!buttonWithText(text);
-const pickerOpen = () =>
-  !!happyWindow.document.querySelector('input[placeholder="notes.speaker.nameOrEmailPlaceholder"]');
+const pickerInput = () =>
+  happyWindow.document.querySelector('input[placeholder="notes.speaker.nameOrEmailPlaceholder"]');
+const pickerOpen = () => !!pickerInput();
+const typeInPicker = (text) => {
+  const input = pickerInput();
+  Object.getOwnPropertyDescriptor(happyWindow.HTMLInputElement.prototype, "value").set.call(
+    input,
+    text
+  );
+  input.dispatchEvent(new happyWindow.Event("input", { bubbles: true }));
+};
+const pressEnter = () =>
+  pickerInput().dispatchEvent(
+    new happyWindow.KeyboardEvent("keydown", { key: "Enter", bubbles: true })
+  );
+const createsAny = () =>
+  [...happyWindow.document.querySelectorAll("button")].some((b) =>
+    b.textContent.includes("notes.speaker.createNewPrefix")
+  );
 
 const chat = (segments, extra) => (React, mod) =>
   React.createElement(mod.MeetingTranscriptChat, { segments, speakerMappings: {}, ...extra });
@@ -101,14 +118,87 @@ test("This is me names an in-person cluster You", async (t) => {
   assert.deepEqual(calls, [["speaker_1", YOU, null, undefined]]);
 });
 
-test("a call's remote speaker doesn't offer This is me", async (t) => {
+test("a call's remote speaker can't be named after the user", async (t) => {
   const { act } = await mount(
     t,
-    chat([{ id: "a", text: "remote", source: "system", timestamp: 1, speaker: "speaker_0" }])
+    chat([{ id: "a", text: "remote", source: "system", timestamp: 1, speaker: "speaker_0" }], {
+      onMapSpeaker: () => {},
+      speakerProfiles: [
+        { id: 1, display_name: YOU, email: null },
+        { id: 2, display_name: "Alice", email: null },
+      ],
+    })
   );
   await act(() => buttonWithText("notes.speaker.label").click());
   assert.ok(pickerOpen());
   assert.ok(!hasButton(THIS_IS_ME));
+  assert.ok(hasButton("Alice"));
+  assert.ok(!hasButton(YOU), "the user's voice profile isn't offered for a remote voice");
+});
+
+test("typing You on a call's remote speaker offers nothing to create", async (t) => {
+  const { act } = await mount(
+    t,
+    chat([{ id: "a", text: "remote", source: "system", timestamp: 1, speaker: "speaker_0" }], {
+      onMapSpeaker: () => {},
+    })
+  );
+  await act(() => buttonWithText("notes.speaker.label").click());
+  await act(() => typeInPicker(YOU));
+  assert.ok(pickerOpen());
+  assert.ok(!createsAny());
+});
+
+test("a reassigned line of a call's mic doesn't offer This is me", async (t) => {
+  const { act } = await mount(
+    t,
+    chat([
+      {
+        id: "a",
+        text: "me",
+        source: "mic",
+        timestamp: 1,
+        speaker: "you",
+        speakerName: "Bob",
+        speakerLocked: true,
+        speakerLockSource: "user",
+        speakerStatus: "locked",
+      },
+    ])
+  );
+  await act(() => buttonWithText("Bob").click());
+  assert.ok(pickerOpen());
+  assert.ok(!hasButton(THIS_IS_ME), "naming it would remap every line of the mic");
+});
+
+test("typing You and pressing Enter picks This is me", async (t) => {
+  const calls = [];
+  const { act } = await mount(
+    t,
+    chat([{ id: "a", text: "hello", source: "mic", timestamp: 1, speaker: "speaker_1" }], {
+      onMapSpeaker: (...args) => calls.push(args),
+    })
+  );
+  await act(() => buttonWithText("notes.speaker.label").click());
+  await act(() => typeInPicker(` ${YOU} `));
+  assert.ok(hasButton(THIS_IS_ME));
+  assert.ok(!createsAny());
+  await act(() => pressEnter());
+  assert.deepEqual(calls, [["speaker_1", YOU, null, undefined]]);
+});
+
+test("Enter still creates any other typed name", async (t) => {
+  const calls = [];
+  const { act } = await mount(
+    t,
+    chat([{ id: "a", text: "hello", source: "mic", timestamp: 1, speaker: "speaker_1" }], {
+      onMapSpeaker: (...args) => calls.push(args),
+    })
+  );
+  await act(() => buttonWithText("notes.speaker.label").click());
+  await act(() => typeInPicker("Bob"));
+  await act(() => pressEnter());
+  assert.deepEqual(calls, [["speaker_1", "Bob", null, undefined]]);
 });
 
 test("a row already on the user's side doesn't offer This is me", async (t) => {
@@ -138,6 +228,51 @@ test("the voice profile saved as You is folded into This is me", async (t) => {
   assert.ok(!hasButton(YOU), "the You profile isn't listed twice");
 });
 
+test("This is me adds the voice to the user's existing profile", async (t) => {
+  const calls = [];
+  const { act } = await mount(
+    t,
+    chat([{ id: "a", text: "hello", source: "mic", timestamp: 1, speaker: "speaker_0" }], {
+      onMapSpeaker: (...args) => calls.push(args),
+      // Saved in English or with other casing: still the user's profile.
+      speakerProfiles: [{ id: 7, display_name: "you", email: "me@example.com" }],
+    })
+  );
+  await act(() => buttonWithText("notes.speaker.label").click());
+  assert.ok(!hasButton("you"));
+  // Its email finds the row instead of offering to create a contact from it.
+  await act(() => typeInPicker("me@example.com"));
+  assert.ok(hasButton(THIS_IS_ME));
+  assert.ok(!createsAny());
+  await act(() => buttonWithText(THIS_IS_ME).click());
+  assert.deepEqual(calls, [["speaker_0", "you", "me@example.com", 7]]);
+});
+
+test("the user's own chip doesn't offer Add contact", async (t) => {
+  const { act } = await mount(
+    t,
+    chat(
+      [
+        { id: "a", text: "me", source: "mic", timestamp: 1, speaker: "speaker_0" },
+        { id: "b", text: "them", source: "mic", timestamp: 2, speaker: "speaker_1" },
+      ],
+      {
+        speakerMappings: { speaker_0: YOU, speaker_1: "Alice" },
+        speakerProfiles: [
+          { id: 1, display_name: YOU, email: null },
+          { id: 2, display_name: "Alice", email: null },
+        ],
+        onAttachSpeakerEmail: () => {},
+      }
+    )
+  );
+  await act(() => {});
+  const addContacts = [...happyWindow.document.querySelectorAll("button")].filter(
+    (b) => b.textContent.trim() === "notes.speaker.addContact"
+  );
+  assert.equal(addContacts.length, 1, "only Alice's chip offers it");
+});
+
 test("Assign to offers This is me for a selection", async (t) => {
   const calls = [];
   const { act } = await mount(t, (React, mod) =>
@@ -145,10 +280,26 @@ test("Assign to offers This is me for a selection", async (t) => {
       count: 2,
       onClear: () => {},
       onAssignName: (...args) => calls.push(args),
+      offerSelf: true,
       t: (key) => key,
     })
   );
   await act(() => buttonWithText("notes.speaker.assignTo").click());
   await act(() => buttonWithText(THIS_IS_ME).click());
   assert.deepEqual(calls, [[YOU, null, undefined]]);
+});
+
+test("Assign to leaves This is me out when every selected line is the user's", async (t) => {
+  const { act } = await mount(t, (React, mod) =>
+    React.createElement(mod.SelectionBar, {
+      count: 2,
+      onClear: () => {},
+      onAssignName: () => {},
+      offerSelf: false,
+      t: (key) => key,
+    })
+  );
+  await act(() => buttonWithText("notes.speaker.assignTo").click());
+  assert.ok(pickerOpen());
+  assert.ok(!hasButton(THIS_IS_ME));
 });
