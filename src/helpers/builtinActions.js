@@ -1,10 +1,9 @@
 // Built-in note templates and actions. The database seeds any that are missing
 // on startup and only rewrites a row whose prompt still equals a previous
 // default, so a user's edited prompt is never touched. A template writes the AI
-// summary: AI Summary, the default (Generate Notes' key), wraps its prompt in the
-// generic system prompt, and Detailed Notes is compiled from sections (see
-// templatePrompts.js). An action either edits the summary or answers in the note
-// chat.
+// summary: AI Summary, the default (Generate Notes' key), uses the detailed
+// sections compiled by templatePrompts.js. An action either edits the summary
+// or answers in the note chat.
 
 export const GENERATE_NOTES_KEY = "notes.actions.builtin.generateNotes";
 export const DETAILED_NOTES_KEY = "notes.actions.builtin.detailedNotes";
@@ -474,40 +473,43 @@ const builtinAction = ({
   sortOrder,
 });
 
+// Retained only to recognize old defaults and preserve customized legacy templates.
+export const LEGACY_DETAILED_NOTES = {
+  translationKey: DETAILED_NOTES_KEY,
+  kind: "template",
+  // The prompt 1.10.2's Generate AI Summary button used.
+  name: "Detailed Notes",
+  description: "Accurate, comprehensive meeting notes with decisions and action items",
+  prompt: "",
+  sections: DETAILED_NOTES_SECTIONS,
+  output: null,
+  previousPrompts: [
+    DETAILED_NOTES_PROMPT_1_10_0,
+    DETAILED_NOTES_PROMPT_1_10_1,
+    DETAILED_NOTES_PROMPT_1_10_2,
+  ],
+  icon: "sparkles",
+  sortOrder: 1,
+};
+
 // previousPrompts only upgrades a row that is still a flat prompt; a later change
 // to a built-in's default sections needs its own history.
 export const BUILTIN_ACTIONS = [
-  {
-    translationKey: DETAILED_NOTES_KEY,
-    kind: "template",
-    // The prompt 1.10.2's Generate AI Summary button used.
-    name: "Detailed Notes",
-    description: "Accurate, comprehensive meeting notes with decisions and action items",
-    prompt: "",
-    sections: DETAILED_NOTES_SECTIONS,
-    output: null,
-    previousPrompts: [
-      DETAILED_NOTES_PROMPT_1_10_0,
-      DETAILED_NOTES_PROMPT_1_10_1,
-      DETAILED_NOTES_PROMPT_1_10_2,
-    ],
-    icon: "sparkles",
-    sortOrder: 1,
-  },
   {
     translationKey: GENERATE_NOTES_KEY,
     kind: "template",
     // The default template.
     name: "AI Summary",
     description: "Clean up, structure, and enhance your notes",
-    prompt: GENERATE_NOTES_PROMPT,
-    sections: null,
+    prompt: "",
+    sections: DETAILED_NOTES_SECTIONS,
     output: null,
     // A pre-release build briefly shipped the detailed prompt under this key.
     previousPrompts: [
       DETAILED_NOTES_PROMPT_1_10_0,
       GENERATE_NOTES_PROMPT_1_10_1,
       GENERATE_NOTES_PROMPT_1_10_2,
+      GENERATE_NOTES_PROMPT,
     ],
     icon: "sparkles",
     sortOrder: 0,

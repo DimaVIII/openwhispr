@@ -11,6 +11,7 @@ const {
 const path = require("path");
 const fs = require("fs");
 const { randomUUID } = require("crypto");
+const { isDeepStrictEqual } = require("node:util");
 const noteUndo = require("./noteUndo");
 const debugLogger = require("./debugLogger");
 const { buildNoteSearchQuery } = require("./noteSearch");
@@ -21,7 +22,12 @@ const { parseEventTime } = require("./calendarAvailability");
 // keeps the cloud created_at but lets timestamp default to the local pull, so
 // a naive value must never outrank created_at when dating a historical row.
 const { hasExplicitTimeZone, parseDbTimestamp, toDbTimestamp } = require("./dbTimestamp");
-const { BUILTIN_ACTIONS, GENERATE_NOTES_KEY, NOTE_ACTION_LIMITS } = require("./builtinActions");
+const {
+  BUILTIN_ACTIONS,
+  GENERATE_NOTES_KEY,
+  LEGACY_DETAILED_NOTES,
+  NOTE_ACTION_LIMITS,
+} = require("./builtinActions");
 const { normalizeSections } = require("./templatePrompts");
 const {
   ANALYTICS_COUNTER_VERSION,
@@ -701,23 +707,53 @@ class DatabaseManager {
         "CREATE INDEX IF NOT EXISTS idx_agent_conversations_container ON agent_conversations(space_id, folder_id)"
       );
 
-      const builtinKeys = BUILTIN_ACTIONS.map((action) => action.translationKey);
-      // A built-in's client id is its key. An older build renames built-in keys it
-      // doesn't know (below), so after a downgrade and upgrade the key comes back
-      // from the client id instead of the row being seeded a second time.
-      this.db
-        .prepare(
-          `UPDATE actions SET translation_key = client_id WHERE is_builtin = 1 AND client_id IN (${builtinKeys.map(() => "?").join(", ")}) AND translation_key IS NOT client_id`
-        )
-        .run(...builtinKeys);
+      const builtinKeys = [
+        ...BUILTIN_ACTIONS.map((action) => action.translationKey),
+        LEGACY_DETAILED_NOTES.translationKey,
+      ];
+      this.db.transaction(() => {
+        // Older builds rename unfamiliar keys. Recover even the retired key
+        // before the unknown-key fallback can turn it into a second AI Summary.
+        this.db
+          .prepare(
+            `UPDATE actions SET translation_key = client_id WHERE is_builtin = 1 AND client_id IN (${builtinKeys.map(() => "?").join(", ")}) AND translation_key IS NOT client_id`
+          )
+          .run(...builtinKeys);
 
-      // Pre-2026 installs carry one built-in row under an older key: rename it to
-      // Generate Notes so the loop below recognizes and upgrades it.
-      this.db
-        .prepare(
-          `UPDATE actions SET translation_key = ? WHERE is_builtin = 1 AND (translation_key IS NULL OR translation_key NOT IN (${builtinKeys.map(() => "?").join(", ")}))`
-        )
-        .run(GENERATE_NOTES_KEY, ...builtinKeys);
+        const legacy = LEGACY_DETAILED_NOTES;
+        const legacyRows = this.db
+          .prepare("SELECT * FROM actions WHERE is_builtin = 1 AND translation_key = ?")
+          .all(legacy.translationKey);
+        for (const row of legacyRows) {
+          let stockContent = row.sections === null && legacy.previousPrompts.includes(row.prompt);
+          if (row.prompt === legacy.prompt && row.sections !== null) {
+            try {
+              stockContent = isDeepStrictEqual(JSON.parse(row.sections), legacy.sections);
+            } catch {
+              // Unrecognized data may be a customization; keep it.
+            }
+          }
+          if (
+            stockContent &&
+            row.name === legacy.name &&
+            row.description === legacy.description &&
+            row.icon === legacy.icon
+          ) {
+            this.db.prepare("DELETE FROM actions WHERE id = ?").run(row.id);
+          } else if (row.client_id === null) {
+            this.db
+              .prepare("UPDATE actions SET client_id = ? WHERE id = ?")
+              .run(legacy.translationKey, row.id);
+          }
+        }
+
+        // Pre-2026 installs carry the default under an older key.
+        this.db
+          .prepare(
+            `UPDATE actions SET translation_key = ? WHERE is_builtin = 1 AND (translation_key IS NULL OR translation_key NOT IN (${builtinKeys.map(() => "?").join(", ")}))`
+          )
+          .run(GENERATE_NOTES_KEY, ...builtinKeys);
+      })();
 
       // Built-ins: insert any that are missing, and roll a new default out to rows
       // that are still a previous flat default (never a user edit). A built-in's

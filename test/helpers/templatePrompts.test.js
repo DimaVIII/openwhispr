@@ -17,14 +17,15 @@ const seededRow = (builtin) => ({
 test("Detailed Notes compiled from its sections is the prompt it replaced, but for its closing rule", async () => {
   const {
     BUILTIN_ACTIONS,
-    DETAILED_NOTES_KEY,
+    LEGACY_DETAILED_NOTES,
+    GENERATE_NOTES_KEY,
     SOURCE_FIDELITY_RULE,
     MEETING_INPUT_PREAMBLE,
     NOTE_INPUT_PREAMBLE,
     compileTemplatePrompt,
   } = await load();
-  const detailed = BUILTIN_ACTIONS.find((action) => action.translationKey === DETAILED_NOTES_KEY);
-  const flat = detailed.previousPrompts.at(-1);
+  const detailed = BUILTIN_ACTIONS.find((action) => action.translationKey === GENERATE_NOTES_KEY);
+  const flat = LEGACY_DETAILED_NOTES.previousPrompts.at(-1);
   // The closing rule is its last paragraph: a note with nothing to summarize now
   // answers with a marker instead of a sentence that was saved as its summary.
   const body = flat.slice(0, flat.lastIndexOf("\n\n"));
@@ -46,7 +47,6 @@ test("Detailed Notes compiled from its sections is the prompt it replaced, but f
 
 test("a template without sections retains its instructions after the shared fidelity rule", async () => {
   const {
-    BUILTIN_ACTIONS,
     DETAILED_NOTES_KEY,
     GENERATE_NOTES_KEY,
     SOURCE_FIDELITY_RULE,
@@ -55,7 +55,11 @@ test("a template without sections retains its instructions after the shared fide
     BASE_SYSTEM_PROMPT,
     compileTemplatePrompt,
   } = await load();
-  const generate = BUILTIN_ACTIONS.find((action) => action.translationKey === GENERATE_NOTES_KEY);
+  const generate = {
+    prompt: "My own summary instructions.",
+    sections: null,
+    translationKey: GENERATE_NOTES_KEY,
+  };
   assert.equal(
     compileTemplatePrompt(seededRow(generate), { isMeetingNote: true }),
     SOURCE_FIDELITY_RULE + "\n\n" + MEETING_SYSTEM_PROMPT + generate.prompt
