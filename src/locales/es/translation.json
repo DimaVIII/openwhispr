@@ -3150,6 +3150,22 @@
       "typeEmail": "Escribe un correo para agregar...",
       "me": "(yo)"
     },
+    "eventLink": {
+      "selectEvent": "Seleccionar evento del calendario",
+      "searchPlaceholder": "Buscar evento…",
+      "back": "Atrás",
+      "removeEvent": "Quitar evento del calendario",
+      "allDay": "Todo el día",
+      "noEventsOnDay": "No hay eventos este día",
+      "searchOtherDays": "Busca para encontrar eventos de otros días",
+      "outsideWindow": "Solo se pueden vincular eventos de los últimos {{days}} días",
+      "noResults": "No hay eventos que coincidan",
+      "noCalendar": "Conecta un calendario en Integraciones para vincular eventos",
+      "loadFailed": "No se pudieron cargar los eventos del calendario",
+      "join": "Unirse",
+      "linkedEvent": "Evento del calendario",
+      "unavailable": "Este evento no está en tus calendarios en este dispositivo"
+    },
     "upload": {
       "title": "Subir audio",
       "using": "Usando {{model}}",

@@ -103,6 +103,7 @@ const EXPECTED_NATIVE_FIELD_DIRECTIONS = {
   "src/components/notes/AddNotesToFolderDialog.tsx": ["auto"],
   "src/components/notes/MeetingTranscriptChat.tsx": ["ltr", "auto"],
   "src/components/notes/NoteEditor.tsx": ["auto", "auto"],
+  "src/components/notes/NoteEventPicker.tsx": ["auto"],
   "src/components/notes/NoteParticipants.tsx": ["auto"],
   "src/components/notes/NotesOnboarding.tsx": ["auto", "auto", "auto"],
   "src/components/notes/ShareNoteDialog.tsx": ["auto"],

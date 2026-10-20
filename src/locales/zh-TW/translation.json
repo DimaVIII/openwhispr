@@ -3098,6 +3098,22 @@
       "typeEmail": "輸入電子郵件以新增...",
       "me": "（我）"
     },
+    "eventLink": {
+      "selectEvent": "選擇行事曆活動",
+      "searchPlaceholder": "搜尋活動…",
+      "back": "返回",
+      "removeEvent": "移除行事曆活動",
+      "allDay": "整天",
+      "noEventsOnDay": "這一天沒有活動",
+      "searchOtherDays": "搜尋以尋找其他日期的活動",
+      "outsideWindow": "只能連結最近 {{days}} 天內的活動",
+      "noResults": "沒有相符的活動",
+      "noCalendar": "請在「整合」中連結行事曆以連結活動",
+      "loadFailed": "無法載入行事曆活動",
+      "join": "加入",
+      "linkedEvent": "行事曆活動",
+      "unavailable": "此裝置上的行事曆中沒有這個活動"
+    },
     "upload": {
       "title": "上傳音訊",
       "using": "使用 {{model}}",

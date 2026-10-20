@@ -2993,6 +2993,22 @@
       "typeEmail": "メールアドレスを入力して追加...",
       "me": "（自分）"
     },
+    "eventLink": {
+      "selectEvent": "カレンダーの予定を選択",
+      "searchPlaceholder": "予定を検索…",
+      "back": "戻る",
+      "removeEvent": "カレンダーの予定を解除",
+      "allDay": "終日",
+      "noEventsOnDay": "この日に予定はありません",
+      "searchOtherDays": "検索すると他の日の予定も見つかります",
+      "outsideWindow": "リンクできるのは過去{{days}}日間の予定のみです",
+      "noResults": "一致する予定はありません",
+      "noCalendar": "予定をリンクするには「連携」でカレンダーを接続してください",
+      "loadFailed": "カレンダーの予定を読み込めませんでした",
+      "join": "参加",
+      "linkedEvent": "カレンダーの予定",
+      "unavailable": "この予定はこのデバイスのカレンダーにありません"
+    },
     "context": {
       "moveToFolder": "フォルダに移動",
       "delete": "削除",

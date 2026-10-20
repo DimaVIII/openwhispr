@@ -3449,6 +3449,22 @@
       "typeEmail": "Type an email to add...",
       "me": "(me)"
     },
+    "eventLink": {
+      "selectEvent": "Select calendar event",
+      "searchPlaceholder": "Search event…",
+      "back": "Back",
+      "removeEvent": "Remove calendar event",
+      "allDay": "All day",
+      "noEventsOnDay": "No events on this day",
+      "searchOtherDays": "Search to find events from other days",
+      "outsideWindow": "Only events from the last {{days}} days can be linked",
+      "noResults": "No matching events",
+      "noCalendar": "Connect a calendar in Integrations to link events",
+      "loadFailed": "Couldn't load calendar events",
+      "join": "Join",
+      "linkedEvent": "Calendar event",
+      "unavailable": "This event isn't in your calendars on this device"
+    },
     "upload": {
       "title": "Upload Audio",
       "using": "Using {{model}}",

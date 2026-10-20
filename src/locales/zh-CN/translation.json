@@ -3098,6 +3098,22 @@
       "typeEmail": "输入邮箱以添加...",
       "me": "（我）"
     },
+    "eventLink": {
+      "selectEvent": "选择日历事件",
+      "searchPlaceholder": "搜索事件…",
+      "back": "返回",
+      "removeEvent": "移除日历事件",
+      "allDay": "全天",
+      "noEventsOnDay": "这一天没有事件",
+      "searchOtherDays": "搜索以查找其他日期的事件",
+      "outsideWindow": "只能关联最近 {{days}} 天内的事件",
+      "noResults": "没有匹配的事件",
+      "noCalendar": "请在“集成”中连接日历以关联事件",
+      "loadFailed": "无法加载日历事件",
+      "join": "加入",
+      "linkedEvent": "日历事件",
+      "unavailable": "此设备上的日历中没有这个事件"
+    },
     "upload": {
       "title": "上传音频",
       "using": "使用 {{model}}",

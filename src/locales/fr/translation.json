@@ -3449,6 +3449,22 @@
       "typeEmail": "Saisissez un e-mail pour ajouter...",
       "me": "(moi)"
     },
+    "eventLink": {
+      "selectEvent": "Sélectionner un événement",
+      "searchPlaceholder": "Rechercher un événement…",
+      "back": "Retour",
+      "removeEvent": "Retirer l'événement",
+      "allDay": "Toute la journée",
+      "noEventsOnDay": "Aucun événement ce jour-là",
+      "searchOtherDays": "Recherchez pour trouver des événements d'autres jours",
+      "outsideWindow": "Seuls les événements des {{days}} derniers jours peuvent être liés",
+      "noResults": "Aucun événement correspondant",
+      "noCalendar": "Connectez un calendrier dans Intégrations pour lier des événements",
+      "loadFailed": "Impossible de charger les événements du calendrier",
+      "join": "Rejoindre",
+      "linkedEvent": "Événement du calendrier",
+      "unavailable": "Cet événement ne figure dans aucun de vos calendriers sur cet appareil"
+    },
     "upload": {
       "title": "Téléverser un fichier audio",
       "using": "Utilisation de {{model}}",
