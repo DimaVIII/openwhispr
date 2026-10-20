@@ -425,6 +425,8 @@ export interface RunActionOptions {
   isCloudMode: boolean;
   modelId: string;
   isMeetingNote?: boolean;
+  /** The transcript is plain text, with no speaker segments to label its lines (#2666). */
+  hasPlainTranscript?: boolean;
   /** Opt-in so enhancement never renames a note the user has titled. */
   allowTitleGeneration?: boolean;
   /** People whose names in generated action-item owners become mention tags. */
@@ -485,12 +487,17 @@ export function runBackgroundAction(
         ? compileSummaryActionPrompt(action, {
             fromSummary: !!options.fromSummary,
             isMeetingNote: options.isMeetingNote,
+            hasPlainTranscript: options.hasPlainTranscript,
           })
-        : compileTemplatePrompt(action, { isMeetingNote: options.isMeetingNote });
+        : compileTemplatePrompt(action, {
+            isMeetingNote: options.isMeetingNote,
+            hasPlainTranscript: options.hasPlainTranscript,
+          });
       const providerOverrides = buildNoteFormattingOverrides(noteFormatting, options.isCloudMode);
       const systemPrompt = appendDictionarySuffix(
         instructions,
-        options.isMeetingNote ? settings.customDictionary : undefined,
+        // Any transcript is speech-to-text, which misspells names.
+        options.isMeetingNote || options.hasPlainTranscript ? settings.customDictionary : undefined,
         settings.uiLanguage
       );
       const requestConfig: ReasoningConfig = {

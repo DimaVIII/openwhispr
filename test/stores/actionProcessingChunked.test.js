@@ -688,12 +688,17 @@ test("only the whole-note request refuses a reply the window clipped", async (t)
 
 test("a transcript without speaker labels is packed without a prose prefix", async (t) => {
   const { store, calls, updates } = await loadStore(t, { failFirst: true });
-  // A note summarised while it is still recording carries the live transcript:
-  // one space-joined paragraph, no "Label:" lines, and a colon in the first clause.
+  // A transcript stored as plain text (a recording that captured no speaker
+  // segments): one space-joined paragraph, no "Label:" lines, and a colon in the first clause.
   const transcript =
     "Meeting at 10:30 we discussed the rollout plan. " +
     "Then we covered the budget and the hiring plan. ".repeat(600).trim();
-  run(store, 21, { notes: "", meetingContext: "", transcript }, { isMeetingNote: false });
+  run(
+    store,
+    21,
+    { notes: "", meetingContext: "", transcript },
+    { isMeetingNote: false, hasPlainTranscript: true }
+  );
   await waitForResult(store, updates);
   assert.deepEqual(store.consumeErrorEvents(), []);
   assert.equal(updates.length, 1);
@@ -705,6 +710,70 @@ test("a transcript without speaker labels is packed without a prose prefix", asy
       .join("")
       .split("Meeting at 10:").length - 1,
     1
+  );
+  const { compileTemplatePrompt } = await import("../../src/helpers/templatePrompts.js");
+  assert.ok(
+    calls
+      .at(-1)
+      .config.systemPrompt.startsWith(compileTemplatePrompt(ACTION, { hasPlainTranscript: true })),
+    "the merge pass carries the plain-transcript rule"
+  );
+});
+
+test("a transcript in plain text gets its own prompt and the dictionary, and owners it names become mentions", async (t) => {
+  const { compileTemplatePrompt } = await import("../../src/helpers/templatePrompts.js");
+  const reply = [
+    "## Action Items",
+    "- [ ] Fix the build by Friday — Wes",
+    "- [ ] Book the room — Priya",
+    "- [ ] Send the revised proposal",
+  ].join("\n");
+  const { store, calls, updates } = await loadStore(t, {
+    budget: BIG_BUDGET,
+    storage: { customDictionary: JSON.stringify(["Wes Kim"]) },
+    processText: () => reply,
+  });
+  const plainOptions = { isMeetingNote: false, hasPlainTranscript: true };
+
+  run(
+    store,
+    40,
+    { notes: "", meetingContext: "", transcript: "Wes, can you fix the build by Friday? Sure." },
+    { ...plainOptions, knownPeople: [{ name: "Wes Kim", email: "wes@example.com" }] }
+  );
+  await waitFor(() => updates.length === 1, "the plain transcript's save");
+  const instructions = compileTemplatePrompt(ACTION, plainOptions);
+  assert.equal(updates[0].payload.enhancement_prompt, instructions);
+  assert.ok(calls[0].config.systemPrompt.startsWith(instructions));
+  assert.ok(
+    calls[0].config.systemPrompt.endsWith("Wes Kim"),
+    "a transcript gets the custom dictionary"
+  );
+  assert.equal(
+    updates[0].payload.enhanced_content,
+    [
+      "## Action Items",
+      "- [ ] Fix the build by Friday — [@Wes Kim](mention:wes%40example.com)",
+      "- [ ] Book the room — Priya",
+      "- [ ] Send the revised proposal",
+    ].join("\n")
+  );
+
+  run(store, 41, longMaterial(2));
+  await waitFor(() => updates.length === 2, "the meeting's save");
+  assert.ok(calls.at(-1).config.systemPrompt.endsWith("Wes Kim"), "a meeting keeps the dictionary");
+
+  run(
+    store,
+    42,
+    { notes: "My notes", meetingContext: "", transcript: "" },
+    { isMeetingNote: false }
+  );
+  await waitFor(() => updates.length === 3, "the personal note's save");
+  assert.equal(
+    calls.at(-1).config.systemPrompt,
+    compileTemplatePrompt(ACTION),
+    "a personal note is unchanged"
   );
 });
 
