@@ -45,7 +45,9 @@ function privateCleanupLine(
       hint:
         readiness?.status === 'appleIntelligenceOff'
           ? 'Starts once it’s on in Settings → Apple Intelligence & Siri.'
-          : undefined,
+          : readiness?.status === 'unsupportedLanguage'
+            ? 'Starts once your iPhone is set to a language it supports, in Settings → General → Language & Region.'
+            : undefined,
     };
   }
   if (readiness?.status === 'unsupportedDevice') {

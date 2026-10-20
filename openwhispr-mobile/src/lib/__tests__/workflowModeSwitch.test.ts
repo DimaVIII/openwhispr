@@ -139,7 +139,7 @@ it('switches uploads to On-Device with the model picked for them before', async 
 });
 
 // Settings can fix these, so the page finishes the switch once Apple Intelligence is ready.
-it.each(['appleIntelligenceOff', 'modelNotReady'])(
+it.each(['appleIntelligenceOff', 'modelNotReady', 'unsupportedLanguage'])(
   'waits for Apple Intelligence when it is %s',
   async (status) => {
     mockLocalReasoningReadiness.mockResolvedValue({ status });

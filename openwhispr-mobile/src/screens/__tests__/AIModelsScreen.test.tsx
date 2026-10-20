@@ -272,6 +272,16 @@ it.each([
   expect(await screen.findByText(new RegExp(`Status: ${label}\\s`))).toBeTruthy();
 });
 
+it('says when the iPhone is set to a language Apple Intelligence does not support', async () => {
+  mockReadiness.mockResolvedValue({
+    status: 'unsupportedLanguage',
+    deviceLanguage: 'English (South Africa)',
+    tokenCounting: false,
+  });
+  render(<AIModelsScreen />);
+  expect(await screen.findByText(/Status: Language not supported\s/)).toBeTruthy();
+});
+
 // Dictation owns Local Mode, so AI Models has no switch of its own.
 it('has no Local Mode switch', async () => {
   render(<AIModelsScreen />);

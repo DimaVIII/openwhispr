@@ -98,6 +98,7 @@ const APPLE_INTELLIGENCE_POLL_MS = 10_000;
 const APPLE_INTELLIGENCE_STATUSES: Partial<Record<LocalReasoningReadiness['status'], string>> = {
   appleIntelligenceOff: 'Apple Intelligence is turned off in iOS Settings.',
   modelNotReady: 'Apple Intelligence is downloading its model.',
+  unsupportedLanguage: "Apple Intelligence doesn't support your iPhone's language.",
 };
 const PROVIDER_SETUP_URLS: Record<string, string> = {
   openai: 'https://platform.openai.com/api-keys',

@@ -1443,7 +1443,8 @@ function modeRow(title: string): { props: { accessibilityState?: Record<string, 
 }
 
 describe('an iPhone that cannot run Apple Intelligence', () => {
-  const NEEDS = 'On-Device AI needs an iPhone with Apple Intelligence (iPhone 15 Pro or later).';
+  const NEEDS =
+    "Apple Intelligence isn't available on this iPhone. It needs an iPhone 15 Pro or later, with Apple Intelligence set up in Settings → Apple Intelligence & Siri.";
 
   beforeEach(() => {
     mockLocalReadiness.mockResolvedValue({ status: 'unsupportedDevice', tokenCounting: false });

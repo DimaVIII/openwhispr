@@ -56,6 +56,16 @@ export async function getLocalReasoningReadiness(options?: {
   cachedReadiness = (async () => {
     try {
       const availability = await AppleLLM.getAvailability();
+      // iOS gives no availability reason for an unsupported language, so it can report the
+      // iPhone as ineligible, or Apple Intelligence as off, when the language is what's wrong.
+      // The check only explains why it is unavailable; it never stops Apple Intelligence that runs.
+      if (availability.status !== 'available' && availability.localeSupported === false) {
+        return {
+          status: 'unsupportedLanguage',
+          deviceLanguage: availability.deviceLanguage,
+          tokenCounting: false,
+        };
+      }
       switch (availability.status) {
         case 'available':
           return {
@@ -197,15 +207,19 @@ export async function fitsLocalCleanupOutput(text: string): Promise<boolean> {
   return tokens <= LOCAL_CLEANUP_MAX_TRANSCRIPT_TOKENS;
 }
 
-// This iPhone runs Apple Intelligence, even if it is turned off in Settings or still preparing
-// its model. Disabled in AI Models or unavailable says nothing about the device either way.
+// This iPhone runs Apple Intelligence, even if it is turned off in Settings, still preparing its
+// model, or set to a language it doesn't support. Disabled in AI Models or unavailable says nothing
+// about the device either way.
 export function canRunLocalReasoning(readiness?: LocalReasoningReadiness | null): boolean {
   return (
     readiness?.status === 'ready' ||
     readiness?.status === 'appleIntelligenceOff' ||
-    readiness?.status === 'modelNotReady'
+    readiness?.status === 'modelNotReady' ||
+    readiness?.status === 'unsupportedLanguage'
   );
 }
+
+export const UNSUPPORTED_LANGUAGE_MESSAGE = "Apple Intelligence doesn't support this language.";
 
 // Unlike Apple Intelligence being off or still downloading, nothing in Settings fixes these.
 export function isLocalReasoningUnsupported(readiness?: LocalReasoningReadiness | null): boolean {
@@ -214,8 +228,9 @@ export function isLocalReasoningUnsupported(readiness?: LocalReasoningReadiness 
 
 export function getLocalReasoningUnavailableMessage(readiness?: LocalReasoningReadiness): string {
   switch (readiness?.status) {
+    // iOS also reports an eligible iPhone this way while Apple Intelligence isn't set up on it.
     case 'unsupportedDevice':
-      return 'On-Device AI needs an iPhone with Apple Intelligence (iPhone 15 Pro or later).';
+      return "Apple Intelligence isn't available on this iPhone. It needs an iPhone 15 Pro or later, with Apple Intelligence set up in Settings → Apple Intelligence & Siri.";
     case 'unsupportedOS':
       return 'On-Device AI needs iOS 26 or later on an iPhone with Apple Intelligence.';
     case 'disabled':
@@ -224,6 +239,12 @@ export function getLocalReasoningUnavailableMessage(readiness?: LocalReasoningRe
       return "Apple Intelligence is turned off, so this can't run on-device. Turn it on in Settings → Apple Intelligence & Siri.";
     case 'modelNotReady':
       return 'Apple Intelligence is still downloading its model. Check Settings → Apple Intelligence & Siri, and keep your iPhone on Wi-Fi and charging.';
+    case 'unsupportedLanguage': {
+      const language = readiness.deviceLanguage
+        ? `${readiness.deviceLanguage}, your iPhone's language`
+        : "your iPhone's language";
+      return `Apple Intelligence doesn't support ${language}. Choose a supported one in Settings → General → Language & Region.`;
+    }
     case 'unavailable':
     default:
       return 'Local Apple Intelligence is unavailable on this device.';
@@ -242,6 +263,9 @@ export function toLocalReasoningError(error: unknown): LocalReasoningError {
   }
 
   switch (code) {
+    // The iPhone's language, or the text's, which the transcript can be in whatever the setting.
+    case 'APPLE_LLM_UNSUPPORTED_LANGUAGE':
+      return new LocalReasoningError(code, UNSUPPORTED_LANGUAGE_MESSAGE);
     case 'APPLE_LLM_GUARDRAIL':
     case 'APPLE_LLM_CONTEXT_LIMIT':
     case 'APPLE_LLM_OUTPUT_LIMIT':

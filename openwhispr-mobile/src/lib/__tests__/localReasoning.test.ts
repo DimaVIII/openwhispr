@@ -125,18 +125,23 @@ it.each([
   },
 );
 
-it.each(['ready', 'disabled', 'appleIntelligenceOff', 'modelNotReady', 'unavailable'] as const)(
-  'does not treat %s as an unsupported iPhone, since it can change',
-  (status) => {
-    expect(isLocalReasoningUnsupported({ status, tokenCounting: false })).toBe(false);
-  },
-);
+it.each([
+  'ready',
+  'disabled',
+  'appleIntelligenceOff',
+  'modelNotReady',
+  'unavailable',
+  'unsupportedLanguage',
+] as const)('does not treat %s as an unsupported iPhone, since it can change', (status) => {
+  expect(isLocalReasoningUnsupported({ status, tokenCounting: false })).toBe(false);
+});
 
 // Off in iOS Settings or still preparing its model, the iPhone still runs Apple Intelligence.
 it.each([
   ['ready', true],
   ['appleIntelligenceOff', true],
   ['modelNotReady', true],
+  ['unsupportedLanguage', true],
   ['disabled', false],
   ['unavailable', false],
   ['unsupportedDevice', false],
@@ -148,14 +153,82 @@ it.each([
 it.each([
   [
     'unsupportedDevice',
-    'On-Device AI needs an iPhone with Apple Intelligence (iPhone 15 Pro or later).',
+    "Apple Intelligence isn't available on this iPhone. It needs an iPhone 15 Pro or later, with Apple Intelligence set up in Settings → Apple Intelligence & Siri.",
   ],
   ['unsupportedOS', 'On-Device AI needs iOS 26 or later on an iPhone with Apple Intelligence.'],
 ] as const)('says what an unsupported iPhone needs (%s)', (status, message) => {
   expect(getLocalReasoningUnavailableMessage({ status, tokenCounting: false })).toBe(message);
 });
 
+// iOS has no availability reason for an unsupported language, so the language check explains it.
+describe("an iPhone set to a language Apple Intelligence doesn't support", () => {
+  it.each(['deviceNotEligible', 'appleIntelligenceNotEnabled', 'modelNotReady', 'unavailable'])(
+    'names the language when availability is %s',
+    async (native) => {
+      mockAppleAvailability.mockResolvedValue({
+        status: native,
+        tokenCounting: false,
+        localeSupported: false,
+        deviceLanguage: 'English (South Africa)',
+      });
+
+      const readiness = await getLocalReasoningReadiness();
+
+      expect(readiness).toEqual({
+        status: 'unsupportedLanguage',
+        deviceLanguage: 'English (South Africa)',
+        tokenCounting: false,
+      });
+      expect(getLocalReasoningUnavailableMessage(readiness)).toBe(
+        "Apple Intelligence doesn't support English (South Africa), your iPhone's language. Choose a supported one in Settings → General → Language & Region.",
+      );
+    },
+  );
+
+  it('never stops Apple Intelligence that iOS says is available', async () => {
+    mockAppleAvailability.mockResolvedValue({
+      status: 'available',
+      contextSize: 4096,
+      tokenCounting: true,
+      localeSupported: false,
+      deviceLanguage: 'English (South Africa)',
+    });
+
+    await expect(getLocalReasoningReadiness()).resolves.toMatchObject({ status: 'ready' });
+  });
+
+  // Binaries built before the check shipped send no localeSupported.
+  it('keeps the reason iOS gave when the language was not checked', async () => {
+    mockAppleAvailability.mockResolvedValue({ status: 'deviceNotEligible', tokenCounting: false });
+
+    await expect(getLocalReasoningReadiness()).resolves.toMatchObject({
+      status: 'unsupportedDevice',
+    });
+  });
+
+  it("says the iPhone's language without a name", () => {
+    expect(
+      getLocalReasoningUnavailableMessage({ status: 'unsupportedLanguage', tokenCounting: false }),
+    ).toBe(
+      "Apple Intelligence doesn't support your iPhone's language. Choose a supported one in Settings → General → Language & Region.",
+    );
+  });
+});
+
 describe('toLocalReasoningError', () => {
+  it('explains an unsupported language rather than passing on the native text', () => {
+    const error = toLocalReasoningError(
+      Object.assign(new Error('UnsupportedLanguageOrLocale'), {
+        code: 'APPLE_LLM_UNSUPPORTED_LANGUAGE',
+      }),
+    );
+    expect(error).toMatchObject({
+      code: 'APPLE_LLM_UNSUPPORTED_LANGUAGE',
+      message: "Apple Intelligence doesn't support this language.",
+      retryable: false,
+    });
+  });
+
   it('reads an aborted request as cancelled', () => {
     const aborted = Object.assign(new Error('cancelled'), { name: 'AbortError' });
     expect(toLocalReasoningError(aborted)).toMatchObject({

@@ -146,12 +146,16 @@ export type LocalReasoningStatus =
   | 'unsupportedDevice'
   | 'unsupportedOS'
   | 'appleIntelligenceOff'
-  | 'modelNotReady';
+  | 'modelNotReady'
+  // Apple Intelligence doesn't support the iPhone's language, which Settings can change.
+  | 'unsupportedLanguage';
 
 export interface LocalReasoningReadiness {
   status: LocalReasoningStatus;
   contextSize?: number;
   tokenCounting?: boolean;
+  // The iPhone's language, named for unsupportedLanguage.
+  deviceLanguage?: string;
 }
 
 export type LocalReasoningErrorCode =
@@ -160,6 +164,7 @@ export type LocalReasoningErrorCode =
   | 'APPLE_LLM_OUTPUT_LIMIT'
   | 'APPLE_LLM_RATE_LIMITED'
   | 'APPLE_LLM_UNAVAILABLE'
+  | 'APPLE_LLM_UNSUPPORTED_LANGUAGE'
   | 'APPLE_LLM_FAILED'
   | 'APPLE_LLM_CANCELLED'
   | 'LOCAL_CONTEXT_LIMIT'
