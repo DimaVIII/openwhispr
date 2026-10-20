@@ -17,8 +17,11 @@ import {
   type AddTarget,
   type AddTargetOption,
 } from "./dictionary/DictionaryAddField";
-import { DictionaryWordList } from "./dictionary/DictionaryWordList";
+import { DictionaryWordList, type WordListSelection } from "./dictionary/DictionaryWordList";
 import { useDictionaryActions } from "./dictionary/useDictionaryActions";
+import { useDictionarySelection } from "./dictionary/useDictionarySelection";
+import { SELECTION_BAR_CLEARANCE_CLASS, SelectionActionBar } from "./dictionary/SelectionActionBar";
+import { ShareWordsPopover } from "./dictionary/ShareWordsPopover";
 import {
   buildPicker,
   defaultAddTarget,
@@ -26,7 +29,6 @@ import {
   rowsForList,
   shareTargetsFor,
   SORT_LABEL_KEYS,
-  type DictionaryRow,
   type SortKey,
 } from "./dictionary/dictionaryViewModel";
 import { useSettings } from "../hooks/useSettings";
@@ -107,6 +109,11 @@ export default function DictionaryView() {
   const [bulkText, setBulkText] = useState("");
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
+  // The words the share popover is open for, and the control it opened from.
+  const [shareRequest, setShareRequest] = useState<{
+    words: string[];
+    anchor: HTMLElement;
+  } | null>(null);
   const addInputRef = useRef<HTMLInputElement>(null);
 
   // A window's snapshot only refreshes where the last sync pass ran, so the page
@@ -165,6 +172,43 @@ export default function DictionaryView() {
       }),
     [openList, userWords, movedPersonal, snapshot, workspaceName, user?.id, search, sort, access]
   );
+
+  const selection = useDictionarySelection(rows);
+  const { clear: clearSelection } = selection;
+  // Hidden words can only be unhidden one by one, so that list has no checkboxes.
+  const selectable = !locked && openList !== "hidden";
+  const selectedRows = selectable ? selection.selectedRows : [];
+  const selectedPersonal = selectedRows.filter((row) => row.kind === "personal");
+  const selectedShared = selectedRows.filter((row) => row.kind === "shared");
+  const selectionActive = selectedRows.length > 0;
+
+  useEffect(() => {
+    clearSelection();
+    setShareRequest(null);
+  }, [openList, clearSelection]);
+
+  // Esc clears from anywhere on the page. An open dialog or popover handles
+  // Esc first and marks it handled, and a text field keeps it for itself.
+  useEffect(() => {
+    if (!selectionActive) return;
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest?.("input, textarea, [contenteditable='true']")) return;
+      clearSelection();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [selectionActive, clearSelection]);
+
+  const shareOptions = useMemo(
+    () =>
+      shareRequest && snapshot?.meta
+        ? shareTargetsFor(shareRequest.words, snapshot, workspaceName, t)
+        : [],
+    [shareRequest, snapshot, workspaceName, t]
+  );
+  const canShare = access === "available" && !!snapshot?.meta && snapshot.meta.scopes.length > 0;
 
   const addTargets = useMemo((): AddTargetOption[] => {
     const personal: AddTargetOption = {
@@ -230,6 +274,35 @@ export default function DictionaryView() {
     }
   };
 
+  const wordListSelection: WordListSelection | undefined = selectable
+    ? {
+        isSelected: selection.isSelected,
+        active: selectionActive,
+        onToggle: (row, extend) => selection.toggle(row.key, extend),
+        onSelectAll: selection.selectAll,
+        onClear: clearSelection,
+      }
+    : undefined;
+
+  const deleteSelectedPersonal = (): void => {
+    updateCustomDictionary({ remove: selectedPersonal.map((row) => row.word) });
+    clearSelection();
+  };
+
+  const hideSelected = async (): Promise<void> => {
+    if (await actions.setRowsHidden(selectedShared, true)) clearSelection();
+  };
+
+  const shareRequested = async (
+    targets: Parameters<typeof actions.shareWords>[1]
+  ): Promise<void> => {
+    if (!shareRequest) return;
+    const shared = await actions.shareWords(shareRequest.words, targets);
+    setShareRequest(null);
+    // Words that didn't go stay selected, so sharing them again is one click.
+    if (shared) clearSelection();
+  };
+
   const selectList = (next: ListKey): void => {
     setList(next);
     setSearch("");
@@ -275,7 +348,13 @@ export default function DictionaryView() {
         {emptyPersonalState}
       </div>
     ) : (
-      <div className={cn(CARD_SURFACE_CLASS, "rounded-lg px-4 py-3 shadow-sm")}>
+      <div
+        className={cn(
+          CARD_SURFACE_CLASS,
+          "rounded-lg px-4 py-3 shadow-sm",
+          selectionActive && SELECTION_BAR_CLEARANCE_CLASS
+        )}
+      >
         <div className="flex items-center justify-between gap-3 border-b border-dashed border-foreground/10 pb-2 dark:border-white/10">
           <h3 dir="auto" className="truncate text-[11px] font-semibold text-foreground/45">
             {openEntry?.label} · {headerDetail}
@@ -317,6 +396,10 @@ export default function DictionaryView() {
             onHide={(row) => void actions.setRowsHidden([row], true)}
             onUnhide={(row) => void actions.setRowsHidden([row], false)}
             onDeleteForEveryone={(row) => actions.requestDeleteForEveryone([row])}
+            onShare={
+              canShare ? (row, anchor) => setShareRequest({ words: [row.word], anchor }) : undefined
+            }
+            selection={wordListSelection}
           />
         )}
       </div>
@@ -341,6 +424,17 @@ export default function DictionaryView() {
         confirmText={t("dictionary.shared.actions.deleteForEveryone")}
         onConfirm={actions.confirmDelete}
         variant="destructive"
+      />
+
+      <ShareWordsPopover
+        open={shareRequest !== null}
+        onOpenChange={(open) => {
+          if (!open) setShareRequest(null);
+        }}
+        anchor={shareRequest?.anchor ?? null}
+        words={shareRequest?.words ?? []}
+        targets={shareOptions}
+        onShare={shareRequested}
       />
 
       <div
@@ -467,6 +561,33 @@ export default function DictionaryView() {
                 )}
 
                 {listCard}
+
+                {selectionActive && (
+                  <SelectionActionBar
+                    count={selectedRows.length}
+                    total={rows.length}
+                    onSelectAll={selection.selectAll}
+                    onClear={clearSelection}
+                    onDelete={selectedPersonal.length > 0 ? deleteSelectedPersonal : undefined}
+                    onShare={
+                      canShare && selectedPersonal.length > 0
+                        ? (anchor) =>
+                            setShareRequest((current) =>
+                              current
+                                ? null
+                                : { words: selectedPersonal.map((row) => row.word), anchor }
+                            )
+                        : undefined
+                    }
+                    shareOpen={shareRequest !== null}
+                    onHide={selectedShared.length > 0 ? () => void hideSelected() : undefined}
+                    onDeleteForEveryone={
+                      selectedShared.length > 0
+                        ? () => actions.requestDeleteForEveryone(selectedShared, clearSelection)
+                        : undefined
+                    }
+                  />
+                )}
               </>
             )}
 

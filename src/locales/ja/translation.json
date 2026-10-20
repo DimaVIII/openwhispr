@@ -3512,7 +3512,29 @@
       "deleteManyTitle_one": "{{list}} の全員から {{count}} 個の単語を削除しますか？",
       "deleteManyTitle_other": "{{list}} の全員から {{count}} 個の単語を削除しますか？",
       "deletedManyForEveryone_one": "{{count}} 個の単語を全員から削除しました",
-      "deletedManyForEveryone_other": "{{count}} 個の単語を全員から削除しました"
+      "deletedManyForEveryone_other": "{{count}} 個の単語を全員から削除しました",
+      "selection": {
+        "count_one": "{{count}} 件を選択中",
+        "count_other": "{{count}} 件を選択中",
+        "selectAll": "{{total}} 件すべてを選択",
+        "shareWith": "共有先…",
+        "clear": "選択を解除",
+        "selectWord": "{{word}} を選択",
+        "label": "選択した単語"
+      },
+      "share": {
+        "titleOne": "「{{word}}」の共有先",
+        "titleMany_one": "{{count}} 個の単語の共有先",
+        "titleMany_other": "{{count}} 個の単語の共有先",
+        "alreadyShared": "共有済み",
+        "movesOut_one": "個人から移動します",
+        "movesOut_other": "個人から移動します",
+        "partial": "{{total}} 個中 {{moved}} 個の単語を共有しました。{{failed}} 個は共有されませんでした。",
+        "reasons": {
+          "personalChanged": "別のデバイスで単語が変更されました。もう一度お試しください。",
+          "network": "接続を確認して、もう一度お試しください。"
+        }
+      }
     }
   },
   "referral": {

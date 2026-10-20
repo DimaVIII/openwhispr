@@ -3616,7 +3616,35 @@
       "deletedManyForEveryone_one": "{{count}} слово удалено для всех",
       "deletedManyForEveryone_few": "{{count}} слова удалены для всех",
       "deletedManyForEveryone_many": "{{count}} слов удалено для всех",
-      "deletedManyForEveryone_other": "{{count}} слова удалено для всех"
+      "deletedManyForEveryone_other": "{{count}} слова удалено для всех",
+      "selection": {
+        "count_one": "Выбрано {{count}} слово",
+        "count_few": "Выбрано {{count}} слова",
+        "count_many": "Выбрано {{count}} слов",
+        "count_other": "Выбрано {{count}} слова",
+        "selectAll": "Выбрать все ({{total}})",
+        "shareWith": "Поделиться с…",
+        "clear": "Снять выделение",
+        "selectWord": "Выбрать {{word}}",
+        "label": "Выбранные слова"
+      },
+      "share": {
+        "titleOne": "Поделиться «{{word}}» с",
+        "titleMany_one": "Поделиться {{count}} словом с",
+        "titleMany_few": "Поделиться {{count}} словами с",
+        "titleMany_many": "Поделиться {{count}} словами с",
+        "titleMany_other": "Поделиться {{count}} словами с",
+        "alreadyShared": "Уже добавлено",
+        "movesOut_one": "Убирает его из «Личных»",
+        "movesOut_few": "Убирает их из «Личных»",
+        "movesOut_many": "Убирает их из «Личных»",
+        "movesOut_other": "Убирает их из «Личных»",
+        "partial": "Поделились {{moved}} из {{total}} слов. Не удалось поделиться: {{failed}}.",
+        "reasons": {
+          "personalChanged": "Слово изменилось на другом устройстве. Попробуйте ещё раз.",
+          "network": "Проверьте подключение и попробуйте ещё раз."
+        }
+      }
     }
   },
   "insights": {

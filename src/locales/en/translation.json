@@ -3935,7 +3935,29 @@
       "deleteManyTitle_one": "Delete {{count}} word for everyone in {{list}}?",
       "deleteManyTitle_other": "Delete {{count}} words for everyone in {{list}}?",
       "deletedManyForEveryone_one": "Deleted {{count}} word for everyone",
-      "deletedManyForEveryone_other": "Deleted {{count}} words for everyone"
+      "deletedManyForEveryone_other": "Deleted {{count}} words for everyone",
+      "selection": {
+        "count_one": "{{count}} selected",
+        "count_other": "{{count}} selected",
+        "selectAll": "Select all {{total}}",
+        "shareWith": "Share with…",
+        "clear": "Clear selection",
+        "selectWord": "Select {{word}}",
+        "label": "Selected words"
+      },
+      "share": {
+        "titleOne": "Share \"{{word}}\" with",
+        "titleMany_one": "Share {{count}} word with",
+        "titleMany_other": "Share {{count}} words with",
+        "alreadyShared": "Already shared",
+        "movesOut_one": "Moves it out of Personal",
+        "movesOut_other": "Moves them out of Personal",
+        "partial": "Shared {{moved}} of {{total}} words. {{failed}} weren't shared.",
+        "reasons": {
+          "personalChanged": "A word changed on another device. Try again.",
+          "network": "Check your connection and try again."
+        }
+      }
     }
   },
   "support": {

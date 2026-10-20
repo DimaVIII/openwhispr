@@ -3584,7 +3584,29 @@
       "deleteManyTitle_one": "Eliminare {{count}} parola per tutti in {{list}}?",
       "deleteManyTitle_other": "Eliminare {{count}} parole per tutti in {{list}}?",
       "deletedManyForEveryone_one": "{{count}} parola eliminata per tutti",
-      "deletedManyForEveryone_other": "{{count}} parole eliminate per tutti"
+      "deletedManyForEveryone_other": "{{count}} parole eliminate per tutti",
+      "selection": {
+        "count_one": "{{count}} selezionata",
+        "count_other": "{{count}} selezionate",
+        "selectAll": "Seleziona tutte ({{total}})",
+        "shareWith": "Condividi con…",
+        "clear": "Deseleziona tutto",
+        "selectWord": "Seleziona {{word}}",
+        "label": "Parole selezionate"
+      },
+      "share": {
+        "titleOne": "Condividi «{{word}}» con",
+        "titleMany_one": "Condividi {{count}} parola con",
+        "titleMany_other": "Condividi {{count}} parole con",
+        "alreadyShared": "Già condivisa",
+        "movesOut_one": "La sposta fuori da Personali",
+        "movesOut_other": "Le sposta fuori da Personali",
+        "partial": "Condivise {{moved}} parole su {{total}}. {{failed}} non sono state condivise.",
+        "reasons": {
+          "personalChanged": "Una parola è cambiata su un altro dispositivo. Riprova.",
+          "network": "Controlla la connessione e riprova."
+        }
+      }
     }
   },
   "insights": {

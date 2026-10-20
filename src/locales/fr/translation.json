@@ -3935,7 +3935,29 @@
       "deleteManyTitle_one": "Supprimer {{count}} mot pour tous dans {{list}} ?",
       "deleteManyTitle_other": "Supprimer {{count}} mots pour tous dans {{list}} ?",
       "deletedManyForEveryone_one": "{{count}} mot supprimé pour tous",
-      "deletedManyForEveryone_other": "{{count}} mots supprimés pour tous"
+      "deletedManyForEveryone_other": "{{count}} mots supprimés pour tous",
+      "selection": {
+        "count_one": "{{count}} sélectionné",
+        "count_other": "{{count}} sélectionnés",
+        "selectAll": "Tout sélectionner ({{total}})",
+        "shareWith": "Partager avec…",
+        "clear": "Effacer la sélection",
+        "selectWord": "Sélectionner {{word}}",
+        "label": "Mots sélectionnés"
+      },
+      "share": {
+        "titleOne": "Partager « {{word}} » avec",
+        "titleMany_one": "Partager {{count}} mot avec",
+        "titleMany_other": "Partager {{count}} mots avec",
+        "alreadyShared": "Déjà partagé",
+        "movesOut_one": "Le retire de Personnels",
+        "movesOut_other": "Les retire de Personnels",
+        "partial": "{{moved}} mots sur {{total}} partagés. {{failed}} n'ont pas été partagés.",
+        "reasons": {
+          "personalChanged": "Un mot a changé sur un autre appareil. Réessayez.",
+          "network": "Vérifiez votre connexion et réessayez."
+        }
+      }
     }
   },
   "support": {

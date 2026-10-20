@@ -3636,7 +3636,29 @@
       "deleteManyTitle_one": "¿Eliminar {{count}} palabra para todos en {{list}}?",
       "deleteManyTitle_other": "¿Eliminar {{count}} palabras para todos en {{list}}?",
       "deletedManyForEveryone_one": "{{count}} palabra eliminada para todos",
-      "deletedManyForEveryone_other": "{{count}} palabras eliminadas para todos"
+      "deletedManyForEveryone_other": "{{count}} palabras eliminadas para todos",
+      "selection": {
+        "count_one": "{{count}} seleccionada",
+        "count_other": "{{count}} seleccionadas",
+        "selectAll": "Seleccionar las {{total}}",
+        "shareWith": "Compartir con…",
+        "clear": "Borrar selección",
+        "selectWord": "Seleccionar {{word}}",
+        "label": "Palabras seleccionadas"
+      },
+      "share": {
+        "titleOne": "Compartir «{{word}}» con",
+        "titleMany_one": "Compartir {{count}} palabra con",
+        "titleMany_other": "Compartir {{count}} palabras con",
+        "alreadyShared": "Ya compartida",
+        "movesOut_one": "La saca de Personal",
+        "movesOut_other": "Las saca de Personal",
+        "partial": "Se compartieron {{moved}} de {{total}} palabras. {{failed}} no se compartieron.",
+        "reasons": {
+          "personalChanged": "Una palabra cambió en otro dispositivo. Inténtalo de nuevo.",
+          "network": "Revisa tu conexión e inténtalo de nuevo."
+        }
+      }
     }
   },
   "insights": {

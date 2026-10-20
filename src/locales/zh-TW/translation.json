@@ -3584,7 +3584,29 @@
       "deleteManyTitle_one": "要為 {{list}} 中的所有人刪除 {{count}} 個詞語嗎？",
       "deleteManyTitle_other": "要為 {{list}} 中的所有人刪除 {{count}} 個詞語嗎？",
       "deletedManyForEveryone_one": "已為所有人刪除 {{count}} 個詞語",
-      "deletedManyForEveryone_other": "已為所有人刪除 {{count}} 個詞語"
+      "deletedManyForEveryone_other": "已為所有人刪除 {{count}} 個詞語",
+      "selection": {
+        "count_one": "已選取 {{count}} 項",
+        "count_other": "已選取 {{count}} 項",
+        "selectAll": "全選 {{total}} 項",
+        "shareWith": "共用給…",
+        "clear": "清除選取",
+        "selectWord": "選取 {{word}}",
+        "label": "已選取的詞語"
+      },
+      "share": {
+        "titleOne": "將「{{word}}」共用給",
+        "titleMany_one": "將 {{count}} 個詞語共用給",
+        "titleMany_other": "將 {{count}} 個詞語共用給",
+        "alreadyShared": "已共用",
+        "movesOut_one": "將其移出個人",
+        "movesOut_other": "將其移出個人",
+        "partial": "已共用 {{moved}}/{{total}} 個詞語，{{failed}} 個未共用。",
+        "reasons": {
+          "personalChanged": "某個詞語已在其他裝置上變更，請再試一次。",
+          "network": "請檢查網路連線後再試一次。"
+        }
+      }
     }
   },
   "insights": {

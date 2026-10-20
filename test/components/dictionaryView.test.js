@@ -53,6 +53,7 @@ const MOCKS = {
     export const editSharedWord = record("editSharedWord");
     export const deleteSharedWords = record("deleteSharedWords");
     export const setSharedWordsHidden = record("setSharedWordsHidden");
+    export const sharePersonalWords = record("sharePersonalWords");
   `,
   "/services/SyncService": `
     export const syncService = {
@@ -96,6 +97,13 @@ const MOCKS = {
             createElement("button", { "data-cancel": "", onClick: () => onOpenChange(false) })
           )
         : null;
+  `,
+  // Radix positions the content with layout this DOM doesn't implement.
+  "/ui/popover": `
+    import { createElement } from "react";
+    export const Popover = ({ open, children }) => (open ? children : null);
+    export const PopoverAnchor = () => null;
+    export const PopoverContent = ({ children }) => createElement("div", { "data-popover": "" }, children);
   `,
   "/ui/useToast": `
     export const useToast = () => ({ toast: (props) => { globalThis.__toasts.push(props); return "id"; } });
@@ -325,12 +333,13 @@ test("shared row hover exposes Edit, Hide for me and Delete for everyone by aria
   await openList(container, `space:${ENGINEERING}`);
   // The tooltip is the short action; the accessible name says which word.
   assert.deepEqual(ariaLabels(rowFor(container, "Qdrant")), [
+    named("dictionary.shared.selection.selectWord", "Qdrant"),
     named("dictionary.editWord", "Qdrant"),
     named("dictionary.shared.actions.hideWord", "Qdrant"),
     named("dictionary.shared.actions.deleteForEveryoneWord", "Qdrant"),
   ]);
 
-  await click(buttonsIn(rowFor(container, "Qdrant"))[1]);
+  await click(buttonsIn(rowFor(container, "Qdrant"))[2]);
   assert.deepEqual(
     calls.find(([name]) => name === "setSharedWordsHidden"),
     ["setSharedWordsHidden", "ws", ["e-qdrant"], true]
@@ -340,7 +349,7 @@ test("shared row hover exposes Edit, Hide for me and Delete for everyone by aria
 test("Delete for everyone runs only after confirming, then offers Undo", async (t) => {
   const { container, calls } = await renderView(t);
   await openList(container, `space:${ENGINEERING}`);
-  const deleteButton = () => buttonsIn(rowFor(container, "Qdrant"))[2];
+  const deleteButton = () => buttonsIn(rowFor(container, "Qdrant"))[3];
   const dialog = () =>
     findElement(container, (node) =>
       node.getAttribute?.("data-dialog")?.includes("deleteOneTitle")
@@ -371,8 +380,9 @@ test("Delete for everyone runs only after confirming, then offers Undo", async (
 test("personal and hidden rows have their own hover actions", async (t) => {
   const { container } = await renderView(t);
   await openList(container, "personal");
-  // Share comes with the share popover; the row keeps Edit and Delete.
   assert.deepEqual(ariaLabels(rowFor(container, "OpenWhispr")), [
+    named("dictionary.shared.selection.selectWord", "OpenWhispr"),
+    named("dictionary.shared.actions.shareWord", "OpenWhispr"),
     named("dictionary.editWord", "OpenWhispr"),
     named("dictionary.shared.actions.deleteWord", "OpenWhispr"),
   ]);
@@ -486,7 +496,7 @@ test("a rename the list already has keeps the editor open with the reason", asyn
   const { container, calls } = await renderView(t);
   globalThis.__results.editSharedWord = "throw:alreadyInList";
   await openList(container, `space:${ENGINEERING}`);
-  await click(buttonsIn(rowFor(container, "Qdrant"))[0]);
+  await click(buttonsIn(rowFor(container, "Qdrant"))[1]);
   const editor = () => findElement(rowFor(container, "Qdrant"), (node) => node.tagName === "INPUT");
 
   // An empty word is never sent.
@@ -561,4 +571,199 @@ test("clear-all and export leave out moved words, which can be added back", asyn
     "updateCustomDictionary",
     { add: ["Supabase"] },
   ]);
+});
+
+const checkboxFor = (container, word) =>
+  findElement(
+    rowFor(container, word),
+    (node) => node.tagName === "BUTTON" && node.getAttribute("role") === "checkbox"
+  );
+
+const shiftClick = (element) =>
+  React.act(async () => element.dispatchEvent({ type: "click", bubbles: true, shiftKey: true }));
+
+const keyDown = (element, key, extra = {}) =>
+  React.act(async () => element.dispatchEvent(domEvent("keydown", { key, ...extra })));
+
+const toolbar = (container) => byAttribute(container, "role", "toolbar");
+
+const barButton = (container, label) =>
+  findElement(
+    toolbar(container),
+    (node) => node.tagName === "BUTTON" && node.textContent === label
+  );
+
+const checkedWords = (container) =>
+  container
+    .querySelectorAll("li")
+    .filter(
+      (node) =>
+        checkboxFor(container, node.getAttribute("data-word"))?.getAttribute("aria-checked") ===
+        "true"
+    )
+    .map((node) => node.getAttribute("data-word"));
+
+const FIVE_WORDS = { customDictionary: ["Biscuit", "Piha", "Qdrant", "sherpa-onnx", "Tiptap"] };
+
+test("shift-click selects a range in the list", async (t) => {
+  const { container } = await renderView(t, { settings: FIVE_WORDS });
+  await openList(container, "personal");
+  assert.equal(toolbar(container), null, "no bar until something is ticked");
+
+  await click(checkboxFor(container, "Biscuit"));
+  await shiftClick(checkboxFor(container, "Qdrant"));
+  assert.deepEqual(checkedWords(container), ["Biscuit", "Piha", "Qdrant"]);
+
+  const bar = toolbar(container).textContent;
+  assert.ok(bar.includes('dictionary.shared.selection.count{"count":3}'));
+  assert.ok(bar.includes('dictionary.shared.selection.selectAll{"total":5}'));
+  // With a selection, rows keep only their checkbox: the hover actions step aside.
+  assert.deepEqual(ariaLabels(rowFor(container, "Tiptap")), [
+    named("dictionary.shared.selection.selectWord", "Tiptap"),
+  ]);
+
+  await click(barButton(container, 'dictionary.shared.selection.selectAll{"total":5}'));
+  assert.equal(checkedWords(container).length, 5);
+});
+
+test("⌘A selects all while the list has focus, Esc clears, and a new list starts empty", async (t) => {
+  const { container, calls } = await renderView(t, { settings: FIVE_WORDS });
+  await openList(container, "personal");
+  const list = container.querySelector("ul");
+
+  // The add field keeps ⌘A for its text.
+  await keyDown(addInput(container), "a", { metaKey: true });
+  assert.equal(toolbar(container), null);
+
+  await keyDown(list, "a", { metaKey: true });
+  assert.equal(checkedWords(container).length, 5);
+  await keyDown(list, "Escape");
+  assert.equal(toolbar(container), null);
+
+  await click(checkboxFor(container, "Piha"));
+  await click(barButton(container, "dictionary.shared.actions.delete"));
+  assert.deepEqual(calls.filter(([name]) => name === "updateCustomDictionary").at(-1), [
+    "updateCustomDictionary",
+    { remove: ["Piha"] },
+  ]);
+  assert.equal(toolbar(container), null, "a finished bulk action clears the selection");
+
+  await click(checkboxFor(container, "Tiptap"));
+  await openList(container, "all");
+  assert.equal(toolbar(container), null);
+});
+
+test("the selection bar shares to the ticked lists; unshared words stay selected", async (t) => {
+  const { container, calls } = await renderView(t, { settings: FIVE_WORDS });
+  await openList(container, "personal");
+  await click(checkboxFor(container, "Biscuit"));
+  await click(checkboxFor(container, "Piha"));
+
+  await click(barButton(container, "dictionary.shared.selection.shareWith"));
+  const popover = () => byAttribute(container, "data-popover");
+  assert.ok(popover().textContent.includes('dictionary.shared.share.titleMany{"count":2}'));
+  const engineering = findElement(
+    popover(),
+    (node) =>
+      node.getAttribute?.("role") === "checkbox" && node.textContent.startsWith("Engineering")
+  );
+  await click(engineering);
+  globalThis.__results.sharePersonalWords = {
+    moved: ["Biscuit"],
+    alreadyPresent: [],
+    failed: { words: ["Piha"], reason: "personalChanged" },
+  };
+  const share = () =>
+    findElement(
+      popover(),
+      (node) =>
+        node.tagName === "BUTTON" &&
+        node.getAttribute("role") !== "checkbox" &&
+        node.textContent === "dictionary.shared.actions.share"
+    );
+  await click(share());
+
+  assert.deepEqual(
+    calls.find(([name]) => name === "sharePersonalWords"),
+    ["sharePersonalWords", "ws", [ENGINEERING], ["Biscuit", "Piha"]]
+  );
+  assert.deepEqual(globalThis.__toasts.at(-1), {
+    title: 'dictionary.shared.share.partial{"moved":1,"total":2,"failed":1}',
+    description: "dictionary.shared.share.reasons.personalChanged",
+    variant: "destructive",
+  });
+  assert.equal(popover(), null);
+  // The mock leaves Biscuit in Personal; the real move takes it out of the list.
+  assert.deepEqual(checkedWords(container), ["Biscuit", "Piha"]);
+
+  // A full share clears the selection.
+  globalThis.__results.sharePersonalWords = { moved: ["Piha"], alreadyPresent: [], failed: null };
+  await click(barButton(container, "dictionary.shared.selection.shareWith"));
+  await click(
+    findElement(
+      popover(),
+      (node) =>
+        node.getAttribute?.("role") === "checkbox" && node.textContent.startsWith("Engineering")
+    )
+  );
+  await click(share());
+  assert.equal(toolbar(container), null);
+});
+
+test("a row's Share icon opens the popover for that word", async (t) => {
+  const { container } = await renderView(t);
+  await openList(container, "personal");
+  await click(
+    byAttribute(container, "aria-label", named("dictionary.shared.actions.shareWord", "OpenWhispr"))
+  );
+  assert.ok(
+    byAttribute(container, "data-popover").textContent.includes(
+      'dictionary.shared.share.titleOne{"word":"OpenWhispr"}'
+    )
+  );
+});
+
+test("a shared list's bar hides for me and deletes for everyone after confirming", async (t) => {
+  const { container, calls } = await renderView(t);
+  await openList(container, `space:${ENGINEERING}`);
+  // Personal-only actions never show for shared words.
+  await click(checkboxFor(container, "Qdrant"));
+  assert.equal(barButton(container, "dictionary.shared.selection.shareWith"), null);
+  await click(checkboxFor(container, "sherpa-onnx"));
+
+  await click(barButton(container, "dictionary.shared.actions.hide"));
+  assert.deepEqual(
+    calls.find(([name]) => name === "setSharedWordsHidden"),
+    ["setSharedWordsHidden", "ws", ["e-qdrant", "e-sherpa"], true]
+  );
+  assert.equal(toolbar(container), null);
+
+  await click(checkboxFor(container, "Qdrant"));
+  await click(checkboxFor(container, "sherpa-onnx"));
+  await click(barButton(container, "dictionary.shared.actions.deleteForEveryone"));
+  const dialog = byAttribute(
+    container,
+    "data-dialog",
+    'dictionary.shared.deleteManyTitle{"count":2,"list":"Engineering"}'
+  );
+  assert.ok(dialog);
+  assert.equal(
+    calls.find(([name]) => name === "deleteSharedWords"),
+    undefined
+  );
+  await click(byAttribute(dialog, "data-confirm"));
+  assert.deepEqual(
+    calls.find(([name]) => name === "deleteSharedWords"),
+    ["deleteSharedWords", "ws", ["e-qdrant", "e-sherpa"]]
+  );
+  assert.equal(globalThis.__toasts.at(-1).actions[0].label, "dictionary.shared.undo");
+  assert.equal(toolbar(container), null);
+});
+
+test("the Hidden list has no checkboxes", async (t) => {
+  const { container } = await renderView(t, {
+    shared: { snapshot: { ...SNAPSHOT, hiddenIds: ["e-arr"] } },
+  });
+  await openList(container, "hidden");
+  assert.equal(checkboxFor(container, "ARR"), null);
 });

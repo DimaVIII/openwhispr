@@ -1,10 +1,21 @@
-import { useState, type ReactElement, type ReactNode } from "react";
+import { useState, type KeyboardEvent, type ReactElement, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Eye, EyeOff, Pencil, Trash2, Users } from "../icons";
 import { Input } from "../ui/input";
 import { Tooltip } from "../ui/tooltip";
 import { cn } from "../lib/utils";
 import type { DictionaryRow } from "./dictionaryViewModel";
+import { RowCheckbox } from "./RowCheckbox";
+
+export interface WordListSelection {
+  isSelected: (key: string) => boolean;
+  // Anything selected: every row shows its checkbox and the hover actions step aside.
+  active: boolean;
+  // extend is a Shift-click, which ticks the range from the last ticked row.
+  onToggle: (row: DictionaryRow, extend: boolean) => void;
+  onSelectAll: () => void;
+  onClear: () => void;
+}
 
 interface DictionaryWordListProps {
   rows: DictionaryRow[];
@@ -16,8 +27,11 @@ interface DictionaryWordListProps {
   onHide: (row: DictionaryRow) => void;
   onDeleteForEveryone: (row: DictionaryRow) => void;
   onUnhide: (row: DictionaryRow) => void;
-  // Personal rows only show Share once there is somewhere to share to.
-  onShare?: (row: DictionaryRow) => void;
+  // Personal rows only show Share once there is somewhere to share to. The
+  // anchor is the clicked icon, which the share popover opens from.
+  onShare?: (row: DictionaryRow, anchor: HTMLElement) => void;
+  // Lists without bulk actions (Hidden) have no checkboxes.
+  selection?: WordListSelection;
 }
 
 interface RowAction {
@@ -25,7 +39,7 @@ interface RowAction {
   label: string;
   ariaLabel: string;
   icon: ReactNode;
-  onClick: () => void;
+  onClick: (anchor: HTMLElement) => void;
   destructive?: boolean;
 }
 
@@ -35,7 +49,7 @@ function RowActionButton({ action }: { action: RowAction }): ReactElement {
       <button
         type="button"
         aria-label={action.ariaLabel}
-        onClick={action.onClick}
+        onClick={(event) => action.onClick(event.currentTarget)}
         className={cn(
           "grid size-6 place-items-center rounded-[5px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20",
           action.destructive
@@ -137,16 +151,32 @@ export function DictionaryWordList({
   onDeleteForEveryone,
   onUnhide,
   onShare,
+  selection,
 }: DictionaryWordListProps): ReactElement {
   const { t } = useTranslation();
   const [editingKey, setEditingKey] = useState<string | null>(null);
+
+  // Only while the list itself has focus: the add field and the row editor keep
+  // ⌘A for their text.
+  const handleKeyDown = (event: KeyboardEvent<HTMLUListElement>): void => {
+    if (!selection) return;
+    const target = event.target as HTMLElement;
+    if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "a") {
+      event.preventDefault();
+      selection.onSelectAll();
+    } else if (event.key === "Escape" && selection.active) {
+      event.preventDefault();
+      selection.onClear();
+    }
+  };
 
   const actionsFor = (row: DictionaryRow): RowAction[] => {
     const action = (
       labelKey: string,
       ariaLabelKey: string,
       icon: ReactNode,
-      onClick: () => void,
+      onClick: (anchor: HTMLElement) => void,
       destructive = false
     ): RowAction => ({
       label: t(labelKey),
@@ -178,7 +208,7 @@ export function DictionaryWordList({
               "dictionary.shared.actions.share",
               "dictionary.shared.actions.shareWord",
               <Users size={13} />,
-              () => onShare(row)
+              (anchor) => onShare(row, anchor)
             ),
           ]
         : [];
@@ -212,15 +242,36 @@ export function DictionaryWordList({
   };
 
   return (
-    <ul>
+    // Focusable so a click on a row gives the list focus for ⌘A.
+    <ul tabIndex={-1} onKeyDown={handleKeyDown} className="outline-none">
       {rows.map((row) => {
         const editing = editingKey === row.key;
+        const selected = selection?.isSelected(row.key) ?? false;
         return (
           <li
             key={row.key}
             data-word={row.word}
-            className="group relative -mx-2 flex h-[38px] items-center gap-2 rounded-md border-b border-foreground/4 px-2 last:border-b-0 hover:bg-foreground/[0.025] dark:border-white/6 dark:hover:bg-white/[0.03]"
+            className={cn(
+              "group relative -mx-2 flex h-[38px] items-center gap-2 rounded-md border-b border-foreground/4 px-2 last:border-b-0 dark:border-white/6",
+              selected
+                ? "bg-primary/8 dark:bg-primary/12"
+                : "hover:bg-foreground/[0.025] dark:hover:bg-white/[0.03]"
+            )}
           >
+            {selection && (
+              // A fixed column, so ticking the first row shifts nothing.
+              <RowCheckbox
+                checked={selected}
+                label={t("dictionary.shared.selection.selectWord", { word: row.word })}
+                onToggle={(event) => selection.onToggle(row, event.shiftKey)}
+                className={cn(
+                  "size-5 shrink-0 justify-center transition-opacity duration-150",
+                  selection.active
+                    ? "opacity-100"
+                    : "opacity-0 focus-visible:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100"
+                )}
+              />
+            )}
             {editing ? (
               <RowEditor
                 row={row}
@@ -236,14 +287,21 @@ export function DictionaryWordList({
                 <span dir="auto" className="min-w-0 flex-1 truncate text-xs text-foreground/75">
                   {row.word}
                 </span>
-                <span className="transition-opacity duration-150 group-focus-within:opacity-0 group-hover:opacity-0">
+                <span
+                  className={cn(
+                    "transition-opacity duration-150",
+                    !selection?.active && "group-focus-within:opacity-0 group-hover:opacity-0"
+                  )}
+                >
                   <RowMeta row={row} />
                 </span>
-                <div className="absolute end-2 top-1/2 flex -translate-y-1/2 items-center gap-0.5 opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
-                  {actionsFor(row).map((action) => (
-                    <RowActionButton key={action.label} action={action} />
-                  ))}
-                </div>
+                {!selection?.active && (
+                  <div className="absolute end-2 top-1/2 flex -translate-y-1/2 items-center gap-0.5 opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
+                    {actionsFor(row).map((action) => (
+                      <RowActionButton key={action.label} action={action} />
+                    ))}
+                  </div>
+                )}
               </>
             )}
           </li>

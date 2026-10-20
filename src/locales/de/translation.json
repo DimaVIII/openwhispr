@@ -3935,7 +3935,29 @@
       "deleteManyTitle_one": "{{count}} Wort für alle in {{list}} löschen?",
       "deleteManyTitle_other": "{{count}} Wörter für alle in {{list}} löschen?",
       "deletedManyForEveryone_one": "{{count}} Wort für alle gelöscht",
-      "deletedManyForEveryone_other": "{{count}} Wörter für alle gelöscht"
+      "deletedManyForEveryone_other": "{{count}} Wörter für alle gelöscht",
+      "selection": {
+        "count_one": "{{count}} ausgewählt",
+        "count_other": "{{count}} ausgewählt",
+        "selectAll": "Alle {{total}} auswählen",
+        "shareWith": "Teilen mit…",
+        "clear": "Auswahl aufheben",
+        "selectWord": "{{word}} auswählen",
+        "label": "Ausgewählte Wörter"
+      },
+      "share": {
+        "titleOne": "„{{word}}“ teilen mit",
+        "titleMany_one": "{{count}} Wort teilen mit",
+        "titleMany_other": "{{count}} Wörter teilen mit",
+        "alreadyShared": "Bereits geteilt",
+        "movesOut_one": "Verschiebt es aus Persönlich",
+        "movesOut_other": "Verschiebt sie aus Persönlich",
+        "partial": "{{moved}} von {{total}} Wörtern geteilt. {{failed}} wurden nicht geteilt.",
+        "reasons": {
+          "personalChanged": "Ein Wort wurde auf einem anderen Gerät geändert. Versuche es erneut.",
+          "network": "Prüfe deine Verbindung und versuche es erneut."
+        }
+      }
     }
   },
   "support": {

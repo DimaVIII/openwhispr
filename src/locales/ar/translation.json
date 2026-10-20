@@ -1495,7 +1495,41 @@
       "deletedManyForEveryone_two": "تم حذف كلمتين ({{count}}) للجميع",
       "deletedManyForEveryone_few": "تم حذف {{count}} كلمات للجميع",
       "deletedManyForEveryone_many": "تم حذف {{count}} كلمةً للجميع",
-      "deletedManyForEveryone_other": "تم حذف {{count}} كلمة للجميع"
+      "deletedManyForEveryone_other": "تم حذف {{count}} كلمة للجميع",
+      "selection": {
+        "count_zero": "المحدد: {{count}}",
+        "count_one": "المحدد: {{count}}",
+        "count_two": "المحدد: {{count}}",
+        "count_few": "المحدد: {{count}}",
+        "count_many": "المحدد: {{count}}",
+        "count_other": "المحدد: {{count}}",
+        "selectAll": "تحديد الكل ({{total}})",
+        "shareWith": "مشاركة مع…",
+        "clear": "إلغاء التحديد",
+        "selectWord": "تحديد {{word}}",
+        "label": "الكلمات المحددة"
+      },
+      "share": {
+        "titleOne": "مشاركة \"{{word}}\" مع",
+        "titleMany_zero": "مشاركة {{count}} كلمة مع",
+        "titleMany_one": "مشاركة كلمة واحدة ({{count}}) مع",
+        "titleMany_two": "مشاركة كلمتين ({{count}}) مع",
+        "titleMany_few": "مشاركة {{count}} كلمات مع",
+        "titleMany_many": "مشاركة {{count}} كلمةً مع",
+        "titleMany_other": "مشاركة {{count}} كلمة مع",
+        "alreadyShared": "تمت مشاركتها",
+        "movesOut_zero": "يزيلها من القائمة الشخصية",
+        "movesOut_one": "يزيلها من القائمة الشخصية",
+        "movesOut_two": "يزيلهما من القائمة الشخصية",
+        "movesOut_few": "يزيلها من القائمة الشخصية",
+        "movesOut_many": "يزيلها من القائمة الشخصية",
+        "movesOut_other": "يزيلها من القائمة الشخصية",
+        "partial": "الكلمات التي تمت مشاركتها: {{moved}} من أصل {{total}}. الكلمات التي لم تتم مشاركتها: {{failed}}.",
+        "reasons": {
+          "personalChanged": "تغيّرت كلمة على جهاز آخر. حاول مرة أخرى.",
+          "network": "تحقق من اتصالك وحاول مرة أخرى."
+        }
+      }
     }
   },
   "promptStudio": {

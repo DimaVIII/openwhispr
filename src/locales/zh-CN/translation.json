@@ -3584,7 +3584,29 @@
       "deleteManyTitle_one": "要为 {{list}} 中的所有人删除 {{count}} 个词语吗？",
       "deleteManyTitle_other": "要为 {{list}} 中的所有人删除 {{count}} 个词语吗？",
       "deletedManyForEveryone_one": "已为所有人删除 {{count}} 个词语",
-      "deletedManyForEveryone_other": "已为所有人删除 {{count}} 个词语"
+      "deletedManyForEveryone_other": "已为所有人删除 {{count}} 个词语",
+      "selection": {
+        "count_one": "已选择 {{count}} 项",
+        "count_other": "已选择 {{count}} 项",
+        "selectAll": "全选 {{total}} 项",
+        "shareWith": "共享给…",
+        "clear": "清除选择",
+        "selectWord": "选择 {{word}}",
+        "label": "已选词语"
+      },
+      "share": {
+        "titleOne": "将“{{word}}”共享给",
+        "titleMany_one": "将 {{count}} 个词语共享给",
+        "titleMany_other": "将 {{count}} 个词语共享给",
+        "alreadyShared": "已共享",
+        "movesOut_one": "将其移出个人",
+        "movesOut_other": "将其移出个人",
+        "partial": "已共享 {{moved}}/{{total}} 个词语，{{failed}} 个未共享。",
+        "reasons": {
+          "personalChanged": "某个词语已在其他设备上更改，请重试。",
+          "network": "请检查网络连接后重试。"
+        }
+      }
     }
   },
   "insights": {

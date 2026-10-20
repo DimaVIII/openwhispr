@@ -7,6 +7,8 @@ import {
   deleteSharedWords,
   editSharedWord,
   setSharedWordsHidden,
+  sharePersonalWords,
+  type ShareTarget,
   type SharedDictionaryActionReason,
 } from "../../services/sharedDictionaryActions";
 import { syncService } from "../../services/SyncService";
@@ -33,6 +35,7 @@ interface PendingSharedDelete {
   entryIds: string[];
   words: string[];
   listName: string;
+  onDeleted?: () => void;
 }
 
 export interface DictionaryActions {
@@ -43,9 +46,13 @@ export interface DictionaryActions {
   addWords: (text: string, target: AddTarget) => Promise<boolean>;
   // Resolves an error to show in the open editor, or null to close it.
   editRow: (row: DictionaryRow, word: string) => Promise<string | null>;
-  setRowsHidden: (rows: DictionaryRow[], hidden: boolean) => Promise<void>;
+  // Resolves true once every row changed.
+  setRowsHidden: (rows: DictionaryRow[], hidden: boolean) => Promise<boolean>;
   // Delete for everyone always asks first; the dialog reads `deleteTitle`.
-  requestDeleteForEveryone: (rows: DictionaryRow[]) => void;
+  // onDeleted runs once the confirmed delete fully succeeded.
+  requestDeleteForEveryone: (rows: DictionaryRow[], onDeleted?: () => void) => void;
+  // Moves personal words into the lists; resolves true when all of them went.
+  shareWords: (words: string[], targets: ShareTarget[]) => Promise<boolean>;
   deleteTitle: string | null;
   confirmDelete: () => void;
   cancelDelete: () => void;
@@ -71,7 +78,7 @@ export function useDictionaryActions({
   snapshot,
   listLabel,
 }: DictionaryActionsInput): DictionaryActions {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { toast } = useToast();
   const [syncing, setSyncing] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<PendingSharedDelete | null>(null);
@@ -166,27 +173,78 @@ export function useDictionaryActions({
     }
   };
 
+  // A selection in All shared can span lists; name each of them once.
+  const listNames = (names: string[]): string =>
+    new Intl.ListFormat(i18n.language, { type: "conjunction" }).format([...new Set(names)]);
+
   const entryIdsOf = (rows: DictionaryRow[]): string[] =>
     rows.flatMap((row) => (row.entryId ? [row.entryId] : []));
 
-  const setRowsHidden = async (rows: DictionaryRow[], hidden: boolean): Promise<void> => {
-    const entryIds = entryIdsOf(rows);
-    if (!workspaceId || entryIds.length === 0) return;
+  const setRowsHidden = async (rows: DictionaryRow[], hidden: boolean): Promise<boolean> => {
+    const shared = rows.filter((row) => row.entryId);
+    if (!workspaceId || shared.length === 0) return false;
     try {
-      await setSharedWordsHidden(workspaceId, entryIds, hidden);
+      await setSharedWordsHidden(workspaceId, entryIdsOf(shared), hidden);
+      return true;
     } catch (error) {
-      showActionError(reasonOf(error), sharedListName(rows[0]));
+      showActionError(reasonOf(error), listNames(shared.map(sharedListName)));
+      return false;
     }
   };
 
-  const requestDeleteForEveryone = (rows: DictionaryRow[]): void => {
+  const requestDeleteForEveryone = (rows: DictionaryRow[], onDeleted?: () => void): void => {
     const shared = rows.filter((row) => row.entryId);
     if (shared.length === 0) return;
     setPendingDelete({
       entryIds: entryIdsOf(shared),
       words: shared.map((row) => row.word),
-      listName: sharedListName(shared[0]),
+      listName: listNames(shared.map(sharedListName)),
+      onDeleted,
     });
+  };
+
+  const shareFailureLine = (reason: SharedDictionaryActionReason, lists: string): string => {
+    if (reason === "personalChanged") return t("dictionary.shared.share.reasons.personalChanged");
+    if (reason === "listFull") return t("dictionary.shared.errors.listFull", { list: lists });
+    return t("dictionary.shared.share.reasons.network");
+  };
+
+  const shareWords = async (words: string[], targets: ShareTarget[]): Promise<boolean> => {
+    if (!workspaceId || words.length === 0 || targets.length === 0) return false;
+    const lists = listNames(targets.map(listLabel));
+    let moved = 0;
+    let failed: { count: number; reason: SharedDictionaryActionReason } | null;
+    try {
+      const result = await sharePersonalWords(workspaceId, targets, words);
+      moved = result.moved.length;
+      failed = result.failed
+        ? { count: result.failed.words.length, reason: result.failed.reason }
+        : null;
+    } catch (error) {
+      failed = { count: words.length, reason: reasonOf(error) };
+    }
+    if (!failed) return true;
+    if (moved === 0) {
+      // Nothing went, so the reason alone says what happened.
+      toast({
+        title:
+          failed.reason === "personalChanged" || failed.reason === "listFull"
+            ? shareFailureLine(failed.reason, lists)
+            : t("dictionary.shared.errors.generic", { list: lists }),
+        variant: "destructive",
+      });
+      return false;
+    }
+    toast({
+      title: t("dictionary.shared.share.partial", {
+        moved,
+        total: moved + failed.count,
+        failed: failed.count,
+      }),
+      description: shareFailureLine(failed.reason, lists),
+      variant: "destructive",
+    });
+    return false;
   };
 
   const undoAction = (
@@ -203,10 +261,16 @@ export function useDictionaryActions({
     },
   });
 
-  const runDelete = async ({ entryIds, words, listName }: PendingSharedDelete): Promise<void> => {
+  const runDelete = async ({
+    entryIds,
+    words,
+    listName,
+    onDeleted,
+  }: PendingSharedDelete): Promise<void> => {
     if (!workspaceId) return;
     try {
       const { undo } = await deleteSharedWords(workspaceId, entryIds);
+      onDeleted?.();
       toast({
         title:
           words.length === 1
@@ -273,6 +337,7 @@ export function useDictionaryActions({
     editRow,
     setRowsHidden,
     requestDeleteForEveryone,
+    shareWords,
     deleteTitle,
     confirmDelete,
     cancelDelete: () => setPendingDelete(null),
