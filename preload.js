@@ -1285,6 +1285,23 @@ contextBridge.exposeInMainWorld("electronAPI", {
   hardDeleteDictionary: (id) => ipcRenderer.invoke("db-hard-delete-dictionary", id),
   clearDictionaryCloudId: (id) => ipcRenderer.invoke("db-clear-dictionary-cloud-id", id),
   broadcastDictionaryUpdated: () => ipcRenderer.invoke("db-broadcast-dictionary-updated"),
+  getDictionaryEntriesByWords: (words) =>
+    ipcRenderer.invoke("db-get-dictionary-entries-by-words", words),
+  markDictionaryWordsShared: (words, sharedAt) =>
+    ipcRenderer.invoke("db-mark-dictionary-words-shared", words, sharedAt),
+  getMovedDictionaryWords: () => ipcRenderer.invoke("db-get-moved-dictionary-words"),
+
+  getSharedDictionary: (workspaceId) => ipcRenderer.invoke("db-shared-dictionary-get", workspaceId),
+  applySharedDictionaryPull: (workspaceId, change) =>
+    ipcRenderer.invoke("db-shared-dictionary-apply-pull", workspaceId, change),
+  replaceSharedDictionary: (workspaceId, full) =>
+    ipcRenderer.invoke("db-shared-dictionary-replace", workspaceId, full),
+  applySharedDictionaryHides: (workspaceId, change) =>
+    ipcRenderer.invoke("db-shared-dictionary-apply-hides", workspaceId, change),
+  replaceSharedDictionaryHides: (workspaceId, hidden) =>
+    ipcRenderer.invoke("db-shared-dictionary-replace-hides", workspaceId, hidden),
+  clearSharedDictionary: (workspaceId) =>
+    ipcRenderer.invoke("db-shared-dictionary-clear", workspaceId),
 
   getPendingSnippets: () => ipcRenderer.invoke("db-get-pending-snippets"),
   getPendingSnippetDeletes: () => ipcRenderer.invoke("db-get-pending-snippet-deletes"),

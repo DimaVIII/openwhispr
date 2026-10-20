@@ -68,3 +68,33 @@ export interface SharedDictionaryShareResponse {
   alreadyPresent: Array<{ space_id: string | null; word: string }>;
   movedPersonalIds: string[];
 }
+
+// What a pass stores alongside the entries: the lists the member can read,
+// who added words, and whether the workspace has paused sharing.
+export interface SharedDictionaryMeta {
+  scopes: SharedScope[];
+  contributors: SharedContributor[];
+  paused: boolean;
+}
+
+export interface SharedDictionarySnapshotEntry {
+  cloudId: string;
+  spaceId: string | null;
+  word: string;
+  addedByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// The local mirror of one workspace, as the main process returns it.
+export interface SharedDictionarySnapshot {
+  entries: SharedDictionarySnapshotEntry[];
+  hiddenIds: string[];
+  // null until a pass has finished for this workspace.
+  meta: (SharedDictionaryMeta & { syncedAt: string }) | null;
+}
+
+export interface SharedDictionaryHideRecord {
+  entryId: string;
+  updatedAt: string;
+}

@@ -2172,6 +2172,73 @@ class IPCHandlers {
       return this.databaseManager.clearDictionaryCloudId(id);
     });
 
+    ipcMain.handle("db-get-dictionary-entries-by-words", async (_event, words) => {
+      if (!Array.isArray(words)) throw new Error("words must be an array");
+      return this.databaseManager.getDictionaryEntriesByWords(words);
+    });
+
+    ipcMain.handle("db-mark-dictionary-words-shared", async (_event, words, sharedAt) => {
+      if (!Array.isArray(words)) throw new Error("words must be an array");
+      return this.databaseManager.markDictionaryWordsShared(words, sharedAt);
+    });
+
+    ipcMain.handle("db-get-moved-dictionary-words", async () => {
+      return this.databaseManager.getMovedDictionaryWords();
+    });
+
+    const requireWorkspaceId = (workspaceId) => {
+      if (typeof workspaceId !== "string" || !workspaceId) {
+        throw new Error("workspaceId must be a non-empty string");
+      }
+    };
+
+    ipcMain.handle("db-shared-dictionary-get", async (_event, workspaceId) => {
+      requireWorkspaceId(workspaceId);
+      return this.databaseManager.getSharedDictionary(workspaceId);
+    });
+
+    ipcMain.handle("db-shared-dictionary-apply-pull", async (_event, workspaceId, change) => {
+      requireWorkspaceId(workspaceId);
+      const { upserts = [], deletedIds = [], meta } = change ?? {};
+      if (!Array.isArray(upserts) || !Array.isArray(deletedIds)) {
+        throw new Error("upserts and deletedIds must be arrays");
+      }
+      return this.databaseManager.applySharedDictionaryPull(workspaceId, {
+        upserts,
+        deletedIds,
+        meta,
+      });
+    });
+
+    ipcMain.handle("db-shared-dictionary-replace", async (_event, workspaceId, full) => {
+      requireWorkspaceId(workspaceId);
+      if (!Array.isArray(full?.entries)) throw new Error("entries must be an array");
+      return this.databaseManager.replaceSharedDictionary(workspaceId, {
+        entries: full.entries,
+        meta: full.meta,
+      });
+    });
+
+    ipcMain.handle("db-shared-dictionary-apply-hides", async (_event, workspaceId, change) => {
+      requireWorkspaceId(workspaceId);
+      const { hidden = [], unhidden = [] } = change ?? {};
+      if (!Array.isArray(hidden) || !Array.isArray(unhidden)) {
+        throw new Error("hidden and unhidden must be arrays");
+      }
+      return this.databaseManager.applySharedDictionaryHides(workspaceId, { hidden, unhidden });
+    });
+
+    ipcMain.handle("db-shared-dictionary-replace-hides", async (_event, workspaceId, hidden) => {
+      requireWorkspaceId(workspaceId);
+      if (!Array.isArray(hidden)) throw new Error("hidden must be an array");
+      return this.databaseManager.replaceSharedDictionaryHides(workspaceId, hidden);
+    });
+
+    ipcMain.handle("db-shared-dictionary-clear", async (_event, workspaceId) => {
+      if (workspaceId != null) requireWorkspaceId(workspaceId);
+      return this.databaseManager.clearSharedDictionary(workspaceId);
+    });
+
     ipcMain.handle("db-broadcast-dictionary-updated", async () => {
       // Emit the normalized list straight from SQLite so renderers see the
       // post-dedupe truth, never a caller-supplied payload.

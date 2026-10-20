@@ -1233,6 +1233,41 @@ class DatabaseManager {
       } catch (err) {
         if (!err.message.includes("duplicate column")) throw err;
       }
+      // Set when the word was shared into a team list. The row stays live as
+      // the sharer's own fallback, so sharing can never lose a word.
+      try {
+        this.db.exec("ALTER TABLE custom_dictionary ADD COLUMN shared_at TEXT");
+      } catch (err) {
+        if (!err.message.includes("duplicate column")) throw err;
+      }
+
+      // Local mirror of the workspaces' shared lists. A hides row means the
+      // member hid that entry; a visible entry has no row.
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS shared_dictionary_entries (
+          cloud_id TEXT PRIMARY KEY,
+          workspace_id TEXT NOT NULL,
+          space_id TEXT,
+          word TEXT NOT NULL,
+          added_by_user_id TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_shared_dictionary_entries_workspace
+          ON shared_dictionary_entries(workspace_id);
+        CREATE TABLE IF NOT EXISTS shared_dictionary_hides (
+          entry_id TEXT PRIMARY KEY,
+          workspace_id TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS shared_dictionary_meta (
+          workspace_id TEXT PRIMARY KEY,
+          scopes_json TEXT NOT NULL,
+          contributors_json TEXT NOT NULL,
+          paused INTEGER NOT NULL,
+          synced_at TEXT NOT NULL
+        );
+      `);
 
       // Backfill client IDs for existing rows
       const syncTables = [
@@ -2453,7 +2488,11 @@ class DatabaseManager {
         "DELETE FROM custom_dictionary WHERE id = ? AND cloud_id IS NULL"
       ),
       restore: this.db.prepare(
-        "UPDATE custom_dictionary SET deleted_at = NULL, source = CASE WHEN source = 'learned' AND ? = 'manual' THEN 'manual' ELSE source END, word = ?, updated_at = datetime('now'), sync_status = 'pending' WHERE id = ?"
+        "UPDATE custom_dictionary SET deleted_at = NULL, shared_at = NULL, source = CASE WHEN source = 'learned' AND ? = 'manual' THEN 'manual' ELSE source END, word = ?, updated_at = datetime('now'), sync_status = 'pending' WHERE id = ?"
+      ),
+      // Pending, so the next push tells the server the word is personal again.
+      clearShared: this.db.prepare(
+        "UPDATE custom_dictionary SET shared_at = NULL, updated_at = datetime('now'), sync_status = 'pending' WHERE id = ? AND shared_at IS NOT NULL"
       ),
       promoteSource: this.db.prepare(
         "UPDATE custom_dictionary SET word = ?, source = 'manual', updated_at = datetime('now'), sync_status = 'pending' WHERE id = ? AND source = 'learned'"
@@ -2486,14 +2525,17 @@ class DatabaseManager {
 
   _dictionaryRows() {
     const rows = this.db
-      .prepare("SELECT id, word, source, deleted_at FROM custom_dictionary")
+      .prepare("SELECT id, word, source, deleted_at, shared_at FROM custom_dictionary")
       .all();
     return { rows, byLower: new Map(rows.map((r) => [r.word.toLowerCase(), r])) };
   }
 
   // Returns true when the word became present, so callers can report how many
   // words they actually added rather than how many they asked for.
-  _upsertDictionaryWord(stmts, word, existing, source) {
+  // `isReAdd` marks an explicit add, which takes a shared word back into
+  // Personal. A whole-list write that merely keeps the word isn't one, or
+  // every settings write would undo every share.
+  _upsertDictionaryWord(stmts, word, existing, source, { isReAdd = false } = {}) {
     if (!existing) {
       return stmts.insert.run(word, source, randomUUID()).changes > 0;
     }
@@ -2506,6 +2548,7 @@ class DatabaseManager {
     } else {
       stmts.updateWord.run(word, existing.id, word);
     }
+    if (isReAdd && existing.shared_at) stmts.clearShared.run(existing.id);
     return false;
   }
 
@@ -2545,7 +2588,10 @@ class DatabaseManager {
           if (this._deleteDictionaryRow(stmts, byLower.get(lower))) removed += 1;
         }
         for (const [lower, word] of additions) {
-          if (this._upsertDictionaryWord(stmts, word, byLower.get(lower), source)) added += 1;
+          const existing = byLower.get(lower);
+          if (this._upsertDictionaryWord(stmts, word, existing, source, { isReAdd: true })) {
+            added += 1;
+          }
         }
       })();
 
@@ -2678,6 +2724,13 @@ class DatabaseManager {
         typeof cloudEntry.created_at === "string" && cloudEntry.created_at
           ? cloudEntry.created_at
           : updatedAt;
+      // An API from before sharing sends no shared_at at all; keep the local
+      // value then, rather than read the missing field as "not shared".
+      const hasSharedAt = Object.hasOwn(cloudEntry, "shared_at");
+      const incomingSharedAt =
+        typeof cloudEntry.shared_at === "string" && cloudEntry.shared_at
+          ? cloudEntry.shared_at
+          : null;
 
       // Resolve the local row deterministically: client_dict_id, then cloud_id,
       // then word.
@@ -2699,24 +2752,33 @@ class DatabaseManager {
         // Manual is sticky — a pull never demotes a local manual row to learned.
         const mergedSource =
           existing.source === "manual" || incomingSource === "manual" ? "manual" : "learned";
+        const sharedAt = hasSharedAt ? incomingSharedAt : existing.shared_at;
         this.db
           .prepare(
             `UPDATE custom_dictionary
-             SET cloud_id = ?, client_dict_id = ?, word = ?, source = ?,
+             SET cloud_id = ?, client_dict_id = ?, word = ?, source = ?, shared_at = ?,
                  sync_status = 'synced', deleted_at = NULL, updated_at = ?
              WHERE id = ?`
           )
-          .run(cloudEntry.id, clientDictId, word, mergedSource, updatedAt, existing.id);
+          .run(cloudEntry.id, clientDictId, word, mergedSource, sharedAt, updatedAt, existing.id);
         return this.db.prepare("SELECT * FROM custom_dictionary WHERE id = ?").get(existing.id);
       }
 
       this.db
         .prepare(
           `INSERT INTO custom_dictionary
-             (word, source, client_dict_id, cloud_id, sync_status, created_at, updated_at)
-           VALUES (?, ?, ?, ?, 'synced', ?, ?)`
+             (word, source, client_dict_id, cloud_id, shared_at, sync_status, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, 'synced', ?, ?)`
         )
-        .run(word, incomingSource, clientDictId, cloudEntry.id, createdAt, updatedAt);
+        .run(
+          word,
+          incomingSource,
+          clientDictId,
+          cloudEntry.id,
+          incomingSharedAt,
+          createdAt,
+          updatedAt
+        );
       return this.db
         .prepare("SELECT * FROM custom_dictionary WHERE client_dict_id = ?")
         .get(clientDictId);
@@ -2765,6 +2827,365 @@ class DatabaseManager {
       return { success: result.changes > 0 };
     } catch (error) {
       debugLogger.error("Error clearing dictionary cloud_id", { error: error.message }, "database");
+      throw error;
+    }
+  }
+
+  // Live personal rows keyed by JS lowercase, the same folding the write
+  // paths dedupe with (SQLite's lower() only folds ASCII).
+  _livePersonalRowsByLower() {
+    const rows = this.db
+      .prepare("SELECT id, word, cloud_id FROM custom_dictionary WHERE deleted_at IS NULL")
+      .all();
+    return new Map(rows.map((row) => [row.word.toLowerCase(), row]));
+  }
+
+  getDictionaryEntriesByWords(words) {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      const byLower = this._livePersonalRowsByLower();
+      const entries = [];
+      for (const lower of this._normalizeDictionaryWords(words).keys()) {
+        const row = byLower.get(lower);
+        if (row) entries.push({ word: row.word, cloudId: row.cloud_id ?? null });
+      }
+      return entries;
+    } catch (error) {
+      debugLogger.error(
+        "Error getting dictionary entries by words",
+        { error: error.message },
+        "database"
+      );
+      throw error;
+    }
+  }
+
+  // The server already recorded the share, so this leaves sync_status and
+  // updated_at alone: a pending push would only echo it back.
+  markDictionaryWordsShared(words, sharedAt) {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      if (typeof sharedAt !== "string" || !sharedAt) {
+        throw new Error("sharedAt must be a non-empty string");
+      }
+      const byLower = this._livePersonalRowsByLower();
+      const mark = this.db.prepare("UPDATE custom_dictionary SET shared_at = ? WHERE id = ?");
+      const marked = [];
+      this.db.transaction(() => {
+        for (const lower of this._normalizeDictionaryWords(words).keys()) {
+          const row = byLower.get(lower);
+          if (!row) continue;
+          mark.run(sharedAt, row.id);
+          marked.push(row.word);
+        }
+      })();
+      return { marked };
+    } catch (error) {
+      debugLogger.error(
+        "Error marking dictionary words shared",
+        { error: error.message },
+        "database"
+      );
+      throw error;
+    }
+  }
+
+  getMovedDictionaryWords() {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      return this.db
+        .prepare(
+          "SELECT word FROM custom_dictionary WHERE deleted_at IS NULL AND shared_at IS NOT NULL ORDER BY id ASC"
+        )
+        .all()
+        .map((row) => row.word);
+    } catch (error) {
+      debugLogger.error(
+        "Error getting moved dictionary words",
+        { error: error.message },
+        "database"
+      );
+      throw error;
+    }
+  }
+
+  getSharedDictionary(workspaceId) {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      const entries = this.db
+        .prepare(
+          `SELECT cloud_id, space_id, word, added_by_user_id, created_at, updated_at
+           FROM shared_dictionary_entries WHERE workspace_id = ?
+           ORDER BY created_at ASC, cloud_id ASC`
+        )
+        .all(workspaceId)
+        .map((row) => ({
+          cloudId: row.cloud_id,
+          spaceId: row.space_id ?? null,
+          word: row.word,
+          addedByUserId: row.added_by_user_id ?? null,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+        }));
+      const hiddenIds = this.db
+        .prepare(
+          "SELECT entry_id FROM shared_dictionary_hides WHERE workspace_id = ? ORDER BY entry_id ASC"
+        )
+        .all(workspaceId)
+        .map((row) => row.entry_id);
+      const metaRow = this.db
+        .prepare("SELECT * FROM shared_dictionary_meta WHERE workspace_id = ?")
+        .get(workspaceId);
+      return { entries, hiddenIds, meta: this._parseSharedDictionaryMeta(metaRow) };
+    } catch (error) {
+      debugLogger.error("Error getting shared dictionary", { error: error.message }, "database");
+      throw error;
+    }
+  }
+
+  _parseSharedDictionaryMeta(row) {
+    if (!row) return null;
+    try {
+      const scopes = JSON.parse(row.scopes_json);
+      const contributors = JSON.parse(row.contributors_json);
+      if (!Array.isArray(scopes) || !Array.isArray(contributors)) return null;
+      return { scopes, contributors, paused: row.paused === 1, syncedAt: row.synced_at };
+    } catch {
+      return null;
+    }
+  }
+
+  // Shared-dictionary writes keep each rule in one place so the delta and
+  // snapshot paths can't drift apart.
+  _sharedDictionaryStatements() {
+    return {
+      // Guarded so a re-applied, unchanged row (the sync's read overlap)
+      // reports no change.
+      upsertEntry: this.db.prepare(
+        `INSERT INTO shared_dictionary_entries
+           (cloud_id, workspace_id, space_id, word, added_by_user_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(cloud_id) DO UPDATE SET
+           workspace_id = excluded.workspace_id, space_id = excluded.space_id,
+           word = excluded.word, added_by_user_id = excluded.added_by_user_id,
+           created_at = excluded.created_at, updated_at = excluded.updated_at
+         WHERE workspace_id IS NOT excluded.workspace_id OR space_id IS NOT excluded.space_id
+           OR word IS NOT excluded.word OR added_by_user_id IS NOT excluded.added_by_user_id
+           OR created_at IS NOT excluded.created_at OR updated_at IS NOT excluded.updated_at`
+      ),
+      deleteEntry: this.db.prepare(
+        "DELETE FROM shared_dictionary_entries WHERE cloud_id = ? AND workspace_id = ?"
+      ),
+      entryIds: this.db.prepare(
+        "SELECT cloud_id, space_id FROM shared_dictionary_entries WHERE workspace_id = ?"
+      ),
+      upsertHide: this.db.prepare(
+        `INSERT INTO shared_dictionary_hides (entry_id, workspace_id, updated_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(entry_id) DO UPDATE SET
+           workspace_id = excluded.workspace_id, updated_at = excluded.updated_at
+         WHERE workspace_id IS NOT excluded.workspace_id OR updated_at IS NOT excluded.updated_at`
+      ),
+      deleteHide: this.db.prepare(
+        "DELETE FROM shared_dictionary_hides WHERE entry_id = ? AND workspace_id = ?"
+      ),
+      hideIds: this.db.prepare(
+        "SELECT entry_id FROM shared_dictionary_hides WHERE workspace_id = ?"
+      ),
+      deleteOrphanHides: this.db.prepare(
+        `DELETE FROM shared_dictionary_hides WHERE workspace_id = ? AND entry_id NOT IN
+           (SELECT cloud_id FROM shared_dictionary_entries WHERE workspace_id = ?)`
+      ),
+      writeMeta: this.db.prepare(
+        `INSERT OR REPLACE INTO shared_dictionary_meta
+           (workspace_id, scopes_json, contributors_json, paused, synced_at)
+         VALUES (?, ?, ?, ?, ?)`
+      ),
+    };
+  }
+
+  // Returns the rows changed; a row that can't be stored as-is (missing
+  // fields, or another workspace's entry) is skipped so a malformed page never
+  // corrupts the mirror.
+  _upsertSharedEntry(stmts, workspaceId, entry) {
+    if (!entry || typeof entry !== "object") return 0;
+    if (typeof entry.id !== "string" || !entry.id) return 0;
+    if (entry.workspace_id != null && entry.workspace_id !== workspaceId) return 0;
+    const word = typeof entry.word === "string" ? entry.word.trim() : "";
+    if (!word) return 0;
+    if (typeof entry.created_at !== "string" || typeof entry.updated_at !== "string") return 0;
+    if (entry.deleted_at) return this._deleteSharedEntry(stmts, workspaceId, entry.id);
+    return stmts.upsertEntry.run(
+      entry.id,
+      workspaceId,
+      typeof entry.space_id === "string" ? entry.space_id : null,
+      word,
+      typeof entry.added_by_user_id === "string" ? entry.added_by_user_id : null,
+      entry.created_at,
+      entry.updated_at
+    ).changes;
+  }
+
+  // A hide never outlives its entry.
+  _deleteSharedEntry(stmts, workspaceId, entryId) {
+    const changes = stmts.deleteEntry.run(entryId, workspaceId).changes;
+    stmts.deleteHide.run(entryId, workspaceId);
+    return changes;
+  }
+
+  _writeSharedDictionaryMeta(stmts, workspaceId, meta) {
+    if (
+      !meta ||
+      !Array.isArray(meta.scopes) ||
+      !Array.isArray(meta.contributors) ||
+      typeof meta.paused !== "boolean"
+    ) {
+      throw new Error("meta must have scopes and contributors arrays and a boolean paused");
+    }
+    stmts.writeMeta.run(
+      workspaceId,
+      JSON.stringify(meta.scopes),
+      JSON.stringify(meta.contributors),
+      meta.paused ? 1 : 0,
+      new Date().toISOString()
+    );
+  }
+
+  // Applies one delta page. The last page of a pass carries `meta`; its
+  // scopes are the lists the member can still read, so words of a space they
+  // lost go now rather than linger until the next snapshot.
+  applySharedDictionaryPull(workspaceId, { upserts = [], deletedIds = [], meta } = {}) {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      const stmts = this._sharedDictionaryStatements();
+      let changed = 0;
+      this.db.transaction(() => {
+        for (const entry of upserts) changed += this._upsertSharedEntry(stmts, workspaceId, entry);
+        for (const id of deletedIds) {
+          if (typeof id === "string" && id)
+            changed += this._deleteSharedEntry(stmts, workspaceId, id);
+        }
+        if (meta === undefined) return;
+        this._writeSharedDictionaryMeta(stmts, workspaceId, meta);
+        const allowedSpaces = new Set(
+          meta.scopes.map((s) => s?.space_id).filter((id) => typeof id === "string")
+        );
+        for (const row of stmts.entryIds.all(workspaceId)) {
+          if (row.space_id !== null && !allowedSpaces.has(row.space_id)) {
+            changed += stmts.deleteEntry.run(row.cloud_id, workspaceId).changes;
+          }
+        }
+        stmts.deleteOrphanHides.run(workspaceId, workspaceId);
+      })();
+      return { changed };
+    } catch (error) {
+      debugLogger.error(
+        "Error applying shared dictionary pull",
+        { error: error.message },
+        "database"
+      );
+      throw error;
+    }
+  }
+
+  // Snapshot write: the workspace's entries become exactly `entries`.
+  replaceSharedDictionary(workspaceId, { entries = [], meta } = {}) {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      const stmts = this._sharedDictionaryStatements();
+      let changed = 0;
+      this.db.transaction(() => {
+        const incomingIds = new Set(
+          entries.filter((e) => e && !e.deleted_at && typeof e.id === "string").map((e) => e.id)
+        );
+        for (const row of stmts.entryIds.all(workspaceId)) {
+          if (!incomingIds.has(row.cloud_id)) {
+            changed += stmts.deleteEntry.run(row.cloud_id, workspaceId).changes;
+          }
+        }
+        for (const entry of entries) changed += this._upsertSharedEntry(stmts, workspaceId, entry);
+        this._writeSharedDictionaryMeta(stmts, workspaceId, meta);
+        stmts.deleteOrphanHides.run(workspaceId, workspaceId);
+      })();
+      return { changed };
+    } catch (error) {
+      debugLogger.error("Error replacing shared dictionary", { error: error.message }, "database");
+      throw error;
+    }
+  }
+
+  // A hide for an entry not mirrored yet is kept: the entry can arrive on a
+  // later pass, and the hides cursor will have moved past the hide by then.
+  _upsertSharedHide(stmts, workspaceId, hide) {
+    if (!hide || typeof hide.entryId !== "string" || !hide.entryId) return 0;
+    if (typeof hide.updatedAt !== "string" || !hide.updatedAt) return 0;
+    return stmts.upsertHide.run(hide.entryId, workspaceId, hide.updatedAt).changes;
+  }
+
+  applySharedDictionaryHides(workspaceId, { hidden = [], unhidden = [] } = {}) {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      const stmts = this._sharedDictionaryStatements();
+      let changed = 0;
+      this.db.transaction(() => {
+        for (const hide of hidden) changed += this._upsertSharedHide(stmts, workspaceId, hide);
+        for (const id of unhidden) {
+          if (typeof id === "string" && id)
+            changed += stmts.deleteHide.run(id, workspaceId).changes;
+        }
+      })();
+      return { changed };
+    } catch (error) {
+      debugLogger.error(
+        "Error applying shared dictionary hides",
+        { error: error.message },
+        "database"
+      );
+      throw error;
+    }
+  }
+
+  replaceSharedDictionaryHides(workspaceId, hidden = []) {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      const stmts = this._sharedDictionaryStatements();
+      this.db.transaction(() => {
+        const incomingIds = new Set(hidden.map((hide) => hide?.entryId));
+        for (const row of stmts.hideIds.all(workspaceId)) {
+          if (!incomingIds.has(row.entry_id)) stmts.deleteHide.run(row.entry_id, workspaceId);
+        }
+        for (const hide of hidden) this._upsertSharedHide(stmts, workspaceId, hide);
+      })();
+    } catch (error) {
+      debugLogger.error(
+        "Error replacing shared dictionary hides",
+        { error: error.message },
+        "database"
+      );
+      throw error;
+    }
+  }
+
+  // With no workspace, clears every workspace (account change, sign-out).
+  clearSharedDictionary(workspaceId) {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      const tables = [
+        "shared_dictionary_entries",
+        "shared_dictionary_hides",
+        "shared_dictionary_meta",
+      ];
+      this.db.transaction(() => {
+        for (const table of tables) {
+          if (workspaceId == null) {
+            this.db.prepare(`DELETE FROM ${table}`).run();
+          } else {
+            this.db.prepare(`DELETE FROM ${table} WHERE workspace_id = ?`).run(workspaceId);
+          }
+        }
+      })();
+    } catch (error) {
+      debugLogger.error("Error clearing shared dictionary", { error: error.message }, "database");
       throw error;
     }
   }

@@ -34,6 +34,14 @@ import type {
   NoteAttendee,
   NoteAttendeesRequest,
 } from "./connectors";
+import type {
+  CloudSharedEntry,
+  SharedDictionaryHideRecord,
+  SharedDictionaryMeta,
+  SharedDictionarySnapshot,
+} from "./sharedDictionary";
+
+export type { SharedDictionarySnapshot } from "./sharedDictionary";
 
 export type LocalTranscriptionProvider = "whisper" | "nvidia" | "cohere";
 
@@ -692,6 +700,8 @@ export interface DictionaryEntryItem {
   cloud_id: string | null;
   sync_status: "synced" | "pending" | "error";
   deleted_at: string | null;
+  // Set once the word was shared into a team list; the row stays live.
+  shared_at: string | null;
 }
 
 export interface SnippetEntryItem {
@@ -3735,6 +3745,38 @@ declare global {
       hardDeleteDictionary?: (id: number) => Promise<{ success: boolean; id: number }>;
       clearDictionaryCloudId?: (id: number) => Promise<{ success: boolean }>;
       broadcastDictionaryUpdated?: () => Promise<{ success: boolean }>;
+      /** Live personal words matching `words` case-insensitively, in their stored spelling. */
+      getDictionaryEntriesByWords?: (
+        words: string[]
+      ) => Promise<Array<{ word: string; cloudId: string | null }>>;
+      /** Records a share the server accepted; sync state is left unchanged. */
+      markDictionaryWordsShared?: (
+        words: string[],
+        sharedAt: string
+      ) => Promise<{ marked: string[] }>;
+      /** Live personal words that were shared into a team list. */
+      getMovedDictionaryWords?: () => Promise<string[]>;
+
+      getSharedDictionary?: (workspaceId: string) => Promise<SharedDictionarySnapshot>;
+      applySharedDictionaryPull?: (
+        workspaceId: string,
+        change: { upserts: CloudSharedEntry[]; deletedIds: string[]; meta?: SharedDictionaryMeta }
+      ) => Promise<{ changed: number }>;
+      /** Snapshot write: the workspace's entries become exactly `full.entries`. */
+      replaceSharedDictionary?: (
+        workspaceId: string,
+        full: { entries: CloudSharedEntry[]; meta: SharedDictionaryMeta }
+      ) => Promise<{ changed: number }>;
+      applySharedDictionaryHides?: (
+        workspaceId: string,
+        change: { hidden: SharedDictionaryHideRecord[]; unhidden: string[] }
+      ) => Promise<{ changed: number }>;
+      replaceSharedDictionaryHides?: (
+        workspaceId: string,
+        hidden: SharedDictionaryHideRecord[]
+      ) => Promise<void>;
+      /** With no workspace, clears every workspace's shared words. */
+      clearSharedDictionary?: (workspaceId?: string) => Promise<void>;
 
       getPendingSnippets?: () => Promise<SnippetEntryItem[]>;
       getPendingSnippetDeletes?: () => Promise<SnippetEntryItem[]>;
