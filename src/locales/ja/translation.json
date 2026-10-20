@@ -3461,7 +3461,52 @@
       "group": "共有",
       "allShared": "すべての共有",
       "everyoneAt": "{{workspace}} の全員",
-      "hidden": "非表示"
+      "hidden": "非表示",
+      "add": {
+        "placeholder": "単語を追加…",
+        "to": "{{list}} に追加",
+        "chooseList": "追加先のリストを選択"
+      },
+      "alreadyIn": "{{list}} に追加済み",
+      "importTo": "{{list}} にインポート",
+      "actions": {
+        "share": "共有",
+        "edit": "編集",
+        "delete": "削除",
+        "hide": "自分には非表示",
+        "deleteForEveryone": "全員から削除",
+        "unhide": "再表示"
+      },
+      "attribution": {
+        "you": "あなた",
+        "former": "元メンバー"
+      },
+      "toolbar": {
+        "search": "検索",
+        "searchPlaceholder": "このリストを検索",
+        "closeSearch": "検索を閉じる",
+        "sort": "並べ替え",
+        "sync": "今すぐ同期",
+        "syncedAgo": "{{time}}前に同期",
+        "syncedJustNow": "たった今同期",
+        "notSynced": "まだ同期されていません"
+      },
+      "sort": {
+        "az": "A–Z",
+        "za": "Z–A",
+        "newest": "新しい順",
+        "oldest": "古い順"
+      },
+      "memberCount_one": "{{count}} 人のメンバー",
+      "memberCount_other": "{{count}} 人のメンバー",
+      "emptyList": "{{list}} にはまだ単語がありません",
+      "noMatches": "「{{query}}」に一致する単語はありません",
+      "deletedForEveryone": "「{{word}}」を全員から削除しました",
+      "undo": "元に戻す",
+      "errors": {
+        "generic": "{{list}} を更新できませんでした。もう一度お試しください。",
+        "listFull": "{{list}} がいっぱいです"
+      }
     }
   },
   "referral": {

@@ -3533,7 +3533,52 @@
       "group": "Compartilhadas",
       "allShared": "Todas as compartilhadas",
       "everyoneAt": "Todos em {{workspace}}",
-      "hidden": "Ocultas"
+      "hidden": "Ocultas",
+      "add": {
+        "placeholder": "Adicionar uma palavra…",
+        "to": "em {{list}}",
+        "chooseList": "Escolher a lista onde adicionar"
+      },
+      "alreadyIn": "Já está em {{list}}",
+      "importTo": "Importar para {{list}}",
+      "actions": {
+        "share": "Compartilhar",
+        "edit": "Editar",
+        "delete": "Excluir",
+        "hide": "Ocultar para mim",
+        "deleteForEveryone": "Excluir para todos",
+        "unhide": "Mostrar"
+      },
+      "attribution": {
+        "you": "Você",
+        "former": "Ex-membro"
+      },
+      "toolbar": {
+        "search": "Pesquisar",
+        "searchPlaceholder": "Pesquisar nesta lista",
+        "closeSearch": "Fechar pesquisa",
+        "sort": "Ordenar",
+        "sync": "Sincronizar agora",
+        "syncedAgo": "Sincronizado há {{time}}",
+        "syncedJustNow": "Sincronizado agora",
+        "notSynced": "Ainda não sincronizado"
+      },
+      "sort": {
+        "az": "A–Z",
+        "za": "Z–A",
+        "newest": "Mais recentes primeiro",
+        "oldest": "Mais antigas primeiro"
+      },
+      "memberCount_one": "{{count}} membro",
+      "memberCount_other": "{{count}} membros",
+      "emptyList": "Ainda não há palavras em {{list}}",
+      "noMatches": "Nenhuma palavra corresponde a “{{query}}”",
+      "deletedForEveryone": "“{{word}}” excluída para todos",
+      "undo": "Desfazer",
+      "errors": {
+        "generic": "Não foi possível atualizar {{list}}. Tente novamente.",
+        "listFull": "{{list}} está cheia"
+      }
     }
   },
   "insights": {

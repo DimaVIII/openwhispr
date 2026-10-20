@@ -3559,7 +3559,54 @@
       "group": "Общие",
       "allShared": "Все общие",
       "everyoneAt": "Все в {{workspace}}",
-      "hidden": "Скрытые"
+      "hidden": "Скрытые",
+      "add": {
+        "placeholder": "Добавить слово…",
+        "to": "в {{list}}",
+        "chooseList": "Выберите список для добавления"
+      },
+      "alreadyIn": "Уже есть в {{list}}",
+      "importTo": "Импортировать в {{list}}",
+      "actions": {
+        "share": "Поделиться",
+        "edit": "Изменить",
+        "delete": "Удалить",
+        "hide": "Скрыть для меня",
+        "deleteForEveryone": "Удалить для всех",
+        "unhide": "Показать"
+      },
+      "attribution": {
+        "you": "Вы",
+        "former": "Бывший участник"
+      },
+      "toolbar": {
+        "search": "Поиск",
+        "searchPlaceholder": "Искать в этом списке",
+        "closeSearch": "Закрыть поиск",
+        "sort": "Сортировка",
+        "sync": "Синхронизировать",
+        "syncedAgo": "Синхронизировано {{time}} назад",
+        "syncedJustNow": "Только что синхронизировано",
+        "notSynced": "Ещё не синхронизировано"
+      },
+      "sort": {
+        "az": "А–Я",
+        "za": "Я–А",
+        "newest": "Сначала новые",
+        "oldest": "Сначала старые"
+      },
+      "memberCount_one": "{{count}} участник",
+      "memberCount_few": "{{count}} участника",
+      "memberCount_many": "{{count}} участников",
+      "memberCount_other": "{{count}} участника",
+      "emptyList": "В {{list}} пока нет слов",
+      "noMatches": "Нет слов, совпадающих с «{{query}}»",
+      "deletedForEveryone": "«{{word}}» удалено для всех",
+      "undo": "Отменить",
+      "errors": {
+        "generic": "Не удалось обновить {{list}}. Попробуйте ещё раз.",
+        "listFull": "Список {{list}} заполнен"
+      }
     }
   },
   "insights": {

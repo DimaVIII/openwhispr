@@ -3533,7 +3533,52 @@
       "group": "共享",
       "allShared": "全部共享",
       "everyoneAt": "{{workspace}} 全員",
-      "hidden": "已隱藏"
+      "hidden": "已隱藏",
+      "add": {
+        "placeholder": "新增詞語…",
+        "to": "新增到 {{list}}",
+        "chooseList": "選擇要新增到的清單"
+      },
+      "alreadyIn": "已在 {{list}} 中",
+      "importTo": "匯入到 {{list}}",
+      "actions": {
+        "share": "共用",
+        "edit": "編輯",
+        "delete": "刪除",
+        "hide": "對我隱藏",
+        "deleteForEveryone": "為所有人刪除",
+        "unhide": "取消隱藏"
+      },
+      "attribution": {
+        "you": "你",
+        "former": "前成員"
+      },
+      "toolbar": {
+        "search": "搜尋",
+        "searchPlaceholder": "搜尋此清單",
+        "closeSearch": "關閉搜尋",
+        "sort": "排序",
+        "sync": "立即同步",
+        "syncedAgo": "{{time}}前已同步",
+        "syncedJustNow": "剛剛已同步",
+        "notSynced": "尚未同步"
+      },
+      "sort": {
+        "az": "A–Z",
+        "za": "Z–A",
+        "newest": "最新優先",
+        "oldest": "最早優先"
+      },
+      "memberCount_one": "{{count}} 位成員",
+      "memberCount_other": "{{count}} 位成員",
+      "emptyList": "{{list}} 中還沒有詞語",
+      "noMatches": "沒有與「{{query}}」相符的詞語",
+      "deletedForEveryone": "已為所有人刪除「{{word}}」",
+      "undo": "復原",
+      "errors": {
+        "generic": "無法更新 {{list}}，請再試一次。",
+        "listFull": "{{list}} 已滿"
+      }
     }
   },
   "insights": {

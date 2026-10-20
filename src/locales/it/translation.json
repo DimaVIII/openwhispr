@@ -3533,7 +3533,52 @@
       "group": "Condivise",
       "allShared": "Tutte le condivise",
       "everyoneAt": "Tutti in {{workspace}}",
-      "hidden": "Nascoste"
+      "hidden": "Nascoste",
+      "add": {
+        "placeholder": "Aggiungi una parola…",
+        "to": "a {{list}}",
+        "chooseList": "Scegli la lista a cui aggiungere"
+      },
+      "alreadyIn": "Già in {{list}}",
+      "importTo": "Importa in {{list}}",
+      "actions": {
+        "share": "Condividi",
+        "edit": "Modifica",
+        "delete": "Elimina",
+        "hide": "Nascondi per me",
+        "deleteForEveryone": "Elimina per tutti",
+        "unhide": "Mostra"
+      },
+      "attribution": {
+        "you": "Tu",
+        "former": "Ex membro"
+      },
+      "toolbar": {
+        "search": "Cerca",
+        "searchPlaceholder": "Cerca in questa lista",
+        "closeSearch": "Chiudi la ricerca",
+        "sort": "Ordina",
+        "sync": "Sincronizza ora",
+        "syncedAgo": "Sincronizzato {{time}} fa",
+        "syncedJustNow": "Sincronizzato ora",
+        "notSynced": "Non ancora sincronizzato"
+      },
+      "sort": {
+        "az": "A–Z",
+        "za": "Z–A",
+        "newest": "Più recenti prima",
+        "oldest": "Meno recenti prima"
+      },
+      "memberCount_one": "{{count}} membro",
+      "memberCount_other": "{{count}} membri",
+      "emptyList": "Ancora nessuna parola in {{list}}",
+      "noMatches": "Nessuna parola corrisponde a «{{query}}»",
+      "deletedForEveryone": "«{{word}}» eliminata per tutti",
+      "undo": "Annulla",
+      "errors": {
+        "generic": "Impossibile aggiornare {{list}}. Riprova.",
+        "listFull": "{{list}} è piena"
+      }
     }
   },
   "insights": {

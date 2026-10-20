@@ -11,6 +11,13 @@ import { canManageWorkspace } from "../../lib/spacePermissions";
 
 export type SortKey = "az" | "za" | "newest" | "oldest";
 
+export const SORT_LABEL_KEYS: Record<SortKey, string> = {
+  az: "dictionary.shared.sort.az",
+  za: "dictionary.shared.sort.za",
+  newest: "dictionary.shared.sort.newest",
+  oldest: "dictionary.shared.sort.oldest",
+};
+
 export type SharedAccessState =
   "unavailable" | "noWorkspace" | "upgradeAdmin" | "upgradeMember" | "paused" | "available";
 

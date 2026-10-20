@@ -3884,7 +3884,52 @@
       "group": "Partagés",
       "allShared": "Tous les partagés",
       "everyoneAt": "Tout le monde chez {{workspace}}",
-      "hidden": "Masqués"
+      "hidden": "Masqués",
+      "add": {
+        "placeholder": "Ajouter un mot…",
+        "to": "à {{list}}",
+        "chooseList": "Choisir la liste où ajouter"
+      },
+      "alreadyIn": "Déjà dans {{list}}",
+      "importTo": "Importer dans {{list}}",
+      "actions": {
+        "share": "Partager",
+        "edit": "Modifier",
+        "delete": "Supprimer",
+        "hide": "Masquer pour moi",
+        "deleteForEveryone": "Supprimer pour tous",
+        "unhide": "Afficher"
+      },
+      "attribution": {
+        "you": "Vous",
+        "former": "Ancien membre"
+      },
+      "toolbar": {
+        "search": "Rechercher",
+        "searchPlaceholder": "Rechercher dans cette liste",
+        "closeSearch": "Fermer la recherche",
+        "sort": "Trier",
+        "sync": "Synchroniser",
+        "syncedAgo": "Synchronisé il y a {{time}}",
+        "syncedJustNow": "Synchronisé à l’instant",
+        "notSynced": "Pas encore synchronisé"
+      },
+      "sort": {
+        "az": "A–Z",
+        "za": "Z–A",
+        "newest": "Plus récents d’abord",
+        "oldest": "Plus anciens d’abord"
+      },
+      "memberCount_one": "{{count}} membre",
+      "memberCount_other": "{{count}} membres",
+      "emptyList": "Aucun mot dans {{list}} pour l’instant",
+      "noMatches": "Aucun mot ne correspond à « {{query}} »",
+      "deletedForEveryone": "« {{word}} » supprimé pour tous",
+      "undo": "Annuler",
+      "errors": {
+        "generic": "Impossible de mettre à jour {{list}}. Réessayez.",
+        "listFull": "{{list}} est pleine"
+      }
     }
   },
   "support": {

@@ -3884,7 +3884,52 @@
       "group": "Shared",
       "allShared": "All shared",
       "everyoneAt": "Everyone at {{workspace}}",
-      "hidden": "Hidden"
+      "hidden": "Hidden",
+      "add": {
+        "placeholder": "Add a word…",
+        "to": "to {{list}}",
+        "chooseList": "Choose the list to add to"
+      },
+      "alreadyIn": "Already in {{list}}",
+      "importTo": "Import to {{list}}",
+      "actions": {
+        "share": "Share",
+        "edit": "Edit",
+        "delete": "Delete",
+        "hide": "Hide for me",
+        "deleteForEveryone": "Delete for everyone",
+        "unhide": "Unhide"
+      },
+      "attribution": {
+        "you": "You",
+        "former": "Former member"
+      },
+      "toolbar": {
+        "search": "Search",
+        "searchPlaceholder": "Search this list",
+        "closeSearch": "Close search",
+        "sort": "Sort",
+        "sync": "Sync now",
+        "syncedAgo": "Synced {{time}} ago",
+        "syncedJustNow": "Synced just now",
+        "notSynced": "Not synced yet"
+      },
+      "sort": {
+        "az": "A–Z",
+        "za": "Z–A",
+        "newest": "Newest first",
+        "oldest": "Oldest first"
+      },
+      "memberCount_one": "{{count}} member",
+      "memberCount_other": "{{count}} members",
+      "emptyList": "No words in {{list}} yet",
+      "noMatches": "No words match “{{query}}”",
+      "deletedForEveryone": "Deleted “{{word}}” for everyone",
+      "undo": "Undo",
+      "errors": {
+        "generic": "Couldn't update {{list}}. Try again.",
+        "listFull": "{{list}} is full"
+      }
     }
   },
   "support": {

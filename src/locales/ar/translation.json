@@ -1432,7 +1432,56 @@
       "group": "مشتركة",
       "allShared": "كل الكلمات المشتركة",
       "everyoneAt": "الجميع في {{workspace}}",
-      "hidden": "مخفية"
+      "hidden": "مخفية",
+      "add": {
+        "placeholder": "أضف كلمة…",
+        "to": "إلى {{list}}",
+        "chooseList": "اختر القائمة التي تريد الإضافة إليها"
+      },
+      "alreadyIn": "موجودة بالفعل في {{list}}",
+      "importTo": "استيراد إلى {{list}}",
+      "actions": {
+        "share": "مشاركة",
+        "edit": "تعديل",
+        "delete": "حذف",
+        "hide": "إخفاء عني",
+        "deleteForEveryone": "حذف للجميع",
+        "unhide": "إظهار"
+      },
+      "attribution": {
+        "you": "أنت",
+        "former": "عضو سابق"
+      },
+      "toolbar": {
+        "search": "بحث",
+        "searchPlaceholder": "ابحث في هذه القائمة",
+        "closeSearch": "إغلاق البحث",
+        "sort": "ترتيب",
+        "sync": "مزامنة الآن",
+        "syncedAgo": "تمت المزامنة قبل {{time}}",
+        "syncedJustNow": "تمت المزامنة للتو",
+        "notSynced": "لم تتم المزامنة بعد"
+      },
+      "sort": {
+        "az": "أ–ي",
+        "za": "ي–أ",
+        "newest": "الأحدث أولًا",
+        "oldest": "الأقدم أولًا"
+      },
+      "memberCount_zero": "{{count}} عضو",
+      "memberCount_one": "عضو واحد ({{count}})",
+      "memberCount_two": "عضوان ({{count}})",
+      "memberCount_few": "{{count}} أعضاء",
+      "memberCount_many": "{{count}} عضوًا",
+      "memberCount_other": "{{count}} عضو",
+      "emptyList": "لا توجد كلمات في {{list}} بعد",
+      "noMatches": "لا توجد كلمات تطابق «{{query}}»",
+      "deletedForEveryone": "تم حذف «{{word}}» للجميع",
+      "undo": "تراجع",
+      "errors": {
+        "generic": "تعذّر تحديث {{list}}. حاول مرة أخرى.",
+        "listFull": "{{list}} ممتلئة"
+      }
     }
   },
   "promptStudio": {

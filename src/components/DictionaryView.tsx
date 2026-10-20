@@ -1,17 +1,6 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  CornerDownLeft,
-  Download,
-  NotebookPen,
-  PanelRight,
-  Pencil,
-  Plus,
-  Sparkles,
-  Upload,
-  X,
-} from "./icons";
-import { Input } from "./ui/input";
+import { Download, NotebookPen, PanelRight, Plus, Sparkles } from "./icons";
 import { Textarea } from "./ui/textarea";
 import { Button } from "./ui/button";
 import { PAGE_CONTENT_WIDTH_CLASS } from "./ui/pageWidth";
@@ -22,28 +11,207 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
 import { useToast } from "./ui/useToast";
 import SnippetsView from "./SnippetsView";
 import DictionaryEmptyIllustration from "./DictionaryEmptyIllustration";
+import { DictionaryListPicker } from "./dictionary/DictionaryListPicker";
+import { DictionaryToolbar } from "./dictionary/DictionaryToolbar";
+import {
+  DictionaryAddField,
+  type AddTarget,
+  type AddTargetOption,
+} from "./dictionary/DictionaryAddField";
+import { DictionaryWordList } from "./dictionary/DictionaryWordList";
+import {
+  buildPicker,
+  defaultAddTarget,
+  resolveSharedAccessState,
+  rowsForList,
+  shareTargetsFor,
+  SORT_LABEL_KEYS,
+  visiblePersonalWords,
+  type DictionaryRow,
+  type SortKey,
+} from "./dictionary/dictionaryViewModel";
 import { useSettings } from "../hooks/useSettings";
+import { useWorkspace } from "../hooks/useWorkspace";
+import { useAuth } from "../hooks/useAuth";
+import { useSharedDictionaryStore, type ListKey } from "../stores/sharedDictionaryStore";
+import {
+  SharedDictionaryActionError,
+  addSharedWords,
+  deleteSharedWords,
+  editSharedWord,
+  setSharedWordsHidden,
+  type SharedDictionaryActionReason,
+} from "../services/sharedDictionaryActions";
+import { syncService } from "../services/SyncService";
 import { getAgentName } from "../utils/agentName";
 import { parseDictionaryImportText } from "../helpers/dictionaryImport";
 import { getDictionaryHintTiers } from "../utils/snippets";
 import { formatDictionaryPrompt, WHISPER_DECODER_PROMPT_CHARS } from "../utils/dictionaryPromptCap";
 
+const SORT_STORAGE_KEY = "dictionarySort";
+const ADD_TARGET_STORAGE_KEY = "dictionaryAddTarget";
+
+function readStorage(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStorage(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Without storage the choice lasts for this visit only.
+  }
+}
+
+function readSort(): SortKey {
+  const stored = readStorage(SORT_STORAGE_KEY);
+  return stored !== null && Object.hasOwn(SORT_LABEL_KEYS, stored) ? (stored as SortKey) : "az";
+}
+
+// "personal", null (the workspace list) or a space id; undefined when nothing valid is stored.
+function readRememberedTarget(): AddTarget | undefined {
+  const stored = readStorage(ADD_TARGET_STORAGE_KEY);
+  if (stored === null) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(stored);
+    if (parsed === null) return null;
+    return typeof parsed === "string" ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+const isSharedList = (list: ListKey): boolean => list !== "all" && list !== "personal";
+const sameWord = (left: string, right: string): boolean =>
+  left.trim().toLowerCase() === right.trim().toLowerCase();
+const reasonOf = (error: unknown): SharedDictionaryActionReason =>
+  error instanceof SharedDictionaryActionError ? error.reason : "network";
+
 export default function DictionaryView() {
   const { t } = useTranslation();
   const { customDictionary, updateCustomDictionary, snippets } = useSettings();
+  const { active: workspace } = useWorkspace();
+  const { isSignedIn, user } = useAuth();
   const agentName = getAgentName();
   const { toast } = useToast();
 
-  const [newWord, setNewWord] = useState("");
-  const [showEmptyInput, setShowEmptyInput] = useState(false);
+  const status = useSharedDictionaryStore((state) => state.status);
+  const snapshot = useSharedDictionaryStore((state) => state.snapshot);
+  const movedPersonal = useSharedDictionaryStore((state) => state.movedPersonal);
+  const storeSyncing = useSharedDictionaryStore((state) => state.syncing);
+  const lastSyncedAt = useSharedDictionaryStore((state) => state.lastSyncedAt);
+  const requestedList = useSharedDictionaryStore((state) => state.requestedList);
+
+  const [tab, setTab] = useState("dictionary");
+  const [list, setList] = useState<ListKey>(requestedList ?? "all");
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<SortKey>(readSort);
+  const [rememberedTarget, setRememberedTarget] = useState<AddTarget | undefined>(
+    readRememberedTarget
+  );
+  // A target picked from the chip holds for the list it was picked on.
+  const [pickedTarget, setPickedTarget] = useState<{ list: ListKey; target: AddTarget } | null>(
+    null
+  );
+  const [manualSyncing, setManualSyncing] = useState(false);
   const [bulkText, setBulkText] = useState("");
   const [showBulkImport, setShowBulkImport] = useState(false);
-  const [editingWord, setEditingWord] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState("");
   const [confirmClear, setConfirmClear] = useState(false);
   const addInputRef = useRef<HTMLInputElement>(null);
 
-  const pendingImportCount = useMemo(() => parseDictionaryImportText(bulkText).length, [bulkText]);
+  // A window's snapshot only refreshes where the last sync pass ran, so the page
+  // rereads the local mirror whenever it opens.
+  useEffect(() => {
+    void useSharedDictionaryStore.getState().reload();
+  }, []);
+
+  // The arrival toast's "View words" can ask for a list while the page is open.
+  useEffect(() => {
+    if (!requestedList) return;
+    setList(requestedList);
+    useSharedDictionaryStore.getState().setRequestedList(null);
+  }, [requestedList]);
+
+  const workspaceId = workspace?.id ?? null;
+  const workspaceName = workspace?.name ?? "";
+  const access = resolveSharedAccessState({
+    capabilityAvailable: status !== "unavailable",
+    workspace,
+    serverPaused: snapshot?.meta?.paused ?? null,
+  });
+
+  // Same membership rule as agentNameDictionaryChanges: a stored spelling that
+  // differs only by case is still the agent name's entry, so keep it hidden.
+  const userWords = useMemo(() => {
+    const agentWord = agentName.trim().toLowerCase();
+    return customDictionary.filter((word) => word.trim().toLowerCase() !== agentWord);
+  }, [customDictionary, agentName]);
+
+  // Clear-all and export leave out words moved into a team list: they stay
+  // under the shared copy as the member's fallback.
+  const visiblePersonal = useMemo(
+    () => visiblePersonalWords(userWords, movedPersonal, snapshot),
+    [userWords, movedPersonal, snapshot]
+  );
+
+  const pickerEntries = useMemo(
+    () => buildPicker({ personal: userWords, movedPersonal, snapshot, workspaceName, access, t }),
+    [userWords, movedPersonal, snapshot, workspaceName, access, t]
+  );
+
+  // A list the member lost (a space they left, the feature switched off) falls back to All words.
+  const openList: ListKey =
+    pickerEntries.some((entry) => entry.key === list) &&
+    (access !== "unavailable" || !isSharedList(list))
+      ? list
+      : "all";
+  const openEntry = pickerEntries.find((entry) => entry.key === openList);
+  const locked = isSharedList(openList) && access !== "available";
+
+  const rows = useMemo(
+    () =>
+      rowsForList(openList, {
+        personal: userWords,
+        movedPersonal,
+        snapshot,
+        workspaceName,
+        currentUserId: user?.id ?? null,
+        search,
+        sort,
+        access,
+      }),
+    [openList, userWords, movedPersonal, snapshot, workspaceName, user?.id, search, sort, access]
+  );
+
+  const addTargets = useMemo((): AddTargetOption[] => {
+    const personal: AddTargetOption = {
+      target: "personal",
+      label: t("dictionary.shared.personal"),
+    };
+    if (access !== "available" || !snapshot?.meta) return [personal];
+    const shared = shareTargetsFor([], snapshot, workspaceName, t);
+    return [personal, ...shared.map(({ target, label }) => ({ target, label }))];
+  }, [access, snapshot, workspaceName, t]);
+
+  const isWritable = (target: AddTarget | undefined): target is AddTarget =>
+    target !== undefined && addTargets.some((option) => option.target === target);
+  const preferredTarget =
+    pickedTarget?.list === openList
+      ? pickedTarget.target
+      : defaultAddTarget(openList, isWritable(rememberedTarget) ? rememberedTarget : undefined);
+  const addTarget: AddTarget = isWritable(preferredTarget) ? preferredTarget : "personal";
+
+  const listLabel = (target: AddTarget): string =>
+    addTargets.find((option) => option.target === target)?.label ?? t("dictionary.shared.personal");
+
+  const rememberTarget = (target: AddTarget): void => {
+    setRememberedTarget(target);
+    writeStorage(ADD_TARGET_STORAGE_KEY, JSON.stringify(target));
+  };
 
   // Length of the user's own part of the STT prompt (words + snippet triggers,
   // comma-joined). Team words are left out: members can't edit them, and they
@@ -56,77 +224,135 @@ export default function DictionaryView() {
     [customDictionary, snippets]
   );
 
-  // Same membership rule as agentNameDictionaryChanges: a stored spelling that
-  // differs only by case is still the agent name's entry, so keep it hidden.
-  const userWords = useMemo(() => {
-    const agentWord = agentName.trim().toLowerCase();
-    return customDictionary.filter((w) => w.trim().toLowerCase() !== agentWord);
-  }, [customDictionary, agentName]);
+  const pendingImportCount = useMemo(() => parseDictionaryImportText(bulkText).length, [bulkText]);
 
-  const searchQuery = newWord.trim().toLowerCase();
-  const visibleWords = useMemo(
-    () =>
-      searchQuery ? userWords.filter((w) => w.toLowerCase().includes(searchQuery)) : userWords,
-    [userWords, searchQuery]
-  );
+  const wordsInTarget = (target: AddTarget): string[] => {
+    if (target === "personal") return customDictionary;
+    // A hidden word still belongs to its list, so the server would refuse it too.
+    return (snapshot?.entries ?? [])
+      .filter((entry) => entry.spaceId === target)
+      .map((entry) => entry.word);
+  };
 
-  const addWords = useCallback(
-    (text: string): number => {
-      const existing = new Set(customDictionary.map((w) => w.toLowerCase()));
-      const words = parseDictionaryImportText(text).filter((w) => {
-        if (existing.has(w.toLowerCase())) return false;
-        existing.add(w.toLowerCase());
-        return true;
+  const showActionError = useCallback(
+    (reason: SharedDictionaryActionReason, listName: string): void => {
+      toast({
+        title:
+          reason === "listFull"
+            ? t("dictionary.shared.errors.listFull", { list: listName })
+            : t("dictionary.shared.errors.generic", { list: listName }),
+        variant: "destructive",
       });
-      if (words.length > 0) {
-        updateCustomDictionary({ add: words });
+    },
+    [toast, t]
+  );
+
+  // Resolves true once nothing is left to add, which clears the field.
+  const addWords = async (text: string): Promise<boolean> => {
+    const target = addTarget;
+    const existing = new Set(wordsInTarget(target).map((word) => word.toLowerCase()));
+    const words = parseDictionaryImportText(text).filter((word) => {
+      if (existing.has(word.toLowerCase())) return false;
+      existing.add(word.toLowerCase());
+      return true;
+    });
+    if (words.length === 0) return true;
+    rememberTarget(target);
+    if (target === "personal") {
+      updateCustomDictionary({ add: words });
+      return true;
+    }
+    if (!workspaceId) return false;
+    const result = await addSharedWords(workspaceId, target, words);
+    if (result.failed) {
+      showActionError(result.failed.reason, listLabel(target));
+      return false;
+    }
+    return true;
+  };
+
+  const handleImport = async (): Promise<void> => {
+    if (await addWords(bulkText)) {
+      setBulkText("");
+      setShowBulkImport(false);
+    }
+  };
+
+  const sharedListName = (row: DictionaryRow): string => {
+    const spaceId = snapshot?.entries.find((entry) => entry.cloudId === row.entryId)?.spaceId;
+    return spaceId === undefined ? workspaceName : listLabel(spaceId);
+  };
+
+  const handleEdit = async (row: DictionaryRow, word: string): Promise<string | null> => {
+    if (word === row.word) return null;
+    if (row.kind === "personal") {
+      if (customDictionary.some((other) => other !== row.word && sameWord(other, word))) {
+        return t("dictionary.shared.alreadyIn", { list: t("dictionary.shared.personal") });
       }
-      return words.length;
-    },
-    [customDictionary, updateCustomDictionary]
-  );
-
-  const handleAdd = useCallback(() => {
-    if (addWords(newWord) > 0) {
-      setNewWord("");
-      setShowEmptyInput(false);
-      // The first word moves the input from the empty card to the top of the list.
-      requestAnimationFrame(() => addInputRef.current?.focus());
+      updateCustomDictionary({ add: [word], remove: [row.word] });
+      return null;
     }
-  }, [addWords, newWord]);
-
-  const handleImport = useCallback(() => {
-    addWords(bulkText);
-    setBulkText("");
-    setShowBulkImport(false);
-  }, [addWords, bulkText]);
-
-  const handleRemove = useCallback(
-    (word: string) => {
-      updateCustomDictionary({ remove: [word] });
-    },
-    [updateCustomDictionary]
-  );
-
-  const startEdit = useCallback((word: string) => {
-    setEditingWord(word);
-    setEditValue(word);
-  }, []);
-
-  const commitEdit = useCallback(() => {
-    if (!editingWord) return;
-    const trimmed = editValue.trim();
-    const isDuplicate = customDictionary.some(
-      (w) => w !== editingWord && w.toLowerCase() === trimmed.toLowerCase()
-    );
-    if (trimmed && trimmed !== editingWord && !isDuplicate) {
-      updateCustomDictionary({ add: [trimmed], remove: [editingWord] });
+    if (!workspaceId || !row.entryId) return null;
+    try {
+      await editSharedWord(workspaceId, row.entryId, word);
+      return null;
+    } catch (error) {
+      const reason = reasonOf(error);
+      if (reason === "alreadyInList") {
+        return t("dictionary.shared.alreadyIn", { list: sharedListName(row) });
+      }
+      showActionError(reason, sharedListName(row));
+      return null;
     }
-    setEditingWord(null);
-  }, [editingWord, editValue, customDictionary, updateCustomDictionary]);
+  };
 
-  const handleExport = useCallback(async () => {
-    const result = await window.electronAPI?.exportDictionary?.(customDictionary);
+  const handleHidden = async (row: DictionaryRow, hidden: boolean): Promise<void> => {
+    if (!workspaceId || !row.entryId) return;
+    try {
+      await setSharedWordsHidden(workspaceId, [row.entryId], hidden);
+    } catch (error) {
+      showActionError(reasonOf(error), sharedListName(row));
+    }
+  };
+
+  const handleDeleteForEveryone = async (row: DictionaryRow): Promise<void> => {
+    if (!workspaceId || !row.entryId) return;
+    const listName = sharedListName(row);
+    try {
+      const { undo } = await deleteSharedWords(workspaceId, [row.entryId]);
+      toast({
+        title: t("dictionary.shared.deletedForEveryone", { word: row.word }),
+        actions: [
+          {
+            label: t("dictionary.shared.undo"),
+            onClick: async () => {
+              try {
+                await undo();
+              } catch (error) {
+                showActionError(reasonOf(error), listName);
+              }
+            },
+          },
+        ],
+      });
+    } catch (error) {
+      showActionError(reasonOf(error), listName);
+    }
+  };
+
+  const handleSync = async (): Promise<void> => {
+    setManualSyncing(true);
+    try {
+      await Promise.all([syncService.syncSharedDictionaryNow(), syncService.syncDictionaryNow()]);
+    } finally {
+      setManualSyncing(false);
+    }
+  };
+
+  const handleExport = async (): Promise<void> => {
+    // The export keeps the agent name, as it always has.
+    const words = visiblePersonalWords(customDictionary, movedPersonal, snapshot);
+    const result = await window.electronAPI?.exportDictionary?.(words);
     if (result?.error) {
       toast({
         title: t("dictionary.exportFailed"),
@@ -134,77 +360,117 @@ export default function DictionaryView() {
         variant: "destructive",
       });
     }
-  }, [customDictionary, toast, t]);
+  };
 
-  const addWordInput = (
-    <div className="relative">
-      <Input
-        dir="auto"
-        ref={addInputRef}
-        autoFocus={userWords.length === 0}
-        placeholder={t("dictionary.addPlaceholder")}
-        value={newWord}
-        onChange={(e) => setNewWord(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") handleAdd();
-          if (e.key === "Escape" && userWords.length === 0) setShowEmptyInput(false);
-        }}
-        className="h-10 w-full rounded-full! pe-24 text-sm placeholder:text-foreground/45"
-      />
-      <div className="absolute end-3 top-1/2 flex -translate-y-1/2 items-center gap-2">
-        <button
-          onClick={handleAdd}
-          disabled={!newWord.trim()}
-          aria-label={t("dictionary.addWord")}
-          className="flex items-center gap-1 text-xs text-foreground/45 transition-colors enabled:hover:text-primary disabled:text-foreground/45"
-        >
-          {t("dictionary.add")}
-          <CornerDownLeft size={12} />
-        </button>
-        <div className="h-4 w-px bg-foreground/10 dark:bg-white/8" />
-        <button
-          onClick={() => setShowBulkImport(true)}
-          aria-label={t("dictionary.importWords")}
-          className="text-foreground/45 transition-colors hover:text-foreground/60"
-        >
-          <Upload size={14} />
-        </button>
-      </div>
-    </div>
-  );
+  const selectList = (next: ListKey): void => {
+    setList(next);
+    setSearch("");
+  };
 
-  const emptyState = (
+  const personalView = openList === "all" || openList === "personal";
+  const listIsEmpty = rows.length === 0 && search.trim() === "";
+  const openScope =
+    openList === "workspace" || openList.startsWith("space:")
+      ? snapshot?.meta?.scopes.find(
+          (scope) =>
+            scope.space_id === (openList === "workspace" ? null : openList.slice("space:".length))
+        )
+      : undefined;
+  const headerDetail = openScope
+    ? t("dictionary.shared.memberCount", { count: openScope.member_count })
+    : String(rows.length);
+
+  const emptyPersonalState = (
     <div className="flex min-h-64 items-start px-6 py-6">
       <div className="relative z-10 w-full min-w-0 md:w-3/5">
         <h2 className="text-xl font-normal text-foreground">{t("dictionary.emptyTitle")}</h2>
         <p className="mt-3 max-w-xl text-base leading-relaxed text-foreground/50 dark:text-foreground/65">
           {t("dictionary.emptyDescription", { agentName })}
         </p>
-        {showEmptyInput ? (
-          <div className="mt-6 max-w-md">{addWordInput}</div>
-        ) : (
-          <Button className="mt-6 px-5 font-normal" onClick={() => setShowEmptyInput(true)}>
-            <Plus size={16} />
-            {t("dictionary.addFirstWord")}
-          </Button>
-        )}
+        <Button className="mt-6 px-5 font-normal" onClick={() => addInputRef.current?.focus()}>
+          <Plus size={16} />
+          {t("dictionary.addFirstWord")}
+        </Button>
       </div>
       <DictionaryEmptyIllustration variant="dictionary" />
     </div>
   );
 
+  const listCard =
+    personalView && listIsEmpty ? (
+      <div
+        className={cn(
+          CARD_SURFACE_CLASS,
+          "relative overflow-hidden rounded-3xl shadow-sm dark:bg-surface-window"
+        )}
+      >
+        {emptyPersonalState}
+      </div>
+    ) : (
+      <div className={cn(CARD_SURFACE_CLASS, "rounded-lg px-4 py-3 shadow-sm")}>
+        <div className="flex items-center justify-between gap-3 border-b border-dashed border-foreground/10 pb-2 dark:border-white/10">
+          <h3 dir="auto" className="truncate text-[11px] font-semibold text-foreground/45">
+            {openEntry?.label} · {headerDetail}
+          </h3>
+          <div className="flex shrink-0 items-center gap-3">
+            {openList === "personal" && visiblePersonal.length > 0 && (
+              <>
+                <button
+                  onClick={() => setConfirmClear(true)}
+                  aria-label={t("dictionary.clearAll")}
+                  className="text-[11px] text-foreground/45 transition-colors hover:text-destructive/70"
+                >
+                  {t("dictionary.clearAll")}
+                </button>
+                <button
+                  onClick={() => void handleExport()}
+                  aria-label={t("dictionary.exportDictionary")}
+                  className="text-foreground/45 transition-colors hover:text-foreground/60"
+                >
+                  <Download size={12} />
+                </button>
+              </>
+            )}
+            <span className="text-[10px] text-foreground/40">{t(SORT_LABEL_KEYS[sort])}</span>
+          </div>
+        </div>
+        {rows.length === 0 ? (
+          <p dir="auto" className="py-6 text-center text-xs text-foreground/45">
+            {listIsEmpty
+              ? t("dictionary.shared.emptyList", { list: openEntry?.label ?? "" })
+              : t("dictionary.shared.noMatches", { query: search.trim() })}
+          </p>
+        ) : (
+          <DictionaryWordList
+            rows={rows}
+            hiddenList={openList === "hidden"}
+            onEdit={handleEdit}
+            onDelete={(row) => updateCustomDictionary({ remove: [row.word] })}
+            onHide={(row) => void handleHidden(row, true)}
+            onUnhide={(row) => void handleHidden(row, false)}
+            onDeleteForEveryone={(row) => void handleDeleteForEveryone(row)}
+          />
+        )}
+      </div>
+    );
+
   return (
-    <Tabs defaultValue="dictionary" className="flex flex-col h-full">
+    <Tabs value={tab} onValueChange={setTab} className="flex flex-col h-full">
       <ConfirmDialog
         open={confirmClear}
         onOpenChange={setConfirmClear}
         title={t("dictionary.clearTitle")}
         description={t("dictionary.clearDescription")}
-        onConfirm={() => updateCustomDictionary({ remove: userWords })}
+        onConfirm={() => updateCustomDictionary({ remove: visiblePersonal })}
         variant="destructive"
       />
 
-      <div className={cn(PAGE_CONTENT_WIDTH_CLASS, "px-6 pt-6")}>
+      <div
+        className={cn(
+          PAGE_CONTENT_WIDTH_CLASS,
+          "flex items-center justify-between gap-3 px-6 pt-6"
+        )}
+      >
         <TabsList variant="pill">
           <TabsTrigger value="dictionary" variant="pill">
             <NotebookPen size={17} />
@@ -215,170 +481,124 @@ export default function DictionaryView() {
             {t("dictionary.tabSnippets")}
           </TabsTrigger>
         </TabsList>
+        {tab === "dictionary" && (
+          <DictionaryToolbar
+            search={search}
+            onSearchChange={setSearch}
+            sort={sort}
+            onSortChange={(next) => {
+              setSort(next);
+              writeStorage(SORT_STORAGE_KEY, next);
+            }}
+            showSync={isSignedIn}
+            syncing={storeSyncing || manualSyncing}
+            lastSyncedAt={lastSyncedAt}
+            onSync={() => void handleSync()}
+          />
+        )}
       </div>
 
       <TabsContent value="dictionary" className="flex-1 min-h-0 mt-0 overflow-y-auto">
-        <div className={cn(PAGE_CONTENT_WIDTH_CLASS, "flex flex-col gap-3 px-6 py-5")}>
-          {/* ─── Add word ─── */}
-          {userWords.length > 0 && addWordInput}
+        <div className={cn(PAGE_CONTENT_WIDTH_CLASS, "flex gap-5 px-6 py-5")}>
+          <DictionaryListPicker
+            entries={pickerEntries}
+            selected={openList}
+            onSelect={selectList}
+            showShared={access !== "unavailable"}
+          />
 
-          {/* ─── Bulk import ─── */}
-          {showBulkImport && (
-            <div className="rounded-md border border-primary/30 dark:border-primary/40 px-3 pt-2.5 pb-2">
-              <Textarea
-                dir="auto"
-                autoFocus
-                value={bulkText}
-                onChange={(e) => setBulkText(e.target.value)}
-                placeholder={t("dictionary.importPlaceholder")}
-                rows={4}
-                className="min-h-[72px] resize-none border-0 shadow-none rounded-none bg-transparent p-0 text-xs text-foreground placeholder:text-foreground/45 hover:border-0 focus:border-0 focus:ring-0"
-              />
-              <div className="flex items-center justify-between pt-1.5">
-                <p className="text-xs text-foreground/45">
-                  {t("dictionary.separateWithCommas")}
-                  {pendingImportCount > 0 && (
-                    <span className="text-success">
-                      {" • "}
-                      {t("dictionary.wordsReady", { count: pendingImportCount })}
-                    </span>
-                  )}
-                </p>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setBulkText("");
-                      setShowBulkImport(false);
-                    }}
-                  >
-                    {t("common.cancel")}
-                  </Button>
-                  <Button size="sm" onClick={handleImport} disabled={pendingImportCount === 0}>
-                    {t("dictionary.import")}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ─── Agent name (always recognized) ─── */}
-          {userWords.length > 0 && (
-            <div className="flex items-center justify-between gap-3 rounded-xl border border-primary/15 bg-primary/3 px-4 py-3 dark:border-primary/20 dark:bg-primary/6">
-              <div className="flex items-center gap-2 min-w-0">
-                <Sparkles size={11} className="text-primary/70 shrink-0" />
-                <span dir="auto" className="text-xs font-medium text-primary truncate">
-                  {agentName}
-                </span>
-              </div>
-              <span className="text-xs text-foreground/45 shrink-0">
-                {t("dictionary.agentDefault")}
-              </span>
-            </div>
-          )}
-
-          {/* ─── Dictionary list ─── */}
-          <div
-            className={cn(
-              CARD_SURFACE_CLASS,
-              "shadow-sm",
-              userWords.length > 0
-                ? "px-4 py-3"
-                : "relative overflow-hidden rounded-3xl dark:bg-surface-window"
-            )}
-          >
-            {userWords.length > 0 && (
+          <div className="flex min-w-0 flex-1 flex-col gap-3">
+            {locked ? (
+              // Placeholder for a list the member can't use; the blocked states fill it.
+              <div className={cn(CARD_SURFACE_CLASS, "min-h-40 rounded-lg")} />
+            ) : (
               <>
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-semibold text-foreground/45">
-                    {t("dictionary.yourDictionary")}
-                  </h3>
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => setConfirmClear(true)}
-                      aria-label={t("dictionary.clearAll")}
-                      className="text-xs text-foreground/45 hover:text-destructive/70 transition-colors"
-                    >
-                      {t("dictionary.clearAll")}
-                    </button>
-                    <button
-                      onClick={handleExport}
-                      aria-label={t("dictionary.exportDictionary")}
-                      className="text-foreground/45 hover:text-foreground/60 transition-colors"
-                    >
-                      <Download size={12} />
-                    </button>
+                <DictionaryAddField
+                  target={addTarget}
+                  targets={addTargets}
+                  onTargetChange={(target) => {
+                    setPickedTarget({ list: openList, target });
+                    rememberTarget(target);
+                  }}
+                  onAdd={addWords}
+                  isInTarget={(word) =>
+                    wordsInTarget(addTarget).some((existing) => sameWord(existing, word))
+                  }
+                  onImport={() => setShowBulkImport(true)}
+                  inputRef={addInputRef}
+                />
+
+                {/* ─── Bulk import ─── */}
+                {showBulkImport && (
+                  <div className="rounded-md border border-primary/30 dark:border-primary/40 px-3 pt-2.5 pb-2">
+                    <Textarea
+                      dir="auto"
+                      autoFocus
+                      value={bulkText}
+                      onChange={(e) => setBulkText(e.target.value)}
+                      placeholder={t("dictionary.importPlaceholder")}
+                      rows={4}
+                      className="min-h-[72px] resize-none border-0 shadow-none rounded-none bg-transparent p-0 text-xs text-foreground placeholder:text-foreground/45 hover:border-0 focus:border-0 focus:ring-0"
+                    />
+                    <div className="flex items-center justify-between pt-1.5">
+                      <p className="text-xs text-foreground/45">
+                        {t("dictionary.separateWithCommas")}
+                        {pendingImportCount > 0 && (
+                          <span className="text-success">
+                            {" • "}
+                            {t("dictionary.wordsReady", { count: pendingImportCount })}
+                          </span>
+                        )}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setBulkText("");
+                            setShowBulkImport(false);
+                          }}
+                        >
+                          {t("common.cancel")}
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => void handleImport()}
+                          disabled={pendingImportCount === 0}
+                        >
+                          {t("dictionary.shared.importTo", { list: listLabel(addTarget) })}
+                        </Button>
+                      </div>
+                    </div>
                   </div>
-                </div>
-                <div className="mt-2.5 border-t border-dashed border-foreground/10 dark:border-white/10" />
+                )}
+
+                {/* ─── Agent name (always recognized) ─── */}
+                {personalView && !listIsEmpty && (
+                  <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/15 bg-primary/3 px-4 py-2.5 dark:border-primary/20 dark:bg-primary/6">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Sparkles size={11} className="text-primary/70 shrink-0" />
+                      <span dir="auto" className="text-xs font-medium text-primary truncate">
+                        {agentName}
+                      </span>
+                    </div>
+                    <span className="text-xs text-foreground/45 shrink-0">
+                      {t("dictionary.agentDefault")}
+                    </span>
+                  </div>
+                )}
+
+                {listCard}
               </>
             )}
 
-            {userWords.length === 0 ? (
-              emptyState
-            ) : visibleWords.length === 0 ? (
-              <p className="py-6 text-xs text-foreground/45 text-center">
-                {t("dictionary.noMatches", { word: newWord.trim() })}
+            {/* ─── Provider prompt-limit notice ─── */}
+            {promptChars > WHISPER_DECODER_PROMPT_CHARS && (
+              <p className="text-xs text-foreground/45 leading-relaxed">
+                {t("dictionary.promptLimitNotice", { chars: promptChars })}
               </p>
-            ) : (
-              <ul>
-                {visibleWords.map((word) => {
-                  const isEditing = editingWord === word;
-                  return (
-                    <li
-                      key={word}
-                      className="group flex items-center gap-2 h-9 border-b border-foreground/4 dark:border-white/10 last:border-b-0"
-                    >
-                      {isEditing ? (
-                        <Input
-                          dir="auto"
-                          autoFocus
-                          value={editValue}
-                          onChange={(e) => setEditValue(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") commitEdit();
-                            if (e.key === "Escape") setEditingWord(null);
-                          }}
-                          onBlur={commitEdit}
-                          className="h-7 text-xs flex-1"
-                        />
-                      ) : (
-                        <span dir="auto" className="flex-1 text-xs truncate text-foreground/60">
-                          {word}
-                        </span>
-                      )}
-                      {!isEditing && (
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                          <button
-                            onClick={() => startEdit(word)}
-                            aria-label={t("dictionary.editWord", { word })}
-                            className="p-1 text-foreground/45 hover:text-foreground/60 transition-colors"
-                          >
-                            <Pencil size={11} />
-                          </button>
-                          <button
-                            onClick={() => handleRemove(word)}
-                            aria-label={t("dictionary.removeWord", { word })}
-                            className="p-1 text-foreground/45 hover:text-destructive/70 transition-colors"
-                          >
-                            <X size={11} strokeWidth={2} />
-                          </button>
-                        </div>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
             )}
           </div>
-
-          {/* ─── Provider prompt-limit notice ─── */}
-          {promptChars > WHISPER_DECODER_PROMPT_CHARS && (
-            <p className="text-xs text-foreground/45 leading-relaxed">
-              {t("dictionary.promptLimitNotice", { chars: promptChars })}
-            </p>
-          )}
         </div>
       </TabsContent>
 

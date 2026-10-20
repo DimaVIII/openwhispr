@@ -3884,7 +3884,52 @@
       "group": "Geteilt",
       "allShared": "Alle geteilten",
       "everyoneAt": "Alle bei {{workspace}}",
-      "hidden": "Ausgeblendet"
+      "hidden": "Ausgeblendet",
+      "add": {
+        "placeholder": "Wort hinzufügen…",
+        "to": "zu {{list}}",
+        "chooseList": "Liste zum Hinzufügen wählen"
+      },
+      "alreadyIn": "Bereits in {{list}}",
+      "importTo": "In {{list}} importieren",
+      "actions": {
+        "share": "Teilen",
+        "edit": "Bearbeiten",
+        "delete": "Löschen",
+        "hide": "Für mich ausblenden",
+        "deleteForEveryone": "Für alle löschen",
+        "unhide": "Einblenden"
+      },
+      "attribution": {
+        "you": "Du",
+        "former": "Ehemaliges Mitglied"
+      },
+      "toolbar": {
+        "search": "Suchen",
+        "searchPlaceholder": "Diese Liste durchsuchen",
+        "closeSearch": "Suche schließen",
+        "sort": "Sortieren",
+        "sync": "Jetzt synchronisieren",
+        "syncedAgo": "Vor {{time}} synchronisiert",
+        "syncedJustNow": "Gerade synchronisiert",
+        "notSynced": "Noch nicht synchronisiert"
+      },
+      "sort": {
+        "az": "A–Z",
+        "za": "Z–A",
+        "newest": "Neueste zuerst",
+        "oldest": "Älteste zuerst"
+      },
+      "memberCount_one": "{{count}} Mitglied",
+      "memberCount_other": "{{count}} Mitglieder",
+      "emptyList": "Noch keine Wörter in {{list}}",
+      "noMatches": "Keine Wörter passen zu „{{query}}“",
+      "deletedForEveryone": "„{{word}}“ für alle gelöscht",
+      "undo": "Rückgängig",
+      "errors": {
+        "generic": "{{list}} konnte nicht aktualisiert werden. Versuche es erneut.",
+        "listFull": "{{list}} ist voll"
+      }
     }
   },
   "support": {
