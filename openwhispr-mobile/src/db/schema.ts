@@ -134,6 +134,7 @@ export const dictionaryEntries = sqliteTable('dictionary_entries', {
   clientDictId: text('client_dict_id'),
   remoteId: text('remote_id'),
   deletedAt: text('deleted_at'),
+  sharedAt: text('shared_at'),
   pendingSync: integer('pending_sync').notNull().default(0),
   createdAt: text('created_at').default(sql`(datetime('now'))`),
   updatedAt: text('updated_at').default(sql`(datetime('now'))`),

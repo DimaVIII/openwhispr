@@ -10,6 +10,8 @@ export interface DictionaryEntry {
   word: string;
   source: DictionarySource;
   addedAt: number | null;
+  // When the word was moved into a shared list; it stays a live personal word.
+  sharedAt: number | null;
 }
 
 interface DictionaryStore {
@@ -40,6 +42,7 @@ function rowToEntry(row: Row): DictionaryEntry {
     word: row.word,
     source: row.source,
     addedAt: parseStoredTimestamp(row.createdAt),
+    sharedAt: parseStoredTimestamp(row.sharedAt),
   };
 }
 

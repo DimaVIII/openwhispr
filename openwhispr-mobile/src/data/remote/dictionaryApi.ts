@@ -10,6 +10,9 @@ export interface RemoteDictionaryEntry {
   deleted_at: string | null;
   created_at: string;
   updated_at: string;
+  // Set when the word was moved into a shared list. Absent from older APIs,
+  // which the pull treats as "keep the local value"; null clears it.
+  shared_at?: string | null;
 }
 
 export interface DictionaryPushInput {

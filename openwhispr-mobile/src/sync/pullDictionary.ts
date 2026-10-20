@@ -8,7 +8,11 @@ import {
   type RemoteDictionaryEntry,
 } from '@/data/remote/dictionaryApi';
 import { notesRepository } from '@/data';
-import { DICTIONARY_CURSOR_KEY, DICTIONARY_CURSOR_ID_KEY } from './pullCursors';
+import {
+  DICTIONARY_CURSOR_KEY,
+  DICTIONARY_CURSOR_ID_KEY,
+  DICTIONARY_SHARED_AT_BACKFILL_KEY,
+} from './pullCursors';
 
 const PAGE_SIZE = 200;
 
@@ -65,6 +69,7 @@ function applyRemote(remote: RemoteDictionaryEntry): void {
         clientDictId: remote.client_dict_id,
         remoteId: remote.id,
         deletedAt: remote.deleted_at,
+        sharedAt: remote.shared_at ?? null,
         pendingSync: 0,
         createdAt: remote.created_at,
         updatedAt: remote.updated_at,
@@ -84,8 +89,22 @@ function applyRemote(remote: RemoteDictionaryEntry): void {
     return;
   }
 
-  // For non-tombstone updates, a local pending write wins until pushed.
-  if (local.pendingSync === 1) return;
+  // shared_at is server-owned metadata, not a user edit: an absent field (older
+  // API) keeps the local value, an explicit null clears it.
+  const sharedAt = remote.shared_at === undefined ? local.sharedAt : remote.shared_at;
+
+  // For non-tombstone updates, a local pending write wins until pushed. Only
+  // shared_at is recorded meanwhile, since the one-time backfill never revisits
+  // the row once its cursor has passed.
+  if (local.pendingSync === 1) {
+    if (sharedAt !== local.sharedAt) {
+      db.update(dictionaryEntries)
+        .set({ sharedAt })
+        .where(eq(dictionaryEntries.id, local.id))
+        .run();
+    }
+    return;
+  }
 
   db.update(dictionaryEntries)
     .set({
@@ -94,6 +113,7 @@ function applyRemote(remote: RemoteDictionaryEntry): void {
       clientDictId: remote.client_dict_id ?? local.clientDictId,
       remoteId: remote.id,
       deletedAt: null,
+      sharedAt,
       pendingSync: 0,
       updatedAt: remote.updated_at,
     })
@@ -162,6 +182,15 @@ async function walkPages(
 // correct delta boundary for subsequent runs.
 export async function pullDictionary(checkpoint: SyncCheckpoint = uncheckedSync): Promise<void> {
   checkpoint();
+  // Rows pulled before shared_at existed never carry it, and a cursor that
+  // already passed them would never revisit. Replaying once as a snapshot
+  // refreshes them. The flag is set first: a snapshot cut short saves no
+  // cursor, so the next run is a snapshot again without needing the flag.
+  if (!notesRepository.getSyncState(DICTIONARY_SHARED_AT_BACKFILL_KEY)) {
+    notesRepository.clearSyncState(DICTIONARY_CURSOR_KEY);
+    notesRepository.clearSyncState(DICTIONARY_CURSOR_ID_KEY);
+    notesRepository.setSyncState(DICTIONARY_SHARED_AT_BACKFILL_KEY, '1');
+  }
   const since = notesRepository.getSyncState(DICTIONARY_CURSOR_KEY);
   const sinceId = notesRepository.getSyncState(DICTIONARY_CURSOR_ID_KEY);
   const maxes = { updatedAt: since ?? '', id: sinceId ?? '' };

@@ -446,8 +446,8 @@ describe('config integration', () => {
     const { config } = makeConfig();
     mockUseDictionaryStore.getState.mockReturnValue({
       entries: [
-        { word: 'OpenWhispr', source: 'manual' as const, addedAt: null },
-        { word: 'TDD', source: 'manual' as const, addedAt: null },
+        { word: 'OpenWhispr', source: 'manual' as const, addedAt: null, sharedAt: null },
+        { word: 'TDD', source: 'manual' as const, addedAt: null, sharedAt: null },
       ],
       isLoaded: true,
       load: jest.fn(),
