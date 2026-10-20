@@ -123,10 +123,12 @@ jest.mock('../pullSharedDictionary', () => ({
 }));
 const mockLoadSharedDictionary = jest.fn();
 const mockResetSharedDictionary = jest.fn();
+const mockLoadSharedDictionaryIfOwnedBy = jest.fn();
 jest.mock('@/store/useSharedDictionaryStore', () => ({
   useSharedDictionaryStore: {
     getState: () => ({ load: mockLoadSharedDictionary, reset: mockResetSharedDictionary }),
   },
+  loadSharedDictionaryIfOwnedBy: (...args: unknown[]) => mockLoadSharedDictionaryIfOwnedBy(...args),
 }));
 
 jest.mock('@/store/useDictionaryStore', () => ({
@@ -177,6 +179,7 @@ beforeEach(() => {
   mockRunInitialBackfillIfNeeded.mockResolvedValue(undefined);
   mockPullSharedDictionary.mockResolvedValue({ changed: false });
   mockLoadSharedDictionary.mockResolvedValue(undefined);
+  mockLoadSharedDictionaryIfOwnedBy.mockResolvedValue(undefined);
   useSyncStore.setState({
     status: 'idle',
     lastError: null,
@@ -934,6 +937,19 @@ describe('shared dictionary pull', () => {
     expect(mockPullDictionary).not.toHaveBeenCalled();
     expect(mockLoadSharedDictionary).toHaveBeenCalled();
     expect(useSyncStore.getState().status).toBe('idle');
+  });
+
+  it('hydrates the stored words for this account before any network call', async () => {
+    requestSync('manual');
+    await flush();
+
+    expect(mockLoadSharedDictionaryIfOwnedBy).toHaveBeenCalledWith('user-1');
+    const hydratedAt = mockLoadSharedDictionaryIfOwnedBy.mock.invocationCallOrder[0];
+    expect(hydratedAt).toBeLessThan(
+      jest.mocked(pushPrivateNoteDeletes).mock.invocationCallOrder[0],
+    );
+    expect(hydratedAt).toBeLessThan(mockFetchUsage.mock.invocationCallOrder[0]);
+    expect(hydratedAt).toBeLessThan(mockSyncSpaces.mock.invocationCallOrder[0]);
   });
 
   it('runs on the personal path, after the spaces pass, and reloads the store after it', async () => {

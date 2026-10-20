@@ -453,6 +453,60 @@ describe('pullSharedDictionary', () => {
     await expect(isolated.pull()).resolves.toEqual({ changed: false });
   });
 
+  it('a coded 404 other than NOT_MEMBER is a normal error, not a missing endpoint', async () => {
+    const isolated = loadIsolatedPull();
+    await seedStored();
+    mockFetchSharedDictionary.mockRejectedValueOnce(
+      apiError(404, 'SOMETHING_ELSE', isolated.ApiError),
+    );
+
+    await expect(isolated.pull()).rejects.toThrow('failed');
+    expect(await loadSharedDictionaryState()).toEqual(STORED);
+
+    // The step still runs next time.
+    await isolated.pull();
+    expect(mockFetchSharedDictionary).toHaveBeenCalledTimes(2);
+  });
+
+  it('a snapshot without server_time stores no cursor, so the next run snapshots again', async () => {
+    mockFetchSharedDictionary.mockResolvedValueOnce({
+      ...listPage([entry('e1', 'Acme')]),
+      server_time: undefined,
+    });
+    mockFetchSharedDictionaryHides.mockResolvedValueOnce({
+      ...hidesPage([]),
+      server_time: undefined,
+    });
+
+    await pullSharedDictionary();
+
+    expect((await loadSharedDictionaryState())?.entries).toEqual({
+      e1: { spaceId: null, word: 'Acme' },
+    });
+    for (const key of [
+      SHARED_DICTIONARY_CURSOR_KEY,
+      SHARED_DICTIONARY_CURSOR_ID_KEY,
+      SHARED_DICTIONARY_HIDES_CURSOR_KEY,
+      SHARED_DICTIONARY_HIDES_CURSOR_ID_KEY,
+    ]) {
+      expect(mockSyncState.has(key)).toBe(false);
+    }
+
+    await pullSharedDictionary();
+
+    expect(mockFetchSharedDictionary).toHaveBeenLastCalledWith('ws-1', { limit: 200 });
+    expect(mockFetchSharedDictionaryHides).toHaveBeenLastCalledWith('ws-1', { limit: 200 });
+  });
+
+  it('a delta without server_time keeps the stored cursor', async () => {
+    await seedStored();
+    mockFetchSharedDictionary.mockResolvedValueOnce({ ...listPage([]), server_time: undefined });
+
+    await pullSharedDictionary();
+
+    expect(mockSyncState.get(SHARED_DICTIONARY_CURSOR_KEY)).toBe(T0);
+  });
+
   it('rethrows other errors', async () => {
     mockFetchSharedDictionary.mockRejectedValueOnce(apiError(500));
     await expect(pullSharedDictionary()).rejects.toThrow('failed');

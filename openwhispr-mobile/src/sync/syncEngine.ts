@@ -21,7 +21,10 @@ import { pushSnippets } from './pushSnippets';
 import { syncSpaces, type SyncSpacesResult } from './syncSpaces';
 import { pullSharedDictionary } from './pullSharedDictionary';
 import { useDictionaryStore } from '@/store/useDictionaryStore';
-import { useSharedDictionaryStore } from '@/store/useSharedDictionaryStore';
+import {
+  loadSharedDictionaryIfOwnedBy,
+  useSharedDictionaryStore,
+} from '@/store/useSharedDictionaryStore';
 import { useSnippetsStore } from '@/store/useSnippetsStore';
 import { runInitialBackfillIfNeeded } from './initialBackfill';
 import { resetAllPullCursors } from './pullCursors';
@@ -251,10 +254,11 @@ async function syncSharedDictionary(checkpoint: SyncCheckpoint): Promise<void> {
       Sentry.captureException(err, { tags: { sync: 'shared-dictionary' } });
     }
   }
-  useSharedDictionaryStore
-    .getState()
-    .load()
-    .catch((err) => Sentry.captureException(err, { tags: { sync: 'shared-dictionary-load' } }));
+  useSharedDictionaryStore.getState().load().catch(reportSharedDictionaryLoadError);
+}
+
+function reportSharedDictionaryLoadError(err: unknown): void {
+  Sentry.captureException(err, { tags: { sync: 'shared-dictionary-load' } });
 }
 
 async function runSyncNow(reason: SyncReason): Promise<void> {
@@ -286,6 +290,9 @@ async function runSyncNow(reason: SyncReason): Promise<void> {
     checkpoint();
     reconcileSyncIdentity(auth);
     const userId = auth.user.id;
+    // Stored shared words apply from the start of the run, before any network
+    // call, so offline or slow syncs still dictate with them.
+    loadSharedDictionaryIfOwnedBy(userId).catch(reportSharedDictionaryLoadError);
     await retryPrivateNoteDeletes(checkpoint);
     checkpoint();
     // Paygate: personal sync (everything — private content, dictionary,

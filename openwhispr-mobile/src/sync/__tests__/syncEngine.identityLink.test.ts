@@ -210,6 +210,33 @@ describe('syncEngine identity transitions', () => {
     expect(mockRepo.dropRemoteIdsForAccountLink).not.toHaveBeenCalled();
   });
 
+  it('fills the shared store from the stored row before any network call', async () => {
+    seedSyncState({
+      'sync.user_id': 'real-user',
+      'shared_dictionary.state': JSON.stringify({
+        workspaceId: 'ws-1',
+        workspaceName: 'Acme',
+        entries: { e1: { spaceId: null, word: 'Acme' } },
+        hiddenIds: [],
+        scopes: [{ space_id: null, name: 'Acme', member_count: 2, word_count: 1 }],
+        paused: false,
+      }),
+    });
+    useSharedDictionaryStore.getState().reset();
+    signIn('real-user', false);
+    // The first network step hasn't answered yet (offline, or just slow).
+    const pending = deferred<void>();
+    jest.mocked(pushPrivateNoteDeletes).mockReturnValueOnce(pending.promise);
+
+    requestSync('manual');
+    await flush();
+
+    expect(useSharedDictionaryStore.getState().hints.workspace).toEqual(['Acme']);
+    expect(mockSyncSpaces).not.toHaveBeenCalled();
+    pending.resolve();
+    await flush();
+  });
+
   it('an account switch resets the shared store before anything else runs', () => {
     seedSyncState({ 'sync.user_id': 'first-user' });
     seedSharedWords();

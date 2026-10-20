@@ -11,7 +11,10 @@ jest.mock('@/data', () => ({
   },
 }));
 
-import { useSharedDictionaryStore } from '../useSharedDictionaryStore';
+import {
+  loadSharedDictionaryIfOwnedBy,
+  useSharedDictionaryStore,
+} from '../useSharedDictionaryStore';
 import {
   saveSharedDictionaryState,
   SHARED_DICTIONARY_STATE_KEY,
@@ -109,6 +112,37 @@ describe('useSharedDictionaryStore', () => {
     useSharedDictionaryStore.getState().reset();
     await loading;
 
+    expect(useSharedDictionaryStore.getState().hints).toEqual({ space: [], workspace: [] });
+  });
+});
+
+describe('loadSharedDictionaryIfOwnedBy', () => {
+  beforeEach(async () => {
+    await saveSharedDictionaryState(STATE);
+    mockSyncState.set('sync.user_id', 'user-1');
+  });
+
+  it('loads the stored words for the account they were pulled under', async () => {
+    await loadSharedDictionaryIfOwnedBy('user-1');
+    expect(useSharedDictionaryStore.getState().hints).toEqual({
+      space: ['Gizmo'],
+      workspace: ['Acme'],
+    });
+  });
+
+  it('stays empty for another account, even with a stored row', async () => {
+    await loadSharedDictionaryIfOwnedBy('user-2');
+    expect(useSharedDictionaryStore.getState().hints).toEqual({ space: [], workspace: [] });
+  });
+
+  it('stays empty without a signed-in account', async () => {
+    await loadSharedDictionaryIfOwnedBy(null);
+    expect(useSharedDictionaryStore.getState().hints).toEqual({ space: [], workspace: [] });
+  });
+
+  it('stays empty before any account has synced', async () => {
+    mockSyncState.delete('sync.user_id');
+    await loadSharedDictionaryIfOwnedBy('user-1');
     expect(useSharedDictionaryStore.getState().hints).toEqual({ space: [], workspace: [] });
   });
 });

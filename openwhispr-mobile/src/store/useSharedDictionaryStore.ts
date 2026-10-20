@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { selectSharedHintWords, type SharedHintWords } from '@/lib/sharedDictionaryHints';
 import { loadSharedDictionaryState } from '@/sync/sharedDictionaryState';
+import { getLastSyncedUserId } from '@/sync/syncIdentity';
 
 export interface SharedDictionarySummary {
   count: number;
@@ -62,3 +63,14 @@ export const useSharedDictionaryStore = create<SharedDictionaryStoreState>((set)
     set(emptyState());
   },
 }));
+
+/**
+ * Loads the stored shared words, but only for the account they were pulled
+ * under. Sign-out resets the store and leaves `shared_dictionary.state` in
+ * SQLite until the next account switch wipes it, so an ungated load could apply
+ * the previous account's words. Pass the signed-in, non-guest user's id, or null.
+ */
+export function loadSharedDictionaryIfOwnedBy(userId: string | null): Promise<void> {
+  if (!userId || getLastSyncedUserId() !== userId) return Promise.resolve();
+  return useSharedDictionaryStore.getState().load();
+}

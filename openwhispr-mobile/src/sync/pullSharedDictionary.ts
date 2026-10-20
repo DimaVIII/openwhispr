@@ -63,15 +63,25 @@ function readCursor(keys: CursorKeys): Cursor | null {
 
 // A pass stores its FIRST page's server_time: a row deleted (or unhidden)
 // behind a later page of the same pass is then re-read next time. The cursor
-// never moves backwards, whatever the server clock says.
-function advanceCursor(previous: Cursor | null, at: string | undefined, id: string | null): Cursor {
-  const valid = at !== undefined && !Number.isNaN(Date.parse(at));
-  if (!previous) return { at: valid ? at : new Date(0).toISOString(), id };
+// never moves backwards, whatever the server clock says. A snapshot whose first
+// page had no usable server_time gets no cursor, so the next run snapshots.
+function advanceCursor(
+  previous: Cursor | null,
+  at: string | undefined,
+  id: string | null,
+): Cursor | null {
+  const valid = typeof at === 'string' && !Number.isNaN(Date.parse(at));
+  if (!previous) return valid ? { at, id } : null;
   const next = valid && Date.parse(at) >= Date.parse(previous.at) ? at : previous.at;
   return { at: next, id: id ?? previous.id };
 }
 
-function writeCursor(keys: CursorKeys, cursor: Cursor): void {
+function writeCursor(keys: CursorKeys, cursor: Cursor | null): void {
+  if (!cursor) {
+    notesRepository.clearSyncState(keys.at);
+    notesRepository.clearSyncState(keys.id);
+    return;
+  }
   notesRepository.setSyncState(keys.at, cursor.at);
   if (cursor.id) notesRepository.setSyncState(keys.id, cursor.id);
   else notesRepository.clearSyncState(keys.id);
@@ -106,9 +116,12 @@ function isAccessLost(err: unknown): boolean {
   );
 }
 
+// Only an uncoded 404: the API's own 404s carry a code (NOT_MEMBER, handled as
+// lost access) and are real answers from a deployed route.
 function isEndpointUnavailable(err: unknown): boolean {
   return (
-    err instanceof ApiError && (err.status === 404 || err.status === 405 || err.status === 501)
+    err instanceof ApiError &&
+    ((err.status === 404 && !err.code) || err.status === 405 || err.status === 501)
   );
 }
 
@@ -142,7 +155,7 @@ interface EntriesPass {
   entries: Entries;
   scopes: RemoteSharedScope[];
   paused: boolean;
-  cursor: Cursor;
+  cursor: Cursor | null;
 }
 
 // Pages into memory; nothing is written until the whole pass is in, so a pass
@@ -222,7 +235,7 @@ async function pullHides(
   workspaceId: string,
   base: string[] | null,
   checkpoint: SyncCheckpoint,
-): Promise<{ hiddenIds: string[]; cursor: Cursor }> {
+): Promise<{ hiddenIds: string[]; cursor: Cursor | null }> {
   const stored = base ? readCursor(HIDES_CURSOR) : null;
   const hidden = new Set(stored && base ? base : []);
   let page: SharedDictionaryPage = stored
@@ -260,8 +273,8 @@ async function pullHides(
 
 interface PassResult {
   state: SharedDictionaryState;
-  entriesCursor: Cursor;
-  hidesCursor: Cursor;
+  entriesCursor: Cursor | null;
+  hidesCursor: Cursor | null;
 }
 
 // An expired cursor or a returning list re-runs the whole pass as a snapshot,
