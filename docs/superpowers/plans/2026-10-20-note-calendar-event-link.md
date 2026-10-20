@@ -6,7 +6,7 @@
 | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `deep_research`  | yes, in `docs/superpowers/research/2026-10-20-note-calendar-event-link-research.md`. Its live-fetch recommendation is superseded by Josh's "store 3 days locally" decision (spec Decision 1) |
 | `codex_review`   | yes                                                                                                                                                                                          |
-| `plan_status`    | approved 2026-10-20 by Josh (this revision: capsule keeps the date, search only)                                                                   |
+| `plan_status`    | approved 2026-10-20 by Josh (this revision: capsule keeps the date, search only)                                                                                                             |
 | Execution method | main agent implements; reviewers are read-only                                                                                                                                               |
 | Review path      | Codex branch review, then a final `/deep-review`                                                                                                                                             |
 | Spec             | `docs/superpowers/specs/2026-10-20-note-calendar-event-link-design.md`. Read it first: every decision below argues from it                                                                   |
