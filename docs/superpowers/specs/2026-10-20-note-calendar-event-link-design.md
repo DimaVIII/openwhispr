@@ -20,7 +20,7 @@ The dropdown under the note header's date and attendees capsule (`NoteParticipan
 1. **Unlinked.** The top row reads **Select calendar event**, with the note's date and time underneath and a chevron. Below it are the "Add attendees…" input and the attendees grouped by domain, as today.
 2. **Choosing.** Clicking the row swaps the dropdown to a list. It has a **Search event…** box with a back arrow, and below it the events on the note's day, each with its calendar's colour dot, its title and "Tue, Oct 20 · 10:00 AM – 1:00 PM" (or "All day"). Typing searches every stored event (about 3 days back through the stored lookahead), closest to the note's date first. "team" finds Team Standup.
 3. **Linked.** Picking an event links it and merges its guests into the attendees, then returns to the main view. The top row now shows the event: dot, title, date and time. Under it are a **Join** button (only when the event has a meeting link) and **Open in Google Calendar** or **Open in Outlook** (only when a web link is stored, so never for Apple). The capsule keeps the note's date and attendees.
-4. **Changing.** Reopening the list while linked shows **Remove calendar event** first, then the events, with a check mark on the linked one. Removing it unlinks the event and leaves the attendees as they are.
+4. **Changing.** Reopening the list while linked shows **Remove calendar event** first, then the events, with a check mark on the linked one. Removing it unlinks the event and takes off the guests that linking added. Anyone already on the note, or added by hand, stays (Josh, 2026-10-20, after trying it in a dev build). Switching to another event swaps the first event's guests for the new one's.
 
 Join only opens the meeting URL. It never starts a recording, unlike Upcoming Meetings' "Join & transcribe".
 
@@ -105,6 +105,7 @@ Several notes per event already exist and are handled. `getOwnNoteByCalendarEven
   In all of these cases the id doesn't resolve. The capsule then shows the date, and the dropdown's top row says the event isn't in this device's calendars. There's no title, no Join and no broken chip. An editor can still replace or remove the link.
 
 - **Merged attendees are visible to the team.** Merging adds the guests to `participants`, which syncs. That's the user's own action, the same as adding attendees by hand today.
+- **Attendees an event adds carry `addedByEvent: <event id>`** in `participants`: guests merged by linking, and the attendees meeting detection copies onto a note it creates (`tagEventAttendeesJson`). Removing the event (or switching to another) drops exactly the attendees tagged with it. Attendees on notes created before this change carry no tag and stay when the event is removed; so do attendees whose tag another client dropped by rewriting `participants`.
 
 ### 5. The read-only chip is replaced by the dropdown row
 

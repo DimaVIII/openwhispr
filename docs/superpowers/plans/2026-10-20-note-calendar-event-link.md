@@ -484,6 +484,7 @@ Josh can cut this task without touching Tasks 1–6.
 - **`isBeforeStoredWindow` became `startsBeforeStoredWindow`:** a day the stored history only partly covers also gets the outside-the-window message (final review).
 - **Re-picking the linked event** goes back without merging its guests again, and the list is shown and saved only while `canEdit` (final review).
 - **`updateNote`** stores an explicit NULL unlink of a linked note as `""` (final review).
+- **Removing an event removes the guests it added** (Josh, 2026-10-20, after the dev-build pass; replaces "unlinking leaves attendees"). Attendees an event adds are tagged `addedByEvent` (by linking, and by meeting detection's new notes); unlinking or switching events drops exactly those.
 
 ## Approval
 
