@@ -269,10 +269,14 @@ function createSharedDictionaryCloud() {
   async function cloudApiRequest({ method, path }) {
     const url = new URL(path, "https://api.openwhispr.test");
     const query = url.searchParams;
-    requests.push({ method, pathname: url.pathname, query });
+    const request = { method, pathname: url.pathname, query };
+    requests.push(request);
+    // Lets a test change server state between the pages of one pass.
+    fake.beforeServe?.(request);
     const queue = interceptors.get(url.pathname);
     const next = queue?.shift();
     if (next?.promise) await next.promise;
+    else if (next?.data) return { success: true, data: structuredClone(next.data) };
     else if (next) return { success: false, error: next.code ?? "failed", ...next };
 
     if (url.pathname === "/api/shared-dictionary/list") {
@@ -284,7 +288,8 @@ function createSharedDictionaryCloud() {
     return { success: false, status: 404, error: "Not found" };
   }
 
-  return {
+  const fake = {
+    beforeServe: null,
     cloudApiRequest,
     requests,
     workspace: forWorkspace,
@@ -312,6 +317,12 @@ function createSharedDictionaryCloud() {
       queue.push({ status, code });
       interceptors.set(pathname, queue);
     },
+    // The next request to `pathname` answers with exactly this body.
+    respondNext(pathname, data) {
+      const queue = interceptors.get(pathname) ?? [];
+      queue.push({ data });
+      interceptors.set(pathname, queue);
+    },
     // The next request to `pathname` waits until the returned resolve() runs.
     holdNext(pathname) {
       const gate = deferred();
@@ -324,6 +335,7 @@ function createSharedDictionaryCloud() {
       return requests.filter((request) => request.pathname === pathname);
     },
   };
+  return fake;
 }
 
 module.exports = {

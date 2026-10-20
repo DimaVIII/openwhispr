@@ -192,6 +192,8 @@ const FOLDER_UPDATE_404_KEY = "folderUpdate404Counts";
 const SHARED_DICTIONARY_PAGE_LIMIT = 200;
 // Writers on different lists can commit out of updated_at order, so every
 // delta re-reads this much before the stored cursor; re-applied rows are no-ops.
+// The cursor a pass stores is the FIRST page's server_time: a row deleted (or
+// unhidden) behind a later page of the same pass is then still re-read next time.
 const SHARED_DICTIONARY_READ_OVERLAP_MS = 10_000;
 // Covers both cursor families: lastSyncedAt.sharedDictionary.<ws> and
 // lastSyncedAt.sharedDictionaryHides.<ws>, each with an `.id` companion.
@@ -616,6 +618,14 @@ export class SyncService {
     subscribeIsSubscribed(() => this.requestSyncAll("start"));
     usePolicyStore.subscribe((policyState, previousPolicyState) => {
       if (cloudBackupResumed(previousPolicyState, policyState)) this.requestSyncAll("start");
+    });
+    // A workspace this device has no mirror of would otherwise show no shared
+    // words until the next interval. The store's own subscription was added at
+    // import, so it has already moved to the new generation when this runs.
+    useWorkspaceStore.subscribe((state, previous) => {
+      if (state.activeWorkspaceId && state.activeWorkspaceId !== previous.activeWorkspaceId) {
+        void this.syncSharedDictionaryNow();
+      }
     });
     setInterval(() => this.requestSyncAll("interval"), AUTO_SYNC_INTERVAL_MS);
   }
@@ -2959,12 +2969,17 @@ export class SyncService {
       if (workspaceId && isSharedDictionaryAccessLost(err)) {
         clearSharedCursors(workspaceId);
         this.teamPassMovedWork = true;
+        let cleared = true;
         try {
           await api?.clearSharedDictionary?.(workspaceId);
         } catch (clearErr) {
+          cleared = false;
           console.error("Shared dictionary cleanup failed:", clearErr);
         }
-        if (isCurrent()) await store.load(workspaceId, generation);
+        if (!isCurrent()) return;
+        // A load after a failed clear would republish the lost lists' words.
+        if (cleared) await store.load(workspaceId, generation);
+        else useSettingsStore.getState().setSharedDictionaryHints(EMPTY_SHARED_HINTS, workspaceId);
         return;
       }
       // A plain 404 is an API without the shared dictionary routes: nothing
@@ -3035,9 +3050,11 @@ export class SyncService {
       const entries: CloudSharedEntry[] = [];
       const contributors: SharedContributor[][] = [];
       let page: SharedDictionaryPage = { limit };
+      let passStartedAt: string | undefined;
       while (true) {
         const response = await SharedDictionaryService.list(workspaceId, page);
         await assertAuthGenerationCurrent(authGeneration);
+        passStartedAt ??= response.server_time;
         entries.push(...response.entries);
         contributors.push(response.contributors);
         if (response.hasMore) {
@@ -3055,7 +3072,7 @@ export class SyncService {
         };
         const result = await api.replaceSharedDictionary!(workspaceId, { entries, meta });
         if (result?.changed) this.teamPassMovedWork = true;
-        writeSharedCursor(key, null, response.server_time, entries.at(-1)?.id ?? null);
+        writeSharedCursor(key, null, passStartedAt, entries.at(-1)?.id ?? null);
         return "snapshot";
       }
     }
@@ -3065,9 +3082,11 @@ export class SyncService {
     const contributors: SharedContributor[][] = [storedMeta.contributors];
     let page: SharedDictionaryPage = { since: overlappedSince(stored), limit };
     let lastId: string | null = null;
+    let passStartedAt: string | undefined;
     while (true) {
       const response = await SharedDictionaryService.list(workspaceId, page);
       await assertAuthGenerationCurrent(authGeneration);
+      passStartedAt ??= response.server_time;
       contributors.push(response.contributors);
       const upserts = response.entries.filter((entry) => !entry.deleted_at);
       const deletedIds = response.entries
@@ -3099,7 +3118,7 @@ export class SyncService {
         meta,
       });
       if (result?.changed) this.teamPassMovedWork = true;
-      writeSharedCursor(key, stored, response.server_time, lastId);
+      writeSharedCursor(key, stored, passStartedAt, lastId);
       return "delta";
     }
   }
@@ -3121,9 +3140,11 @@ export class SyncService {
     if (!stored) {
       const hidden: SharedDictionaryHideRecord[] = [];
       let page: SharedDictionaryPage = { limit };
+      let passStartedAt: string | undefined;
       while (true) {
         const response = await SharedDictionaryService.hides(workspaceId, page);
         await assertAuthGenerationCurrent(authGeneration);
+        passStartedAt ??= response.server_time;
         hidden.push(...response.hides.filter((hide) => !hide.deleted_at).map(toRecord));
         if (response.hasMore) {
           const last = response.hides.at(-1);
@@ -3134,16 +3155,18 @@ export class SyncService {
           continue;
         }
         await api.replaceSharedDictionaryHides!(workspaceId, hidden);
-        writeSharedCursor(key, null, response.server_time, hidden.at(-1)?.entryId ?? null);
+        writeSharedCursor(key, null, passStartedAt, hidden.at(-1)?.entryId ?? null);
         return;
       }
     }
 
     let page: SharedDictionaryPage = { since: overlappedSince(stored), limit };
     let lastId: string | null = null;
+    let passStartedAt: string | undefined;
     while (true) {
       const response = await SharedDictionaryService.hides(workspaceId, page);
       await assertAuthGenerationCurrent(authGeneration);
+      passStartedAt ??= response.server_time;
       const result = await api.applySharedDictionaryHides!(workspaceId, {
         hidden: response.hides.filter((hide) => !hide.deleted_at).map(toRecord),
         unhidden: response.hides.filter((hide) => hide.deleted_at).map((hide) => hide.entry_id),
@@ -3152,7 +3175,7 @@ export class SyncService {
       const last = response.hides.at(-1);
       if (last) lastId = last.entry_id;
       if (!response.hasMore) {
-        writeSharedCursor(key, stored, response.server_time, lastId);
+        writeSharedCursor(key, stored, passStartedAt, lastId);
         return;
       }
       if (!last || (last.updated_at === page.since && last.entry_id === page.sinceId)) {

@@ -370,6 +370,151 @@ test("sign-out clears the shared tables, cursors, welcome, capability and hints"
   assert.equal(state.snapshot, null);
 });
 
+test("a delete behind a later snapshot page is still read by the next delta", async (t) => {
+  const ctx = await setup(t);
+  const { cloud, db, service } = ctx;
+  const rows = cloud.add(
+    W1,
+    Array.from({ length: 250 }, (_, index) => `Word${index}`),
+    { created_at: "2026-10-20T10:00:00.000Z", updated_at: "2026-10-20T10:00:00.000Z" }
+  );
+  // Between page 1 and page 2, a teammate deletes a word page 1 already sent,
+  // and the server clock moves well past the read overlap.
+  cloud.beforeServe = (request) => {
+    if (request.pathname !== LIST || !request.query.get("cursor")) return;
+    Object.assign(rows[5], {
+      deleted_at: "2026-10-20T12:00:05.000Z",
+      updated_at: "2026-10-20T12:00:05.000Z",
+    });
+    cloud.setServerTime("2026-10-20T12:00:30.000Z");
+    cloud.beforeServe = null;
+  };
+
+  await service.syncSharedDictionaryNow();
+  assert.equal(harness.localStorage.getItem(ENTRIES_CURSOR), "2026-10-20T12:00:00.000Z");
+  const words = async () => (await db.api.getSharedDictionary(W1)).entries.map((e) => e.word);
+  assert.ok((await words()).includes("Word5"), "page 1 sent it live");
+
+  await service.syncSharedDictionaryNow();
+
+  assert.equal(query(cloud.requestsTo(LIST).at(-1)).since, "2026-10-20T11:59:50.000Z");
+  assert.equal((await words()).includes("Word5"), false);
+  assert.equal((await words()).length, 249);
+  assert.equal(ctx.hints().workspace.includes("Word5"), false);
+});
+
+test("an unhide behind a later hides snapshot page is still read by the next delta", async (t) => {
+  const ctx = await setup(t);
+  const { cloud, db, service } = ctx;
+  const rows = cloud.add(
+    W1,
+    Array.from({ length: 250 }, (_, index) => `Word${index}`),
+    { created_at: "2026-10-20T10:00:00.000Z", updated_at: "2026-10-20T10:00:00.000Z" }
+  );
+  for (const row of rows) cloud.hide(W1, row.id, "2026-10-20T11:00:00.000Z");
+  const unhidden = cloud.workspace(W1).hides.find((hide) => hide.entry_id === rows[5].id);
+  cloud.beforeServe = (request) => {
+    if (request.pathname !== HIDES || !request.query.get("cursor")) return;
+    Object.assign(unhidden, {
+      deleted_at: "2026-10-20T12:00:05.000Z",
+      updated_at: "2026-10-20T12:00:05.000Z",
+    });
+    cloud.setServerTime("2026-10-20T12:00:30.000Z");
+    cloud.beforeServe = null;
+  };
+
+  await service.syncSharedDictionaryNow();
+  assert.equal(harness.localStorage.getItem(HIDES_CURSOR), "2026-10-20T12:00:00.000Z");
+  const hidden = async () => (await db.api.getSharedDictionary(W1)).hiddenIds;
+  assert.ok((await hidden()).includes(rows[5].id), "page 1 sent the hide");
+
+  await service.syncSharedDictionaryNow();
+
+  assert.equal(query(cloud.requestsTo(HIDES).at(-1)).since, "2026-10-20T11:59:50.000Z");
+  assert.equal((await hidden()).includes(rows[5].id), false);
+  assert.equal((await hidden()).length, 249);
+  assert.deepEqual(ctx.hints().workspace, ["Word5"]);
+});
+
+test("a delta stall throws without corrupting state", async (t) => {
+  const ctx = await setup(t);
+  const { cloud, db, service } = ctx;
+  const [row] = cloud.add(W1, ["Qdrant"]);
+  await service.syncSharedDictionaryNow();
+  const before = await db.api.getSharedDictionary(W1);
+  const cursor = harness.localStorage.getItem(ENTRIES_CURSOR);
+  const errors = t.mock.method(console, "error", () => {});
+
+  // The server keeps answering "more" with the same last row.
+  const stuck = {
+    entries: [row],
+    hasMore: true,
+    scopes: [WORKSPACE_SCOPE],
+    contributors: [],
+    paused: false,
+    server_time: "2026-10-20T13:00:00.000Z",
+  };
+  cloud.respondNext(LIST, stuck);
+  cloud.respondNext(LIST, stuck);
+  await service.syncSharedDictionaryNow();
+
+  assert.equal(errors.mock.callCount(), 1);
+  assert.match(String(errors.mock.calls[0].arguments[1]), /delta stopped advancing/);
+  assert.equal(cloud.requestsTo(LIST).length, 3, "it gives up instead of looping");
+  assert.equal(harness.localStorage.getItem(ENTRIES_CURSOR), cursor);
+  assert.deepEqual(await db.api.getSharedDictionary(W1), before);
+  assert.deepEqual(ctx.hints().workspace, ["Qdrant"]);
+});
+
+test("a 410 from /hides restarts as a hides snapshot", async (t) => {
+  const ctx = await setup(t);
+  const { cloud, db, service } = ctx;
+  const [kept, unhidden] = cloud.add(W1, ["Qdrant", "Orukeet"]);
+  cloud.hide(W1, unhidden.id);
+  await service.syncSharedDictionaryNow();
+  assert.deepEqual((await db.api.getSharedDictionary(W1)).hiddenIds, [unhidden.id]);
+
+  // The hide is undone and the hide of `kept` arrives, both behind an expired cursor.
+  cloud.workspace(W1).hides = [];
+  cloud.hide(W1, kept.id);
+  cloud.failNext(HIDES, { status: 410, code: "SHARED_DICTIONARY_CURSOR_EXPIRED" });
+  const hidesBefore = cloud.requestsTo(HIDES).length;
+  await service.syncSharedDictionaryNow();
+
+  const [expired, snapshot] = cloud.requestsTo(HIDES).slice(hidesBefore).map(query);
+  assert.ok(expired.since);
+  assert.equal(snapshot.since, undefined);
+  assert.equal(snapshot.cursor, undefined);
+  assert.equal(db.callsNamed("replaceSharedDictionaryHides").length, 2);
+  assert.equal(db.callsNamed("replaceSharedDictionary").length, 2, "entries re-snapshot too");
+  assert.deepEqual((await db.api.getSharedDictionary(W1)).hiddenIds, [kept.id]);
+  assert.deepEqual(ctx.hints().workspace, ["Orukeet"]);
+});
+
+test("a failed clear after NOT_MEMBER publishes empty hints instead of reloading", async (t) => {
+  const ctx = await setup(t);
+  const { cloud, db, service } = ctx;
+  cloud.add(W1, ["Qdrant"]);
+  await service.syncSharedDictionaryNow();
+  const errors = t.mock.method(console, "error", () => {});
+  harness.window.electronAPI.clearSharedDictionary = async () => {
+    throw new Error("disk full");
+  };
+  cloud.failNext(LIST, { status: 404, code: "SHARED_DICTIONARY_NOT_MEMBER" });
+
+  await service.syncSharedDictionaryNow();
+
+  assert.equal(db.workspaces.get(W1).entries.size, 1, "the mirror could not be cleared");
+  assert.deepEqual(ctx.hints(), { space: [], workspace: [] });
+  assert.deepEqual(JSON.parse(harness.localStorage.getItem("sharedDictionaryHints")), {
+    workspaceId: W1,
+    space: [],
+    workspace: [],
+  });
+  assert.equal(harness.localStorage.getItem(ENTRIES_CURSOR), null);
+  assert.equal(errors.mock.callCount(), 1);
+});
+
 // --- personal shared_at (moved words) ----------------------------------------
 
 function personalRow(overrides = {}) {
@@ -472,4 +617,31 @@ test("a pull takes the cloud's shared_at for a row at the same version", async (
   const olderCtx = await setupPersonal(t, { local: synced, cloudEntries: [olderApiRow] });
   await olderCtx.service.syncDictionaryNow();
   assert.equal(olderCtx.upserted.length, 0);
+});
+
+// Last: startAutoSync's subscription lives as long as the workspace store, so
+// it would also fire in any test after this one.
+test("changing the active workspace starts a shared pass for it", async (t) => {
+  const ctx = await setup(t);
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  // Keep startAutoSync's own first pass throttled; only the switch should sync.
+  harness.localStorage.setItem("lastSyncedAt", new Date().toISOString());
+  harness.localStorage.setItem("teamSpacesCapability.probedAt", new Date().toISOString());
+  ctx.cloud.add(W2, ["Biscuit"]);
+  ctx.service.startAutoSync();
+  await flush();
+  assert.equal(ctx.cloud.requestsTo(LIST).length, 0);
+
+  ctx.useWorkspaceStore.getState().setActiveWorkspaceId(W2);
+  for (let i = 0; i < 20 && ctx.hints().workspace.length === 0; i++) await flush();
+
+  const lists = ctx.cloud.requestsTo(LIST);
+  assert.equal(lists.length, 1);
+  assert.equal(lists[0].query.get("workspace_id"), W2);
+  assert.deepEqual(ctx.hints().workspace, ["Biscuit"]);
+
+  // Clearing the workspace is not a switch to sync.
+  ctx.useWorkspaceStore.getState().setActiveWorkspaceId(null);
+  await flush();
+  assert.equal(ctx.cloud.requestsTo(LIST).length, 1);
 });
