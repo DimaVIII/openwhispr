@@ -2677,7 +2677,7 @@
         "anthropic_claude_fable_5_1": "Anthropic の最も高性能なモデル、Mythos クラス",
         "anthropic_claude_fable_5": "前世代の Mythos クラスのフラッグシップ",
         "anthropic_claude_opus_5_5": "複雑な推論向けの最新 Opus モデル、100 万トークンコンテキスト",
-        "anthropic_claude_sonnet_5_5": "最新の Sonnet：日常業務に速くて高性能、100 万トークンコンテキスト",
+        "anthropic_claude_sonnet_5_5": "最新の Sonnet：日常業務向けの高速かつ高性能なモデル、100 万トークンコンテキスト",
         "anthropic_claude_haiku_5_5": "最速かつ最も低コストな Claude モデル、100 万トークンコンテキスト",
         "anthropic_claude_sonnet_5": "低コストで高速かつ高性能なアシスタントモデル",
         "anthropic_claude_sonnet_4_6": "バランスの取れた性能",

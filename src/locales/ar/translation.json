@@ -282,7 +282,7 @@
         "openai_gpt_4_1_nano": "GPT-4.1 بأقل زمن انتقال",
         "anthropic_claude_fable_5_1": "نموذج Anthropic الأكثر قدرة، فئة Mythos",
         "anthropic_claude_fable_5": "الرائد السابق من فئة Mythos",
-        "anthropic_claude_opus_5_5": "أحدث نموذج Opus للاستدلال المعقد، سياق 1 مليون",
+        "anthropic_claude_opus_5_5": "أحدث نموذج Opus للاستنتاج المعقد، سياق 1 مليون",
         "anthropic_claude_sonnet_5_5": "أحدث Sonnet: سريع وقادر للعمل اليومي، سياق 1 مليون",
         "anthropic_claude_haiku_5_5": "أسرع نموذج Claude وأقلّه تكلفة، سياق 1 مليون",
         "anthropic_claude_sonnet_5": "نموذج مساعد سريع وقادر بتكلفة أقل",
