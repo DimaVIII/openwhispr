@@ -3757,6 +3757,8 @@ declare global {
       ) => Promise<{ marked: string[] }>;
       /** Live personal words that were shared into a team list. */
       getMovedDictionaryWords?: () => Promise<string[]>;
+      /** Removes moved personal words whose shared copy is gone for the sharer. */
+      retireMovedDictionaryWords?: (words: string[]) => Promise<{ retired: string[] }>;
 
       getSharedDictionary?: (workspaceId: string) => Promise<SharedDictionarySnapshot>;
       applySharedDictionaryPull?: (

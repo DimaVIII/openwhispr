@@ -1290,6 +1290,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   markDictionaryWordsShared: (words, sharedAt) =>
     ipcRenderer.invoke("db-mark-dictionary-words-shared", words, sharedAt),
   getMovedDictionaryWords: () => ipcRenderer.invoke("db-get-moved-dictionary-words"),
+  retireMovedDictionaryWords: (words) =>
+    ipcRenderer.invoke("db-retire-moved-dictionary-words", words),
 
   getSharedDictionary: (workspaceId) => ipcRenderer.invoke("db-shared-dictionary-get", workspaceId),
   applySharedDictionaryPull: (workspaceId, change) =>

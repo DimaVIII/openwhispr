@@ -259,6 +259,48 @@ test("markDictionaryWordsShared keeps the word live", (t) => {
   );
 });
 
+test("retireMovedDictionaryWords removes only moved rows", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+
+  for (const [index, word] of ["Qdrant", "Parakeet"].entries()) {
+    db.upsertDictionaryFromCloud({
+      id: `cloud-${index}`,
+      client_dict_id: `client-${index}`,
+      word,
+      source: "manual",
+      created_at: "2026-10-20T09:00:00.000Z",
+      updated_at: "2026-10-20T09:00:00.000Z",
+    });
+  }
+  db.applyDictionaryChanges({ add: ["Orukeet", "Kubernetes"] });
+  db.markDictionaryWordsShared(["Qdrant", "Orukeet"], "2026-10-20T12:00:00.000Z");
+
+  const result = db.retireMovedDictionaryWords([
+    "qdrant",
+    "Orukeet",
+    "Parakeet",
+    "Kubernetes",
+    "Missing",
+  ]);
+
+  assert.deepEqual(result, { retired: ["Qdrant", "Orukeet"] });
+  assert.deepEqual(db.getDictionary(), ["Parakeet", "Kubernetes"]);
+  assert.deepEqual(db.getMovedDictionaryWords(), []);
+  // The synced row is tombstoned for the push; the never-synced one is gone,
+  // so no pending create can send it again.
+  assert.deepEqual(
+    db.getPendingDictionaryDeletes().map((row) => [row.word, row.cloud_id]),
+    [["Qdrant", "cloud-0"]]
+  );
+  assert.deepEqual(
+    db.getPendingDictionary().map((row) => row.word),
+    ["Kubernetes"]
+  );
+  assert.equal(db.getDictionaryEntryByClientId("client-1").deleted_at, null);
+  assert.deepEqual(db.retireMovedDictionaryWords(["Qdrant"]), { retired: [] });
+});
+
 test("replaceSharedDictionary removes entries absent from the snapshot", (t) => {
   const db = createDb(t);
   if (!db) return;

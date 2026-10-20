@@ -7,6 +7,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const harness = require("../helpers/harness/browserGlobals.js");
+const harnessWindow = () => harness.window;
 const { createSharedDictionaryDb } = require("../helpers/harness/sharedDictionaryFakes.js");
 
 const WS = "11111111-1111-4111-8111-111111111111";
@@ -34,13 +35,15 @@ function failure(status, code, extra = {}) {
   return { fail: { status, code, error: code ?? "failed", ...extra } };
 }
 
-function setup(t, { personal = [] } = {}) {
+function setup(t, { personal = [], canSync = false } = {}) {
   harness.resetBrowserGlobals();
   harness.installBrowserGlobals();
 
   const db = createSharedDictionaryDb();
-  const personalByLower = new Map(personal.map((row) => [row.word.toLowerCase(), row]));
+  const personalByLower = new Map(personal.map((row) => [row.word.toLowerCase(), { ...row }]));
   const marks = [];
+  const retires = [];
+  let broadcasts = 0;
   const requests = [];
   const responders = new Map();
 
@@ -53,7 +56,27 @@ function setup(t, { personal = [] } = {}) {
         .map((row) => ({ word: row.word, cloudId: row.cloudId ?? null })),
     markDictionaryWordsShared: async (words, sharedAt) => {
       marks.push({ words, sharedAt });
+      for (const word of words) {
+        const row = personalByLower.get(word.toLowerCase());
+        if (row) row.sharedAt = sharedAt;
+      }
       return { marked: words };
+    },
+    retireMovedDictionaryWords: async (words) => {
+      retires.push(words);
+      const retired = [];
+      for (const word of words) {
+        const row = personalByLower.get(word.toLowerCase());
+        if (!row?.sharedAt) continue;
+        personalByLower.delete(word.toLowerCase());
+        retired.push(row.word);
+      }
+      return { retired };
+    },
+    getDictionary: async () => [...personalByLower.values()].map((row) => row.word),
+    broadcastDictionaryUpdated: async () => {
+      broadcasts += 1;
+      return { success: true };
     },
     cloudApiRequest: async (options) => {
       const path = options.path.split("?")[0];
@@ -79,6 +102,7 @@ function setup(t, { personal = [] } = {}) {
   const actions = require("../../src/services/sharedDictionaryActions.ts");
   const { useSharedDictionaryStore } = require("../../src/stores/sharedDictionaryStore.ts");
   const { syncService } = require("../../src/services/SyncService.ts");
+  const { useSettingsStore } = require("../../src/stores/settingsStore.ts");
 
   const counts = { reloads: 0, sharedSyncs: 0, personalSyncs: 0 };
   const originalReload = useSharedDictionaryStore.getState().reload;
@@ -94,10 +118,24 @@ function setup(t, { personal = [] } = {}) {
   t.mock.method(syncService, "syncDictionaryNow", async () => {
     counts.personalSyncs += 1;
   });
+  t.mock.method(syncService, "canSync", () => canSync);
 
   const on = (path, respond) => responders.set(path, respond);
   const requestsTo = (path) => requests.filter((request) => request.path === path);
-  return { actions, db, marks, counts, on, requestsTo };
+  const personalWords = () => [...personalByLower.values()].map((row) => row.word);
+  const customDictionary = () => useSettingsStore.getState().customDictionary;
+  return {
+    actions,
+    db,
+    marks,
+    retires,
+    counts,
+    on,
+    requestsTo,
+    personalWords,
+    customDictionary,
+    broadcasts: () => broadcasts,
+  };
 }
 
 // Echoes a share request as the API accepts it: every word lands in every target.
@@ -186,7 +224,7 @@ test("second chunk failure keeps the first 200 shared and returns the other 250"
 });
 
 test("PERSONAL_CHANGED maps to personalChanged and triggers a personal sync", async (t) => {
-  const ctx = setup(t, { personal: syncedPersonal(2) });
+  const ctx = setup(t, { personal: syncedPersonal(2), canSync: true });
   ctx.on(SHARE, () =>
     failure(409, "SHARED_DICTIONARY_PERSONAL_CHANGED", {
       conflicts: [{ id: "aaaaaaaa-aaaa-4aaa-8aaa-000000000000", word: "Word0 renamed" }],
@@ -199,6 +237,7 @@ test("PERSONAL_CHANGED maps to personalChanged and triggers a personal sync", as
   assert.deepEqual(result.moved, []);
   assert.equal(ctx.counts.personalSyncs, 1);
   assert.deepEqual(ctx.marks, []);
+  assert.equal(ctx.requestsTo(SHARE).length, 1, "with backup on there is no retry");
 });
 
 test("share and add never send an empty batch", async (t) => {
@@ -343,4 +382,192 @@ test("hiding and unhiding apply the server's hide rows", async (t) => {
   assert.deepEqual(unhide.unhidden, [rows[0].id]);
   assert.deepEqual(unhide.hidden, []);
   assert.deepEqual((await ctx.db.api.getSharedDictionary(WS)).hiddenIds, [rows[1].id]);
+});
+
+const DELETE = "/api/shared-dictionary/delete";
+const RESTORE = "/api/shared-dictionary/restore";
+const HIDE = "/api/shared-dictionary/hide";
+
+const hideRows = (body) =>
+  body.ids.map((id) => ({
+    entry_id: id,
+    workspace_id: WS,
+    updated_at: "2026-10-20T13:00:00.000Z",
+    deleted_at: body.hidden ? null : "2026-10-20T13:00:00.000Z",
+  }));
+
+const manyIds = (count) =>
+  Array.from(
+    { length: count },
+    (_, index) => `cccccccc-cccc-4ccc-8ccc-${String(index).padStart(12, "0")}`
+  );
+
+test("PERSONAL_CHANGED with backup off retries once with the conflicts as plain words", async (t) => {
+  const personal = syncedPersonal(3);
+  const ctx = setup(t, { personal });
+  ctx.on(SHARE, (body, call) =>
+    call === 0
+      ? failure(409, "SHARED_DICTIONARY_PERSONAL_CHANGED", {
+          conflicts: [{ id: personal[1].cloudId, word: "Word1 renamed" }],
+        })
+      : acceptShare(body)
+  );
+
+  const result = await ctx.actions.sharePersonalWords(WS, [null], ["Word0", "Word1", "Word2"]);
+
+  const [, retry] = ctx.requestsTo(SHARE);
+  assert.deepEqual(retry.body.personal, [
+    { id: personal[0].cloudId, word: "Word0" },
+    { id: personal[2].cloudId, word: "Word2" },
+  ]);
+  assert.deepEqual(retry.body.words, ["Word1"]);
+  assert.equal(result.failed, null);
+  assert.deepEqual(result.moved, ["Word0", "Word1", "Word2"]);
+  assert.deepEqual(ctx.marks[0].words, ["Word0", "Word1", "Word2"]);
+});
+
+test("PERSONAL_CHANGED with backup off fails after one retry", async (t) => {
+  const ctx = setup(t, { personal: syncedPersonal(2) });
+  ctx.on(SHARE, () => failure(409, "SHARED_DICTIONARY_PERSONAL_CHANGED", { conflicts: [] }));
+
+  const result = await ctx.actions.sharePersonalWords(WS, [null], ["Word0", "Word1"]);
+
+  const sent = ctx.requestsTo(SHARE);
+  assert.equal(sent.length, 2);
+  assert.deepEqual(sent[1].body.personal, [], "no conflict list: every word goes plain");
+  assert.deepEqual(sent[1].body.words, ["Word0", "Word1"]);
+  assert.deepEqual(result.failed, { words: ["Word0", "Word1"], reason: "personalChanged" });
+  assert.deepEqual(ctx.marks, []);
+});
+
+test("a failed mark still applies the created entries", async (t) => {
+  const ctx = setup(t, { personal: syncedPersonal(1) });
+  ctx.on(SHARE, acceptShare);
+  harnessWindow().electronAPI.markDictionaryWordsShared = async () => {
+    throw new Error("disk full");
+  };
+  t.mock.method(console, "warn", () => {});
+
+  const result = await ctx.actions.sharePersonalWords(WS, [null], ["Word0"]);
+
+  assert.deepEqual(result.moved, ["Word0"]);
+  assert.equal(ctx.db.callsNamed("applySharedDictionaryPull").length, 1);
+});
+
+test("delete and hide send more than 200 ids in chunks", async (t) => {
+  const ctx = setup(t);
+  const ids = manyIds(450);
+  ctx.on(DELETE, (body) => ({ deletedIds: body.ids }));
+  ctx.on(RESTORE, () => ({ restored: [], conflicts: [] }));
+  ctx.on(HIDE, (body) => ({ hides: hideRows(body) }));
+
+  const { undo } = await ctx.actions.deleteSharedWords(WS, ids);
+  await undo();
+  await ctx.actions.setSharedWordsHidden(WS, ids, true);
+
+  const sizes = (path) => ctx.requestsTo(path).map((request) => request.body.ids.length);
+  assert.deepEqual(sizes(DELETE), [200, 200, 50]);
+  assert.deepEqual(sizes(RESTORE), [200, 200, 50]);
+  assert.deepEqual(sizes(HIDE), [200, 200, 50]);
+});
+
+test("a delete whose second chunk fails carries an undo for the first 200", async (t) => {
+  const ctx = setup(t);
+  const ids = manyIds(450);
+  ctx.on(DELETE, (body, call) => (call === 1 ? failure(500, undefined) : { deletedIds: body.ids }));
+  ctx.on(RESTORE, () => ({ restored: [], conflicts: [] }));
+
+  const error = await ctx.actions.deleteSharedWords(WS, ids).then(
+    () => assert.fail("expected the delete to throw"),
+    (rejection) => rejection
+  );
+
+  assert.ok(error instanceof ctx.actions.SharedDictionaryActionError);
+  assert.equal(error.reason, "network");
+  assert.equal(error.appliedCount, 200);
+  assert.equal(ctx.requestsTo(DELETE).length, 2);
+  assert.deepEqual(ctx.db.callsNamed("applySharedDictionaryPull")[0].deletedIds, ids.slice(0, 200));
+
+  await error.undo();
+
+  assert.deepEqual(
+    ctx.requestsTo(RESTORE).map((request) => request.body),
+    [{ workspace_id: WS, ids: ids.slice(0, 200) }]
+  );
+});
+
+test("a hide whose second chunk fails reports the 200 it hid", async (t) => {
+  const ctx = setup(t);
+  const ids = manyIds(450);
+  ctx.on(HIDE, (body, call) =>
+    call === 1 ? failure(404, "SHARED_DICTIONARY_NOT_MEMBER") : { hides: hideRows(body) }
+  );
+
+  const error = await ctx.actions.setSharedWordsHidden(WS, ids, true).then(
+    () => assert.fail("expected the hide to throw"),
+    (rejection) => rejection
+  );
+
+  assert.equal(error.reason, "notMember");
+  assert.equal(error.appliedCount, 200);
+  assert.equal(error.undo, undefined);
+  assert.equal(ctx.requestsTo(HIDE).length, 2);
+});
+
+function movedPersonal() {
+  return [
+    {
+      word: "Qdrant",
+      cloudId: "dddddddd-dddd-4ddd-8ddd-000000000001",
+      sharedAt: "2026-10-20T12:00:00.000Z",
+    },
+    { word: "Orukeet", cloudId: null, sharedAt: "2026-10-20T12:00:00.000Z" },
+    { word: "Parakeet", cloudId: "dddddddd-dddd-4ddd-8ddd-000000000003" },
+  ];
+}
+
+test("hiding a moved word with no other copy retires its personal fallback", async (t) => {
+  const ctx = setup(t, { personal: movedPersonal() });
+  const rows = [entry("qdrant"), entry("Parakeet")];
+  ctx.db.seed(WS, { entries: rows });
+  ctx.on(HIDE, (body) => ({ hides: hideRows(body) }));
+
+  await ctx.actions.setSharedWordsHidden(WS, [rows[0].id, rows[1].id], true);
+
+  assert.deepEqual(ctx.retires, [["qdrant", "Parakeet"]]);
+  assert.deepEqual(ctx.personalWords(), ["Orukeet", "Parakeet"], "an unmoved word is untouched");
+  assert.deepEqual(ctx.customDictionary(), ["Orukeet", "Parakeet"]);
+  assert.equal(ctx.broadcasts(), 1);
+  assert.equal(ctx.counts.personalSyncs, 1);
+});
+
+test("a moved word with another live copy in a second list keeps its fallback", async (t) => {
+  const ctx = setup(t, { personal: movedPersonal() });
+  const rows = [entry("Qdrant"), entry("QDRANT", SPACE)];
+  ctx.db.seed(WS, { entries: rows, scopes: [{ space_id: null }, { space_id: SPACE }] });
+  ctx.on(HIDE, (body) => ({ hides: hideRows(body) }));
+
+  await ctx.actions.setSharedWordsHidden(WS, [rows[0].id], true);
+
+  assert.deepEqual(ctx.retires, []);
+  assert.deepEqual(ctx.personalWords(), ["Qdrant", "Orukeet", "Parakeet"]);
+  assert.equal(ctx.broadcasts(), 0);
+  assert.equal(ctx.counts.personalSyncs, 0);
+});
+
+test("delete for everyone retires the fallback; unhiding never does", async (t) => {
+  const ctx = setup(t, { personal: movedPersonal() });
+  const rows = [entry("Orukeet"), entry("Qdrant")];
+  ctx.db.seed(WS, { entries: rows });
+  ctx.on(DELETE, (body) => ({ deletedIds: body.ids }));
+  ctx.on(HIDE, (body) => ({ hides: hideRows(body) }));
+
+  await ctx.actions.setSharedWordsHidden(WS, [rows[1].id], false);
+  assert.deepEqual(ctx.retires, []);
+
+  await ctx.actions.deleteSharedWords(WS, [rows[0].id]);
+
+  assert.deepEqual(ctx.retires, [["Orukeet"]]);
+  assert.deepEqual(ctx.personalWords(), ["Qdrant", "Parakeet"]);
+  assert.deepEqual(ctx.customDictionary(), ["Qdrant", "Parakeet"]);
 });

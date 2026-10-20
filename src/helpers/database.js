@@ -2890,6 +2890,41 @@ class DatabaseManager {
     }
   }
 
+  // Removes the sharer's fallback once its shared copy was hidden or deleted
+  // for everyone, as the API does. Only moved rows (shared_at set) qualify. A
+  // never-synced row is deleted outright, so a pending create can't bring it
+  // back; a synced one is tombstoned for the usual push.
+  retireMovedDictionaryWords(words) {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      const rows = this.db
+        .prepare(
+          "SELECT id, word, cloud_id FROM custom_dictionary WHERE deleted_at IS NULL AND shared_at IS NOT NULL"
+        )
+        .all();
+      const byLower = new Map(rows.map((row) => [row.word.toLowerCase(), row]));
+      const { tombstone, hardDelete } = this._dictionaryWriteStatements();
+      const retired = [];
+      this.db.transaction(() => {
+        for (const lower of this._normalizeDictionaryWords(words).keys()) {
+          const row = byLower.get(lower);
+          if (!row) continue;
+          if (row.cloud_id) tombstone.run(row.id);
+          else hardDelete.run(row.id);
+          retired.push(row.word);
+        }
+      })();
+      return { retired };
+    } catch (error) {
+      debugLogger.error(
+        "Error retiring moved dictionary words",
+        { error: error.message },
+        "database"
+      );
+      throw error;
+    }
+  }
+
   getMovedDictionaryWords() {
     try {
       if (!this.db) throw new Error("Database not initialized");

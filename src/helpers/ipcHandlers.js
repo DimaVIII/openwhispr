@@ -2191,6 +2191,11 @@ class IPCHandlers {
       return this.databaseManager.markDictionaryWordsShared(words, sharedAt);
     });
 
+    ipcMain.handle("db-retire-moved-dictionary-words", async (_event, words) => {
+      if (!Array.isArray(words)) throw new Error("words must be an array");
+      return this.databaseManager.retireMovedDictionaryWords(words);
+    });
+
     ipcMain.handle("db-get-moved-dictionary-words", async () => {
       return this.databaseManager.getMovedDictionaryWords();
     });
