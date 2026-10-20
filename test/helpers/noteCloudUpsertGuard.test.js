@@ -303,4 +303,8 @@ test("clearing a linked note's event with null stores the synced blank", (t) => 
 
   assert.equal(db.getNote(linked.id).calendar_event_id, "");
   assert.equal(db.getNote(unlinked.id).calendar_event_id, null, "a never-linked note stays NULL");
+
+  // A null arriving while that unlink still waits to sync keeps it.
+  db.updateNote(linked.id, { calendar_event_id: null });
+  assert.equal(db.getNote(linked.id).calendar_event_id, "");
 });

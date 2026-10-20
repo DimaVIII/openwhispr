@@ -123,22 +123,21 @@ export default function NoteParticipants({
     (event: LinkableCalendarEvent) => {
       setView("people");
       // Re-picking the linked event must not re-add guests the user removed.
-      if (!canEdit || event.id === localLinkedId) return;
+      if (event.id === localLinkedId) return;
       const merged = mergeEventAttendees(localParticipants, parseAttendees(event));
       setLocalParticipants(merged);
       setLocalLinkedId(event.id);
       saveParticipants(merged, { calendar_event_id: event.id });
     },
-    [canEdit, localLinkedId, localParticipants, saveParticipants]
+    [localLinkedId, localParticipants, saveParticipants]
   );
 
   const unlinkEvent = useCallback(() => {
     setView("people");
-    if (!canEdit) return;
     setLocalLinkedId(null);
     // "" (not NULL) so the unlink syncs: the cloud keeps a NULL as "unchanged".
     window.electronAPI.updateNote(noteId, { calendar_event_id: "" });
-  }, [canEdit, noteId]);
+  }, [noteId]);
 
   const resolvedEvent: (CalendarEvent & { calendar_color?: string | null }) | null = localLinkedId
     ? (events?.find((event) => event.id === localLinkedId) ??
@@ -335,8 +334,9 @@ export default function NoteParticipants({
                       <button
                         type="button"
                         onClick={() => window.electronAPI.openExternal(calendarUrl)}
-                        aria-label={openInCalendarLabel}
-                        title={openInCalendarLabel}
+                        // The short label keeps its own accessible name; the
+                        // tooltip says where it opens.
+                        title={joinUrl ? openInCalendarLabel : undefined}
                         className={EVENT_ACTION_CLASS}
                       >
                         <ExternalLink size={14} className="shrink-0" />

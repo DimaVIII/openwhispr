@@ -192,12 +192,14 @@ const FOLDER_NAME_TAKEN_FILTER = `(deleted_at IS NULL OR EXISTS (
 // time slot + title (REST rows have richer conference data). datetime()
 // normalizes the providers' timestamp formats (Google stores offset-form
 // RFC3339, Apple/Microsoft store UTC "Z" form). All-day rows pair by local
-// start day instead: REST providers store a plain date while the Apple helper
-// writes local midnight as a UTC instant, and EventKit's all-day end differs.
-// REST rows are never collapsed — Google and Microsoft are never mirrors of
-// each other.
+// days instead: REST providers store plain dates (the end exclusive) while the
+// Apple helper writes local instants, ending at either the next midnight or
+// the last second of the final day — one second later is the exclusive end
+// day in both cases. REST rows are never collapsed — Google and Microsoft are
+// never mirrors of each other.
 const MIRROR_SLOT = `CASE WHEN is_all_day THEN 'day:' || CASE WHEN length(start_time) = 10
-  THEN start_time ELSE date(start_time, 'localtime') END
+  THEN start_time || '|' || end_time
+  ELSE date(start_time, 'localtime') || '|' || date(end_time, '+1 second', 'localtime') END
   ELSE datetime(start_time) || '|' || datetime(end_time) END`;
 
 function dedupedEventsQuery(where) {
@@ -3409,7 +3411,7 @@ class DatabaseManager {
       if (!previous) return { success: false, error: "Note not found" };
       updates = { ...updates };
       // An unlink is stored as "" so it syncs: the cloud keeps a NULL as "unchanged".
-      if (updates.calendar_event_id === null && previous.calendar_event_id) {
+      if (updates.calendar_event_id === null && previous.calendar_event_id != null) {
         updates.calendar_event_id = "";
       }
       const clears = updates.clear_fields ?? [];

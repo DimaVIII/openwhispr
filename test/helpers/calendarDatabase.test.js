@@ -648,3 +648,50 @@ test("a declined all-day event keeps its Calendar.app copy out outside UTC", (t)
   assert.deepEqual(db.getLinkableCalendarEvents(), []);
   db.db.close();
 });
+
+test("all-day mirrors pair whichever end EventKit reports, and a longer namesake stays", (t) => {
+  useTimeZone(t, "America/Los_Angeles");
+  const db = createDb(t);
+  if (!db) return;
+  insertCalendar(db, "google", "google-calendar");
+  insertAppleCalendar(db, "apple-calendar");
+  const lastSecond = (year, month, day) =>
+    new Date(year, month, day, 23, 59, 59).toISOString().replace(".000Z", "Z");
+  db.upsertCalendarEvents([
+    restEvent("google", "google-calendar", "google-offsite", {
+      summary: "Offsite",
+      start_time: "2026-10-20",
+      end_time: "2026-10-21",
+      is_all_day: true,
+    }),
+    // The mirror ends on the event's last second rather than the next midnight.
+    appleEvent("apple-offsite", {
+      summary: "Offsite",
+      start_time: appleAllDayInstant(2026, 9, 20),
+      end_time: lastSecond(2026, 9, 20),
+      is_all_day: true,
+    }),
+    restEvent("google", "google-calendar", "google-vacation", {
+      summary: "Vacation",
+      start_time: "2026-10-20",
+      end_time: "2026-10-21",
+      is_all_day: true,
+    }),
+    // A separate, longer event on the user's own calendar, not a mirror.
+    appleEvent("apple-vacation-4d", {
+      summary: "Vacation",
+      start_time: appleAllDayInstant(2026, 9, 20),
+      end_time: appleAllDayInstant(2026, 9, 24),
+      is_all_day: true,
+    }),
+  ]);
+
+  assert.deepEqual(
+    db
+      .getLinkableCalendarEvents()
+      .map((event) => event.id)
+      .sort(),
+    ["apple-vacation-4d", "google-offsite", "google-vacation"]
+  );
+  db.db.close();
+});

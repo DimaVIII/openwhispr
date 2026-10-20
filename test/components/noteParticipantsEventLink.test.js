@@ -255,7 +255,8 @@ test("a Google event opens in Google Calendar, beside Join", async (t) => {
   );
 
   const button = buttonWith("notes.eventLink.calendar");
-  assert.equal(button.getAttribute("aria-label"), "notes.eventLink.openInGoogle");
+  assert.equal(button.getAttribute("aria-label"), null, "the visible label is its name");
+  assert.equal(button.getAttribute("title"), "notes.eventLink.openInGoogle");
   await act(() => button.click());
   assert.deepEqual(calls.openExternal, ["https://www.google.com/calendar/event?eid=abc"]);
 });
