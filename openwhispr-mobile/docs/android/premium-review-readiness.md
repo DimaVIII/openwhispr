@@ -2,7 +2,17 @@
 
 This is a requirements audit against the 15 October 2026 goal brief, including the Android-only correction. It is not a completion certificate. The [implementation plan](premium-experience-plan.md) preserves the chronological checkpoints; [acceptance](acceptance.md) distinguishes baseline checks from later builds. A checked implementation item does not establish physical-device or provider acceptance.
 
-## Current continuation — Qwen3 and correction-learning batch
+## 20 October — consolidated billing-candidate preflight
+
+The installed development runtime remains v67/source `ce8f0ccbfaf565c06f65b2f85c71df9cebc944a2`; no model/prompt change was promoted. A host-only comparison using all39 observed dictionary words rejected the zero-penalty alternative: grammar and paragraph limitations remain. Physical-phone speech/performance acceptance is unavailable; Josh confirmed no phone is available yet.
+
+Code15 is now downloaded and independently validated: package `com.gizmolabs.openwhispr`, version1.2.4/code15, expected upload certificate, valid bundle/signature and16KiB alignment for all50 Android CPU libraries. SHA-256 `cbe647ed119122e46f5dcb7c9d2fa023f5e3a69200f0afda5baeb53b8935e760`. It predates v67; historical artifact-blocked statements below are superseded for that file.
+
+The isolated API deployment at API PR268 source `0af512b7048d9f644d401f6ab71d2f81cf931bf0` passed nine ordinary-HTTPS synthetic-account checks, including sign-out invalidation and stable billing identity. With explicit authorization, the exact deployment URL was temporarily exempted from Vercel Authentication only after an exact-host/preview deny-outside-network guard was published and read back. Excluding the actual test network returned403; restoring its verified address allowed access. An Android HttpsURLConnection probe received the expected application401 without Vercel credentials. This is transport evidence, not installed React Native session or purchase acceptance. The exception was revoked and Vercel login verified before removing the owned guard; no custom rules/drafts remain and project protection is unchanged. Provider webhook ingress was not tested through the network guard.
+
+The `android-billing-test` EAS profile now has a validated native route for its pinned API URL, production Play package, remote signing, store AAB, ARM64 target, preview environment, required fonts and separate update channel. The20 October preflight passes8 focused billing/auth suites/89 tests, TypeScript and profile formatting. Its private receipts are `v91-preview-access-sequence.json`, `v91-plain-account-check.json`, `v91-android-transport-check.json` and `v92-candidate-config.json`. The next signed candidate must validate installed authentication, zero-charge purchase-to-server access and Restore; no new artifact or store upload is claimed by this preflight.
+
+## Historical v67 — Qwen3 and correction-learning batch
 
 Installed runtime is `ce8f0ccbfaf565c06f65b2f85c71df9cebc944a2`, combining the Qwen3 candidate, conservative correction learning and custom-title request suppression. **One local build and zero cloud builds** cover v67. Whole-note/partial-tail edits leave the dictionary unchanged; a genuine single-character correction is learned and its owned test entry is removed afterward. Custom titles use one inference; an untitled note uses two and persists **Silver draft needed**. Raw content is retained. [Local note quality](local-note-quality.md) records the exact checks and remaining grammar/paragraph limitations.
 
