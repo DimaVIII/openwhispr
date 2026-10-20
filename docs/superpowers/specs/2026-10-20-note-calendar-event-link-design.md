@@ -56,7 +56,7 @@ Tokens: Google sync tokens and Microsoft delta links pin the window they were cr
 
 Pruning stays as it is. A Google or Microsoft full sync deletes rows the fresh snapshot lacks, and an Apple snapshot deletes all unlinked Apple rows (`database.js:5530-5550`, `5826-5850`). Rows a live note links to are exempt from both. I checked Apple: `replaceAppleCalendarEvents` skips note-linked ids before it upserts, so a linked Apple row survives every snapshot. Between full syncs, incremental Google and Microsoft syncs never prune by age. Microsoft can therefore hold up to about 10 days, as it already drifts today. That's harmless, so no new age-based prune is added.
 
-Because the picked event is already in `calendar_events`, linking needs no upsert. The link alone protects the row from pruning.
+Because the picked event is already in `calendar_events`, linking needs no upsert. The link keeps the row through full-sync pruning and Apple snapshots. Deselecting its calendar still removes the row; the note then shows the "isn't in your calendars on this device" row.
 
 Data on the device: it now keeps about 3 days of other people's meeting details (names, emails, titles) instead of about 2.
 
@@ -84,6 +84,10 @@ Every reader treats `''` as unlinked:
 - Mobile's `if (!note.calendarEventId)` checks (`openwhispr-mobile/src/lib/notes/localMeetingNotes.ts:120` and others).
 
 noteUndo's trigger already treats `''` and NULL as equal, so a pull's blank echo doesn't count as an edit.
+
+`updateNote` stores an explicit NULL on a linked note as `""` too, so an unlink from the local API or any other non-UI caller syncs the same way.
+
+**Rollout limitation.** A device or teammate on a build before this one still maps a pulled `""` to NULL and keeps its stale link. Its next edit to that note sends the link back, and upgrading doesn't heal it, because it already recorded that revision. Once everyone with the note runs this build, unlinking again sticks.
 
 ### 3. An event already linked to another note: allow, silently
 
@@ -143,7 +147,7 @@ Link and unlink are ordinary `db-update-note` writes. `noteUndo.js` lists both `
   - Google stores `htmlLink`.
   - Microsoft stores Graph's `webLink` as returned. The research notes that it may open the older Outlook on the web; manual acceptance checks this.
   - Apple has no documented per-event URL, so the button is hidden there.
-  - A second token reset (`user_version` 6) backfills the column.
+  - The `user_version` 5 reset's full sync fills the column for rows inside the sync window (5 hadn't shipped, so one reset covers both). Older note-linked rows keep a NULL link.
 
 ### 10. i18n
 

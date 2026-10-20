@@ -472,6 +472,18 @@ Josh can cut this task without touching Tasks 1–6.
 
 ---
 
+## Deviations during implementation
+
+- **One reset, not two.** Task 7's `web_link` backfill uses the `user_version` 5 full sync instead of a v6 reset: v5 hadn't shipped, so one reset covers both.
+- **The "connect a calendar" copy** points at the Integrations sidebar item, where calendars are connected, not at "Settings → Integrations".
+- **The list-opening row uses `ChevronDown`,** as Granola does, not `ChevronRight`.
+- **Escape** is handled in `PopoverContent`'s `onEscapeKeyDown`, reading the view from a ref. The popover takes Escape on document capture, before the list's input, and that handler was seen running with a stale closure (Codex review).
+- **Recurring Outlook occurrences** take the series master's `webLink` (added to its `$select`) (Codex review).
+- **All-day mirrors** now pair by local start day and title in `dedupedEventsQuery`; before, every all-day event a Mac also syncs showed twice outside UTC (final review).
+- **`isBeforeStoredWindow` became `startsBeforeStoredWindow`:** a day the stored history only partly covers also gets the outside-the-window message (final review).
+- **Re-picking the linked event** goes back without merging its guests again, and the list is shown and saved only while `canEdit` (final review).
+- **`updateNote`** stores an explicit NULL unlink of a linked note as `""` (final review).
+
 ## Approval
 
 Approved by Josh on 2026-10-20. Answers to the spec's open questions: keep the date in the capsule; search only, no day arrows.

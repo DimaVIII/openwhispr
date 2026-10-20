@@ -1024,7 +1024,7 @@ class DatabaseManager {
         if (!err.message.includes("duplicate column")) throw err;
       }
       // The event's page in Google Calendar or Outlook on the web; Apple has
-      // none. Existing rows are backfilled by the user_version 5 full sync.
+      // none. The user_version 5 full sync fills it for rows in the sync window.
       try {
         this.db.exec("ALTER TABLE calendar_events ADD COLUMN web_link TEXT");
       } catch (err) {
