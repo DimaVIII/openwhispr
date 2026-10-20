@@ -3,7 +3,8 @@ import {
   TRANSCRIBE_PROMPT_CHARS,
   WHISPER_PROMPT_CHARS,
   dictionaryPromptLimit,
-  trimDictionaryPrompt,
+  formatDictionaryPrompt,
+  promptLimitKeepingPersonal,
 } from '../transcriptionPromptCap';
 
 describe('dictionaryPromptLimit', () => {
@@ -62,17 +63,48 @@ describe('dictionaryPromptLimit', () => {
   });
 });
 
-describe('trimDictionaryPrompt', () => {
-  it('leaves a prompt within the budget untouched', (): void => {
-    expect(trimDictionaryPrompt('OpenWhispr, Gizmo', 17)).toBe('OpenWhispr, Gizmo');
-    expect(trimDictionaryPrompt('', 10)).toBe('');
+describe('formatDictionaryPrompt', () => {
+  it('leaves a personal-only list that fits unchanged', (): void => {
+    expect(formatDictionaryPrompt([['a', 'b'], [], []], 900)).toBe('a, b');
   });
 
-  it('cuts at the last comma inside the budget so no entry is half-spelled', (): void => {
-    expect(trimDictionaryPrompt('alpha, bravo, charlie', 16)).toBe('alpha, bravo');
+  it('ends with personal words when over budget', (): void => {
+    const workspace = Array.from({ length: 300 }, (_, i) => `ws${String(i).padStart(8, '0')}`);
+    const prompt = formatDictionaryPrompt([['Piha', 'Biscuit'], [], workspace], 900);
+    expect(prompt.endsWith('Piha, Biscuit')).toBe(true);
+    expect(prompt.length).toBeLessThanOrEqual(900);
+    expect(prompt.length).toBeGreaterThan(800);
+    const words = prompt.split(', ');
+    // The highest-priority workspace words are kept, in their own order.
+    expect(words[0]).toBe('ws00000000');
+    expect(words.indexOf('Piha')).toBeGreaterThan(words.findIndex((w) => w.startsWith('ws')));
   });
 
-  it('hard-cuts a single entry longer than the budget', (): void => {
-    expect(trimDictionaryPrompt('supercalifragilistic', 5)).toBe('super');
+  it('keeps the higher tier last and drops whole words only', (): void => {
+    expect(formatDictionaryPrompt([['P1'], ['S1'], ['W1']], 100)).toBe('W1, S1, P1');
+    // 9 characters fit "S1, P1" and nothing more: W1 is dropped, not truncated.
+    expect(formatDictionaryPrompt([['P1'], ['S1'], ['W1']], 9)).toBe('S1, P1');
+    expect(formatDictionaryPrompt([['P1'], ['S1'], ['W1']], 1)).toBe('');
+  });
+
+  it('stops at the first word that does not fit', (): void => {
+    expect(formatDictionaryPrompt([['P1'], ['longer-space-word', 'S2'], ['W1']], 12)).toBe('P1');
+  });
+
+  it('returns an empty string for empty tiers', (): void => {
+    expect(formatDictionaryPrompt([[], [], []], 900)).toBe('');
+  });
+});
+
+describe('promptLimitKeepingPersonal', () => {
+  it('keeps the limit when the personal tier fits in it', (): void => {
+    expect(promptLimitKeepingPersonal([['Piha', 'Biscuit'], ['S1'], []], 890)).toBe(890);
+  });
+
+  it('grows to the personal tier so personal words are never cut', (): void => {
+    const personal = Array.from({ length: 200 }, (_, i) => `personal${i}`);
+    const limit = promptLimitKeepingPersonal([personal, ['S1'], ['W1']], 890);
+    expect(limit).toBe(personal.join(', ').length);
+    expect(formatDictionaryPrompt([personal, ['S1'], ['W1']], limit)).toBe(personal.join(', '));
   });
 });

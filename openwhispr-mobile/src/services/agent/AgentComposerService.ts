@@ -1,8 +1,8 @@
 import type { InferenceSelection } from '@/lib/mobileProviders';
 import { ApiError } from '@/lib/apiClient';
+import { buildLlmDictionaryHints } from '@/lib/dictationHints';
 import { isAccountRequiredError } from '@/lib/accountRequiredError';
 import { useConfigStore } from '@/store/useConfigStore';
-import { useDictionaryStore } from '@/store/useDictionaryStore';
 import {
   readKeyboardAgentJob,
   writeKeyboardAgentResult,
@@ -218,10 +218,10 @@ function isCurrentRequest(session: AgentSession, requestId: string): boolean {
 // Config resolution
 // ---------------------------------------------------------------------------
 
+// Personal words plus at most MAX_SHARED_WORDS_IN_LLM_PROMPTS shared ones.
 function resolveCustomDictionary(): string[] | undefined {
-  const dictState = useDictionaryStore.getState();
-  if (!dictState.isLoaded || dictState.entries.length === 0) return undefined;
-  return dictState.entries.map((e) => e.word);
+  const words = buildLlmDictionaryHints(false);
+  return words.length > 0 ? words : undefined;
 }
 
 /**

@@ -46,6 +46,10 @@ jest.mock('@/store/useDictionaryStore', () => ({
   },
 }));
 
+jest.mock('@/store/useSnippetsStore', () => ({
+  useSnippetsStore: { getState: () => ({ isLoaded: true, entries: [] }) },
+}));
+
 const mockSaveAgentSessions = jest.fn();
 const mockLoadAgentSessions = jest.fn<PersistedAgentSession[] | null, []>(() => null);
 const mockClearAgentSessions = jest.fn();
@@ -65,6 +69,7 @@ import {
   isKeyboardAgentCancelled,
 } from '@/lib/keyboardAgentSync';
 import { useDictionaryStore } from '@/store/useDictionaryStore';
+import { useSharedDictionaryStore } from '@/store/useSharedDictionaryStore';
 import {
   generateForJob,
   handleAgentAction,
@@ -164,6 +169,32 @@ describe('compose happy path', () => {
     });
 
     expect(setKeyboardStatus).toHaveBeenLastCalledWith('agent_ready', undefined);
+  });
+});
+
+describe('compose dictionary', () => {
+  afterEach(() => {
+    useSharedDictionaryStore.getState().reset();
+  });
+
+  it('sends personal words and at most 200 shared ones', async () => {
+    (mockUseDictionaryStore.getState as jest.Mock).mockReturnValueOnce({
+      entries: [{ word: 'Piha' }],
+      isLoaded: true,
+    });
+    useSharedDictionaryStore.setState({
+      hints: { space: [], workspace: Array.from({ length: 300 }, (_, i) => `team${i}`) },
+    });
+    const job = makeComposeJob();
+    mockStreamAgentText.mockResolvedValue('Thank you for your time!');
+    mockReadKeyboardAgentJob.mockReturnValue(job);
+
+    await generateForJob(job, 'Write a thank you email', makeConfig().config);
+
+    const { systemPrompt } = mockStreamAgentText.mock.calls[0][0];
+    expect(systemPrompt).toContain('use these exact spellings when they appear): Piha, team0, ');
+    expect(systemPrompt).toContain('team199');
+    expect(systemPrompt).not.toContain('team200');
   });
 });
 

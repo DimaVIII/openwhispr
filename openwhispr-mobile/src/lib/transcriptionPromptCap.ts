@@ -20,10 +20,35 @@ export function dictionaryPromptLimit(input: {
   return WHISPER_PROMPT_CHARS;
 }
 
-// Cuts at the last comma inside the budget so no entry is sent half-spelled.
-export function trimDictionaryPrompt(prompt: string, maxChars: number): string {
-  if (prompt.length <= maxChars) return prompt;
-  const head = prompt.slice(0, maxChars);
-  const lastComma = head.lastIndexOf(',');
-  return lastComma > 0 ? head.slice(0, lastComma) : head;
+// Builds the dictionary prompt from priority tiers (personal, space, workspace).
+// Whole words are kept greedily, highest tier first, so a long shared list can
+// only ever crowd out lower-priority words. They are emitted lowest tier first:
+// Whisper-family decoders keep the TAIL of an over-long prompt, so the user's
+// own words belong there. A personal-only list that fits is the plain
+// ", "-joined string it always was. Ported from desktop dictionaryPromptCap.js.
+export function formatDictionaryPrompt(tiers: string[][], maxChars: number): string {
+  const kept: string[][] = tiers.map(() => []);
+  let length = 0;
+  let count = 0;
+  let full = false;
+  for (let tier = 0; tier < tiers.length && !full; tier++) {
+    for (const word of tiers[tier]) {
+      const next = length + word.length + (count > 0 ? 2 : 0);
+      // Strict priority: the first word that doesn't fit ends the fill.
+      if (next > maxChars) {
+        full = true;
+        break;
+      }
+      length = next;
+      count++;
+      kept[tier].push(word);
+    }
+  }
+  return kept.reverse().flat().join(', ');
+}
+
+// For prompts the app never trimmed before shared words existed: shared words
+// fill up to `maxChars`, but the personal tier (tiers[0]) is always sent whole.
+export function promptLimitKeepingPersonal(tiers: string[][], maxChars: number): number {
+  return Math.max(maxChars, (tiers[0] ?? []).join(', ').length);
 }

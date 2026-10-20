@@ -62,15 +62,49 @@ export function expandSnippets(text: string, snippets: Snippet[]): string {
   });
 }
 
+// Shared words never repeat a word seen in a higher tier (or earlier in their
+// own); case-insensitive so the user's own spelling wins over a teammate's.
+function dedupeBelow(words: string[], seen: Set<string>): string[] {
+  const kept: string[] = [];
+  for (const word of words) {
+    const key = word.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    kept.push(word);
+  }
+  return kept;
+}
+
 /**
- * Dictionary words plus snippet triggers — the hint list fed to the STT prompt
- * and cleanup-model dictionary so triggers survive both. Mirrors desktop's
- * getDictionaryHintWords.
+ * Hint words in priority order: [personal + snippet triggers, space, workspace],
+ * fed to the STT prompt and cleanup-model dictionary so triggers survive both.
+ * Snippet triggers rank with personal words. The personal tier is returned as
+ * saved (no dedupe), so a list without shared words is exactly what it always
+ * was. Mirrors desktop's getDictionaryHintTiers.
  */
-export function getDictionaryHintWords(settings: {
-  customDictionary: string[];
-  snippets: Snippet[];
-}): string[] {
-  if (settings.snippets.length === 0) return settings.customDictionary;
-  return [...settings.customDictionary, ...settings.snippets.map((s) => s.trigger)];
+export function getDictionaryHintTiers(
+  customDictionary: string[],
+  snippets: Snippet[],
+  shared: { space: string[]; workspace: string[] },
+  includeSnippetTriggers: boolean,
+): string[][] {
+  const personal = includeSnippetTriggers
+    ? [...customDictionary, ...snippets.map((s) => s.trigger)]
+    : customDictionary;
+  const seen = new Set(personal.map((word) => word.toLowerCase()));
+  const space = dedupeBelow(shared.space, seen);
+  const workspace = dedupeBelow(shared.workspace, seen);
+  return [personal, space, workspace];
+}
+
+// Teammates' words ride in LLM system prompts; a bounded list keeps a long one
+// from crowding out the instructions. Same cap as desktop.
+export const MAX_SHARED_WORDS_IN_LLM_PROMPTS = 200;
+
+/** Every personal word (tier 0), then at most `maxShared` shared ones, space first. */
+export function withSharedCapped(tiers: string[][], maxShared: number): string[] {
+  const [personal = [], space = [], workspace = []] = tiers;
+  const keptSpace = space.slice(0, maxShared);
+  const keptWorkspace = workspace.slice(0, maxShared - keptSpace.length);
+  return [...personal, ...keptSpace, ...keptWorkspace];
 }

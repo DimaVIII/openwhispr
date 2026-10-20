@@ -7,7 +7,7 @@ import { useProcessingModeStore } from '@/store/useProcessingModeStore';
 import { requiresRealAccount } from './accountAccess';
 import type { KeyboardTone, ReasoningRequest, TextInferenceSnapshot } from '@/types';
 import { getDictationAgentName } from './dictationAgent';
-import { buildDictationHints } from './dictationHints';
+import { buildLlmDictionaryHints } from './dictationHints';
 import {
   LOCAL_CLEANUP_MAX_TRANSCRIPT_TOKENS,
   countLocalReasoningTokens,
@@ -114,7 +114,7 @@ export async function cleanupTranscript(
 
   const preferred = cfg?.preferredLanguage;
   const lang = preferred && preferred !== 'auto' ? preferred : undefined;
-  const hintWords = buildDictationHints(options.includeSnippetTriggers ?? false);
+  const hintWords = buildLlmDictionaryHints(options.includeSnippetTriggers ?? false);
   const customDictionary = hintWords.length > 0 ? hintWords : undefined;
 
   const activeMode = useProcessingModeStore.getState().activeMode;

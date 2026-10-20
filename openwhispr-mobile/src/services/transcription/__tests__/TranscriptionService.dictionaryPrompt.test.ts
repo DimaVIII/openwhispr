@@ -1,0 +1,158 @@
+/**
+ * The dictionary prompt each transcription path actually sends: a long shared
+ * list fills the budget, and the user's own words always survive, last.
+ */
+import * as FileSystem from 'expo-file-system/legacy';
+import { BackgroundUploader } from '../../../../modules/background-uploader/src';
+import { transcribeWithProvider } from '@/services/providers/ProviderExecution';
+import { TranscriptionService } from '../TranscriptionService';
+import type { TranscriptionRequest } from '../../../types';
+
+jest.mock('expo-constants', () => ({
+  __esModule: true,
+  default: { expoConfig: { version: '1.2.1' } },
+}));
+jest.mock('expo/fetch', () => ({ fetch: jest.fn() }));
+jest.mock('@/store/useAuthStore', () => ({
+  useAuthStore: { getState: () => ({ sessionCookie: 'test-session-cookie' }) },
+}));
+jest.mock('expo-file-system/legacy', () => ({
+  getInfoAsync: jest.fn(),
+  uploadAsync: jest.fn(),
+  FileSystemUploadType: { MULTIPART: 1 },
+  FileSystemSessionType: { FOREGROUND: 0 },
+}));
+jest.mock('../LocalWhisperService', () => ({ LocalWhisperService: {} }));
+const mockLocalTranscribe = jest.fn(async () => ({ text: 'local text', duration: 1 }));
+jest.mock('../LocalTranscriptionService', () => ({
+  LocalTranscriptionService: {
+    isAvailable: () => true,
+    transcribe: (...args: unknown[]) => mockLocalTranscribe(...(args as [])),
+  },
+}));
+jest.mock('@/lib/cleanupTranscript', () => ({ CLEANUP_TIMEOUT_MS: 30000 }));
+jest.mock('../../../../modules/background-uploader/src', () => ({
+  BackgroundUploader: { isAvailable: () => true, upload: jest.fn() },
+}));
+jest.mock('../../../../modules/audio-tools/src', () => ({
+  AudioTools: { isAvailable: () => true, splitToChunks: jest.fn(), cleanup: jest.fn() },
+}));
+jest.mock('../../../../modules/app-group-storage/src', () => ({
+  AppGroupStorage: { setItem: jest.fn() },
+  APP_GROUP_KEYS: {},
+}));
+
+const PERSONAL = ['Piha', 'Biscuit'];
+const WORKSPACE = Array.from({ length: 300 }, (_, i) => `ws${String(i).padStart(8, '0')}`);
+
+jest.mock('@/store/useDictionaryStore', () => ({
+  useDictionaryStore: {
+    getState: () => ({ isLoaded: true, entries: [{ word: 'Piha' }, { word: 'Biscuit' }] }),
+  },
+}));
+jest.mock('@/store/useSnippetsStore', () => ({
+  useSnippetsStore: { getState: () => ({ isLoaded: true, entries: [] }) },
+}));
+jest.mock('@/store/useSharedDictionaryStore', () => ({
+  useSharedDictionaryStore: {
+    getState: () => ({
+      hints: {
+        space: [],
+        workspace: Array.from({ length: 300 }, (_, i) => `ws${String(i).padStart(8, '0')}`),
+      },
+    }),
+  },
+}));
+
+const mockProviderRoute = {
+  mode: 'providers',
+  scope: 'dictation',
+  providerId: 'groq',
+  modelId: 'whisper-large-v3-turbo',
+  endpoint: 'https://api.groq.com/openai/v1',
+  credentialRef: 'provider.groq',
+} as const;
+
+jest.mock('@/lib/inferenceRouting', () => ({
+  resolveMobileProviderRoute: jest.fn(async () => mockProviderRoute),
+  getInferenceSelection: () => undefined,
+  getPickedLocalModel: () => 'whisper-base',
+}));
+jest.mock(
+  '@/services/providers/ProviderExecution',
+  () => ({
+    transcribeWithProvider: jest.fn(async () => ({ text: 'Direct provider transcript' })),
+  }),
+  { virtual: true },
+);
+jest.mock('@/lib/keyboardInferenceRoute', () => ({
+  clearKeyboardProviderRecovery: jest.fn(),
+}));
+
+let logSpy: jest.SpyInstance;
+
+beforeEach((): void => {
+  jest.clearAllMocks();
+  // The service logs each upload; keep the test output quiet.
+  logSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+  jest.mocked(FileSystem.getInfoAsync).mockResolvedValue({
+    exists: true,
+    isDirectory: false,
+    uri: 'file:///recording.wav',
+    size: 1024,
+    modificationTime: 0,
+  });
+  jest.mocked(BackgroundUploader.upload).mockResolvedValue({
+    status: 200,
+    body: JSON.stringify({ text: 'Hello world.' }),
+  });
+});
+
+afterEach((): void => {
+  logSpy.mockRestore();
+});
+
+const recording = (provider: TranscriptionRequest['provider']): TranscriptionRequest => ({
+  audioUri: 'file:///recording.wav',
+  provider,
+  requestContext: 'recording',
+  inferenceRoute: provider === 'byok' ? mockProviderRoute : undefined,
+});
+
+function uploadedParameters(): Record<string, string> {
+  const [call] = jest.mocked(BackgroundUploader.upload).mock.calls;
+  return (call[0] as { parameters: Record<string, string> }).parameters;
+}
+
+function expectFilledEndingWithPersonal(prompt: string | undefined, maxChars: number): void {
+  expect(prompt?.endsWith(PERSONAL.join(', '))).toBe(true);
+  expect(prompt?.length).toBeLessThanOrEqual(maxChars);
+  expect(prompt?.startsWith(WORKSPACE[0])).toBe(true);
+}
+
+test('cloud request prompt ends with personal words', async (): Promise<void> => {
+  await TranscriptionService.transcribe(recording('cloud'));
+  const prompt = uploadedParameters().prompt;
+  expectFilledEndingWithPersonal(prompt, 900);
+  // OpenWhispr Cloud's Groq provider keeps only the head of a longer prompt.
+  expect(prompt.length).toBeLessThanOrEqual(890);
+});
+
+test('local transcription prompt ends with personal words', async (): Promise<void> => {
+  await TranscriptionService.transcribe(recording('local'));
+  const [, options] = mockLocalTranscribe.mock.calls[0] as unknown as [string, { prompt: string }];
+  expectFilledEndingWithPersonal(options.prompt, 900);
+});
+
+test('BYOK prompt ends with personal words', async (): Promise<void> => {
+  await TranscriptionService.transcribe(recording('byok'));
+  const [input] = jest.mocked(transcribeWithProvider).mock.calls[0];
+  expectFilledEndingWithPersonal(input.prompt, 890);
+});
+
+test('fused cleanup dictionary gets at most 200 shared words', async (): Promise<void> => {
+  await TranscriptionService.transcribeWithCloudCleanup(recording('cloud'));
+  const dictionary = JSON.parse(uploadedParameters().customDictionary) as string[];
+  expect(dictionary).toEqual([...PERSONAL, ...WORKSPACE.slice(0, 200)]);
+  expectFilledEndingWithPersonal(uploadedParameters().prompt, 890);
+});

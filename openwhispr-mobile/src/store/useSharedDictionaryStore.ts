@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 import { selectSharedHintWords, type SharedHintWords } from '@/lib/sharedDictionaryHints';
-import { loadSharedDictionaryState } from '@/sync/sharedDictionaryState';
-import { getLastSyncedUserId } from '@/sync/syncIdentity';
+
+// The sync modules are required where they're used: every dictation path reads
+// `hints` (src/lib/dictationHints.ts), and a static import would pull the whole
+// data layer into each of them.
 
 export interface SharedDictionarySummary {
   count: number;
@@ -41,6 +43,8 @@ export const useSharedDictionaryStore = create<SharedDictionaryStoreState>((set)
 
   load: async () => {
     const startedAt = generation;
+    const { loadSharedDictionaryState } =
+      require('@/sync/sharedDictionaryState') as typeof import('@/sync/sharedDictionaryState');
     const state = await loadSharedDictionaryState();
     if (startedAt !== generation) return;
     if (!state) {
@@ -71,6 +75,8 @@ export const useSharedDictionaryStore = create<SharedDictionaryStoreState>((set)
  * the previous account's words. Pass the signed-in, non-guest user's id, or null.
  */
 export function loadSharedDictionaryIfOwnedBy(userId: string | null): Promise<void> {
+  const { getLastSyncedUserId } =
+    require('@/sync/syncIdentity') as typeof import('@/sync/syncIdentity');
   if (!userId || getLastSyncedUserId() !== userId) return Promise.resolve();
   return useSharedDictionaryStore.getState().load();
 }

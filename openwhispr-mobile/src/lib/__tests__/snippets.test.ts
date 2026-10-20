@@ -1,4 +1,4 @@
-import { expandSnippets, getDictionaryHintWords, type Snippet } from '../snippets';
+import { expandSnippets, getDictionaryHintTiers, type Snippet } from '../snippets';
 
 describe('expandSnippets', () => {
   it('replaces a trigger with its replacement', () => {
@@ -66,23 +66,39 @@ describe('expandSnippets', () => {
   });
 });
 
-describe('getDictionaryHintWords', () => {
+describe('getDictionaryHintTiers', () => {
+  const noShared = { space: [], workspace: [] };
+
   it('returns the custom dictionary unchanged when there are no snippets', () => {
-    expect(getDictionaryHintWords({ customDictionary: ['Acme', 'Vercel'], snippets: [] })).toEqual([
-      'Acme',
-      'Vercel',
+    expect(getDictionaryHintTiers(['Acme', 'Vercel'], [], noShared, true)).toEqual([
+      ['Acme', 'Vercel'],
+      [],
+      [],
     ]);
   });
 
-  it('appends snippet triggers to the custom dictionary', () => {
+  it('appends snippet triggers to the custom dictionary only when asked to', () => {
     const snippets: Snippet[] = [
       { trigger: 'linkedin', replacement: 'LinkedIn' },
       { trigger: 'eg', replacement: 'for example' },
     ];
-    expect(getDictionaryHintWords({ customDictionary: ['Acme'], snippets })).toEqual([
+    expect(getDictionaryHintTiers(['Acme'], snippets, noShared, true)[0]).toEqual([
       'Acme',
       'linkedin',
       'eg',
     ]);
+    expect(getDictionaryHintTiers(['Acme'], snippets, noShared, false)[0]).toEqual(['Acme']);
+  });
+
+  it('drops shared words already in a higher tier, case-insensitively', () => {
+    const snippets: Snippet[] = [{ trigger: 'sig', replacement: 'Best, Chad' }];
+    expect(
+      getDictionaryHintTiers(
+        ['OpenWhispr'],
+        snippets,
+        { space: ['openwhispr', 'Gizmo', 'SIG'], workspace: ['gizmo', 'Acme', 'acme'] },
+        true,
+      ),
+    ).toEqual([['OpenWhispr', 'sig'], ['Gizmo'], ['Acme']]);
   });
 });
