@@ -108,9 +108,9 @@ test("a spelling fix hides the shared word and adds the corrected one to Persona
   assert.equal(result.success, true);
 });
 
-test("a word in Personal is removed from Personal, not hidden", async () => {
+test("a word only in Personal is removed without hiding anything", async () => {
   const { createUpdateDictionaryTool } = await load();
-  const { actions, calls, hideCalls } = harness(["Orukeet"], [{ id: "entry-1", word: "Orukeet" }]);
+  const { actions, calls, hideCalls } = harness(["Orukeet"]);
   const tool = createUpdateDictionaryTool(actions);
 
   const result = await tool.execute({ remove: ["orukeet"] });
@@ -119,6 +119,20 @@ test("a word in Personal is removed from Personal, not hidden", async () => {
   assert.equal(hideCalls.length, 0);
   assert.deepEqual(result.data.removed, ["orukeet"]);
   assert.deepEqual(result.data.hidden, []);
+});
+
+test("a word in Personal and a shared list is removed and its shared copy hidden", async () => {
+  const { createUpdateDictionaryTool } = await load();
+  const { actions, calls, hideCalls } = harness(["Orukeet"], [{ id: "entry-1", word: "Orukeet" }]);
+  const tool = createUpdateDictionaryTool(actions);
+
+  const result = await tool.execute({ remove: ["orukeet"] });
+
+  assert.deepEqual(hideCalls, [["entry-1"]]);
+  assert.deepEqual(calls, [{ add: [], remove: ["orukeet"] }]);
+  assert.deepEqual(result.data.removed, ["orukeet"]);
+  assert.deepEqual(result.data.hidden, ["orukeet"]);
+  assert.equal(result.displayText, 'Removed "orukeet" and hid the shared copy for you');
 });
 
 test("adding a word that is shared reports alreadyPresent", async () => {
@@ -147,4 +161,20 @@ test("a failed hide changes nothing and reports the failure", async () => {
   assert.equal(calls.length, 0);
   assert.equal(result.success, false);
   assert.match(result.displayText, /Could not hide "Kubernetes"/);
+});
+
+test("a partly applied hide says some words were hidden and skips the Personal write", async () => {
+  const { createUpdateDictionaryTool } = await load();
+  const { actions, calls } = harness(["Old"], [{ id: "entry-1", word: "Kubernetes" }]);
+  actions.hideSharedWords = async () => {
+    throw Object.assign(new Error("offline"), { appliedCount: 1 });
+  };
+  const tool = createUpdateDictionaryTool(actions);
+
+  const result = await tool.execute({ remove: ["Old", "Kubernetes"] });
+
+  assert.equal(calls.length, 0);
+  assert.equal(result.success, false);
+  assert.doesNotMatch(result.displayText, /Nothing was changed/);
+  assert.match(result.displayText, /Some were hidden/);
 });

@@ -1,3 +1,4 @@
+import logger from "../../utils/logger";
 import type { ToolDefinition, ToolResult } from "./ToolRegistry";
 
 export interface SharedDictionaryWord {
@@ -70,7 +71,8 @@ export function createUpdateDictionaryTool(actions: DictionaryActions): ToolDefi
       const add = requestedAdd.filter((word) => !has(word));
       const alreadyPresent = requestedAdd.filter(has);
       const remove = requestedRemove.filter(inPersonal);
-      const hidden = requestedRemove.filter((word) => !inPersonal(word) && inShared(word));
+      // Independent of Personal: a shared copy keeps applying after the Personal one goes.
+      const hidden = requestedRemove.filter(inShared);
       const notFound = requestedRemove.filter((word) => !has(word));
 
       if (add.length === 0 && remove.length === 0 && hidden.length === 0) {
@@ -89,21 +91,38 @@ export function createUpdateDictionaryTool(actions: DictionaryActions): ToolDefi
         const ids = hidden.flatMap((word) => sharedIdsByWord.get(word.toLowerCase()) ?? []);
         try {
           await actions.hideSharedWords(ids);
-        } catch {
+        } catch (error) {
+          logger.warn(
+            "Failed to hide shared dictionary words for the assistant",
+            { error: (error as Error)?.message },
+            "dictionary"
+          );
+          const appliedCount = (error as { appliedCount?: number } | null)?.appliedCount ?? 0;
           return {
             success: false,
             data: null,
-            displayText: `Could not hide ${quoteList(hidden)} from the shared dictionary. Nothing was changed`,
+            displayText:
+              `Could not hide ${quoteList(hidden)} from the shared dictionary. ` +
+              (appliedCount > 0
+                ? "Some were hidden; the rest of the request was not applied"
+                : "Nothing was changed"),
           };
         }
       }
 
       if (add.length > 0 || remove.length > 0) actions.updateDictionary({ add, remove });
+      const isHidden = new Set(hidden.map((word) => word.toLowerCase()));
+      const removedAndHidden = remove.filter((word) => isHidden.has(word.toLowerCase()));
+      const removedOnly = remove.filter((word) => !isHidden.has(word.toLowerCase()));
+      const hiddenOnly = hidden.filter((word) => !inPersonal(word));
       const summary = [
         add.length ? `Added ${quoteList(add)}` : "",
-        remove.length ? `Removed ${quoteList(remove)}` : "",
-        hidden.length
-          ? `Hidden for you ${quoteList(hidden)} (shared with your team, so it stays for them)`
+        removedOnly.length ? `Removed ${quoteList(removedOnly)}` : "",
+        removedAndHidden.length
+          ? `Removed ${quoteList(removedAndHidden)} and hid the shared copy for you`
+          : "",
+        hiddenOnly.length
+          ? `Hidden for you ${quoteList(hiddenOnly)} (shared with your team, so it stays for them)`
           : "",
       ].filter(Boolean);
       return {
