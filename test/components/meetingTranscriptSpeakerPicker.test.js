@@ -286,7 +286,6 @@ test("Assign to offers This is me for a selection", async (t) => {
   const calls = [];
   const { act } = await mount(t, (React, mod) =>
     React.createElement(mod.SelectionBar, {
-      count: 2,
       onClear: () => {},
       onAssignName: (...args) => calls.push(args),
       selectedSegments: [
@@ -305,7 +304,6 @@ test("Assign to offers This is me for a selection", async (t) => {
 test("Assign to leaves This is me out when every selected line is the user's", async (t) => {
   const { act } = await mount(t, (React, mod) =>
     React.createElement(mod.SelectionBar, {
-      count: 2,
       onClear: () => {},
       onAssignName: () => {},
       selectedSegments: [

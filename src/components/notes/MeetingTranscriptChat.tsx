@@ -271,8 +271,7 @@ function SpeakerPicker({
     : [];
   // Naming the speaker after the existing profile adds this voice to it rather
   // than to a second "You" profile.
-  const selfProfile =
-    selfProfiles.find((p) => p.display_name.trim().toLowerCase() === youLower) ?? selfProfiles[0];
+  const selfProfile = selfProfiles.find((p) => p.id != null) ?? selfProfiles[0];
   const matchesSelf =
     !!self &&
     !!trimmed &&
@@ -592,7 +591,6 @@ function SelectCheckbox({
 }
 
 export function SelectionBar({
-  count,
   onClear,
   speakerProfiles,
   participants,
@@ -601,7 +599,6 @@ export function SelectionBar({
   speakerMappings,
   t,
 }: {
-  count: number;
   onClear: () => void;
   speakerProfiles?: SpeakerProfileLite[];
   participants?: Array<{ email: string; displayName: string | null }>;
@@ -611,7 +608,6 @@ export function SelectionBar({
   t: (key: string, opts?: Record<string, unknown>) => string;
 }) {
   const [open, setOpen] = useState(false);
-  // Left out when every selected line is already the user's.
   const offerSelf = selectedSegments.some(
     (segment) => !isSelfSideSegment(segment, speakerMappings, t("notes.speaker.you"))
   );
@@ -621,7 +617,7 @@ export function SelectionBar({
       style={{ animation: "agent-message-in 150ms ease-out both" }}
     >
       <span className="text-foreground/70 tabular-nums">
-        {t("notes.speaker.selected", { n: count })}
+        {t("notes.speaker.selected", { n: selectedSegments.length })}
       </span>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
