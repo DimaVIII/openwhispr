@@ -4,6 +4,20 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
+// t.after for teardowns that close over a test's modules. node:test keeps every
+// finished test and hook reachable for the life of the file (its testResources
+// map is only pruned when they are garbage-collected, which the map prevents),
+// so a hook's closure would pin everything it captures; this one lets go of
+// the teardown once it has run.
+function addTeardown(t, teardown) {
+  let pending = teardown;
+  t.after(() => {
+    const run = pending;
+    pending = null;
+    return run();
+  });
+}
+
 function installBrowserGlobals(t, { initialStorage = {}, window: windowProps = {} } = {}) {
   const originalWindow = globalThis.window;
   const originalLocalStorage = globalThis.localStorage;
@@ -247,8 +261,17 @@ async function createRendererServer(
     ],
     server: { middlewareMode: true },
   });
-  t.after(async () => {
+  addTeardown(t, async () => {
     await vite.close();
+    // A closed server is never freed: Vite 8's native resolve plugin (rolldown)
+    // holds its JS callbacks through V8 global handles, and they reach the
+    // server. Emptying its module graphs releases the transformed and evaluated
+    // modules (~50 MB per server), so a file can still create one per test.
+    for (const environment of Object.values(vite.environments)) {
+      for (const value of Object.values(environment.moduleGraph ?? {})) {
+        if (value instanceof Map || value instanceof Set) value.clear();
+      }
+    }
     fs.rmSync(cacheDir, { recursive: true, force: true });
   });
   return vite;
@@ -330,6 +353,7 @@ const SIGNED_OUT_AUTH_MOCK = {
 
 module.exports = {
   SIGNED_OUT_AUTH_MOCK,
+  addTeardown,
   createRendererServer,
   installBrowserGlobals,
   installHookDom,

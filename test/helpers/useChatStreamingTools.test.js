@@ -6,6 +6,7 @@ const React = require("react");
 const { renderToStaticMarkup } = require("react-dom/server");
 const {
   SIGNED_OUT_AUTH_MOCK,
+  addTeardown,
   createRendererServer,
   installBrowserGlobals,
 } = require("../lib/rendererTestHarness");
@@ -51,7 +52,7 @@ async function renderChatStreaming(
   // The app's i18n module (loaded with the tools) follows the machine's locale.
   await (await vite.ssrLoadModule("/i18n.ts")).default.changeLanguage("en");
   const reasoningService = (await vite.ssrLoadModule("/services/ReasoningService.ts")).default;
-  t.after(() => reasoningService.destroy());
+  addTeardown(t, () => reasoningService.destroy());
 
   const offeredTools = [];
   const sentMessages = [];
