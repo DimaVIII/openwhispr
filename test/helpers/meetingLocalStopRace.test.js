@@ -94,7 +94,7 @@ function harness() {
     const armMeetingSystemAudioSilenceTimer = noop;
     const startMeetingSystemAudioWatchdog = noop;
     const flushPendingMeetingMicChunks = noop;
-    const flushPendingMicFinals = noop;
+    const flushPendingMicFinals = () => events.push("flush");
     const stopMeetingAec = asyncNoop;
     const startMeetingAec = asyncNoop;
     const stopLiveSpeakerIdentification = async () => null;
@@ -211,7 +211,7 @@ test("stop waits for a timer pass still transcribing before it captures the sess
   gate.resolve();
   const result = await stopping;
 
-  assert.deepEqual(events, ["chunk-done:system", "capture", "reset"]);
+  assert.deepEqual(events, ["chunk-done:system", "flush", "capture", "reset"]);
   assert.equal(result.success, true);
   assert.equal(result.transcript, "said just before stop");
   assert.deepEqual(plain(diarizations[0][3].map((segment) => segment.text)), [
@@ -236,7 +236,7 @@ test("stop still transcribes what was buffered after the in-flight pass", async 
   finalPass.resolve();
   const result = await stopping;
 
-  assert.deepEqual(events, ["chunk-done:system", "chunk-done:system", "capture", "reset"]);
+  assert.deepEqual(events, ["chunk-done:system", "chunk-done:system", "flush", "capture", "reset"]);
   assert.equal(result.transcript, "timer pass final pass");
 });
 
