@@ -66,8 +66,8 @@ export function compileTemplatePrompt(
   template,
   { isMeetingNote = false, hasPlainTranscript = false } = {}
 ) {
-  const material = { isMeetingNote, hasPlainTranscript };
-  const preamble = SOURCE_FIDELITY_RULE + "\n\n" + inputPreamble(material);
+  const preamble =
+    SOURCE_FIDELITY_RULE + "\n\n" + inputPreamble({ isMeetingNote, hasPlainTranscript });
   const sections = normalizeSections(template.sections);
   if (sections.length > 0) {
     const context = (template.prompt ?? "").trim();
@@ -90,7 +90,12 @@ export function compileTemplatePrompt(
   if (template.translation_key && STANDALONE_PROMPT_KEYS.has(template.translation_key)) {
     return preamble + template.prompt;
   }
-  return SOURCE_FIDELITY_RULE + "\n\n" + flatSystemPrompt(material) + template.prompt;
+  return (
+    SOURCE_FIDELITY_RULE +
+    "\n\n" +
+    flatSystemPrompt({ isMeetingNote, hasPlainTranscript }) +
+    template.prompt
+  );
 }
 
 export function compileSummaryActionPrompt(

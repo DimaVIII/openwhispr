@@ -762,8 +762,8 @@ export default function PersonalNotesView({
         knownPeople = collectKnownPeople(identity, speakerMappings, segments);
       } else {
         // Plain text shows no speakers, so the run gets no Meeting Context: the model
-        // can't tell who "I" is, and an invitee list invites guessed owners. The
-        // invitees still turn an owner the transcript names into a mention (#2666).
+        // can't tell who "I" is, and an invitee list invites guessed owners. The user
+        // and the invitees still turn an owner the transcript names into a mention (#2666).
         hasPlainTranscript = true;
         knownPeople = collectKnownPeople(identity, {}, []);
       }

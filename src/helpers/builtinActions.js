@@ -421,7 +421,7 @@ CONTENT RULES:
 
 Instructions: `;
 
-export const PLAIN_TRANSCRIPT_INPUT_PREAMBLE = `The material is a transcript in plain text: its lines carry no speaker labels, so it doesn't show who said what. Manual notes the user took may precede the transcript. For action items: ${PLAIN_TRANSCRIPT_OWNER_RULE} This takes precedence over any other instruction about action-item owners.
+export const PLAIN_TRANSCRIPT_INPUT_PREAMBLE = `The material is a transcript in plain text: its lines carry no speaker labels, so it doesn't show who said what. Manual notes the user took may precede the transcript. Never guess or invent who said something; name a person only where the transcript or the user's notes name them. For action items: ${PLAIN_TRANSCRIPT_OWNER_RULE} Where an instruction below says to use "You" or "Them" when no name is available, end the line after the action instead.
 
 `;
 

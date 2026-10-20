@@ -268,8 +268,8 @@ async function runInParts(
   material: NoteMaterial
 ): Promise<string> {
   const { transcript, meetingContext: context, notes: manualNotes } = material;
-  // Only a diarised transcript carries "Label:" lines; a live recording's text
-  // is one plain paragraph whose first colon is not a speaker.
+  // Only a diarised transcript carries "Label:" lines; a plain-text transcript
+  // is one paragraph whose first colon is not a speaker.
   const hasSpeakerLabels = run.options.isMeetingNote === true;
   const mergeSystemPrompt = run.systemPrompt + MERGE_ADDENDUM;
 

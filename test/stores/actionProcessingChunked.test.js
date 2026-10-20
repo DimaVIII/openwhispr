@@ -721,39 +721,43 @@ test("a transcript without speaker labels is packed without a prose prefix", asy
 });
 
 test("a transcript in plain text gets its own prompt and the dictionary, and owners it names become mentions", async (t) => {
-  const { compileTemplatePrompt } = await import("../../src/helpers/templatePrompts.js");
+  const { compileTemplatePrompt, compileSummaryActionPrompt } =
+    await import("../../src/helpers/templatePrompts.js");
   const reply = [
     "## Action Items",
-    "- [ ] Fix the build by Friday — Wes",
+    "- [ ] Fix the build by Friday — Alice",
     "- [ ] Book the room — Priya",
     "- [ ] Send the revised proposal",
   ].join("\n");
   const { store, calls, updates } = await loadStore(t, {
     budget: BIG_BUDGET,
-    storage: { customDictionary: JSON.stringify(["Wes Kim"]) },
+    storage: { customDictionary: JSON.stringify(["Alice Ng"]) },
     processText: () => reply,
   });
   const plainOptions = { isMeetingNote: false, hasPlainTranscript: true };
+  const plainMaterial = {
+    notes: "",
+    meetingContext: "",
+    transcript: "Alice, can you fix the build by Friday? Sure.",
+  };
 
-  run(
-    store,
-    40,
-    { notes: "", meetingContext: "", transcript: "Wes, can you fix the build by Friday? Sure." },
-    { ...plainOptions, knownPeople: [{ name: "Wes Kim", email: "wes@example.com" }] }
-  );
+  run(store, 40, plainMaterial, {
+    ...plainOptions,
+    knownPeople: [{ name: "Alice Ng", email: "alice@example.com" }],
+  });
   await waitFor(() => updates.length === 1, "the plain transcript's save");
   const instructions = compileTemplatePrompt(ACTION, plainOptions);
   assert.equal(updates[0].payload.enhancement_prompt, instructions);
   assert.ok(calls[0].config.systemPrompt.startsWith(instructions));
   assert.ok(
-    calls[0].config.systemPrompt.endsWith("Wes Kim"),
+    calls[0].config.systemPrompt.endsWith("Alice Ng"),
     "a transcript gets the custom dictionary"
   );
   assert.equal(
     updates[0].payload.enhanced_content,
     [
       "## Action Items",
-      "- [ ] Fix the build by Friday — [@Wes Kim](mention:wes%40example.com)",
+      "- [ ] Fix the build by Friday — [@Alice Ng](mention:alice%40example.com)",
       "- [ ] Book the room — Priya",
       "- [ ] Send the revised proposal",
     ].join("\n")
@@ -761,7 +765,10 @@ test("a transcript in plain text gets its own prompt and the dictionary, and own
 
   run(store, 41, longMaterial(2));
   await waitFor(() => updates.length === 2, "the meeting's save");
-  assert.ok(calls.at(-1).config.systemPrompt.endsWith("Wes Kim"), "a meeting keeps the dictionary");
+  assert.ok(
+    calls.at(-1).config.systemPrompt.endsWith("Alice Ng"),
+    "a meeting keeps the dictionary"
+  );
 
   run(
     store,
@@ -774,6 +781,19 @@ test("a transcript in plain text gets its own prompt and the dictionary, and own
     calls.at(-1).config.systemPrompt,
     compileTemplatePrompt(ACTION),
     "a personal note is unchanged"
+  );
+
+  // A summary action on a note with no summary yet writes one from the material.
+  const shorten = { id: 2, kind: "action", output: "summary", prompt: "Make it shorter." };
+  run(store, 43, plainMaterial, { ...plainOptions, fromSummary: false }, shorten);
+  await waitFor(() => updates.length === 4, "the summary action's save");
+  assert.ok(
+    calls
+      .at(-1)
+      .config.systemPrompt.startsWith(
+        compileSummaryActionPrompt(shorten, { fromSummary: false, ...plainOptions })
+      ),
+    "a first summary from a summary action gets the plain-transcript preamble"
   );
 });
 

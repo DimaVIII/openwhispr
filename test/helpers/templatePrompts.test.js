@@ -223,6 +223,7 @@ test("standalone templates and a first summary describe a plain transcript inste
   const {
     DETAILED_NOTES_KEY,
     SOURCE_FIDELITY_RULE,
+    MEETING_INPUT_PREAMBLE,
     PLAIN_TRANSCRIPT_INPUT_PREAMBLE,
     SUMMARY_ACTION_FROM_MATERIAL_PROMPT,
     compileTemplatePrompt,
@@ -231,12 +232,17 @@ test("standalone templates and a first summary describe a plain transcript inste
   assert.match(PLAIN_TRANSCRIPT_INPUT_PREAMBLE, /no speaker labels/);
   assert.match(
     PLAIN_TRANSCRIPT_INPUT_PREAMBLE,
+    /Never guess or invent who said something/,
+    "sections that attribute by speaker can't guess one"
+  );
+  assert.match(
+    PLAIN_TRANSCRIPT_INPUT_PREAMBLE,
     /only when the transcript or the user's notes state it/
   );
   assert.match(
     PLAIN_TRANSCRIPT_INPUT_PREAMBLE,
-    /takes precedence over any other instruction about action-item owners/,
-    "it outranks a section that allows You or Them"
+    /Where an instruction below says to use "You" or "Them" when no name is available, end the line after the action instead/,
+    "it outranks the Action Items section's You or Them fallback"
   );
   assert.doesNotMatch(PLAIN_TRANSCRIPT_INPUT_PREAMBLE, /There is no transcript/);
 
@@ -244,6 +250,11 @@ test("standalone templates and a first summary describe a plain transcript inste
   assert.equal(
     compileTemplatePrompt(editedDetailed, { hasPlainTranscript: true }),
     SOURCE_FIDELITY_RULE + "\n\n" + PLAIN_TRANSCRIPT_INPUT_PREAMBLE + editedDetailed.prompt
+  );
+  assert.equal(
+    compileTemplatePrompt(editedDetailed, { isMeetingNote: true, hasPlainTranscript: true }),
+    SOURCE_FIDELITY_RULE + "\n\n" + MEETING_INPUT_PREAMBLE + editedDetailed.prompt,
+    "speaker segments win"
   );
   assert.equal(
     compileSummaryActionPrompt(ACTION, { fromSummary: false, hasPlainTranscript: true }),
