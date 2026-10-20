@@ -1,6 +1,14 @@
 # Moonshine Android integration evidence — 2026-10-15
 
-The initial research and temporary native build below led to the integration and verified emulator inference recorded under Implementation checkpoint and Emulator evidence. Early statements of unverified inference describe that initial research stage. Parakeet remains the default and Qwen remains the cleanup baseline; physical-phone and production-hosting acceptance are still open.
+The initial research and temporary native build below led to the integration and verified emulator inference recorded under Implementation checkpoint and Emulator evidence. Early statements of unverified inference describe that initial research stage. Parakeet remains the default and Qwen remains the cleanup baseline; physical-phone and installed download acceptance are still open. Hosted distribution is verified in the 2026-10-20 checkpoint below.
+
+## Production distribution checkpoint — 2026-10-20
+
+The OpenWhispr-owned public Vercel Blob store `ow-android-models` now serves the pinned English Tiny and Small files. The [published manifest](https://ykb51mbn67loueo2.public.blob.vercel-storage.com/models/moonshine/0bf2f2e5aff22e6fbba4300b00a4e00bbc4f8aae/manifest.json) records all 16 file sizes and SHA-256 checksums; the same immutable prefix includes the publisher's LICENSE. Anonymous full downloads matched every checksum and size, all 16 tail-range requests returned correct HTTP 206 responses, and cache headers specify one year.
+
+The source URLs now use that store. File names, hashes, sizes, English/API constraints, model selection and Parakeet's default are unchanged. No publishing credential is required or included in the client. Code17 was submitted from `9658d9b33d222f4c598b928aa844a71bd2099933` before this change and still uses the archival mirror. This source change does not alter that build and is not installed-app acceptance.
+
+Remaining acceptance on an eventual consolidated candidate: fresh Tiny/Small downloads, cancellation/resume, restart, same-size corruption repair, selection and actual inference using this host. HTTP range verification alone does not prove that the installed downloader resumes correctly. Keep the immutable objects available to existing clients; use a new prefix for future model revisions. Physical-phone performance and the recorded speech-quality limitations remain open.
 
 ## Pinned artifacts
 
@@ -44,7 +52,7 @@ The model chooser discloses details on demand. Download integrity includes SHA-2
 
 ### Distribution and attribution
 
-Both canonical CDN configuration URLs still returned 403 during the refreshed check; immutable HF archive configurations returned 200. The current app uses that verified archive for development downloads. Production model hosting remains an explicit distribution acceptance item; upstream describes HF as an archive, not its supported production serving endpoint.
+Both canonical CDN configuration URLs still returned 403 during the refreshed check; immutable HF archive configurations returned 200. At that checkpoint the app used the verified archive for development downloads. The 2026-10-20 checkpoint above supersedes the hosting status; upstream describes HF as an archive, not its supported production serving endpoint.
 
 English Tiny/Small weights and Moonshine code use MIT. App notices include upstream root terms and copyrights, cpp-annote MIT, bundled Eigen MPL-2.0 and a link to the covered source, kaldi-native-fbank Apache-2.0, utf8cpp Boost, nlohmann MIT, utf8proc/Unicode, Kiss FFT BSD, and Silero VAD MIT. Existing notices cover the actual ORT 1.28.2 binary and NDK runtime. The unmodified native build also embeds converted pyannote community-1 PLDA data and modified VCTK clips: their CC BY 4.0 attribution and modifications are included, although these capabilities are not exposed by the app. Upstream does not record the original PLDA checkpoint revision or exact VCTK corpus revision; that provenance limitation remains documented.
 
