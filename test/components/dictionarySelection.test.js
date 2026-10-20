@@ -62,3 +62,13 @@ test("clear empties the selection and drops the anchor", () => {
   // Clearing nothing keeps the same state, so React skips the render.
   assert.equal(selectionReducer(cleared, { type: "clear" }), cleared);
 });
+
+test("retain drops keys and an anchor that left the list", () => {
+  const some = selectionReducer(EMPTY, { type: "selectAll", orderedKeys: KEYS });
+  const anchored = selectionReducer(some, { type: "toggle", key: "e" });
+  const pruned = selectionReducer(anchored, { type: "retain", orderedKeys: ["a", "b", "c"] });
+  assert.deepEqual(keysOf(pruned), ["a", "b", "c"]);
+  assert.equal(pruned.anchor, null);
+  // Nothing to drop keeps the same state, so rows changing never loops.
+  assert.equal(selectionReducer(pruned, { type: "retain", orderedKeys: KEYS }), pruned);
+});

@@ -3585,6 +3585,8 @@
       "deleteManyTitle_other": "要为 {{list}} 中的所有人删除 {{count}} 个词语吗？",
       "deletedManyForEveryone_one": "已为所有人删除 {{count}} 个词语",
       "deletedManyForEveryone_other": "已为所有人删除 {{count}} 个词语",
+      "deletedPersonalMany_one": "已删除 {{count}} 个词语",
+      "deletedPersonalMany_other": "已删除 {{count}} 个词语",
       "selection": {
         "count_one": "已选择 {{count}} 项",
         "count_other": "已选择 {{count}} 项",
@@ -3601,10 +3603,12 @@
         "alreadyShared": "已共享",
         "movesOut_one": "将其移出个人",
         "movesOut_other": "将其移出个人",
-        "partial": "已共享 {{moved}}/{{total}} 个词语，{{failed}} 个未共享。",
+        "partial_one": "已共享 {{moved}}/{{total}} 个词语，{{count}} 个未共享。",
+        "partial_other": "已共享 {{moved}}/{{total}} 个词语，{{count}} 个未共享。",
         "reasons": {
           "personalChanged": "某个词语已在其他设备上更改，请重试。",
-          "network": "请检查网络连接后重试。"
+          "network": "请检查网络连接后重试。",
+          "aListFull": "有一个列表已满"
         }
       }
     }

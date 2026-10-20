@@ -3936,6 +3936,8 @@
       "deleteManyTitle_other": "Delete {{count}} words for everyone in {{list}}?",
       "deletedManyForEveryone_one": "Deleted {{count}} word for everyone",
       "deletedManyForEveryone_other": "Deleted {{count}} words for everyone",
+      "deletedPersonalMany_one": "Deleted {{count}} word",
+      "deletedPersonalMany_other": "Deleted {{count}} words",
       "selection": {
         "count_one": "{{count}} selected",
         "count_other": "{{count}} selected",
@@ -3952,10 +3954,12 @@
         "alreadyShared": "Already shared",
         "movesOut_one": "Moves it out of Personal",
         "movesOut_other": "Moves them out of Personal",
-        "partial": "Shared {{moved}} of {{total}} words. {{failed}} weren't shared.",
+        "partial_one": "Shared {{moved}} of {{total}} words. {{count}} wasn't shared.",
+        "partial_other": "Shared {{moved}} of {{total}} words. {{count}} weren't shared.",
         "reasons": {
           "personalChanged": "A word changed on another device. Try again.",
-          "network": "Check your connection and try again."
+          "network": "Check your connection and try again.",
+          "aListFull": "A list is full"
         }
       }
     }

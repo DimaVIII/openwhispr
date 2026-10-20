@@ -3936,6 +3936,8 @@
       "deleteManyTitle_other": "Supprimer {{count}} mots pour tous dans {{list}} ?",
       "deletedManyForEveryone_one": "{{count}} mot supprimé pour tous",
       "deletedManyForEveryone_other": "{{count}} mots supprimés pour tous",
+      "deletedPersonalMany_one": "{{count}} mot supprimé",
+      "deletedPersonalMany_other": "{{count}} mots supprimés",
       "selection": {
         "count_one": "{{count}} sélectionné",
         "count_other": "{{count}} sélectionnés",
@@ -3952,10 +3954,12 @@
         "alreadyShared": "Déjà partagé",
         "movesOut_one": "Le retire de Personnels",
         "movesOut_other": "Les retire de Personnels",
-        "partial": "{{moved}} mots sur {{total}} partagés. {{failed}} n'ont pas été partagés.",
+        "partial_one": "{{moved}} mots sur {{total}} partagés. {{count}} n'a pas été partagé.",
+        "partial_other": "{{moved}} mots sur {{total}} partagés. {{count}} n'ont pas été partagés.",
         "reasons": {
           "personalChanged": "Un mot a changé sur un autre appareil. Réessayez.",
-          "network": "Vérifiez votre connexion et réessayez."
+          "network": "Vérifiez votre connexion et réessayez.",
+          "aListFull": "Une liste est pleine"
         }
       }
     }

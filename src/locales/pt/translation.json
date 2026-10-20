@@ -3585,6 +3585,8 @@
       "deleteManyTitle_other": "Excluir {{count}} palavras para todos em {{list}}?",
       "deletedManyForEveryone_one": "{{count}} palavra excluída para todos",
       "deletedManyForEveryone_other": "{{count}} palavras excluídas para todos",
+      "deletedPersonalMany_one": "{{count}} palavra excluída",
+      "deletedPersonalMany_other": "{{count}} palavras excluídas",
       "selection": {
         "count_one": "{{count}} selecionada",
         "count_other": "{{count}} selecionadas",
@@ -3601,10 +3603,12 @@
         "alreadyShared": "Já compartilhada",
         "movesOut_one": "Remove-a de Pessoais",
         "movesOut_other": "Remove-as de Pessoais",
-        "partial": "{{moved}} de {{total}} palavras compartilhadas. {{failed}} não foram compartilhadas.",
+        "partial_one": "{{moved}} de {{total}} palavras compartilhadas. {{count}} não foi compartilhada.",
+        "partial_other": "{{moved}} de {{total}} palavras compartilhadas. {{count}} não foram compartilhadas.",
         "reasons": {
           "personalChanged": "Uma palavra mudou em outro dispositivo. Tente novamente.",
-          "network": "Verifique sua conexão e tente novamente."
+          "network": "Verifique sua conexão e tente novamente.",
+          "aListFull": "Uma lista está cheia"
         }
       }
     }

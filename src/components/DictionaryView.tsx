@@ -20,7 +20,7 @@ import {
 import { DictionaryWordList, type WordListSelection } from "./dictionary/DictionaryWordList";
 import { useDictionaryActions } from "./dictionary/useDictionaryActions";
 import { useDictionarySelection } from "./dictionary/useDictionarySelection";
-import { SELECTION_BAR_CLEARANCE_CLASS, SelectionActionBar } from "./dictionary/SelectionActionBar";
+import { SelectionActionBar } from "./dictionary/SelectionActionBar";
 import { ShareWordsPopover } from "./dictionary/ShareWordsPopover";
 import {
   buildPicker,
@@ -114,6 +114,8 @@ export default function DictionaryView() {
     words: string[];
     anchor: HTMLElement;
   } | null>(null);
+  // Bottom padding the list keeps clear for the floating selection bar.
+  const [selectionBarClearance, setSelectionBarClearance] = useState(56);
   const addInputRef = useRef<HTMLInputElement>(null);
 
   // A window's snapshot only refreshes where the last sync pass ran, so the page
@@ -285,7 +287,7 @@ export default function DictionaryView() {
     : undefined;
 
   const deleteSelectedPersonal = (): void => {
-    updateCustomDictionary({ remove: selectedPersonal.map((row) => row.word) });
+    actions.deletePersonalWords(selectedPersonal.map((row) => row.word));
     clearSelection();
   };
 
@@ -349,11 +351,8 @@ export default function DictionaryView() {
       </div>
     ) : (
       <div
-        className={cn(
-          CARD_SURFACE_CLASS,
-          "rounded-lg px-4 py-3 shadow-sm",
-          selectionActive && SELECTION_BAR_CLEARANCE_CLASS
-        )}
+        className={cn(CARD_SURFACE_CLASS, "rounded-lg px-4 py-3 shadow-sm")}
+        style={selectionActive ? { paddingBottom: selectionBarClearance } : undefined}
       >
         <div className="flex items-center justify-between gap-3 border-b border-dashed border-foreground/10 pb-2 dark:border-white/10">
           <h3 dir="auto" className="truncate text-[11px] font-semibold text-foreground/45">
@@ -581,6 +580,7 @@ export default function DictionaryView() {
                     }
                     shareOpen={shareRequest !== null}
                     onHide={selectedShared.length > 0 ? () => void hideSelected() : undefined}
+                    onClearanceChange={setSelectionBarClearance}
                     onDeleteForEveryone={
                       selectedShared.length > 0
                         ? () => actions.requestDeleteForEveryone(selectedShared, clearSelection)

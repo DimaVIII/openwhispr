@@ -1,11 +1,10 @@
-import type { ReactElement, ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, X } from "../icons";
 import { cn } from "../lib/utils";
 
-// Bottom padding the list takes while the bar floats over it, so the bar
-// (h-10, pulled up by -mt-15 below) never covers the last row.
-export const SELECTION_BAR_CLEARANCE_CLASS = "pb-14";
+// The bar is 40px on one line and taller when its buttons wrap on a narrow window.
+const DEFAULT_BAR_HEIGHT = 40;
 
 interface SelectionActionBarProps {
   count: number;
@@ -19,6 +18,9 @@ interface SelectionActionBarProps {
   // Shared words in the selection.
   onHide?: () => void;
   onDeleteForEveryone?: () => void;
+  // The bottom padding the list needs while the bar floats over it: the bar
+  // plus 8px on each side, so it never covers the last row.
+  onClearanceChange?: (clearance: number) => void;
 }
 
 const QUIET_BUTTON_CLASS =
@@ -59,13 +61,31 @@ export function SelectionActionBar({
   shareOpen = false,
   onHide,
   onDeleteForEveryone,
+  onClearanceChange,
 }: SelectionActionBarProps): ReactElement {
   const { t } = useTranslation();
+  const barRef = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState(DEFAULT_BAR_HEIGHT);
+
+  useEffect(() => {
+    const bar = barRef.current;
+    if (!bar || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => setHeight(bar.offsetHeight || DEFAULT_BAR_HEIGHT));
+    observer.observe(bar);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => onClearanceChange?.(height + 16), [height, onClearanceChange]);
+
   return (
     <div
+      ref={barRef}
       role="toolbar"
       aria-label={t("dictionary.shared.selection.label")}
-      className="sticky bottom-3 z-20 -mt-15 flex h-10 w-[min(100%,34rem)] items-center justify-between gap-3 self-center rounded-lg bg-foreground ps-3 pe-2 text-background shadow-lg animate-in fade-in-0 slide-in-from-bottom-2"
+      // Pulled up across the column's 12px gap so it floats inside the list's
+      // clearance, 8px above the list's bottom edge.
+      style={{ marginTop: -(height + 20) }}
+      className="sticky bottom-3 z-20 flex min-h-10 w-[min(100%,40rem)] flex-wrap items-center justify-between gap-x-3 gap-y-1 self-center rounded-lg bg-foreground py-1.5 ps-3 pe-2 text-background shadow-lg animate-in fade-in-0 slide-in-from-bottom-2"
     >
       <span className="flex min-w-0 items-center gap-1.5 text-[11px]">
         <span className="shrink-0 font-medium tabular-nums">
@@ -84,7 +104,7 @@ export function SelectionActionBar({
           </>
         )}
       </span>
-      <span className="flex shrink-0 items-center gap-2.5">
+      <span className="ms-auto flex min-w-0 flex-wrap items-center justify-end gap-x-2.5 gap-y-1">
         {onHide && (
           <QuietButton onClick={onHide}>{t("dictionary.shared.actions.hide")}</QuietButton>
         )}

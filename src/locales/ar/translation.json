@@ -1496,6 +1496,12 @@
       "deletedManyForEveryone_few": "تم حذف {{count}} كلمات للجميع",
       "deletedManyForEveryone_many": "تم حذف {{count}} كلمةً للجميع",
       "deletedManyForEveryone_other": "تم حذف {{count}} كلمة للجميع",
+      "deletedPersonalMany_zero": "تم حذف {{count}} كلمة",
+      "deletedPersonalMany_one": "تم حذف كلمة واحدة ({{count}})",
+      "deletedPersonalMany_two": "تم حذف كلمتين ({{count}})",
+      "deletedPersonalMany_few": "تم حذف {{count}} كلمات",
+      "deletedPersonalMany_many": "تم حذف {{count}} كلمةً",
+      "deletedPersonalMany_other": "تم حذف {{count}} كلمة",
       "selection": {
         "count_zero": "المحدد: {{count}}",
         "count_one": "المحدد: {{count}}",
@@ -1524,10 +1530,16 @@
         "movesOut_few": "يزيلها من القائمة الشخصية",
         "movesOut_many": "يزيلها من القائمة الشخصية",
         "movesOut_other": "يزيلها من القائمة الشخصية",
-        "partial": "الكلمات التي تمت مشاركتها: {{moved}} من أصل {{total}}. الكلمات التي لم تتم مشاركتها: {{failed}}.",
+        "partial_zero": "الكلمات التي تمت مشاركتها: {{moved}} من أصل {{total}}. الكلمات التي لم تتم مشاركتها: {{count}}.",
+        "partial_one": "الكلمات التي تمت مشاركتها: {{moved}} من أصل {{total}}. الكلمات التي لم تتم مشاركتها: {{count}}.",
+        "partial_two": "الكلمات التي تمت مشاركتها: {{moved}} من أصل {{total}}. الكلمات التي لم تتم مشاركتها: {{count}}.",
+        "partial_few": "الكلمات التي تمت مشاركتها: {{moved}} من أصل {{total}}. الكلمات التي لم تتم مشاركتها: {{count}}.",
+        "partial_many": "الكلمات التي تمت مشاركتها: {{moved}} من أصل {{total}}. الكلمات التي لم تتم مشاركتها: {{count}}.",
+        "partial_other": "الكلمات التي تمت مشاركتها: {{moved}} من أصل {{total}}. الكلمات التي لم تتم مشاركتها: {{count}}.",
         "reasons": {
           "personalChanged": "تغيّرت كلمة على جهاز آخر. حاول مرة أخرى.",
-          "network": "تحقق من اتصالك وحاول مرة أخرى."
+          "network": "تحقق من اتصالك وحاول مرة أخرى.",
+          "aListFull": "إحدى القوائم ممتلئة"
         }
       }
     }

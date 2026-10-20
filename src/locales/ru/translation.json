@@ -3617,6 +3617,10 @@
       "deletedManyForEveryone_few": "{{count}} слова удалены для всех",
       "deletedManyForEveryone_many": "{{count}} слов удалено для всех",
       "deletedManyForEveryone_other": "{{count}} слова удалено для всех",
+      "deletedPersonalMany_one": "Удалено {{count}} слово",
+      "deletedPersonalMany_few": "Удалено {{count}} слова",
+      "deletedPersonalMany_many": "Удалено {{count}} слов",
+      "deletedPersonalMany_other": "Удалено {{count}} слова",
       "selection": {
         "count_one": "Выбрано {{count}} слово",
         "count_few": "Выбрано {{count}} слова",
@@ -3639,10 +3643,14 @@
         "movesOut_few": "Убирает их из «Личных»",
         "movesOut_many": "Убирает их из «Личных»",
         "movesOut_other": "Убирает их из «Личных»",
-        "partial": "Поделились {{moved}} из {{total}} слов. Не удалось поделиться: {{failed}}.",
+        "partial_one": "Поделились {{moved}} из {{total}} слов. Не удалось поделиться: {{count}}.",
+        "partial_few": "Поделились {{moved}} из {{total}} слов. Не удалось поделиться: {{count}}.",
+        "partial_many": "Поделились {{moved}} из {{total}} слов. Не удалось поделиться: {{count}}.",
+        "partial_other": "Поделились {{moved}} из {{total}} слов. Не удалось поделиться: {{count}}.",
         "reasons": {
           "personalChanged": "Слово изменилось на другом устройстве. Попробуйте ещё раз.",
-          "network": "Проверьте подключение и попробуйте ещё раз."
+          "network": "Проверьте подключение и попробуйте ещё раз.",
+          "aListFull": "Один из списков заполнен"
         }
       }
     }

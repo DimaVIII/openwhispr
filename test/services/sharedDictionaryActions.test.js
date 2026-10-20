@@ -215,12 +215,24 @@ test("second chunk failure keeps the first 200 shared and returns the other 250"
 
   assert.equal(ctx.requestsTo(SHARE).length, 2, "the loop stops at the failing chunk");
   assert.deepEqual(result.moved, words.slice(0, 200));
-  assert.deepEqual(result.failed, { words: words.slice(200), reason: "listFull" });
+  // A share to one list knows which list was full.
+  assert.deepEqual(result.failed, { words: words.slice(200), reason: "listFull", target: null });
   assert.equal(ctx.marks.length, 1);
   assert.deepEqual(ctx.marks[0].words, words.slice(0, 200));
   const pulls = ctx.db.callsNamed("applySharedDictionaryPull");
   assert.equal(pulls.length, 1);
   assert.equal(pulls[0].upserts.length, 200);
+});
+
+test("LIST_FULL on a share to several lists names no list", async (t) => {
+  const ctx = setup(t, { personal: syncedPersonal(2) });
+  ctx.on(SHARE, () => failure(400, "SHARED_DICTIONARY_LIST_FULL"));
+
+  const result = await ctx.actions.sharePersonalWords(WS, [null, SPACE], ["Word0", "Word1"]);
+
+  // The error doesn't say which of the two lists is full.
+  assert.deepEqual(result.failed, { words: ["Word0", "Word1"], reason: "listFull" });
+  assert.deepEqual(result.moved, []);
 });
 
 test("PERSONAL_CHANGED maps to personalChanged and triggers a personal sync", async (t) => {

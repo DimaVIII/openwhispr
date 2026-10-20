@@ -38,6 +38,13 @@ interface PendingSharedDelete {
   onDeleted?: () => void;
 }
 
+interface ShareFailure {
+  count: number;
+  reason: SharedDictionaryActionReason;
+  // Only set for listFull when the full list is known.
+  target?: ShareTarget;
+}
+
 export interface DictionaryActions {
   // Personal words the member can see; clear-all removes exactly these.
   visiblePersonal: string[];
@@ -53,6 +60,8 @@ export interface DictionaryActions {
   requestDeleteForEveryone: (rows: DictionaryRow[], onDeleted?: () => void) => void;
   // Moves personal words into the lists; resolves true when all of them went.
   shareWords: (words: string[], targets: ShareTarget[]) => Promise<boolean>;
+  // Removes personal words; several at once come with an Undo toast.
+  deletePersonalWords: (words: string[]) => void;
   deleteTitle: string | null;
   confirmDelete: () => void;
   cancelDelete: () => void;
@@ -203,22 +212,29 @@ export function useDictionaryActions({
     });
   };
 
-  const shareFailureLine = (reason: SharedDictionaryActionReason, lists: string): string => {
+  const shareFailureLine = ({ reason, target }: ShareFailure): string => {
     if (reason === "personalChanged") return t("dictionary.shared.share.reasons.personalChanged");
-    if (reason === "listFull") return t("dictionary.shared.errors.listFull", { list: lists });
+    if (reason === "listFull") {
+      return target === undefined
+        ? t("dictionary.shared.share.reasons.aListFull")
+        : t("dictionary.shared.errors.listFull", { list: listLabel(target) });
+    }
     return t("dictionary.shared.share.reasons.network");
   };
 
   const shareWords = async (words: string[], targets: ShareTarget[]): Promise<boolean> => {
     if (!workspaceId || words.length === 0 || targets.length === 0) return false;
-    const lists = listNames(targets.map(listLabel));
     let moved = 0;
-    let failed: { count: number; reason: SharedDictionaryActionReason } | null;
+    let failed: ShareFailure | null;
     try {
       const result = await sharePersonalWords(workspaceId, targets, words);
       moved = result.moved.length;
       failed = result.failed
-        ? { count: result.failed.words.length, reason: result.failed.reason }
+        ? {
+            count: result.failed.words.length,
+            reason: result.failed.reason,
+            target: result.failed.target,
+          }
         : null;
     } catch (error) {
       failed = { count: words.length, reason: reasonOf(error) };
@@ -229,22 +245,39 @@ export function useDictionaryActions({
       toast({
         title:
           failed.reason === "personalChanged" || failed.reason === "listFull"
-            ? shareFailureLine(failed.reason, lists)
-            : t("dictionary.shared.errors.generic", { list: lists }),
+            ? shareFailureLine(failed)
+            : t("dictionary.shared.errors.generic", { list: listNames(targets.map(listLabel)) }),
         variant: "destructive",
       });
       return false;
     }
     toast({
+      // Plural on the words that weren't shared: "1 wasn't" / "2 weren't".
       title: t("dictionary.shared.share.partial", {
         moved,
         total: moved + failed.count,
-        failed: failed.count,
+        count: failed.count,
       }),
-      description: shareFailureLine(failed.reason, lists),
+      description: shareFailureLine(failed),
       variant: "destructive",
     });
     return false;
+  };
+
+  const deletePersonalWords = (words: string[]): void => {
+    if (words.length === 0) return;
+    updateCustomDictionary({ remove: words });
+    // One word goes as it always has; a bulk delete can be taken back.
+    if (words.length < 2) return;
+    toast({
+      title: t("dictionary.shared.deletedPersonalMany", { count: words.length }),
+      actions: [
+        {
+          label: t("dictionary.shared.undo"),
+          onClick: () => updateCustomDictionary({ add: words }),
+        },
+      ],
+    });
   };
 
   const undoAction = (
@@ -338,6 +371,7 @@ export function useDictionaryActions({
     setRowsHidden,
     requestDeleteForEveryone,
     shareWords,
+    deletePersonalWords,
     deleteTitle,
     confirmDelete,
     cancelDelete: () => setPendingDelete(null),

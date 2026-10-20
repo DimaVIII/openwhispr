@@ -3585,6 +3585,8 @@
       "deleteManyTitle_other": "Eliminare {{count}} parole per tutti in {{list}}?",
       "deletedManyForEveryone_one": "{{count}} parola eliminata per tutti",
       "deletedManyForEveryone_other": "{{count}} parole eliminate per tutti",
+      "deletedPersonalMany_one": "{{count}} parola eliminata",
+      "deletedPersonalMany_other": "{{count}} parole eliminate",
       "selection": {
         "count_one": "{{count}} selezionata",
         "count_other": "{{count}} selezionate",
@@ -3601,10 +3603,12 @@
         "alreadyShared": "Già condivisa",
         "movesOut_one": "La sposta fuori da Personali",
         "movesOut_other": "Le sposta fuori da Personali",
-        "partial": "Condivise {{moved}} parole su {{total}}. {{failed}} non sono state condivise.",
+        "partial_one": "Condivise {{moved}} parole su {{total}}. {{count}} non è stata condivisa.",
+        "partial_other": "Condivise {{moved}} parole su {{total}}. {{count}} non sono state condivise.",
         "reasons": {
           "personalChanged": "Una parola è cambiata su un altro dispositivo. Riprova.",
-          "network": "Controlla la connessione e riprova."
+          "network": "Controlla la connessione e riprova.",
+          "aListFull": "Una lista è piena"
         }
       }
     }

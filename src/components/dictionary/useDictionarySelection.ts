@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useReducer } from "react";
+import { useCallback, useEffect, useMemo, useReducer } from "react";
 import type { DictionaryRow } from "./dictionaryViewModel";
 
 export interface SelectionState {
@@ -11,6 +11,8 @@ export type SelectionAction =
   | { type: "toggle"; key: string }
   | { type: "range"; key: string; orderedKeys: string[] }
   | { type: "selectAll"; orderedKeys: string[] }
+  // Drops keys of rows that left the list, so a row that comes back isn't still ticked.
+  | { type: "retain"; orderedKeys: string[] }
   | { type: "clear" };
 
 const EMPTY_SELECTION: SelectionState = { selected: new Set(), anchor: null };
@@ -39,14 +41,20 @@ export function selectionReducer(state: SelectionState, action: SelectionAction)
     }
     case "selectAll":
       return { selected: new Set(action.orderedKeys), anchor: state.anchor };
+    case "retain": {
+      const keep = new Set(action.orderedKeys);
+      const selected = new Set([...state.selected].filter((key) => keep.has(key)));
+      const anchor = state.anchor !== null && keep.has(state.anchor) ? state.anchor : null;
+      if (selected.size === state.selected.size && anchor === state.anchor) return state;
+      return { selected, anchor };
+    }
     case "clear":
       return state.selected.size === 0 && state.anchor === null ? state : EMPTY_SELECTION;
   }
 }
 
 export interface DictionarySelection {
-  // Selected rows still in the list, in list order. Keys of rows that left it
-  // (filtered by search, moved, deleted) stay in state but never count.
+  // Selected rows in list order.
   selectedRows: DictionaryRow[];
   isSelected: (key: string) => boolean;
   toggle: (key: string, extend: boolean) => void;
@@ -57,6 +65,8 @@ export interface DictionarySelection {
 export function useDictionarySelection(rows: DictionaryRow[]): DictionarySelection {
   const [state, dispatch] = useReducer(selectionReducer, EMPTY_SELECTION);
   const orderedKeys = useMemo(() => rows.map((row) => row.key), [rows]);
+  useEffect(() => dispatch({ type: "retain", orderedKeys }), [orderedKeys]);
+  // Filtered as well, for the render before the prune lands.
   const selectedRows = useMemo(
     () => rows.filter((row) => state.selected.has(row.key)),
     [rows, state.selected]

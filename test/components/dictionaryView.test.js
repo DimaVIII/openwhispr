@@ -647,6 +647,7 @@ test("⌘A selects all while the list has focus, Esc clears, and a new list star
     { remove: ["Piha"] },
   ]);
   assert.equal(toolbar(container), null, "a finished bulk action clears the selection");
+  assert.deepEqual(globalThis.__toasts, [], "deleting one word offers no Undo, as before");
 
   await click(checkboxFor(container, "Tiptap"));
   await openList(container, "all");
@@ -688,7 +689,7 @@ test("the selection bar shares to the ticked lists; unshared words stay selected
     ["sharePersonalWords", "ws", [ENGINEERING], ["Biscuit", "Piha"]]
   );
   assert.deepEqual(globalThis.__toasts.at(-1), {
-    title: 'dictionary.shared.share.partial{"moved":1,"total":2,"failed":1}',
+    title: 'dictionary.shared.share.partial{"moved":1,"total":2,"count":1}',
     description: "dictionary.shared.share.reasons.personalChanged",
     variant: "destructive",
   });
@@ -766,4 +767,100 @@ test("the Hidden list has no checkboxes", async (t) => {
   });
   await openList(container, "hidden");
   assert.equal(checkboxFor(container, "ARR"), null);
+});
+
+test("⌘A then Delete in Personal offers Undo, which adds every removed word back", async (t) => {
+  const { container, calls } = await renderView(t, { settings: FIVE_WORDS });
+  await openList(container, "personal");
+  await keyDown(container.querySelector("ul"), "a", { metaKey: true });
+  await click(barButton(container, "dictionary.shared.actions.delete"));
+
+  const removed = ["Biscuit", "Piha", "Qdrant", "sherpa-onnx", "Tiptap"];
+  assert.deepEqual(calls.filter(([name]) => name === "updateCustomDictionary").at(-1), [
+    "updateCustomDictionary",
+    { remove: removed },
+  ]);
+  const toast = globalThis.__toasts.at(-1);
+  assert.equal(toast.title, 'dictionary.shared.deletedPersonalMany{"count":5}');
+  assert.equal(toast.actions[0].label, "dictionary.shared.undo");
+
+  await React.act(async () => toast.actions[0].onClick());
+  assert.deepEqual(calls.filter(([name]) => name === "updateCustomDictionary").at(-1), [
+    "updateCustomDictionary",
+    { add: removed },
+  ]);
+});
+
+const shareTo = async (container, labels) => {
+  await click(barButton(container, "dictionary.shared.selection.shareWith"));
+  const popover = byAttribute(container, "data-popover");
+  for (const label of labels) {
+    await click(
+      findElement(
+        popover,
+        (node) => node.getAttribute?.("role") === "checkbox" && node.textContent.startsWith(label)
+      )
+    );
+  }
+  await click(
+    findElement(
+      popover,
+      (node) =>
+        node.tagName === "BUTTON" &&
+        node.getAttribute("role") !== "checkbox" &&
+        node.textContent === "dictionary.shared.actions.share"
+    )
+  );
+};
+
+test("a full list is named when known and generic when the share went to several", async (t) => {
+  const { container } = await renderView(t, { settings: FIVE_WORDS });
+  await openList(container, "personal");
+  await click(checkboxFor(container, "Biscuit"));
+  await click(checkboxFor(container, "Piha"));
+  await click(checkboxFor(container, "Tiptap"));
+
+  globalThis.__results.sharePersonalWords = {
+    moved: ["Biscuit"],
+    alreadyPresent: [],
+    failed: { words: ["Piha", "Tiptap"], reason: "listFull", target: ENGINEERING },
+  };
+  await shareTo(container, ["Engineering"]);
+  assert.deepEqual(globalThis.__toasts.at(-1), {
+    title: 'dictionary.shared.share.partial{"moved":1,"total":3,"count":2}',
+    description: 'dictionary.shared.errors.listFull{"list":"Engineering"}',
+    variant: "destructive",
+  });
+
+  globalThis.__results.sharePersonalWords = {
+    moved: [],
+    alreadyPresent: [],
+    failed: { words: ["Biscuit", "Piha", "Tiptap"], reason: "listFull" },
+  };
+  await shareTo(container, ["Engineering", "Sales"]);
+  assert.deepEqual(globalThis.__toasts.at(-1), {
+    title: "dictionary.shared.share.reasons.aListFull",
+    variant: "destructive",
+  });
+});
+
+test("a ticked row that leaves the list isn't still ticked when it comes back", async (t) => {
+  const { container } = await renderView(t, { settings: FIVE_WORDS });
+  await openList(container, "personal");
+  await click(checkboxFor(container, "Piha"));
+  await click(checkboxFor(container, "Tiptap"));
+
+  await click(byAttribute(container, "aria-label", "dictionary.shared.toolbar.search"));
+  const search = () =>
+    findElement(
+      container,
+      (node) =>
+        node.tagName === "INPUT" &&
+        node.getAttribute("aria-label") === "dictionary.shared.toolbar.search"
+    );
+  await type(search(), "ti");
+  assert.deepEqual(checkedWords(container), ["Tiptap"]);
+
+  await type(search(), "");
+  assert.deepEqual(checkedWords(container), ["Tiptap"], "Piha left the list, so it was unticked");
 });

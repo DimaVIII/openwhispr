@@ -50,6 +50,9 @@ export class SharedDictionaryActionError extends Error {
 export interface ActionFailure {
   words: string[];
   reason: SharedDictionaryActionReason;
+  // The list that refused them, when that's known: a share to one list that
+  // came back listFull. LIST_FULL names no list, so a share to several leaves it out.
+  target?: ShareTarget;
 }
 
 const REASON_BY_CODE: Record<string, SharedDictionaryActionReason> = {
@@ -397,6 +400,7 @@ export async function sharePersonalWords(
     } catch (error) {
       const actionError = toSharedDictionaryActionError(error);
       failed = { words: chunks.slice(index).flat(), reason: actionError.reason };
+      if (actionError.reason === "listFull" && targets.length === 1) failed.target = targets[0];
       if (actionError.reason === "personalChanged") {
         logger.debug(
           "Sharing stopped: personal words changed on another device",
