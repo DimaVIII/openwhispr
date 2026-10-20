@@ -110,3 +110,15 @@ test("a capture that falls back releases the mic it was holding", () => {
 
   assert.deepEqual(dispatched, ["a", "b"]);
 });
+
+test("a fallback releases held mic even after the wall clock steps back", () => {
+  const { api, dispatched, advance } = harness();
+  api.setStrategy("wasapi-loopback");
+  api.system();
+  api.mic("a");
+
+  advance(-5000);
+  api.setStrategy("loopback");
+
+  assert.deepEqual(dispatched, ["a"]);
+});

@@ -8282,7 +8282,7 @@ class IPCHandlers {
           : MEETING_MIC_REFERENCE_ALIGNMENT_MS[meetingSystemAudioStrategy];
       while (meetingPendingMicChunks.length > 0) {
         const next = meetingPendingMicChunks[0];
-        if (now - next.queuedAt < holdMs) {
+        if (holdMs && now - next.queuedAt < holdMs) {
           break;
         }
 
