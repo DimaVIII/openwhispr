@@ -79,6 +79,7 @@ test("_mapEvent maps a Graph event to the shared calendar_events shape", () => {
       responseStatus: { response: "declined" },
       onlineMeeting: { joinUrl: "https://teams.microsoft.com/l/meetup-join/abc" },
       organizer: { emailAddress: { address: "organizer@example.com" } },
+      webLink: "https://outlook.office365.com/owa/?itemid=abc",
       attendees: [
         {
           emailAddress: { address: "me@example.com", name: "Me" },
@@ -98,6 +99,7 @@ test("_mapEvent maps a Graph event to the shared calendar_events shape", () => {
   assert.equal(mapped.self_response_status, "declined");
   assert.equal(mapped.hangout_link, "https://teams.microsoft.com/l/meetup-join/abc");
   assert.equal(mapped.organizer_email, "organizer@example.com");
+  assert.equal(mapped.web_link, "https://outlook.office365.com/owa/?itemid=abc");
   assert.equal(mapped.attendees_count, 2);
 
   const attendees = JSON.parse(mapped.attendees);

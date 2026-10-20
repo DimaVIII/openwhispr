@@ -3006,6 +3006,9 @@
       "noCalendar": "予定をリンクするには「連携」でカレンダーを接続してください",
       "loadFailed": "カレンダーの予定を読み込めませんでした",
       "join": "参加",
+      "calendar": "カレンダー",
+      "openInGoogle": "Google Calendar で開く",
+      "openInOutlook": "Outlook で開く",
       "linkedEvent": "カレンダーの予定",
       "unavailable": "この予定はこのデバイスのカレンダーにありません"
     },

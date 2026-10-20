@@ -260,6 +260,7 @@ class GoogleCalendarManager {
         hangout_link: item.hangoutLink || extractMeetingUrl([item.location, item.description]),
         conference_data: item.conferenceData ? JSON.stringify(item.conferenceData) : null,
         organizer_email: item.organizer?.email || null,
+        web_link: item.htmlLink || null,
         attendees_count: item.attendees?.length || 0,
         attendees: item.attendees
           ? JSON.stringify(

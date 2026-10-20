@@ -351,6 +351,7 @@ class MicrosoftCalendarManager {
         extractMeetingUrl([item.location?.displayName, item.bodyPreview]),
       conference_data: null,
       organizer_email: item.organizer?.emailAddress?.address || null,
+      web_link: item.webLink || null,
       attendees_count: attendees.length,
       attendees: attendees.length
         ? JSON.stringify(

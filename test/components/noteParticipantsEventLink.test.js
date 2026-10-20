@@ -205,3 +205,36 @@ test("the capsule keeps the date while linked", async (t) => {
   assert.equal(trigger.textContent.includes("Oct 20"), true);
   assert.equal(trigger.textContent.includes("Team Standup"), false);
 });
+
+test("a Google event opens in Google Calendar, beside Join", async (t) => {
+  const linked = { ...STANDUP, web_link: "https://www.google.com/calendar/event?eid=abc" };
+  const { act, calls } = await mount(
+    t,
+    { linkedEventId: linked.id, linkedEvent: linked },
+    { events: [linked] }
+  );
+
+  await act(() => buttonWith("notes.eventLink.calendar").click());
+  assert.deepEqual(calls.openExternal, ["https://www.google.com/calendar/event?eid=abc"]);
+});
+
+test("an Outlook event without a meeting link offers Open in Outlook", async (t) => {
+  const linked = {
+    ...STANDUP,
+    provider: "microsoft",
+    hangout_link: null,
+    web_link: "https://outlook.office365.com/owa/?itemid=abc",
+  };
+  await mount(t, { linkedEventId: linked.id, linkedEvent: linked }, { events: [linked] });
+
+  assert.equal(!!buttonWith("notes.eventLink.openInOutlook"), true);
+  assert.equal(!!buttonWith("notes.eventLink.join"), false);
+});
+
+test("an Apple event has no calendar button", async (t) => {
+  const linked = { ...STANDUP, provider: "apple", web_link: "https://example.com/x" };
+  await mount(t, { linkedEventId: linked.id, linkedEvent: linked }, { events: [linked] });
+
+  assert.equal(!!buttonWith("notes.eventLink.calendar"), false);
+  assert.equal(!!buttonWith("notes.eventLink.openInGoogle"), false);
+});

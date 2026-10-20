@@ -2230,6 +2230,9 @@
       "noCalendar": "اربط تقويمًا من «التكاملات» لربط الأحداث",
       "loadFailed": "تعذّر تحميل أحداث التقويم",
       "join": "انضمام",
+      "calendar": "التقويم",
+      "openInGoogle": "فتح في Google Calendar",
+      "openInOutlook": "فتح في Outlook",
       "linkedEvent": "حدث التقويم",
       "unavailable": "هذا الحدث غير موجود في تقاويمك على هذا الجهاز"
     },

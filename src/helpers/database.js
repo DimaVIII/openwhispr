@@ -980,7 +980,8 @@ class DatabaseManager {
 
       // One-time reset (user_version 5): the stored lookback widened to
       // CALENDAR_LOOKBACK_DAYS so notes can link recent past events, and REST
-      // sync tokens pin the window they were created with.
+      // sync tokens pin the window they were created with. The full sync also
+      // fills calendar_events.web_link.
       if (this.db.pragma("user_version", { simple: true }) < 5) {
         this.db.exec(`
           UPDATE google_calendars SET sync_token = NULL, sync_token_expires_at = NULL;
@@ -1012,6 +1013,13 @@ class DatabaseManager {
 
       try {
         this.db.exec("ALTER TABLE calendar_events ADD COLUMN attendees TEXT");
+      } catch (err) {
+        if (!err.message.includes("duplicate column")) throw err;
+      }
+      // The event's page in Google Calendar or Outlook on the web; Apple has
+      // none. Existing rows are backfilled by the user_version 5 full sync.
+      try {
+        this.db.exec("ALTER TABLE calendar_events ADD COLUMN web_link TEXT");
       } catch (err) {
         if (!err.message.includes("duplicate column")) throw err;
       }
@@ -5013,7 +5021,7 @@ class DatabaseManager {
       if (!this.db) throw new Error("Database not initialized");
       const transaction = this.db.transaction((eventList) => {
         const stmt = this.db.prepare(
-          "INSERT OR REPLACE INTO calendar_events (id, calendar_id, provider, summary, start_time, end_time, is_all_day, status, availability_status, self_response_status, hangout_link, conference_data, organizer_email, attendees_count, attendees, synced_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)"
+          "INSERT OR REPLACE INTO calendar_events (id, calendar_id, provider, summary, start_time, end_time, is_all_day, status, availability_status, self_response_status, hangout_link, conference_data, organizer_email, attendees_count, attendees, web_link, synced_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)"
         );
         for (const e of eventList) {
           stmt.run(
@@ -5031,7 +5039,8 @@ class DatabaseManager {
             e.conference_data || null,
             e.organizer_email || null,
             e.attendees_count || 0,
-            e.attendees || null
+            e.attendees || null,
+            e.web_link || null
           );
         }
       });

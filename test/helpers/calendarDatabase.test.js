@@ -557,3 +557,16 @@ test("linkable events include all-day rows and recent past events", (t) => {
   );
   db.db.close();
 });
+
+test("web_link round-trips through upsertCalendarEvents", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+  db.upsertCalendarEvents([
+    restEvent("google", "google-calendar", "linked", { web_link: "https://calendar.google.com/x" }),
+    appleEvent("apple"),
+  ]);
+
+  assert.equal(db.getCalendarEventById("linked").web_link, "https://calendar.google.com/x");
+  assert.equal(db.getCalendarEventById("apple").web_link, null);
+  db.db.close();
+});

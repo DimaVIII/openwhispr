@@ -3462,6 +3462,9 @@
       "noCalendar": "Connectez un calendrier dans Intégrations pour lier des événements",
       "loadFailed": "Impossible de charger les événements du calendrier",
       "join": "Rejoindre",
+      "calendar": "Calendrier",
+      "openInGoogle": "Ouvrir dans Google Calendar",
+      "openInOutlook": "Ouvrir dans Outlook",
       "linkedEvent": "Événement du calendrier",
       "unavailable": "Cet événement ne figure dans aucun de vos calendriers sur cet appareil"
     },

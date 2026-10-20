@@ -3111,6 +3111,9 @@
       "noCalendar": "請在「整合」中連結行事曆以連結活動",
       "loadFailed": "無法載入行事曆活動",
       "join": "加入",
+      "calendar": "行事曆",
+      "openInGoogle": "在 Google Calendar 中開啟",
+      "openInOutlook": "在 Outlook 中開啟",
       "linkedEvent": "行事曆活動",
       "unavailable": "此裝置上的行事曆中沒有這個活動"
     },

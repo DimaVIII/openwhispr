@@ -3462,6 +3462,9 @@
       "noCalendar": "Connect a calendar in Integrations to link events",
       "loadFailed": "Couldn't load calendar events",
       "join": "Join",
+      "calendar": "Calendar",
+      "openInGoogle": "Open in Google Calendar",
+      "openInOutlook": "Open in Outlook",
       "linkedEvent": "Calendar event",
       "unavailable": "This event isn't in your calendars on this device"
     },

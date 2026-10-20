@@ -58,6 +58,7 @@ test("_syncCalendar fetches all pages when nextPageToken is returned", async () 
           {
             id: "event-1",
             summary: "Event Page 1",
+            htmlLink: "https://www.google.com/calendar/event?eid=abc",
             start: { dateTime: "2026-08-12T10:00:00Z" },
             transparency: "transparent",
             attendees: [{ self: true, responseStatus: "declined" }],
@@ -95,6 +96,8 @@ test("_syncCalendar fetches all pages when nextPageToken is returned", async () 
   assert.equal(upsertedEvents[0].id, "event-1");
   assert.equal(upsertedEvents[0].availability_status, "free");
   assert.equal(upsertedEvents[0].self_response_status, "declined");
+  assert.equal(upsertedEvents[0].web_link, "https://www.google.com/calendar/event?eid=abc");
+  assert.equal(upsertedEvents[1].web_link, null);
   assert.equal(upsertedEvents[1].id, "event-2");
   assert.equal(savedSyncToken, "sync-token-final", "should save nextSyncToken from final page");
   assert.deepEqual(

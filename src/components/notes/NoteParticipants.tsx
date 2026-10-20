@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Calendar, ChevronDown, Users, Video, X } from "../icons";
+import { Calendar, ChevronDown, ExternalLink, Users, Video, X } from "../icons";
 import { cn } from "../lib/utils";
 import { NOTE_META_CHIP_CLASS } from "./shared";
 import NoteEventPicker, { EventDot } from "./NoteEventPicker";
@@ -130,6 +130,11 @@ export default function NoteParticipants({
       (linkedEvent?.id === localLinkedId ? linkedEvent : null))
     : null;
   const joinUrl = getMeetingJoinUrl(resolvedEvent);
+  const calendarUrl =
+    resolvedEvent?.web_link?.startsWith("https://") &&
+    (resolvedEvent.provider === "google" || resolvedEvent.provider === "microsoft")
+      ? resolvedEvent.web_link
+      : null;
   const linkLookupDone = linkedEvent !== undefined && (!canEdit || events !== null);
 
   const addParticipant = useCallback(
@@ -286,16 +291,32 @@ export default function NoteParticipants({
                     </span>
                   )}
                 </EventHeaderRow>
-                {joinUrl && (
+                {(joinUrl || calendarUrl) && (
                   <div className="flex gap-2 px-2 pt-1 pb-1.5">
-                    <button
-                      type="button"
-                      onClick={() => window.electronAPI.openExternal(joinUrl)}
-                      className={EVENT_ACTION_CLASS}
-                    >
-                      <Video size={14} className="shrink-0" />
-                      {t("notes.eventLink.join")}
-                    </button>
+                    {joinUrl && (
+                      <button
+                        type="button"
+                        onClick={() => window.electronAPI.openExternal(joinUrl)}
+                        className={EVENT_ACTION_CLASS}
+                      >
+                        <Video size={14} className="shrink-0" />
+                        {t("notes.eventLink.join")}
+                      </button>
+                    )}
+                    {calendarUrl && (
+                      <button
+                        type="button"
+                        onClick={() => window.electronAPI.openExternal(calendarUrl)}
+                        className={EVENT_ACTION_CLASS}
+                      >
+                        <ExternalLink size={14} className="shrink-0" />
+                        {joinUrl
+                          ? t("notes.eventLink.calendar")
+                          : resolvedEvent?.provider === "microsoft"
+                            ? t("notes.eventLink.openInOutlook")
+                            : t("notes.eventLink.openInGoogle")}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

@@ -3111,6 +3111,9 @@
       "noCalendar": "请在“集成”中连接日历以关联事件",
       "loadFailed": "无法加载日历事件",
       "join": "加入",
+      "calendar": "日历",
+      "openInGoogle": "在 Google Calendar 中打开",
+      "openInOutlook": "在 Outlook 中打开",
       "linkedEvent": "日历事件",
       "unavailable": "此设备上的日历中没有这个事件"
     },
