@@ -3,39 +3,54 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+const micGate = require("../../src/helpers/meetingMicGate");
 
-// Runs the real mic alignment queue and strategy switch from ipcHandlers.js
-// with only the echo detector and the stream dispatch replaced.
+// Runs the real mic alignment and sendMeetingAudio from ipcHandlers.js with
+// only the echo detector, the watchdog and the stream dispatch replaced.
 const source = fs.readFileSync(path.join(__dirname, "../../src/helpers/ipcHandlers.js"), "utf8");
-const start = source.indexOf("const flushPendingMeetingMicChunks =");
-const end = source.indexOf("const processMeetingMicWithAec =", start);
-assert.ok(start >= 0 && end > start, "alignment block not found in ipcHandlers.js");
-const alignmentSource = source.slice(start, end);
+
+const sliceBetween = (startMarker, endMarker) => {
+  const start = source.indexOf(startMarker);
+  const end = source.indexOf(endMarker, start);
+  assert.ok(start >= 0 && end > start, `${startMarker} not found in ipcHandlers.js`);
+  return source.slice(start, end);
+};
 
 function harness() {
   let now = 1_000_000;
   const dispatched = [];
   const context = {
+    Buffer,
     Date: { now: () => now },
-    MEETING_MIC_REFERENCE_ALIGNMENT_MS: 320,
+    ...micGate,
     meetingPendingMicChunks: [],
     meetingSystemAudioStrategy: null,
+    meetingSystemChunkReceivedAt: null,
     meetingAecEnabled: false,
     meetingLocalMode: false,
-    meetingEchoLeakDetector: { analyzeMicChunk: () => ({ shouldMute: false }) },
-    dispatchMeetingAudioBuffer: (buffer, source) => dispatched.push(`${source}:${buffer}`),
+    meetingLiveSpeakerActive: false,
+    meetingDiarizationStream: { write() {} },
+    meetingSystemAudioHeard: true,
+    meetingSystemAudioWatchdog: { recordChunk() {} },
+    meetingEchoLeakDetector: {
+      recordSystemChunk() {},
+      analyzeMicChunk: () => ({ shouldMute: false }),
+    },
+    dispatchMeetingAudioBuffer: (buffer, source) => {
+      if (source === "mic") dispatched.push(String(buffer));
+    },
   };
   vm.createContext(context);
   vm.runInContext(
-    `${alignmentSource}
+    `
+    ${sliceBetween("const flushPendingMeetingMicChunks =", "const stopLiveSpeakerIdentification =")}
+    ${sliceBetween("const sendMeetingAudio =", "// The Windows helper reports capture_silent")}
     globalThis.api = {
-      needsAlignment: meetingMicNeedsReferenceAlignment,
       setStrategy: setMeetingSystemAudioStrategy,
-      queueMic: (buffer) => {
-        meetingPendingMicChunks.push({ buffer, queuedAt: Date.now() });
-        flushPendingMeetingMicChunks();
-      },
-    };`,
+      system: () => sendMeetingAudio(Buffer.alloc(4), "system"),
+      mic: (text) => sendMeetingAudio(Buffer.from(text), "mic"),
+    };
+    `,
     context
   );
   return {
@@ -47,41 +62,51 @@ function harness() {
   };
 }
 
-test("mic waits for the reference when system audio is captured in main", () => {
-  const { api } = harness();
-  for (const strategy of ["native", "wasapi-loopback", "pipewire-loopback"]) {
+test("each capture holds the mic only as long as its reference lags", () => {
+  for (const [strategy, holdMs] of [
+    ["native", 320],
+    ["wasapi-loopback", 100],
+    ["pipewire-loopback", 100],
+    ["loopback", 0],
+    ["unsupported", 0],
+    [null, 0],
+  ]) {
+    const { api, dispatched, advance } = harness();
     api.setStrategy(strategy);
-    assert.equal(api.needsAlignment(), true, strategy);
+    api.system();
+    api.mic("a");
+    if (holdMs > 0) {
+      advance(holdMs - 1);
+      api.system();
+      assert.deepEqual(dispatched, [], String(strategy));
+      advance(1);
+      api.system();
+    }
+    assert.deepEqual(dispatched, ["a"], String(strategy));
   }
 });
 
-test("mic goes out unaligned for renderer loopback or no system audio", () => {
-  const { api } = harness();
-  for (const strategy of ["loopback", "unsupported", null, undefined]) {
-    api.setStrategy(strategy);
-    assert.equal(api.needsAlignment(), false, String(strategy));
-  }
-});
-
-test("queued mic waits for the alignment window under a helper capture", () => {
+test("a reference that went quiet stops holding the mic, releasing what it held first", () => {
   const { api, dispatched, advance } = harness();
   api.setStrategy("wasapi-loopback");
+  api.system();
+  api.mic("a");
 
-  api.queueMic("a");
-  assert.deepEqual(dispatched, []);
+  advance(1000);
+  api.mic("b");
 
-  advance(320);
-  api.queueMic("b");
-  assert.deepEqual(dispatched, ["mic:a"]);
+  assert.deepEqual(dispatched, ["a", "b"]);
 });
 
 test("a capture that falls back releases the mic it was holding", () => {
   const { api, dispatched } = harness();
   api.setStrategy("wasapi-loopback");
-  api.queueMic("a");
-  api.queueMic("b");
+  api.system();
+  api.mic("a");
+  api.mic("b");
+  assert.deepEqual(dispatched, []);
 
   api.setStrategy("loopback");
 
-  assert.deepEqual(dispatched, ["mic:a", "mic:b"]);
+  assert.deepEqual(dispatched, ["a", "b"]);
 });

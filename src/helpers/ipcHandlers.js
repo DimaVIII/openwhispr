@@ -8001,7 +8001,6 @@ class IPCHandlers {
       return win;
     };
 
-    const MEETING_MIC_REFERENCE_ALIGNMENT_MS = 320;
     const MEETING_STARTUP_WARMUP_MS = 1500;
     const MEETING_MIC_BLEED_LOOKBACK_MS = 500;
     const MEETING_MIC_STATS_LOG_LIMIT = 200;
@@ -8009,6 +8008,7 @@ class IPCHandlers {
     const MEETING_SYSTEM_AUDIO_TICK_MS = 2000;
     let meetingMicStatsLogCount = 0;
     let meetingSystemAudioStrategy = null;
+    let meetingSystemChunkReceivedAt = null;
     let meetingSystemAudioSilenceTimer = null;
     let meetingSystemAudioTicker = null;
     let meetingSystemAudioWatchdogWin = null;
@@ -8276,9 +8276,13 @@ class IPCHandlers {
       }
 
       const now = Date.now();
+      const holdMs =
+        force || !meetingMicNeedsReferenceAlignment()
+          ? 0
+          : MEETING_MIC_REFERENCE_ALIGNMENT_MS[meetingSystemAudioStrategy];
       while (meetingPendingMicChunks.length > 0) {
         const next = meetingPendingMicChunks[0];
-        if (!force && now - next.queuedAt < MEETING_MIC_REFERENCE_ALIGNMENT_MS) {
+        if (now - next.queuedAt < holdMs) {
           break;
         }
 
@@ -8302,15 +8306,22 @@ class IPCHandlers {
     // helpers) arrives on its own schedule, unsynchronized with the renderer's
     // mic, so mic chunks wait for that reference before echo analysis. The
     // capability mode can't tell these apart: it reads "loopback" on Windows
-    // and Linux for the helpers and for renderer loopback alike.
-    const MIC_REFERENCE_ALIGNED_STRATEGIES = new Set([
-      "native",
-      "wasapi-loopback",
-      "pipewire-loopback",
-    ]);
+    // and Linux for the helpers and for renderer loopback alike. Each waits only
+    // as long as its reference lags: the echo detector searches 500 ms back, and
+    // every millisecond held comes out of what's left for speaker latency.
+    const MEETING_MIC_REFERENCE_ALIGNMENT_MS = {
+      native: 320,
+      "wasapi-loopback": 100,
+      "pipewire-loopback": 100,
+    };
+    // A live capture keeps sending, silence included, so one that stopped
+    // mid-session no longer delays the mic.
+    const MEETING_MIC_REFERENCE_RECENT_MS = 1000;
 
     const meetingMicNeedsReferenceAlignment = () =>
-      MIC_REFERENCE_ALIGNED_STRATEGIES.has(meetingSystemAudioStrategy);
+      Object.hasOwn(MEETING_MIC_REFERENCE_ALIGNMENT_MS, meetingSystemAudioStrategy) &&
+      meetingSystemChunkReceivedAt !== null &&
+      Date.now() - meetingSystemChunkReceivedAt < MEETING_MIC_REFERENCE_RECENT_MS;
 
     const setMeetingSystemAudioStrategy = (strategy) => {
       meetingSystemAudioStrategy = strategy;
@@ -8718,6 +8729,7 @@ class IPCHandlers {
       meetingLocalModel = null;
       meetingLocalLanguage = null;
       meetingPendingMicChunks = [];
+      meetingSystemChunkReceivedAt = null;
       resetPendingMicFinals();
       meetingAecEnabled = false;
       meetingStartedAt = null;
@@ -8854,6 +8866,7 @@ class IPCHandlers {
       meetingMicStatsLogCount = 0;
       meetingLiveSpeakerStartedAt = null;
       meetingPendingMicChunks = [];
+      meetingSystemChunkReceivedAt = null;
       resetPendingMicFinals();
       meetingAecEnabled = false;
       meetingEchoLeakDetector.reset();
@@ -9413,6 +9426,7 @@ class IPCHandlers {
         // evidence or an AEC reference for the mic arriving now.
         if (!synthetic) {
           meetingEchoLeakDetector.recordSystemChunk(outboundBuffer, receivedAt);
+          meetingSystemChunkReceivedAt = receivedAt;
           if (meetingAecEnabled && !this.meetingAecManager?.processSystemBuffer(outboundBuffer)) {
             meetingAecEnabled = false;
           }
@@ -9476,19 +9490,6 @@ class IPCHandlers {
           return;
         }
 
-        if (!meetingMicNeedsReferenceAlignment()) {
-          const analysis = meetingEchoLeakDetector.analyzeMicChunk(outboundBuffer);
-          if (analysis?.shouldMute && !meetingAecEnabled) {
-            if (!meetingLocalMode) {
-              dispatchMeetingAudioBuffer(Buffer.alloc(outboundBuffer.length), "mic");
-            }
-            return;
-          }
-
-          dispatchMeetingAudioBuffer(outboundBuffer, "mic");
-          return;
-        }
-
         meetingPendingMicChunks.push({
           buffer: outboundBuffer,
           queuedAt: Date.now(),
@@ -9518,6 +9519,8 @@ class IPCHandlers {
     const completeMeetingSystemAudioHandover = () => {
       debugLogger.info("Renderer loopback took over system audio capture", {}, "meeting");
       meetingSystemAudioWatchdog.detachCapture();
+      // Renderer loopback runs on the mic's clock, so the mic stops waiting.
+      setMeetingSystemAudioStrategy("loopback");
       void this.windowsLoopbackAudioManager?.stop().catch(() => {});
     };
 
