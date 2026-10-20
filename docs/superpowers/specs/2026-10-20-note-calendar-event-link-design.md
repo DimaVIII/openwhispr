@@ -32,7 +32,7 @@ Out of scope: Granola's "Create folder for this meeting" banner, renaming the no
 2. Merging attendees keeps everyone already on the note and appends the event's guests. Duplicates are matched by email, ignoring case and spaces. A guest the provider flags as the user (`self`) is marked self.
 3. The picker opens on the note's local day. The search box matches titles and attendee names or emails across every stored event, and works offline and with an expired provider token, because it reads only the local table.
 4. Each provider stores at least 3 days of history after its next full sync. Existing Google and Microsoft sync tokens are discarded once so that sync happens on first launch. Apple's helper snapshot covers the same 3 days.
-5. Unlinking syncs. Once everyone with the note runs this build, it never comes back on another device, for a teammate, or after a later pull (see the rollout limitation in Decision 2).
+5. Unlinking syncs. Once everyone with the note runs this build, it never comes back on another device, for a teammate, or after a later pull (see the rollout limitation in Decision 2). The exception is a device with an unsynced edit that resolves the resulting conflict with "Keep editing": it keeps its whole copy, link included, as it does for every field but the note's text.
 6. Viewers (`canEditNote` false) see a linked event and can Join or Open it, but can't link, change or remove one.
 7. A linked id this device can't resolve shows a quiet fallback row in the dropdown, with no Join or Open buttons.
 8. Meeting detection, reminders, Upcoming and availability behave as before. They only read events near now.
