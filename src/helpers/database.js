@@ -191,12 +191,19 @@ const FOLDER_NAME_TAKEN_FILTER = `(deleted_at IS NULL OR EXISTS (
 // duplicate UI rows; suppress the Apple copy when a REST row occupies the same
 // time slot + title (REST rows have richer conference data). datetime()
 // normalizes the providers' timestamp formats (Google stores offset-form
-// RFC3339, Apple/Microsoft store UTC "Z" form). REST rows are never collapsed
-// — Google and Microsoft are never mirrors of each other.
+// RFC3339, Apple/Microsoft store UTC "Z" form). All-day rows pair by local
+// start day instead: REST providers store a plain date while the Apple helper
+// writes local midnight as a UTC instant, and EventKit's all-day end differs.
+// REST rows are never collapsed — Google and Microsoft are never mirrors of
+// each other.
+const MIRROR_SLOT = `CASE WHEN is_all_day THEN 'day:' || CASE WHEN length(start_time) = 10
+  THEN start_time ELSE date(start_time, 'localtime') END
+  ELSE datetime(start_time) || '|' || datetime(end_time) END`;
+
 function dedupedEventsQuery(where) {
   return `SELECT * FROM (
     SELECT *, MAX(provider != 'apple') OVER (
-      PARTITION BY datetime(start_time), datetime(end_time), COALESCE(summary, '')
+      PARTITION BY ${MIRROR_SLOT}, COALESCE(summary, '')
     ) AS has_synced
     FROM calendar_events
     WHERE ${where}

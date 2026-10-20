@@ -570,3 +570,81 @@ test("web_link round-trips through upsertCalendarEvents", (t) => {
   assert.equal(db.getCalendarEventById("apple").web_link, null);
   db.db.close();
 });
+
+// SQLite reads local dates through libc, which follows process.env.TZ, so a
+// non-UTC zone exercises what CI (TZ=UTC) would otherwise hide.
+function useTimeZone(t, zone) {
+  const original = process.env.TZ;
+  process.env.TZ = zone;
+  t.after(() => {
+    if (original === undefined) delete process.env.TZ;
+    else process.env.TZ = original;
+  });
+}
+
+// The Apple helper writes an all-day start as local midnight in UTC form.
+const appleAllDayInstant = (year, month, day) =>
+  new Date(year, month, day).toISOString().replace(".000Z", "Z");
+
+test("an all-day event and its Calendar.app copy collapse outside UTC", (t) => {
+  useTimeZone(t, "America/Los_Angeles");
+  const db = createDb(t);
+  if (!db) return;
+  insertCalendar(db, "google", "google-calendar");
+  insertAppleCalendar(db, "apple-calendar");
+  db.upsertCalendarEvents([
+    restEvent("google", "google-calendar", "google-offsite", {
+      summary: "Offsite",
+      start_time: "2026-10-20",
+      end_time: "2026-10-21",
+      is_all_day: true,
+    }),
+    appleEvent("apple-offsite", {
+      summary: "Offsite",
+      start_time: appleAllDayInstant(2026, 9, 20),
+      end_time: appleAllDayInstant(2026, 9, 21),
+      is_all_day: true,
+    }),
+    appleEvent("apple-holiday", {
+      summary: "Holiday",
+      start_time: appleAllDayInstant(2026, 9, 20),
+      end_time: appleAllDayInstant(2026, 9, 21),
+      is_all_day: true,
+    }),
+  ]);
+
+  assert.deepEqual(
+    db
+      .getLinkableCalendarEvents()
+      .map((event) => event.id)
+      .sort(),
+    ["apple-holiday", "google-offsite"]
+  );
+  db.db.close();
+});
+
+test("a declined all-day event keeps its Calendar.app copy out outside UTC", (t) => {
+  useTimeZone(t, "Asia/Kolkata");
+  const db = createDb(t);
+  if (!db) return;
+  insertCalendar(db, "google", "google-calendar");
+  insertAppleCalendar(db, "apple-calendar");
+  db.upsertCalendarEvents([
+    restEvent("google", "google-calendar", "google-offsite", {
+      summary: "Offsite",
+      start_time: "2026-10-20",
+      end_time: "2026-10-21",
+      is_all_day: true,
+      self_response_status: "declined",
+    }),
+    appleEvent("apple-offsite", {
+      summary: "Offsite",
+      start_time: appleAllDayInstant(2026, 9, 20),
+      end_time: appleAllDayInstant(2026, 9, 21),
+      is_all_day: true,
+    }),
+  ]);
+
+  assert.deepEqual(db.getLinkableCalendarEvents(), []);
+  db.db.close();
+});
