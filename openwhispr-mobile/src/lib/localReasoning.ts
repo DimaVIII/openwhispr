@@ -83,11 +83,7 @@ export async function getLocalReasoningReadiness(options?: {
             tokenCounting: availability.tokenCounting === true,
           };
         case 'deviceNotEligible':
-          return {
-            status: 'unsupportedDevice',
-            tokenCounting: false,
-            ...siriMismatch(availability),
-          };
+          return { status: 'unsupportedDevice', tokenCounting: false };
         case 'unsupportedOS':
           return { status: 'unsupportedOS', tokenCounting: false };
         default:
@@ -105,10 +101,10 @@ export async function getLocalReasoningReadiness(options?: {
   return cachedReadiness;
 }
 
-// iOS has no availability reason for the iPhone and Siri being set to different languages, or to
-// one Apple Intelligence doesn't support; it reports Apple Intelligence as off. So the language
-// explains only that. A model still downloading means Apple Intelligence is on, an ineligible
-// iPhone stays one, and Apple Intelligence that runs is never stopped.
+// iOS has no availability reason for a language Apple Intelligence doesn't support; it reports
+// Apple Intelligence as off. So the language explains only that. A model still downloading means
+// Apple Intelligence is on, an ineligible iPhone stays one, and Apple Intelligence that runs is
+// never stopped.
 function languageReadinessFor(availability: AppleLLMAvailability): LocalReasoningReadiness | null {
   if (
     availability.status !== 'appleIntelligenceNotEnabled' &&
@@ -116,21 +112,12 @@ function languageReadinessFor(availability: AppleLLMAvailability): LocalReasonin
   ) {
     return null;
   }
-  const mismatch = siriMismatch(availability);
-  if (!mismatch.siriLanguage && availability.localeSupported !== false) return null;
+  if (availability.localeSupported !== false) return null;
   return {
     status: 'unsupportedLanguage',
     deviceLanguage: availability.deviceLanguage,
     tokenCounting: false,
-    ...mismatch,
   };
-}
-
-function siriMismatch(
-  availability: AppleLLMAvailability,
-): Pick<LocalReasoningReadiness, 'deviceLanguage' | 'siriLanguage'> {
-  if (availability.siriLanguageMatches !== false || !availability.siriLanguage) return {};
-  return { deviceLanguage: availability.deviceLanguage, siriLanguage: availability.siriLanguage };
 }
 
 export function isLocalReasoningRequired(options: ReasoningRoutingOptions = {}): boolean {
@@ -255,38 +242,27 @@ export function isLocalReasoningUnsupported(readiness?: LocalReasoningReadiness 
 
 // What keeps Apple Intelligence off when the language does, in one sentence.
 export function getLocalReasoningLanguageNote(readiness: LocalReasoningReadiness): string {
-  if (readiness.siriLanguage) {
-    return 'Apple Intelligence needs your iPhone and Siri set to the same language.';
-  }
   return readiness.deviceLanguage
     ? `Apple Intelligence doesn't support ${readiness.deviceLanguage}, your iPhone's language.`
     : "Apple Intelligence doesn't support your iPhone's language.";
 }
 
-function siriMismatchAdvice(readiness: LocalReasoningReadiness): string {
-  const device = readiness.deviceLanguage ? ` and your iPhone to ${readiness.deviceLanguage}` : '';
-  return `Siri is set to ${readiness.siriLanguage}${device}. Change Siri's in Settings → Siri, or your iPhone's in ${LANGUAGE_SETTINGS}.`;
-}
-
 export function getLocalReasoningUnavailableMessage(readiness?: LocalReasoningReadiness): string {
   switch (readiness?.status) {
     case 'unsupportedDevice':
-      // Shown with the hardware need in case iOS reports a language mismatch this way too.
-      return readiness.siriLanguage
-        ? `On-Device AI needs an iPhone with Apple Intelligence (iPhone 15 Pro or later), set to the same language as Siri. ${siriMismatchAdvice(readiness)}`
-        : 'On-Device AI needs an iPhone with Apple Intelligence (iPhone 15 Pro or later).';
+      return 'On-Device AI needs an iPhone with Apple Intelligence (iPhone 15 Pro or later).';
     case 'unsupportedOS':
       return 'On-Device AI needs iOS 26 or later on an iPhone with Apple Intelligence.';
     case 'disabled':
       return 'Local Apple Intelligence is turned off in AI Models.';
+    // Apple Intelligence also needs Siri set to the iPhone's language, and iOS then offers only a
+    // Siri page; the app can't read Siri's language to tell.
     case 'appleIntelligenceOff':
-      return "Apple Intelligence is turned off, so this can't run on-device. Turn it on in Settings → Apple Intelligence & Siri.";
+      return "Apple Intelligence is turned off, so this can't run on-device. Turn it on in Settings → Apple Intelligence & Siri. If that page shows only Siri, set Siri to the same language as your iPhone.";
     case 'modelNotReady':
       return 'Apple Intelligence is still downloading its model. Check Settings → Apple Intelligence & Siri, and keep your iPhone on Wi-Fi and charging.';
     case 'unsupportedLanguage':
-      return readiness.siriLanguage
-        ? `${getLocalReasoningLanguageNote(readiness)} ${siriMismatchAdvice(readiness)}`
-        : `${getLocalReasoningLanguageNote(readiness)} Choose a supported one in ${LANGUAGE_SETTINGS}.`;
+      return `${getLocalReasoningLanguageNote(readiness)} Choose a supported one in ${LANGUAGE_SETTINGS}.`;
     case 'unavailable':
     default:
       return 'Local Apple Intelligence is unavailable on this device.';

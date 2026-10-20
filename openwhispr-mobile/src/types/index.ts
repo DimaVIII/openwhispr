@@ -147,17 +147,15 @@ export type LocalReasoningStatus =
   | 'unsupportedOS'
   | 'appleIntelligenceOff'
   | 'modelNotReady'
-  // Apple Intelligence doesn't support the iPhone's language, or Siri is set to another one; both
-  // can be changed in Settings.
+  // Apple Intelligence doesn't support the iPhone's language, which Settings can change.
   | 'unsupportedLanguage';
 
 export interface LocalReasoningReadiness {
   status: LocalReasoningStatus;
   contextSize?: number;
   tokenCounting?: boolean;
-  // The iPhone's language, and Siri's when it differs, named for the language reasons.
+  // The iPhone's language, named for unsupportedLanguage.
   deviceLanguage?: string;
-  siriLanguage?: string;
 }
 
 export type LocalReasoningErrorCode =

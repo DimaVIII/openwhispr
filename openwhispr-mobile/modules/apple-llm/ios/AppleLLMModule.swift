@@ -1,6 +1,5 @@
 import ExpoModulesCore
 import Foundation
-import Intents
 
 #if canImport(FoundationModels)
 import FoundationModels
@@ -202,9 +201,10 @@ public class AppleLLMModule: Module {
       payload["status"] = "unavailable"
     }
 
-    // Apple Intelligence needs the iPhone and Siri set to the same language, one it supports, and
-    // its availability has no reason for either, so both are checked beside it. Names are in
-    // English, like the app's own text.
+    // Apple Intelligence runs in only some of the languages an iPhone can be set to, and its
+    // availability has no reason for that, so the iPhone's language is checked beside it. The name
+    // is in English, like the app's own text. Siri's language can't be read without the Siri
+    // entitlement (INPreferences throws), so a mismatch with it is left to the message.
     let language = Locale(identifier: Locale.preferredLanguages.first ?? Locale.current.identifier)
     payload["deviceLanguage"] = englishName(of: language)
     // The list is read from the model, so an empty one says nothing about the language. A region
@@ -214,28 +214,12 @@ public class AppleLLMModule: Module {
       payload["localeSupported"] =
         model.supportsLocale(language) || languageOnly.map { model.supportsLocale($0) } ?? false
     }
-    let siriCode = INPreferences.siriLanguageCode()
-    if !siriCode.isEmpty {
-      let siri = Locale(identifier: siriCode)
-      payload["siriLanguage"] = englishName(of: siri)
-      payload["siriLanguageMatches"] = sameLanguage(language, siri)
-    }
 
     return payload
   }
 
   private static func englishName(of locale: Locale) -> String {
     Locale(identifier: "en").localizedString(forIdentifier: locale.identifier) ?? locale.identifier
-  }
-
-  // Script is left out: an iPhone set to zh-Hans-CN has Siri's zh-CN. A region only one side
-  // names doesn't count against them.
-  private static func sameLanguage(_ first: Locale, _ second: Locale) -> Bool {
-    guard first.language.languageCode == second.language.languageCode else { return false }
-    guard let firstRegion = first.language.region, let secondRegion = second.language.region else {
-      return true
-    }
-    return firstRegion == secondRegion
   }
 
   @available(iOS 26.0, *)

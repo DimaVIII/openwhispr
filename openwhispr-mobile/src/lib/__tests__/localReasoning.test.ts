@@ -170,8 +170,6 @@ describe("an iPhone set to a language Apple Intelligence doesn't support", () =>
         tokenCounting: false,
         localeSupported: false,
         deviceLanguage: 'Polish (Poland)',
-        siriLanguage: 'Polish (Poland)',
-        siriLanguageMatches: true,
       });
 
       const readiness = await getLocalReasoningReadiness();
@@ -210,9 +208,7 @@ describe("an iPhone set to a language Apple Intelligence doesn't support", () =>
       contextSize: 4096,
       tokenCounting: true,
       localeSupported: false,
-      siriLanguageMatches: false,
       deviceLanguage: 'English (South Africa)',
-      siriLanguage: 'English (United States)',
     });
 
     await expect(getLocalReasoningReadiness()).resolves.toMatchObject({ status: 'ready' });
@@ -226,8 +222,6 @@ describe("an iPhone set to a language Apple Intelligence doesn't support", () =>
       status: 'appleIntelligenceNotEnabled',
       tokenCounting: false,
       deviceLanguage: 'English (United States)',
-      siriLanguage: 'English (United States)',
-      siriLanguageMatches: true,
     },
   ])('keeps the reason iOS gave when the language is not known to be wrong', async (payload) => {
     mockAppleAvailability.mockResolvedValue(payload);
@@ -246,46 +240,21 @@ describe("an iPhone set to a language Apple Intelligence doesn't support", () =>
   });
 });
 
-// Apple Intelligence needs the iPhone and Siri set to the same language, which iOS reports as off.
-describe('an iPhone and Siri set to different languages', () => {
-  const MISMATCH = {
+// The app can't read Siri's language, so the off message says what a Siri-only Settings page means.
+it("says Apple Intelligence also needs Siri set to the iPhone's language", async () => {
+  mockAppleAvailability.mockResolvedValue({
+    status: 'appleIntelligenceNotEnabled',
     tokenCounting: false,
     localeSupported: true,
     deviceLanguage: 'English (South Africa)',
-    siriLanguage: 'English (United States)',
-    siriLanguageMatches: false,
-  };
-
-  it('names both languages and where to change them', async () => {
-    mockAppleAvailability.mockResolvedValue({ status: 'appleIntelligenceNotEnabled', ...MISMATCH });
-
-    const readiness = await getLocalReasoningReadiness();
-
-    expect(readiness).toEqual({
-      status: 'unsupportedLanguage',
-      deviceLanguage: 'English (South Africa)',
-      siriLanguage: 'English (United States)',
-      tokenCounting: false,
-    });
-    expect(canRunLocalReasoning(readiness)).toBe(true);
-    expect(getLocalReasoningUnavailableMessage(readiness)).toBe(
-      "Apple Intelligence needs your iPhone and Siri set to the same language. Siri is set to English (United States) and your iPhone to English (South Africa). Change Siri's in Settings → Siri, or your iPhone's in Settings → General → Language & Region.",
-    );
   });
 
-  // In case iOS reports the mismatch as an ineligible iPhone, the message mentions it, but the
-  // iPhone still reads as one Settings can't fix.
-  it('adds the language to the hardware message for an ineligible iPhone', async () => {
-    mockAppleAvailability.mockResolvedValue({ status: 'deviceNotEligible', ...MISMATCH });
+  const readiness = await getLocalReasoningReadiness();
 
-    const readiness = await getLocalReasoningReadiness();
-
-    expect(readiness).toMatchObject({ status: 'unsupportedDevice' });
-    expect(isLocalReasoningUnsupported(readiness)).toBe(true);
-    expect(getLocalReasoningUnavailableMessage(readiness)).toBe(
-      "On-Device AI needs an iPhone with Apple Intelligence (iPhone 15 Pro or later), set to the same language as Siri. Siri is set to English (United States) and your iPhone to English (South Africa). Change Siri's in Settings → Siri, or your iPhone's in Settings → General → Language & Region.",
-    );
-  });
+  expect(readiness).toMatchObject({ status: 'appleIntelligenceOff' });
+  expect(getLocalReasoningUnavailableMessage(readiness)).toBe(
+    "Apple Intelligence is turned off, so this can't run on-device. Turn it on in Settings → Apple Intelligence & Siri. If that page shows only Siri, set Siri to the same language as your iPhone.",
+  );
 });
 
 describe('toLocalReasoningError', () => {

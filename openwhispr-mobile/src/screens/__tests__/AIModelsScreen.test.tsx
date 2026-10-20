@@ -282,17 +282,6 @@ it('says when the iPhone is set to a language Apple Intelligence does not suppor
   expect(await screen.findByText(/Status: Language not supported\s/)).toBeTruthy();
 });
 
-it('says when Siri is set to another language than the iPhone', async () => {
-  mockReadiness.mockResolvedValue({
-    status: 'unsupportedLanguage',
-    deviceLanguage: 'English (South Africa)',
-    siriLanguage: 'English (United States)',
-    tokenCounting: false,
-  });
-  render(<AIModelsScreen />);
-  expect(await screen.findByText(/Status: Siri language differs\s/)).toBeTruthy();
-});
-
 // Dictation owns Local Mode, so AI Models has no switch of its own.
 it('has no Local Mode switch', async () => {
   render(<AIModelsScreen />);
