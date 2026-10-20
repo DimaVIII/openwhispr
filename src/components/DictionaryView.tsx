@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { Download, NotebookPen, PanelRight, Plus, Sparkles } from "./icons";
 import { Textarea } from "./ui/textarea";
@@ -22,6 +22,12 @@ import { useDictionaryActions } from "./dictionary/useDictionaryActions";
 import { useDictionarySelection } from "./dictionary/useDictionarySelection";
 import { SelectionActionBar } from "./dictionary/SelectionActionBar";
 import { ShareWordsPopover } from "./dictionary/ShareWordsPopover";
+import {
+  SharedDictionaryLocked,
+  SharedDictionaryUpsell,
+  type LockedAccessState,
+} from "./dictionary/SharedDictionaryLocked";
+import { SharedListEmpty } from "./dictionary/SharedListEmpty";
 import {
   buildPicker,
   defaultAddTarget,
@@ -81,7 +87,12 @@ const isSharedList = (list: ListKey): boolean => list !== "all" && list !== "per
 const sameWord = (left: string, right: string): boolean =>
   left.trim().toLowerCase() === right.trim().toLowerCase();
 
-export default function DictionaryView() {
+interface DictionaryViewProps {
+  // Opens Plans & Billing from a Shared list's upsell.
+  onUpgrade: () => void;
+}
+
+export default function DictionaryView({ onUpgrade }: DictionaryViewProps): ReactElement {
   const { t } = useTranslation();
   const { customDictionary, updateCustomDictionary, snippets } = useSettings();
   const { active: workspace } = useWorkspace();
@@ -159,6 +170,12 @@ export default function DictionaryView() {
       : "all";
   const openEntry = pickerEntries.find((entry) => entry.key === openList);
   const locked = isSharedList(openList) && access !== "available";
+  const lockedAccess: LockedAccessState | null = locked && access !== "unavailable" ? access : null;
+  const singleList = openList === "workspace" || openList.startsWith("space:");
+  // A paused workspace keeps its words, so one of its lists opens dimmed and read-only;
+  // every other locked list shows what Business gives instead.
+  const readOnlyList = lockedAccess === "paused" && singleList;
+  const scopes = snapshot?.meta?.scopes ?? [];
 
   const rows = useMemo(
     () =>
@@ -312,13 +329,16 @@ export default function DictionaryView() {
 
   const personalView = openList === "all" || openList === "personal";
   const listIsEmpty = rows.length === 0 && search.trim() === "";
-  const openScope =
-    openList === "workspace" || openList.startsWith("space:")
-      ? snapshot?.meta?.scopes.find(
-          (scope) =>
-            scope.space_id === (openList === "workspace" ? null : openList.slice("space:".length))
-        )
-      : undefined;
+  const openScope = singleList
+    ? snapshot?.meta?.scopes.find(
+        (scope) =>
+          scope.space_id === (openList === "workspace" ? null : openList.slice("space:".length))
+      )
+    : undefined;
+  const readOnlyTarget: AddTargetOption | null =
+    readOnlyList && openScope
+      ? { target: openScope.space_id, label: openEntry?.label ?? "" }
+      : null;
   const headerDetail = openScope
     ? t("dictionary.shared.memberCount", { count: openScope.member_count })
     : String(rows.length);
@@ -339,8 +359,20 @@ export default function DictionaryView() {
     </div>
   );
 
+  const importIntoOpenList = (): void => {
+    if (openScope) setPickedTarget({ list: openList, target: openScope.space_id });
+    setShowBulkImport(true);
+  };
+
   const listCard =
-    personalView && listIsEmpty ? (
+    !locked && singleList && listIsEmpty && openScope ? (
+      <SharedListEmpty
+        listName={openEntry?.label ?? ""}
+        memberCount={openScope.member_count}
+        onImport={importIntoOpenList}
+        onShareFromPersonal={() => selectList("personal")}
+      />
+    ) : personalView && listIsEmpty ? (
       <div
         className={cn(
           CARD_SURFACE_CLASS,
@@ -351,7 +383,11 @@ export default function DictionaryView() {
       </div>
     ) : (
       <div
-        className={cn(CARD_SURFACE_CLASS, "rounded-lg px-4 py-3 shadow-sm")}
+        className={cn(
+          CARD_SURFACE_CLASS,
+          "rounded-lg px-4 py-3 shadow-sm",
+          readOnlyList && "opacity-60"
+        )}
         style={selectionActive ? { paddingBottom: selectionBarClearance } : undefined}
       >
         <div className="flex items-center justify-between gap-3 border-b border-dashed border-foreground/10 pb-2 dark:border-white/10">
@@ -399,6 +435,7 @@ export default function DictionaryView() {
               canShare ? (row, anchor) => setShareRequest({ words: [row.word], anchor }) : undefined
             }
             selection={wordListSelection}
+            readOnly={readOnlyList}
           />
         )}
       </div>
@@ -479,14 +516,28 @@ export default function DictionaryView() {
           />
 
           <div className="flex min-w-0 flex-1 flex-col gap-3">
-            {locked ? (
-              // Placeholder for a list the member can't use; the blocked states fill it.
-              <div className={cn(CARD_SURFACE_CLASS, "min-h-40 rounded-lg")} />
+            {lockedAccess && !readOnlyList ? (
+              <SharedDictionaryLocked
+                access={lockedAccess}
+                workspaceName={workspaceName}
+                scopes={scopes}
+                onUpgrade={onUpgrade}
+              />
             ) : (
               <>
+                {lockedAccess && (
+                  <SharedDictionaryUpsell
+                    access={lockedAccess}
+                    workspaceName={workspaceName}
+                    scopes={scopes}
+                    onUpgrade={onUpgrade}
+                  />
+                )}
                 <DictionaryAddField
-                  target={addTarget}
-                  targets={addTargets}
+                  // A read-only list's field names that list, though nothing can be added to it.
+                  target={readOnlyTarget ? readOnlyTarget.target : addTarget}
+                  targets={readOnlyTarget ? [readOnlyTarget] : addTargets}
+                  disabled={readOnlyList}
                   onTargetChange={(target) => {
                     setPickedTarget({ list: openList, target });
                     rememberTarget(target);
@@ -500,7 +551,7 @@ export default function DictionaryView() {
                 />
 
                 {/* ─── Bulk import ─── */}
-                {showBulkImport && (
+                {showBulkImport && !readOnlyList && (
                   <div className="rounded-md border border-primary/30 dark:border-primary/40 px-3 pt-2.5 pb-2">
                     <Textarea
                       dir="auto"

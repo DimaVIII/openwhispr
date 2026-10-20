@@ -3961,6 +3961,25 @@
           "network": "Prüfe deine Verbindung und versuche es erneut.",
           "aListFull": "Eine Liste ist voll"
         }
+      },
+      "locked": {
+        "noWorkspace": "Geteilte Wörterbücher sind in Business enthalten. Teile Fachbegriffe, Produktnamen und Abkürzungen deines Teams mit allen.",
+        "upgradeAdmin": "Geteilte Wörterbücher sind in Business enthalten. Upgrade {{workspace}}, damit alle dieselben Wörter bekommen.",
+        "upgradeMember": "Geteilte Wörterbücher sind in Business enthalten. Bitte einen Admin, {{workspace}} upzugraden.",
+        "paused_one": "Das {{count}} geteilte Wort von {{workspace}} ist pausiert. Upgrade auf Business, um es wieder beim Diktieren zu nutzen.",
+        "paused_other": "Die {{count}} geteilten Wörter von {{workspace}} sind pausiert. Upgrade auf Business, um sie wieder beim Diktieren zu nutzen.",
+        "workspaceTitle": "Alle in deinem Workspace",
+        "workspaceDescription": "Wörter für das ganze Unternehmen",
+        "spaceTitle": "Eine Liste pro Space",
+        "spaceDescription": "Wörter, die nur ein Team braucht",
+        "wordCount_one": "{{count}} Wort",
+        "wordCount_other": "{{count}} Wörter",
+        "lockLabel": "In Business enthalten"
+      },
+      "empty": {
+        "body": "Füge die Begriffe hinzu, die dieses Team verwendet, oder teile einige aus deiner persönlichen Liste. Alle in {{list}} ({{count}}) bekommen sie.",
+        "import": "Liste importieren",
+        "shareFromPersonal": "Aus Persönlich teilen"
       }
     }
   },

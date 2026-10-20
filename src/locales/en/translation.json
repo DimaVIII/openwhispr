@@ -3961,6 +3961,25 @@
           "network": "Check your connection and try again.",
           "aListFull": "A list is full"
         }
+      },
+      "locked": {
+        "noWorkspace": "Shared dictionaries are included with Business. Share your team's jargon, product names and acronyms with everyone.",
+        "upgradeAdmin": "Shared dictionaries are included with Business. Upgrade {{workspace}} so everyone gets the same words.",
+        "upgradeMember": "Shared dictionaries are included with Business. Ask an admin to upgrade {{workspace}}.",
+        "paused_one": "{{workspace}}'s {{count}} shared word is paused. Upgrade to Business to use it in dictation again.",
+        "paused_other": "{{workspace}}'s {{count}} shared words are paused. Upgrade to Business to use them in dictation again.",
+        "workspaceTitle": "Everyone in your workspace",
+        "workspaceDescription": "Words for the whole company",
+        "spaceTitle": "A list per space",
+        "spaceDescription": "Words only one team needs",
+        "wordCount_one": "{{count}} word",
+        "wordCount_other": "{{count}} words",
+        "lockLabel": "Included with Business"
+      },
+      "empty": {
+        "body": "Add the terms this team uses, or share some from your personal list. Everyone in {{list}} ({{count}}) will get them.",
+        "import": "Import a list",
+        "shareFromPersonal": "Share from Personal"
       }
     }
   },

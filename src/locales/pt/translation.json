@@ -3610,6 +3610,25 @@
           "network": "Verifique sua conexão e tente novamente.",
           "aListFull": "Uma lista está cheia"
         }
+      },
+      "locked": {
+        "noWorkspace": "Os dicionários compartilhados estão incluídos no Business. Compartilhe com todos o jargão, os nomes de produtos e as siglas da sua equipe.",
+        "upgradeAdmin": "Os dicionários compartilhados estão incluídos no Business. Faça o upgrade de {{workspace}} para que todos tenham as mesmas palavras.",
+        "upgradeMember": "Os dicionários compartilhados estão incluídos no Business. Peça a um administrador para fazer o upgrade de {{workspace}}.",
+        "paused_one": "A {{count}} palavra compartilhada de {{workspace}} está pausada. Faça o upgrade para o Business para usá-la novamente no ditado.",
+        "paused_other": "As {{count}} palavras compartilhadas de {{workspace}} estão pausadas. Faça o upgrade para o Business para usá-las novamente no ditado.",
+        "workspaceTitle": "Todos no seu espaço de trabalho",
+        "workspaceDescription": "Palavras para a empresa toda",
+        "spaceTitle": "Uma lista por espaço",
+        "spaceDescription": "Palavras de que só uma equipe precisa",
+        "wordCount_one": "{{count}} palavra",
+        "wordCount_other": "{{count}} palavras",
+        "lockLabel": "Incluído no Business"
+      },
+      "empty": {
+        "body": "Adicione os termos que esta equipe usa ou compartilhe alguns da sua lista pessoal. Todos em {{list}} ({{count}}) vão recebê-los.",
+        "import": "Importar uma lista",
+        "shareFromPersonal": "Compartilhar de Pessoais"
       }
     }
   },

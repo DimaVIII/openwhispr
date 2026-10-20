@@ -218,7 +218,9 @@ async function renderView(t, options = {}) {
   // Loaded after the DOM is installed, so react-dom detects native input events.
   const { createRoot } = require("react-dom/client");
   root = createRoot(container);
-  await React.act(async () => root.render(createElement(DictionaryView)));
+  await React.act(async () =>
+    root.render(createElement(DictionaryView, { onUpgrade: () => calls.push(["upgrade"]) }))
+  );
   return { container, calls, storage, exported };
 }
 
@@ -863,4 +865,74 @@ test("a ticked row that leaves the list isn't still ticked when it comes back", 
 
   await type(search(), "");
   assert.deepEqual(checkedWords(container), ["Tiptap"], "Piha left the list, so it was unticked");
+});
+
+const isDisabled = (node) => node.disabled === true || node.getAttribute("disabled") !== null;
+const buttonWithText = (container, text) =>
+  findElement(container, (node) => node.tagName === "BUTTON" && node.textContent === text);
+const PAUSED = { ...SNAPSHOT, meta: { ...SNAPSHOT.meta, paused: true } };
+
+test("a locked shared list shows the upsell over dimmed lists, and View Plans opens billing", async (t) => {
+  const { container, calls } = await renderView(t);
+  globalThis.__workspace = { ...globalThis.__workspace, plan: "pro", role: "owner" };
+  await openList(container, "allShared");
+  assert.ok(
+    container.textContent.includes('dictionary.shared.locked.upgradeAdmin{"workspace":"Acme"}')
+  );
+  assert.equal(addInput(container), null, "a locked list has no add field");
+  assert.equal(rowFor(container, "ARR"), null, "no words while locked");
+  assert.ok(container.textContent.includes('dictionary.shared.memberCount{"count":14}'));
+
+  await click(buttonWithText(container, "integrations.api.viewPlans"));
+  assert.ok(calls.some(([name]) => name === "upgrade"));
+});
+
+test("a paused list shows its words dimmed and read-only", async (t) => {
+  const { container } = await renderView(t, { shared: { snapshot: PAUSED } });
+  await openList(container, "workspace");
+  assert.ok(container.textContent.includes("dictionary.shared.locked.paused"));
+  const row = rowFor(container, "ARR");
+  assert.ok(row, "the list's words are shown");
+  assert.deepEqual(buttonsIn(row), [], "no hover actions or checkboxes");
+  assert.ok(isDisabled(addInput(container)), "the add field is disabled");
+  assert.equal(
+    targetChip(container).textContent,
+    'dictionary.shared.add.to{"list":"dictionary.shared.everyoneAt{\\"workspace\\":\\"Acme\\"}"}',
+    "the disabled field names the open list"
+  );
+
+  // All shared stays the per-list summary.
+  await openList(container, "allShared");
+  assert.equal(rowFor(container, "ARR"), null);
+  assert.ok(container.textContent.includes('dictionary.shared.locked.wordCount{"count":2}'));
+});
+
+test("an empty list imports into itself or sends the member to Personal", async (t) => {
+  const SUPPORT = "33333333-3333-4333-8333-333333333333";
+  const snapshot = {
+    ...SNAPSHOT,
+    meta: {
+      ...SNAPSHOT.meta,
+      scopes: [
+        ...SNAPSHOT.meta.scopes,
+        { space_id: SUPPORT, name: "Support", member_count: 4, word_count: 0 },
+      ],
+    },
+  };
+  const { container } = await renderView(t, { shared: { snapshot } });
+  await openList(container, `space:${SUPPORT}`);
+  assert.ok(container.textContent.includes('dictionary.shared.emptyList{"list":"Support"}'));
+  assert.ok(
+    container.textContent.includes('dictionary.shared.empty.body{"list":"Support","count":4}')
+  );
+
+  await click(buttonWithText(container, "dictionary.shared.empty.import"));
+  assert.ok(
+    buttonWithText(container, 'dictionary.shared.importTo{"list":"Support"}'),
+    "the bulk import is aimed at this list"
+  );
+
+  await click(buttonWithText(container, "dictionary.shared.empty.shareFromPersonal"));
+  assert.equal(pickerEntry(container, "personal").getAttribute("aria-current"), "true");
+  assert.ok(rowFor(container, "OpenWhispr"), "Personal is open");
 });

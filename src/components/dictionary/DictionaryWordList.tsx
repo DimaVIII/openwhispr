@@ -32,6 +32,8 @@ interface DictionaryWordListProps {
   onShare?: (row: DictionaryRow, anchor: HTMLElement) => void;
   // Lists without bulk actions (Hidden) have no checkboxes.
   selection?: WordListSelection;
+  // A paused list's words can be read, not changed: the rows have no actions.
+  readOnly?: boolean;
 }
 
 interface RowAction {
@@ -152,6 +154,7 @@ export function DictionaryWordList({
   onUnhide,
   onShare,
   selection,
+  readOnly = false,
 }: DictionaryWordListProps): ReactElement {
   const { t } = useTranslation();
   const [editingKey, setEditingKey] = useState<string | null>(null);
@@ -290,12 +293,14 @@ export function DictionaryWordList({
                 <span
                   className={cn(
                     "transition-opacity duration-150",
-                    !selection?.active && "group-focus-within:opacity-0 group-hover:opacity-0"
+                    !selection?.active &&
+                      !readOnly &&
+                      "group-focus-within:opacity-0 group-hover:opacity-0"
                   )}
                 >
                   <RowMeta row={row} />
                 </span>
-                {!selection?.active && (
+                {!selection?.active && !readOnly && (
                   <div className="absolute end-2 top-1/2 flex -translate-y-1/2 items-center gap-0.5 opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
                     {actionsFor(row).map((action) => (
                       <RowActionButton key={action.label} action={action} />

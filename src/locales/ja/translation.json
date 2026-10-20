@@ -3538,6 +3538,25 @@
           "network": "接続を確認して、もう一度お試しください。",
           "aListFull": "リストがいっぱいです"
         }
+      },
+      "locked": {
+        "noWorkspace": "共有辞書は Business プランに含まれています。チームの専門用語、製品名、略語を全員と共有できます。",
+        "upgradeAdmin": "共有辞書は Business プランに含まれています。{{workspace}} をアップグレードすると、全員が同じ単語を使えます。",
+        "upgradeMember": "共有辞書は Business プランに含まれています。{{workspace}} のアップグレードを管理者に依頼してください。",
+        "paused_one": "{{workspace}} の共有単語 {{count}} 個は一時停止中です。Business にアップグレードすると、再び音声入力で使えます。",
+        "paused_other": "{{workspace}} の共有単語 {{count}} 個は一時停止中です。Business にアップグレードすると、再び音声入力で使えます。",
+        "workspaceTitle": "ワークスペースの全員",
+        "workspaceDescription": "会社全体で使う単語",
+        "spaceTitle": "スペースごとのリスト",
+        "spaceDescription": "1 つのチームだけが必要とする単語",
+        "wordCount_one": "{{count}} 個の単語",
+        "wordCount_other": "{{count}} 個の単語",
+        "lockLabel": "Business プランに含まれます"
+      },
+      "empty": {
+        "body": "このチームが使う用語を追加するか、個人リストから共有しましょう。{{list}} の全員（{{count}} 人）に届きます。",
+        "import": "リストをインポート",
+        "shareFromPersonal": "個人から共有"
       }
     }
   },

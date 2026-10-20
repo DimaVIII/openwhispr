@@ -43,6 +43,8 @@ const ARABIC_PLURAL_BASES = [
   "dictionary.shared.share.movesOut",
   "dictionary.shared.share.partial",
   "dictionary.shared.deletedPersonalMany",
+  "dictionary.shared.locked.paused",
+  "dictionary.shared.locked.wordCount",
   "insights.days",
   "insights.longestStreak",
   "insights.dayTooltip",

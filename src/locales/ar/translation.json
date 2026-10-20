@@ -1541,6 +1541,33 @@
           "network": "تحقق من اتصالك وحاول مرة أخرى.",
           "aListFull": "إحدى القوائم ممتلئة"
         }
+      },
+      "locked": {
+        "noWorkspace": "القواميس المشتركة متاحة ضمن خطة Business. شارك مصطلحات فريقك وأسماء المنتجات والاختصارات مع الجميع.",
+        "upgradeAdmin": "القواميس المشتركة متاحة ضمن خطة Business. قم بترقية {{workspace}} ليحصل الجميع على الكلمات نفسها.",
+        "upgradeMember": "القواميس المشتركة متاحة ضمن خطة Business. اطلب من أحد المسؤولين ترقية {{workspace}}.",
+        "paused_zero": "تم إيقاف {{count}} كلمة مشتركة في {{workspace}} مؤقتًا. قم بالترقية إلى Business لاستخدامها في الإملاء مجددًا.",
+        "paused_one": "تم إيقاف كلمة مشتركة واحدة ({{count}}) في {{workspace}} مؤقتًا. قم بالترقية إلى Business لاستخدامها في الإملاء مجددًا.",
+        "paused_two": "تم إيقاف كلمتين مشتركتين ({{count}}) في {{workspace}} مؤقتًا. قم بالترقية إلى Business لاستخدامهما في الإملاء مجددًا.",
+        "paused_few": "تم إيقاف {{count}} كلمات مشتركة في {{workspace}} مؤقتًا. قم بالترقية إلى Business لاستخدامها في الإملاء مجددًا.",
+        "paused_many": "تم إيقاف {{count}} كلمةً مشتركةً في {{workspace}} مؤقتًا. قم بالترقية إلى Business لاستخدامها في الإملاء مجددًا.",
+        "paused_other": "تم إيقاف {{count}} كلمة مشتركة في {{workspace}} مؤقتًا. قم بالترقية إلى Business لاستخدامها في الإملاء مجددًا.",
+        "workspaceTitle": "الجميع في مساحة العمل الخاصة بك",
+        "workspaceDescription": "كلمات للشركة بأكملها",
+        "spaceTitle": "قائمة لكل مساحة",
+        "spaceDescription": "كلمات يحتاجها فريق واحد فقط",
+        "wordCount_zero": "{{count}} كلمة",
+        "wordCount_one": "كلمة واحدة ({{count}})",
+        "wordCount_two": "كلمتان ({{count}})",
+        "wordCount_few": "{{count}} كلمات",
+        "wordCount_many": "{{count}} كلمةً",
+        "wordCount_other": "{{count}} كلمة",
+        "lockLabel": "متاح ضمن خطة Business"
+      },
+      "empty": {
+        "body": "أضف المصطلحات التي يستخدمها هذا الفريق، أو شارك بعضها من قائمتك الشخصية. سيحصل عليها الجميع في {{list}} ({{count}}).",
+        "import": "استيراد قائمة",
+        "shareFromPersonal": "مشاركة من القائمة الشخصية"
       }
     }
   },

@@ -8,6 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
+import { cn } from "../lib/utils";
 import type { ShareTarget } from "../../services/sharedDictionaryActions";
 
 export type AddTarget = ShareTarget | "personal";
@@ -27,6 +28,8 @@ interface DictionaryAddFieldProps {
   isInTarget: (word: string) => boolean;
   onImport: () => void;
   inputRef?: Ref<HTMLInputElement>;
+  // A list that takes no new words (paused) keeps the field, dimmed and inert.
+  disabled?: boolean;
 }
 
 export function DictionaryAddField({
@@ -37,6 +40,7 @@ export function DictionaryAddField({
   isInTarget,
   onImport,
   inputRef,
+  disabled = false,
 }: DictionaryAddFieldProps): ReactElement {
   const { t } = useTranslation();
   const [text, setText] = useState("");
@@ -47,7 +51,7 @@ export function DictionaryAddField({
   const trimmed = text.trim();
   // A comma list adds whatever is new; only a single known word is refused.
   const alreadyAdded = trimmed !== "" && !trimmed.includes(",") && isInTarget(trimmed);
-  const canAdd = trimmed !== "" && !alreadyAdded && !busy;
+  const canAdd = trimmed !== "" && !alreadyAdded && !busy && !disabled;
 
   const submit = async (): Promise<void> => {
     if (!canAdd) return;
@@ -60,10 +64,16 @@ export function DictionaryAddField({
   };
 
   return (
-    <div className="flex h-9 items-center gap-2 rounded-lg border border-border/70 bg-card ps-3 pe-1.5 transition-colors focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10 dark:border-white/10 dark:bg-surface-1">
+    <div
+      className={cn(
+        "flex h-9 items-center gap-2 rounded-lg border border-border/70 bg-card ps-3 pe-1.5 transition-colors focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10 dark:border-white/10 dark:bg-surface-1",
+        disabled && "opacity-60"
+      )}
+    >
       <Input
         dir="auto"
         ref={inputRef}
+        disabled={disabled}
         value={text}
         onChange={(event) => setText(event.target.value)}
         onKeyDown={(event) => {
@@ -92,11 +102,12 @@ export function DictionaryAddField({
         )
       )}
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
+        <DropdownMenuTrigger asChild disabled={disabled}>
           <button
             type="button"
+            disabled={disabled}
             aria-label={t("dictionary.shared.add.chooseList")}
-            className="flex h-6 max-w-48 shrink-0 items-center gap-1 rounded-[5px] border border-foreground/8 bg-foreground/3 px-2 text-[11px] text-foreground/80 transition-colors hover:bg-foreground/6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 dark:border-white/8 dark:bg-white/4"
+            className="flex h-6 max-w-48 shrink-0 items-center gap-1 rounded-[5px] border border-foreground/8 bg-foreground/3 px-2 text-[11px] text-foreground/80 transition-colors enabled:hover:bg-foreground/6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 dark:border-white/8 dark:bg-white/4"
           >
             <span dir="auto" className="truncate">
               {t("dictionary.shared.add.to", { list: targetLabel })}
@@ -123,8 +134,9 @@ export function DictionaryAddField({
       <button
         type="button"
         onClick={onImport}
+        disabled={disabled}
         aria-label={t("dictionary.importWords")}
-        className="grid size-6 shrink-0 place-items-center rounded-[5px] text-foreground/45 transition-colors hover:bg-foreground/5 hover:text-foreground/70"
+        className="grid size-6 shrink-0 place-items-center rounded-[5px] text-foreground/45 transition-colors enabled:hover:bg-foreground/5 enabled:hover:text-foreground/70"
       >
         <Upload size={13} />
       </button>

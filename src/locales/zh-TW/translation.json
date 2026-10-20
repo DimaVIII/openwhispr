@@ -3610,6 +3610,23 @@
           "network": "請檢查網路連線後再試一次。",
           "aListFull": "有一個清單已滿"
         }
+      },
+      "locked": {
+        "noWorkspace": "共享字典包含在 Business 方案中。與所有人共享團隊的術語、產品名稱和縮寫。",
+        "upgradeAdmin": "共享字典包含在 Business 方案中。升級 {{workspace}}，讓每個人都使用相同的詞語。",
+        "upgradeMember": "共享字典包含在 Business 方案中。請管理員升級 {{workspace}}。",
+        "paused_other": "{{workspace}} 的 {{count}} 個共享詞語已暫停。升級到 Business 即可在聽寫中再次使用。",
+        "workspaceTitle": "工作區中的所有人",
+        "workspaceDescription": "適用於整個公司的詞語",
+        "spaceTitle": "每個空間一個清單",
+        "spaceDescription": "只有一個團隊需要的詞語",
+        "wordCount_other": "{{count}} 個詞語",
+        "lockLabel": "包含在 Business 方案中"
+      },
+      "empty": {
+        "body": "新增這個團隊使用的術語，或從你的個人清單中共享一些。{{list}} 中的所有人（{{count}}）都會收到。",
+        "import": "匯入清單",
+        "shareFromPersonal": "從個人共享"
       }
     }
   },

@@ -1277,7 +1277,12 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
               )}
               {activeView === "dictionary" && (
                 <Suspense fallback={null}>
-                  <DictionaryView />
+                  <DictionaryView
+                    onUpgrade={() => {
+                      setSettingsSection("plansBilling");
+                      setShowSettings(true);
+                    }}
+                  />
                 </Suspense>
               )}
               {activeView === "upload" && policyActionsAllowed && (
