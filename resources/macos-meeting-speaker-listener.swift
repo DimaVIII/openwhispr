@@ -16,6 +16,7 @@
  *   {"type":"start","intervalMs":500}
  *   {"type":"status","state":"waiting_for_app"}
  *   {"type":"status","state":"tracking","bundleId":"us.zoom.xos"}
+ *   {"type":"status","state":"unreadable","bundleId":"us.zoom.xos","axError":-25204}
  *   {"type":"snapshot","at":<ms>,"bundleId":"us.zoom.xos","windows":[
  *     {"title":"Zoom Meeting","frame":[x,y,w,h],"nodes":[
  *       {"role":"AXGroup","description":"Jane Doe","frame":[x,y,w,h],"depth":7}]}]}
@@ -232,14 +233,42 @@ func runningTarget() -> (app: NSRunningApplication, bundleId: String)? {
     return nil
 }
 
-func describeApp(_ app: NSRunningApplication, dump: Bool) -> [[String: Any]] {
-    let appElement = AXUIElementCreateApplication(app.processIdentifier)
-    var windowsRef: AnyObject?
-    guard
-        AXUIElementCopyAttributeValue(appElement, "AXWindows" as CFString, &windowsRef) == .success,
-        let windows = windowsRef as? [AXUIElement]
-    else { return [] }
-    return windows.map { describeWindow($0, dump: dump) }
+func elementAttribute(_ element: AXUIElement, _ name: String) -> (value: AnyObject?, error: AXError) {
+    var valueRef: AnyObject?
+    let result = AXUIElementCopyAttributeValue(element, name as CFString, &valueRef)
+    return (value: result == .success ? axValue(valueRef) : nil, error: result)
+}
+
+func asElement(_ value: AnyObject?) -> AXUIElement? {
+    guard let value = value, CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
+    return (value as! AXUIElement)
+}
+
+// Zoom 7.2 sometimes answers AXWindows with an empty list while its meeting
+// window is open and readable through AXChildren and AXMainWindow, so those
+// fill in. error is set only when no window could be read and AXWindows
+// itself failed, so a refused read never passes for "no meeting".
+func windowElements(of appElement: AXUIElement) -> (windows: [AXUIElement], error: AXError?) {
+    let listed = elementAttribute(appElement, "AXWindows")
+    var windows = (listed.value as? [AXUIElement]) ?? []
+    if windows.isEmpty {
+        var candidates = ((elementAttribute(appElement, childrenAttribute).value as? [AXUIElement]) ?? [])
+            .filter { text(elementAttribute($0, roleAttribute).value) == "AXWindow" }
+        for name in ["AXMainWindow", "AXFocusedWindow"] {
+            if let window = asElement(elementAttribute(appElement, name).value) {
+                candidates.append(window)
+            }
+        }
+        for candidate in candidates where !windows.contains(where: { CFEqual($0, candidate) }) {
+            windows.append(candidate)
+        }
+    }
+    return (windows: windows, error: windows.isEmpty && listed.error != .success ? listed.error : nil)
+}
+
+func describeApp(_ app: NSRunningApplication, dump: Bool) -> (windows: [[String: Any]], error: AXError?) {
+    let found = windowElements(of: AXUIElementCreateApplication(app.processIdentifier))
+    return (windows: found.windows.map { describeWindow($0, dump: dump) }, error: found.error)
 }
 
 if bundleIds.isEmpty {
@@ -261,8 +290,13 @@ if dumpMode {
         emitError(code: "app_not_running", message: "None of the requested apps is running")
         exit(1)
     }
+    let described = describeApp(target.app, dump: true)
+    if let error = described.error {
+        emitError(code: "windows_unreadable", message: "Could not read the app's windows (AXError \(error.rawValue))")
+        exit(1)
+    }
     emit(
-        ["type": "dump", "at": nowMs(), "bundleId": target.bundleId, "windows": describeApp(target.app, dump: true)],
+        ["type": "dump", "at": nowMs(), "bundleId": target.bundleId, "windows": described.windows],
         pretty: true
     )
     exit(0)
@@ -280,12 +314,13 @@ for signalNumber in [SIGTERM, SIGINT] {
 var lastStatus = ""
 var lastWindowsJSON: Data?
 
-func reportStatus(_ state: String, bundleId: String? = nil) {
-    let key = state + ":" + (bundleId ?? "")
+func reportStatus(_ state: String, bundleId: String? = nil, axError: AXError? = nil) {
+    let key = state + ":" + (bundleId ?? "") + ":" + (axError.map { String($0.rawValue) } ?? "")
     guard key != lastStatus else { return }
     lastStatus = key
     var payload: [String: Any] = ["type": "status", "state": state]
     if let bundleId = bundleId { payload["bundleId"] = bundleId }
+    if let axError = axError { payload["axError"] = Int(axError.rawValue) }
     emit(payload)
 }
 
@@ -299,9 +334,15 @@ func poll() {
         reportStatus("waiting_for_app")
         return
     }
+    let described = describeApp(target.app, dump: false)
+    if let error = described.error {
+        lastWindowsJSON = nil
+        reportStatus("unreadable", bundleId: target.bundleId, axError: error)
+        return
+    }
     reportStatus("tracking", bundleId: target.bundleId)
 
-    let windows = describeApp(target.app, dump: false)
+    let windows = described.windows
     guard
         JSONSerialization.isValidJSONObject(windows),
         let windowsJSON = try? JSONSerialization.data(withJSONObject: windows, options: [.sortedKeys])

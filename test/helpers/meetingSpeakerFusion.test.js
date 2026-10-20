@@ -100,6 +100,17 @@ test("the user's own tile never names a remote voice", () => {
   }
 });
 
+test("stays the user once marked, after the app stops marking them", () => {
+  const fusion = createMeetingSpeakerFusion();
+  fusion.recordAppState({ at: T0, participants: [ME, JANE], speakingIds: [] });
+  // Zoom's home window closed: the user's tile is still there, unmarked.
+  highlight(fusion, [[["me"], 0, 20_000]], [{ id: "me", name: "Gabe" }, JANE]);
+
+  for (let at = 0; at < 18_000; at += 2_000) {
+    assert.equal(identify(fusion, "speaker_0", at, at + 1_500), null);
+  }
+});
+
 test("a highlight that trails the audio lines up once its lag is compensated", () => {
   // Omar and Jane alternate 5 s turns; the app highlights each 1.5 s late, so
   // every turn of Jane's opens on Omar's still-lit tile.

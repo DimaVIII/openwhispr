@@ -74,8 +74,8 @@ const SPEAKER_VIEW_SNAPSHOT = {
       title: "Zoom Meeting",
       frame: [0, 0, 1600, 1000],
       nodes: [
-        { role: "AXGroup", description: "Jane Doe", frame: [0, 120, 1600, 840], depth: 6 },
-        { role: "AXGroup", description: "Omar Haddad", frame: [200, 0, 200, 112], depth: 6 },
+        { role: "AXTabGroup", description: "Jane Doe", frame: [0, 120, 1600, 840], depth: 6 },
+        { role: "AXTabGroup", description: "Omar Haddad", frame: [200, 0, 200, 112], depth: 6 },
       ],
     },
   ],
@@ -120,6 +120,18 @@ test("clears speaking when the meeting app goes away", async () => {
   assert.equal(states.length, 2);
   assert.deepEqual(states[1].speakingIds, []);
   assert.deepEqual(states[1].participants, []);
+  await listener.stop();
+});
+
+test("clears speaking while the meeting app's windows can't be read", async () => {
+  const { listener, child, states } = await startListener();
+  child.stdout.emit("data", line(SPEAKER_VIEW_SNAPSHOT));
+  child.stdout.emit(
+    "data",
+    line({ type: "status", state: "unreadable", bundleId: "us.zoom.xos", axError: -25204 })
+  );
+  assert.equal(states.length, 2);
+  assert.deepEqual(states[1].speakingIds, []);
   await listener.stop();
 });
 

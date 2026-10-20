@@ -1,0 +1,553 @@
+{
+  "type": "snapshot",
+  "at": 1792509729760,
+  "bundleId": "us.zoom.xos",
+  "windows": [
+    {
+      "title": "Zoom Meeting",
+      "frame": [261, 183, 1466, 730],
+      "nodes": [
+        {
+          "depth": 1,
+          "role": "AXTabGroup",
+          "description": "Omar Haddad, Computer audio unmuted",
+          "frame": [304, 345, 1009, 568]
+        },
+        {
+          "depth": 1,
+          "role": "AXTabGroup",
+          "description": "Priya Shah, Computer audio muted, Video on",
+          "frame": [729, 241, 160, 90]
+        },
+        {
+          "depth": 1,
+          "role": "AXButton",
+          "description": "Invite",
+          "frame": [1375, 843, 102, 42]
+        },
+        {
+          "depth": 1,
+          "role": "AXButton",
+          "description": "Mute all",
+          "frame": [1490, 843, 102, 42]
+        },
+        {
+          "depth": 1,
+          "role": "AXButton",
+          "description": "More options to manage all participants",
+          "frame": [1605, 843, 102, 42]
+        },
+        {
+          "depth": 1,
+          "role": "AXUnknown",
+          "description": "Participants (2)",
+          "frame": [1361, 239, 362, 44]
+        },
+        {
+          "depth": 2,
+          "role": "AXButton",
+          "description": "Omar Haddad",
+          "frame": [309, 882, 64, 26]
+        },
+        {
+          "depth": 2,
+          "role": "AXButton",
+          "description": "Priya Shah",
+          "frame": [731, 311, 82, 18]
+        },
+        {
+          "depth": 2,
+          "role": "AXOutline",
+          "description": "Participants list",
+          "help": "Press tab for more options and to return to the main meeting window",
+          "frame": [1362, 284, 360, 536]
+        },
+        {
+          "depth": 2,
+          "role": "AXButton",
+          "title": "Close",
+          "description": "Button",
+          "help": "Close",
+          "frame": [1686, 248, 26, 26]
+        },
+        {
+          "depth": 2,
+          "role": "AXButton",
+          "title": "Pop out",
+          "description": "Button",
+          "help": "Pop out",
+          "frame": [1660, 248, 26, 26]
+        },
+        {
+          "depth": 5,
+          "role": "AXMenuButton",
+          "description": "More options for Priya Shah, collapsed",
+          "help": "More",
+          "frame": [1686, 296, 26, 26]
+        },
+        {
+          "depth": 5,
+          "role": "AXButton",
+          "description": "Stop video",
+          "help": "Stop video",
+          "frame": [1658, 296, 26, 26]
+        },
+        {
+          "depth": 5,
+          "role": "AXButton",
+          "description": "Unmute",
+          "help": "Unmute",
+          "frame": [1630, 296, 26, 26]
+        },
+        {
+          "depth": 5,
+          "role": "AXMenuButton",
+          "description": "More options for Omar Haddad, collapsed",
+          "help": "More",
+          "frame": [1686, 344, 26, 26]
+        },
+        {
+          "depth": 5,
+          "role": "AXButton",
+          "description": "Stop video",
+          "help": "Stop video",
+          "frame": [1658, 344, 26, 26]
+        },
+        {
+          "depth": 5,
+          "role": "AXButton",
+          "description": "Mute",
+          "help": "Mute",
+          "frame": [1630, 344, 26, 26]
+        }
+      ]
+    },
+    {
+      "title": "You now have limited access to Zoom AI every month",
+      "frame": [1070, 182, 400, 148],
+      "nodes": [
+        {
+          "depth": 1,
+          "role": "AXStaticText",
+          "description": "You now have limited access to Zoom AI every month",
+          "frame": [1113, 197, 306, 36]
+        },
+        {
+          "depth": 1,
+          "role": "AXStaticText",
+          "description": "Take notes, get meeting summaries, and ask AI questions.",
+          "frame": [1113, 235, 306, 36]
+        },
+        {
+          "depth": 1,
+          "role": "AXButton",
+          "description": "Close",
+          "help": "Close",
+          "frame": [1430, 198, 24, 24]
+        },
+        {
+          "depth": 1,
+          "role": "AXButton",
+          "title": "Set up AI for meetings",
+          "description": "Set up AI for meetings",
+          "frame": [1275, 280, 175, 32]
+        }
+      ]
+    },
+    {
+      "title": "Zoom Workplace",
+      "frame": [210, 78, 1280, 960],
+      "nodes": [
+        {
+          "depth": 1,
+          "role": "AXButton",
+          "description": "Zoom, Priya Shah, In a Zoom Meeting, Basic account",
+          "frame": [1449, 87, 34, 34]
+        },
+        {
+          "depth": 1,
+          "role": "AXButton",
+          "description": "Search (⌘E)  ⌘E",
+          "frame": [643, 87, 442, 34]
+        },
+        {
+          "depth": 1,
+          "role": "AXButton",
+          "description": "Back in Chat(⌘ + left bracket)",
+          "help": "Back in Chat(⌘ + left bracket)",
+          "frame": [541, 89, 30, 30]
+        },
+        {
+          "depth": 1,
+          "role": "AXButton",
+          "description": "Forward in Chat(⌘ + right bracket)",
+          "help": "Forward in Chat(⌘ + right bracket)",
+          "frame": [575, 89, 30, 30]
+        },
+        {
+          "depth": 1,
+          "role": "AXButton",
+          "description": "History",
+          "frame": [609, 89, 30, 30]
+        },
+        {
+          "depth": 1,
+          "role": "AXButton",
+          "description": "Create new",
+          "help": "Create new",
+          "frame": [1089, 89, 30, 30]
+        },
+        {
+          "depth": 1,
+          "role": "AXButton",
+          "description": "Open activity center, New messages",
+          "frame": [1381, 89, 30, 30]
+        },
+        {
+          "depth": 1,
+          "role": "AXButton",
+          "description": "Calendar always shows on the home screen.",
+          "frame": [1415, 89, 30, 30]
+        },
+        {
+          "depth": 1,
+          "role": "AXButton",
+          "title": "Upgrade",
+          "description": "Upgrade",
+          "frame": [1291, 88, 86, 32]
+        },
+        {
+          "depth": 1,
+          "role": "AXGroup",
+          "description": "Navigation tabs",
+          "frame": [210, 130, 84, 829]
+        },
+        {
+          "depth": 1,
+          "role": "AXButton",
+          "title": "Settings",
+          "help": "Settings",
+          "frame": [236, 959, 32, 32]
+        },
+        {
+          "depth": 1,
+          "role": "AXUnknown",
+          "description": "SPECIAL OFFER",
+          "frame": [405, 138, 111, 16]
+        },
+        {
+          "depth": 1,
+          "role": "AXUnknown",
+          "description": "This scary-good deal won't last. Get 15% off Workplace Pro annual for longer meetings, My Notes, and more! Terms apply. Redeem offer",
+          "frame": [523, 138, 829, 16]
+        },
+        {
+          "depth": 1,
+          "role": "AXButton",
+          "description": "Close",
+          "frame": [1451, 133, 26, 26]
+        },
+        {
+          "depth": 1,
+          "role": "AXButton",
+          "subrole": "AXFullScreenButton",
+          "help": "this button also has an action to zoom the window",
+          "frame": [268, 96, 16, 16]
+        },
+        {
+          "depth": 2,
+          "role": "AXButton",
+          "description": "Home, selected, 1 of 6",
+          "help": "Press Shift + F10 key for the context menu, Press Ctrl+Command+Arrow keys to reorder",
+          "frame": [209, 129, 86, 52]
+        },
+        {
+          "depth": 2,
+          "role": "AXButton",
+          "description": "ZoomMate, 2 of 6",
+          "help": "Press Shift + F10 key for the context menu, Press Ctrl+Command+Arrow keys to reorder",
+          "frame": [209, 179, 86, 52]
+        },
+        {
+          "depth": 2,
+          "role": "AXButton",
+          "description": "Meetings, 3 of 6",
+          "help": "Press Shift + F10 key for the context menu, Press Ctrl+Command+Arrow keys to reorder",
+          "frame": [209, 229, 86, 52]
+        },
+        {
+          "depth": 2,
+          "role": "AXButton",
+          "description": "Chat, 4 of 6",
+          "help": "Press Shift + F10 key for the context menu, Press Ctrl+Command+Arrow keys to reorder",
+          "frame": [209, 279, 86, 52]
+        },
+        {
+          "depth": 2,
+          "role": "AXButton",
+          "description": "Hub, 5 of 6",
+          "help": "Press Shift + F10 key for the context menu, Press Ctrl+Command+Arrow keys to reorder",
+          "frame": [209, 329, 86, 52]
+        },
+        {
+          "depth": 2,
+          "role": "AXButton",
+          "description": "More with new items, 6 of 6",
+          "help": "Opens the navigation tabs in a grid",
+          "frame": [209, 379, 86, 52]
+        },
+        {
+          "depth": 2,
+          "role": "AXTextArea",
+          "description": "This scary-good deal won't last. Get 15% off Workplace Pro annual for longer meetings, My Notes, and more! Terms apply.",
+          "frame": [525, 138, 743, 16]
+        },
+        {
+          "depth": 2,
+          "role": "AXLink",
+          "description": "Redeem offer",
+          "frame": [1269, 138, 84, 16]
+        },
+        {
+          "depth": 2,
+          "role": "AXLink",
+          "description": "Redeem offer",
+          "frame": [1269, 138, 82, 16]
+        },
+        {
+          "depth": 3,
+          "role": "AXButton",
+          "description": "Close AI chat (⇧⌘O)",
+          "frame": [1054, 179, 34, 34]
+        },
+        {
+          "depth": 4,
+          "role": "AXButton",
+          "description": "Back to meeting",
+          "frame": [0, 1169, 0, 0]
+        },
+        {
+          "depth": 4,
+          "role": "AXButton",
+          "description": "Join meeting",
+          "frame": [0, 1169, 0, 0]
+        },
+        {
+          "depth": 4,
+          "role": "AXButton",
+          "description": "Schedule meeting",
+          "frame": [0, 1169, 0, 0]
+        },
+        {
+          "depth": 4,
+          "role": "AXButton",
+          "description": "Share screen",
+          "frame": [0, 1169, 0, 0]
+        },
+        {
+          "depth": 4,
+          "role": "AXButton",
+          "description": "My Notes",
+          "frame": [0, 1169, 0, 0]
+        },
+        {
+          "depth": 6,
+          "role": "AXWebArea",
+          "description": "Zoom Calendar Sidebar",
+          "frame": [395, 462, 600, 530]
+        },
+        {
+          "depth": 6,
+          "role": "AXWebArea",
+          "description": "Zoom AI",
+          "frame": [1096, 180, 376, 840]
+        },
+        {
+          "depth": 7,
+          "role": "AXButton",
+          "title": "Dismiss banner message",
+          "description": "Dismiss banner message",
+          "frame": [949, 484, 24, 24]
+        },
+        {
+          "depth": 7,
+          "role": "AXButton",
+          "title": "Create event",
+          "description": "Create event",
+          "help": "Create event",
+          "frame": [403, 558, 24, 24]
+        },
+        {
+          "depth": 7,
+          "role": "AXButton",
+          "title": "Today",
+          "description": "Today",
+          "help": "Today",
+          "frame": [411, 602, 68, 24]
+        },
+        {
+          "depth": 7,
+          "role": "AXButton",
+          "title": "Previous",
+          "description": "Previous",
+          "help": "Previous",
+          "frame": [486, 602, 25, 24]
+        },
+        {
+          "depth": 7,
+          "role": "AXButton",
+          "title": "Next",
+          "description": "Next",
+          "help": "Next",
+          "frame": [518, 602, 25, 24]
+        },
+        {
+          "depth": 7,
+          "role": "AXButton",
+          "title": "Schedule a meeting",
+          "description": "Schedule a meeting",
+          "frame": [621, 854, 148, 21]
+        },
+        {
+          "depth": 7,
+          "role": "AXButton",
+          "title": "Open recordings",
+          "description": "Open recordings",
+          "frame": [411, 963, 568, 18]
+        },
+        {
+          "depth": 8,
+          "role": "AXLink",
+          "title": "Connect now",
+          "description": "Connect now",
+          "frame": [731, 487, 85, 17]
+        },
+        {
+          "depth": 8,
+          "role": "AXPopUpButton",
+          "title": "Select calendar date: Today, Oct 20",
+          "description": "Select calendar date: Today, Oct 20",
+          "frame": [638, 554, 130, 32]
+        },
+        {
+          "depth": 9,
+          "role": "AXPopUpButton",
+          "title": "More calendar actions",
+          "description": "More calendar actions",
+          "frame": [955, 602, 24, 24]
+        },
+        {
+          "depth": 9,
+          "role": "AXWebArea",
+          "description": "Synora side panel",
+          "frame": [1096, 180, 376, 840]
+        },
+        {
+          "depth": 10,
+          "role": "AXGroup",
+          "subrole": "AXEmptyGroup",
+          "title": "Notifications alt+T",
+          "description": "Notifications alt+T",
+          "frame": [1096, 180, 376, 10]
+        },
+        {
+          "depth": 13,
+          "role": "AXGroup",
+          "subrole": "AXLandmarkRegion",
+          "title": "Suggested",
+          "description": "Suggested",
+          "frame": [1112, 536, 344, 152]
+        },
+        {
+          "depth": 13,
+          "role": "AXTextArea",
+          "title": "Message ZoomMate",
+          "description": "Message ZoomMate",
+          "frame": [1163, 946, 202, 24]
+        },
+        {
+          "depth": 13,
+          "role": "AXPopUpButton",
+          "title": "Open tools menu",
+          "description": "Open tools menu",
+          "frame": [1123, 942, 32, 32]
+        },
+        {
+          "depth": 14,
+          "role": "AXPopUpButton",
+          "title": "Open menu",
+          "description": "Open menu",
+          "frame": [1104, 192, 32, 32]
+        },
+        {
+          "depth": 14,
+          "role": "AXLink",
+          "title": "Open in browser",
+          "description": "Open in browser",
+          "frame": [1390, 192, 32, 32]
+        },
+        {
+          "depth": 14,
+          "role": "AXButton",
+          "title": "Expand",
+          "description": "Expand",
+          "frame": [1424, 192, 32, 32]
+        },
+        {
+          "depth": 14,
+          "role": "AXButton",
+          "title": "Voice input",
+          "description": "Voice input",
+          "frame": [1413, 942, 32, 32]
+        },
+        {
+          "depth": 15,
+          "role": "AXButton",
+          "title": "Switch",
+          "description": "Switch",
+          "frame": [1382, 536, 65, 21]
+        },
+        {
+          "depth": 15,
+          "role": "AXButton",
+          "title": "Drive meeting",
+          "frame": [1112, 889, 125, 32]
+        },
+        {
+          "depth": 15,
+          "role": "AXButton",
+          "title": "Build slides",
+          "frame": [1242, 889, 112, 32]
+        },
+        {
+          "depth": 15,
+          "role": "AXPopUpButton",
+          "title": "Show more scenes",
+          "description": "Show more scenes",
+          "frame": [1358, 889, 74, 32]
+        },
+        {
+          "depth": 16,
+          "role": "AXButton",
+          "title": "What’s on my to-do list today?",
+          "description": "What’s on my to-do list today?",
+          "frame": [1122, 567, 324, 41]
+        },
+        {
+          "depth": 16,
+          "role": "AXButton",
+          "title": "Create my meeting summary template",
+          "description": "Create my meeting summary template",
+          "frame": [1122, 607, 324, 41]
+        },
+        {
+          "depth": 16,
+          "role": "AXButton",
+          "title": "Send me a morning brief on a topic every day",
+          "description": "Send me a morning brief on a topic every day",
+          "frame": [1122, 647, 324, 41]
+        }
+      ]
+    }
+  ]
+}

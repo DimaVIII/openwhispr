@@ -240,7 +240,7 @@ class MeetingSpeakerListener {
     if (message.type === "status") {
       debugLogger.debug(
         "[MeetingSpeakerListener] status",
-        { state: message.state, bundleId: message.bundleId },
+        { state: message.state, bundleId: message.bundleId, axError: message.axError },
         "meeting"
       );
       if (message.state !== "tracking") {

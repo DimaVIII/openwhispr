@@ -3,39 +3,26 @@
 // app's tree into a roster plus the participants it shows as speaking;
 // meetingSpeakerFusion.js matches those against the voices in the audio.
 //
-// The matching rules are provisional. They follow what's documented about
-// Zoom's desktop client (every video tile labelled with the participant's name
-// and status, speaker view showing the active speaker large) and must be
-// checked against real `--dump` output before this ships. Meeting apps restyle
-// their UI without notice, which is why the rules live here beside their tests
-// rather than in the native helper.
+// Tile and speaker-view rules are checked against a `--dump` of Zoom 7.2.2 in
+// speaker view (test/helpers/fixtures/zoom-7.2-speaker-view.json). Its tiles
+// never said "Talking"; the tile-status and "Talking:" rules are still
+// provisional until gallery view and screen sharing are dumped too. Meeting
+// apps restyle their UI without notice, which is why the rules live here
+// beside their tests rather than in the native helper.
 
 const EMPTY_STATE = Object.freeze({ participants: [], speakingIds: [], strategy: "none" });
 
 const MAX_NAME_LENGTH = 80;
 
 const ZOOM_BUNDLE_IDS = ["us.zoom.xos"];
-// Video tiles are at least thumbnail-sized; toolbar buttons and list rows aren't.
+// Zoom 7.2's video tiles are AXTabGroups labelled "Name, Computer audio muted,
+// Video on" (checked against --dump of 7.2.2). Matching the role keeps this
+// independent of Zoom's UI language, and rules out the home window's web
+// panels ("Zoom Calendar Sidebar"), which carry tile-sized labels too.
+const ZOOM_TILE_ROLE = "AXTabGroup";
+// Video tiles are at least thumbnail-sized.
 const ZOOM_MIN_TILE_WIDTH = 120;
 const ZOOM_MIN_TILE_HEIGHT = 68;
-// Roles that can carry a participant's name without being a video tile: the
-// participants panel, chat, menus and text inputs.
-const ZOOM_NON_TILE_ROLES = new Set([
-  "AXCell",
-  "AXList",
-  "AXMenu",
-  "AXMenuButton",
-  "AXMenuItem",
-  "AXOutline",
-  "AXPopUpButton",
-  "AXRow",
-  "AXScrollBar",
-  "AXStaticText",
-  "AXTable",
-  "AXTextArea",
-  "AXTextField",
-  "AXToolbar",
-]);
 // Status parts that follow the name in a tile's label ("Jane Doe, Talking").
 const ZOOM_SPEAKING_TOKENS = new Set(["talking", "speaking", "active speaker"]);
 const ZOOM_MUTED_TOKENS = new Set([
@@ -119,8 +106,8 @@ function collectZoomTiles(window) {
   const tiles = new Map();
   for (const node of window?.nodes || []) {
     const [, , width = 0, height = 0] = Array.isArray(node?.frame) ? node.frame : [];
+    if (node?.role !== ZOOM_TILE_ROLE) continue;
     if (width < ZOOM_MIN_TILE_WIDTH || height < ZOOM_MIN_TILE_HEIGHT) continue;
-    if (ZOOM_NON_TILE_ROLES.has(node.role)) continue;
 
     const parsed = parseZoomTileText(nodeText(node));
     if (!parsed) continue;
@@ -139,6 +126,23 @@ function collectZoomTiles(window) {
     });
   }
   return tiles;
+}
+
+// Tiles never mark the user, and the participants panel's "(Host, me)" is an
+// AXValue, which snapshots leave out. The home window's profile button carries
+// the signed-in name instead: "Zoom, Jane Doe, In a Zoom Meeting, Basic account".
+function collectZoomSelfIds(windows) {
+  const ids = new Set();
+  for (const window of windows) {
+    for (const node of window?.nodes || []) {
+      if (node?.role !== "AXButton") continue;
+      const [brand, rawName, ...status] = splitLabelParts(nodeText(node));
+      if (brand !== "Zoom" || !rawName || !status.length) continue;
+      const parsed = parseZoomName(rawName);
+      if (parsed) ids.add(participantIdForName(parsed.name));
+    }
+  }
+  return ids;
 }
 
 function collectZoomTalkingNames(windows) {
@@ -167,6 +171,10 @@ function interpretZoomSnapshot(snapshot) {
     if (!meeting || tiles.size > meeting.tiles.size) meeting = { window, tiles };
   }
   const tiles = meeting?.tiles ?? new Map();
+  const selfIds = collectZoomSelfIds(windows);
+  for (const tile of tiles.values()) {
+    if (selfIds.has(tile.id)) tile.isSelf = true;
+  }
   const participants = [...tiles.values()].map(({ id, name, isSelf }) => ({ id, name, isSelf }));
 
   const flagged = [...tiles.values()].filter((tile) => tile.speaking && !tile.muted);
@@ -180,7 +188,7 @@ function interpretZoomSnapshot(snapshot) {
     for (const { name, isSelf } of talking) {
       const id = participantIdForName(name);
       if (tiles.get(id)?.muted || speakingIds.includes(id)) continue;
-      if (!tiles.has(id)) participants.push({ id, name, isSelf });
+      if (!tiles.has(id)) participants.push({ id, name, isSelf: isSelf || selfIds.has(id) });
       speakingIds.push(id);
     }
     return { participants, speakingIds, strategy: "talking-label" };

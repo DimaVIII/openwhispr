@@ -8,10 +8,12 @@ const {
   participantIdForName,
 } = require("../../src/helpers/meetingAppSpeakerAdapters");
 
-// Synthetic trees shaped like the documented Zoom client. Replace them with
-// trimmed `macos-meeting-speaker-listener --dump` output once it's captured.
+const ZOOM_SPEAKER_VIEW = require("./fixtures/zoom-7.2-speaker-view.json");
+
+// Synthetic trees for layouts not dumped yet, shaped like Zoom 7.2's (tiles are
+// AXTabGroups; see the fixture).
 const WINDOW = [0, 0, 1600, 1000];
-const node = (description, frame, role = "AXGroup") => ({ role, description, frame });
+const node = (description, frame, role = "AXTabGroup") => ({ role, description, frame });
 const zoom = (...windows) => ({ type: "snapshot", at: 1, bundleId: "us.zoom.xos", windows });
 const meetingWindow = (...nodes) => ({ title: "Zoom Meeting", frame: WINDOW, nodes });
 const gallery = (...labels) =>
@@ -143,7 +145,11 @@ test("reads the window showing the most tiles, never list rows or buttons", () =
   const home = {
     title: "Zoom Workplace",
     frame: WINDOW,
-    nodes: [node("Upcoming meetings", [0, 0, 900, 600])],
+    nodes: [
+      node("Zoom Calendar Sidebar", [0, 0, 600, 530], "AXWebArea"),
+      node("Zoom AI", [600, 0, 376, 840], "AXWebArea"),
+      node("Suggested", [600, 360, 344, 152], "AXGroup"),
+    ],
   };
   const meeting = meetingWindow(
     ...gallery("Jane Doe", "Omar Haddad"),
@@ -156,6 +162,50 @@ test("reads the window showing the most tiles, never list rows or buttons", () =
     state.participants.map((participant) => participant.id),
     ["jane doe", "omar haddad"]
   );
+});
+
+test("real Zoom 7.2 speaker view: the large tile speaks, the home window is ignored", () => {
+  const state = interpretMeetingAppSnapshot(ZOOM_SPEAKER_VIEW);
+
+  assert.equal(state.strategy, "speaker-view");
+  assert.deepEqual(state.speakingIds, ["omar haddad"]);
+  assert.deepEqual(state.participants, [
+    { id: "omar haddad", name: "Omar Haddad", isSelf: false },
+    { id: "priya shah", name: "Priya Shah", isSelf: true },
+  ]);
+});
+
+test("the home window's profile button marks the user's tile", () => {
+  const profile = (description) => ({
+    title: "Zoom Workplace",
+    frame: WINDOW,
+    nodes: [node(description, [1449, 87, 34, 34], "AXButton")],
+  });
+  const meeting = meetingWindow(...gallery("Jane Doe", "Omar Haddad"));
+
+  const marked = interpretMeetingAppSnapshot(
+    zoom(meeting, profile("Zoom, Omar Haddad, In a Zoom Meeting, Basic account"))
+  );
+  assert.deepEqual(
+    marked.participants.map(({ id, isSelf }) => [id, isSelf]),
+    [
+      ["jane doe", false],
+      ["omar haddad", true],
+    ]
+  );
+
+  // Other buttons that start with "Zoom" or name a participant don't count.
+  for (const description of [
+    "Zoom",
+    "Zoom, Omar Haddad",
+    "More options for Omar Haddad, collapsed",
+  ]) {
+    const state = interpretMeetingAppSnapshot(zoom(meeting, profile(description)));
+    assert.ok(
+      state.participants.every((participant) => !participant.isSelf),
+      description
+    );
+  }
 });
 
 test("only apps with an adapter are read", () => {

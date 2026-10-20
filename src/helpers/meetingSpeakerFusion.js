@@ -162,9 +162,12 @@ const createMeetingSpeakerFusion = ({ lagMs = 0 } = {}) => {
 
       for (const { id, name, isSelf } of roster) {
         if (!id) continue;
+        const known = participants.get(id);
         participants.set(id, {
-          name: name || participants.get(id)?.name || null,
-          isSelf: !!isSelf,
+          name: name || known?.name || null,
+          // Sticky: the signal that marks the user (Zoom's home window) can
+          // close mid-meeting without the user becoming someone else.
+          isSelf: !!isSelf || !!known?.isSelf,
         });
       }
 
