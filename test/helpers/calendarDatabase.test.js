@@ -249,7 +249,7 @@ test("reopening a pre-v2 database clears microsoft sync tokens once", (t) => {
   assert.equal(calendar.sync_token, null);
   assert.equal(calendar.sync_token_expires_at, null);
   // Reopening runs every later migration too.
-  assert.equal(reopened.db.pragma("user_version", { simple: true }), 4);
+  assert.equal(reopened.db.pragma("user_version", { simple: true }), 5);
   reopened.db.close();
 });
 
@@ -304,16 +304,16 @@ test("Google shared RSVP repair is scoped, preserves notes, and runs once", (t) 
   for (const id of ["primary", "me@example.com", "ms-event", "apple-event"]) {
     assert.equal(repaired.getCalendarEventById(id).self_response_status, "declined");
   }
-  assert.equal(repaired.db.pragma("user_version", { simple: true }), 4);
+  // Reopening also runs the v5 lookback reset, which clears every REST token.
+  assert.equal(repaired.db.pragma("user_version", { simple: true }), 5);
   const calendars = repaired.getGoogleCalendars();
   assert.equal(calendars.find((c) => c.id === "shared").sync_token, null);
   assert.equal(calendars.find((c) => c.id === "shared").sync_token_expires_at, null);
-  assert.equal(calendars.find((c) => c.id === "primary").sync_token, "old-google");
-  assert.equal(calendars.find((c) => c.id === "me@example.com").sync_token, "old-google");
+  assert.equal(calendars.find((c) => c.id === "primary").sync_token, null);
   assert.equal(
     repaired.db.prepare("SELECT sync_token FROM microsoft_calendars WHERE id='ms'").get()
       .sync_token,
-    "old-ms"
+    null
   );
   assert.equal(
     repaired.db.prepare("SELECT calendar_event_id FROM notes WHERE id=?").get(note.id)
@@ -388,4 +388,68 @@ test("declined REST suppresses its stale Apple mirror", (t) => {
   ]);
   assert.deepEqual(db.getUpcomingEvents(120), []);
   assert.deepEqual(db.getActiveEvents(), []);
+});
+
+test("reopening a pre-v5 database clears REST sync tokens once", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+  insertCalendar(db, "google", "google-calendar");
+  insertCalendar(db, "microsoft", "ms-calendar");
+  const seedTokens = (target) => {
+    target.updateCalendarSyncToken("google-calendar", "sync-token", Date.now() + 1000000);
+    target.updateMicrosoftCalendarSyncToken("ms-calendar", "delta-link", Date.now() + 1000000);
+  };
+  const tokens = (target) => [
+    target.db.prepare("SELECT sync_token FROM google_calendars").get().sync_token,
+    target.db.prepare("SELECT sync_token FROM microsoft_calendars").get().sync_token,
+  ];
+  seedTokens(db);
+  db.db.pragma("user_version = 4");
+  db.db.close();
+
+  const reopened = new DatabaseManager();
+  assert.deepEqual(tokens(reopened), [null, null]);
+  seedTokens(reopened);
+  reopened.db.close();
+
+  const again = new DatabaseManager();
+  assert.deepEqual(tokens(again), ["sync-token", "delta-link"]);
+  again.db.close();
+});
+
+test("events from two and three days ago never surface as active, upcoming or available", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+  insertCalendar(db, "google", "google-calendar");
+  const now = Date.now();
+  const twoDaysAgo = new Date(now - 2 * 86_400_000);
+  const localDate = (date) =>
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  db.upsertCalendarEvents([
+    restEvent("google", "google-calendar", "past-timed", {
+      start_time: new Date(now - 50 * 3_600_000).toISOString(),
+      end_time: new Date(now - 49 * 3_600_000).toISOString(),
+    }),
+    restEvent("google", "google-calendar", "past-all-day", {
+      start_time: localDate(twoDaysAgo),
+      end_time: localDate(new Date(twoDaysAgo.getTime() + 86_400_000)),
+      is_all_day: true,
+    }),
+  ]);
+  const pastIds = new Set(["past-timed", "past-all-day"]);
+  const ids = (events) => events.map((event) => event.id).filter((id) => pastIds.has(id));
+
+  assert.deepEqual(ids(db.getActiveEvents()), []);
+  assert.deepEqual(ids(db.getUpcomingEvents(1440)), []);
+  assert.deepEqual(
+    ids(
+      db.getCalendarEventsInRange(
+        new Date(now).toISOString(),
+        new Date(now + 86_400_000).toISOString(),
+        ["google"]
+      )
+    ),
+    []
+  );
+  db.db.close();
 });

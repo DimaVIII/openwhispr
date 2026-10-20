@@ -194,3 +194,11 @@ test("Apple RSVP ignores another attendee's decline and follows current-user cha
     assert.equal(mapped.self_response_status, response);
   }
 });
+
+test("the helper is told the stored lookback", () => {
+  const AppleCalendarManager = loadManager();
+  const manager = new AppleCalendarManager({}, {});
+
+  assert.deepEqual(manager._helperArgs(false), ["--lookback-seconds", "259200"]);
+  assert.deepEqual(manager._helperArgs(true), ["--lookback-seconds", "259200", "--request"]);
+});

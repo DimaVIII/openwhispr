@@ -427,3 +427,33 @@ test("Google RSVP on a shared calendar uses the connected account's attendee", a
     "unknown"
   );
 });
+
+test("_syncCalendar full sync looks back CALENDAR_LOOKBACK_DAYS", async () => {
+  const GoogleCalendarManager = loadManagerModule();
+  const { CALENDAR_LOOKBACK_MS } = require("../../src/helpers/calendarCacheWindow.js");
+  const databaseManager = {
+    getGoogleAccounts: () => [],
+    removeStaleCalendarEvents: () => {},
+    upsertCalendarEvents: () => {},
+    removeCalendarEvents: () => {},
+    updateCalendarSyncToken: () => {},
+    syncCalendarContacts: () => {},
+  };
+  const manager = new GoogleCalendarManager(databaseManager, null, {
+    scheduleNextMeeting: () => {},
+    reset: () => {},
+  });
+  const paths = [];
+  manager._apiGet = async (path) => {
+    paths.push(path);
+    return { items: [], nextSyncToken: "token" };
+  };
+
+  await manager._syncCalendar({ id: "cal-1", account_email: "test@example.com", is_primary: 1 });
+
+  const params = new URL(paths[0], "https://www.googleapis.com").searchParams;
+  const now = Date.now();
+  assert.ok(Math.abs(Date.parse(params.get("timeMin")) - (now - CALENDAR_LOOKBACK_MS)) < 5_000);
+  const lookaheadMs = (33 * 24 + 48) * 3_600_000;
+  assert.ok(Math.abs(Date.parse(params.get("timeMax")) - (now + lookaheadMs)) < 5_000);
+});

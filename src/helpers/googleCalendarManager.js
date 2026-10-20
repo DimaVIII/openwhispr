@@ -2,12 +2,11 @@ const { net } = require("electron");
 const debugLogger = require("./debugLogger");
 const GoogleCalendarOAuth = require("./googleCalendarOAuth");
 const CalendarSyncInterval = require("./calendarSyncInterval");
-const { MAX_BUFFER_MINUTES } = require("./calendarAvailability");
+const { CALENDAR_LOOKBACK_MS } = require("./calendarCacheWindow");
 const { extractMeetingUrl } = require("./meetingJoinUrl");
 const { broadcastToWindows } = require("./windowBroadcast");
 
 const CALENDAR_API_BASE = "https://www.googleapis.com/calendar/v3";
-const BUFFER_COVERAGE_MS = MAX_BUFFER_MINUTES * 60 * 1000;
 const ALL_DAY_TIMEZONE_PADDING_MS = 48 * 60 * 60 * 1000;
 
 // Sync tokens pin the full sync's timeMin/timeMax window, so discard them
@@ -171,9 +170,7 @@ class GoogleCalendarManager {
       new URLSearchParams({
         singleEvents: "true",
         orderBy: "startTime",
-        timeMin: new Date(
-          Date.now() - BUFFER_COVERAGE_MS - ALL_DAY_TIMEZONE_PADDING_MS
-        ).toISOString(),
+        timeMin: new Date(Date.now() - CALENDAR_LOOKBACK_MS).toISOString(),
         timeMax: new Date(
           Date.now() + SYNC_LOOKAHEAD_MS + ALL_DAY_TIMEZONE_PADDING_MS
         ).toISOString(),

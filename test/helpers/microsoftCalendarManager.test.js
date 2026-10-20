@@ -478,3 +478,17 @@ test("a stripped occurrence keeps details but applies explicit RSVP after master
   await manager._syncCalendar({ id: "cal-1", account_email: "me@example.com" });
   assert.deepEqual(upserted, [{ ...original, self_response_status: "declined" }]);
 });
+
+test("_deltaUrl starts CALENDAR_LOOKBACK_DAYS back", () => {
+  const MicrosoftCalendarManager = loadManagerModule();
+  const { CALENDAR_LOOKBACK_MS } = require("../../src/helpers/calendarCacheWindow.js");
+  const manager = new MicrosoftCalendarManager({}, {});
+
+  const params = new URL(manager._deltaUrl("cal-1"), "https://graph.microsoft.com").searchParams;
+
+  const now = Date.now();
+  assert.ok(
+    Math.abs(Date.parse(params.get("startDateTime")) - (now - CALENDAR_LOOKBACK_MS)) < 5_000
+  );
+  assert.ok(Math.abs(Date.parse(params.get("endDateTime")) - (now + 38 * 86_400_000)) < 5_000);
+});

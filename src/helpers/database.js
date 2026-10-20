@@ -978,6 +978,17 @@ class DatabaseManager {
         this.db.pragma("user_version = 4");
       }
 
+      // One-time reset (user_version 5): the stored lookback widened to
+      // CALENDAR_LOOKBACK_DAYS so notes can link recent past events, and REST
+      // sync tokens pin the window they were created with.
+      if (this.db.pragma("user_version", { simple: true }) < 5) {
+        this.db.exec(`
+          UPDATE google_calendars SET sync_token = NULL, sync_token_expires_at = NULL;
+          UPDATE microsoft_calendars SET sync_token = NULL, sync_token_expires_at = NULL;
+        `);
+        this.db.pragma("user_version = 5");
+      }
+
       this.db.exec(`
         CREATE TABLE IF NOT EXISTS apple_calendars (
           id TEXT PRIMARY KEY,
@@ -5253,7 +5264,7 @@ class DatabaseManager {
   }
 
   // What find_contact searches. calendar_events only holds a sync window
-  // (about two days back to a month ahead), so the meetings nearest to now go
+  // (about three days back to a month ahead), so the meetings nearest to now go
   // first, and the contacts table (every synced attendee until its last
   // source is disconnected) covers older ones, most recently seen first. Only
   // the user's own meetings count: not cancelled or declined ones, not a
@@ -5820,15 +5831,15 @@ class DatabaseManager {
     }
   }
 
-  // Snapshots cover the full current/future window, so missing unreferenced
-  // events can be removed while note-linked history is retained.
+  // Snapshots cover the full cache window, so missing unreferenced events can
+  // be removed while note-linked history is retained.
   replaceAppleCalendarEvents(events) {
     try {
       if (!this.db) throw new Error("Database not initialized");
       const transaction = this.db.transaction((list) => {
-        // The helper snapshot only contains current/future events. Keep past or
-        // rescheduled rows that are still referenced by meeting notes so those
-        // notes retain their calendar metadata.
+        // The helper snapshot only covers the lookback window and the future.
+        // Keep older or rescheduled rows that are still referenced by meeting
+        // notes so those notes retain their calendar metadata.
         this.db
           .prepare(
             `DELETE FROM calendar_events
