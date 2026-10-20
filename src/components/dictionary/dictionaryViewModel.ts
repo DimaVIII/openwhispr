@@ -64,13 +64,15 @@ const wordKey = (word: string): string => word.trim().toLowerCase();
 export function resolveSharedAccessState(input: {
   capabilityAvailable: boolean;
   workspace: Workspace | null;
-  // The server's flag: a downgraded workspace that still holds shared words.
+  // The server's flag. It is set on every answer for a workspace without the
+  // plan, so it only means "paused" when there are words to pause.
   serverPaused: boolean | null;
+  hasWords: boolean;
 }): SharedAccessState {
-  const { capabilityAvailable, workspace, serverPaused } = input;
+  const { capabilityAvailable, workspace, serverPaused, hasWords } = input;
   if (!capabilityAvailable) return "unavailable";
   if (!workspace) return "noWorkspace";
-  if (serverPaused === true) return "paused";
+  if (serverPaused === true && hasWords) return "paused";
   if (!hasSharedDictionaryPlan(workspace)) {
     return canManageWorkspace(workspace.role) ? "upgradeAdmin" : "upgradeMember";
   }

@@ -4,18 +4,24 @@ import type {
 } from "../types/sharedDictionary";
 
 export interface SharedHintWords {
-  space: string[];
-  workspace: string[];
+  readonly space: readonly string[];
+  readonly workspace: readonly string[];
 }
 
-export const EMPTY_SHARED_HINTS: SharedHintWords = { space: [], workspace: [] };
+// Shared by every "no shared words" answer, so frozen: a caller that pushed into
+// it would leak words into every later fallback.
+export const EMPTY_SHARED_HINTS: SharedHintWords = Object.freeze({
+  space: Object.freeze([]),
+  workspace: Object.freeze([]),
+});
 
 const MAX_SHARED_WORD_LENGTH = 64;
 const MAX_SHARED_WORD_TOKENS = 6;
 // Control, invisible format (zero-width, bidi overrides, BOM) and line or
 // paragraph separator characters, plus the characters that open markup,
-// templates, fences or tables in a prompt.
-const NOT_TERM_LIKE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}<>{}[\]`|]/u;
+// templates, fences or tables in a prompt. ZWNJ and ZWJ stay: Persian, Urdu and
+// Indic words are spelled with them.
+const NOT_TERM_LIKE = /(?![\u200C\u200D])[\p{Cc}\p{Cf}\p{Zl}\p{Zp}<>{}[\]`|]/u;
 
 /**
  * Teammates' words reach transcription and LLM system prompts, so only words

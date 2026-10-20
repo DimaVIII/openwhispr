@@ -62,6 +62,7 @@ export function formatDictionaryPrompt(tiers, maxChars) {
   outer: for (let tier = 0; tier < tiers.length; tier++) {
     for (const word of tiers[tier]) {
       const next = length + word.length + (count > 0 ? 2 : 0);
+      // Strict priority: the first word that doesn't fit ends the fill.
       if (next > maxChars) break outer;
       length = next;
       count++;

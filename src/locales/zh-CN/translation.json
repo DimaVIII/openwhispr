@@ -3573,6 +3573,7 @@
       "memberCount_one": "{{count}} 名成员",
       "memberCount_other": "{{count}} 名成员",
       "emptyList": "{{list}} 中还没有词语",
+      "allHiddenList": "{{list}} 中的所有词语都已对你隐藏",
       "noMatches": "没有与“{{query}}”匹配的词语",
       "deletedForEveryone": "已为所有人删除“{{word}}”",
       "undo": "撤销",

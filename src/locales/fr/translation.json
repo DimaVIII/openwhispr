@@ -3924,6 +3924,7 @@
       "memberCount_one": "{{count}} membre",
       "memberCount_other": "{{count}} membres",
       "emptyList": "Aucun mot dans {{list}} pour l’instant",
+      "allHiddenList": "Tous les mots de {{list}} sont masqués pour vous",
       "noMatches": "Aucun mot ne correspond à « {{query}} »",
       "deletedForEveryone": "« {{word}} » supprimé pour tous",
       "undo": "Annuler",

@@ -68,7 +68,17 @@ test("workspace words need the workspace list in scope", () => {
 });
 
 test("isTermLikeSharedWord keeps terms and drops instruction- or markup-shaped words", () => {
-  for (const word of ["C++", "CI/CD", "sherpa-onnx", "Q3 OKRs", "  Acme  ", "a".repeat(64)]) {
+  for (const word of [
+    "C++",
+    "CI/CD",
+    "sherpa-onnx",
+    "Q3 OKRs",
+    "  Acme  ",
+    "a".repeat(64),
+    // ZWNJ and ZWJ are spelling in Persian, Urdu and Indic scripts.
+    "می\u200Cخواهم",
+    "क्\u200Dष",
+  ]) {
     assert.equal(isTermLikeSharedWord(word), true, word);
   }
   for (const word of [
@@ -79,7 +89,7 @@ test("isTermLikeSharedWord keeps terms and drops instruction- or markup-shaped w
     "Acme\u202Eemca",
     "Acme\u2066x\u2069",
     "\uFEFFAcme",
-    "Ac\u200Dme",
+    "Ac\u2060me",
     "tab\there",
     "a".repeat(65),
     "<tag>",
@@ -93,6 +103,12 @@ test("isTermLikeSharedWord keeps terms and drops instruction- or markup-shaped w
   ]) {
     assert.equal(isTermLikeSharedWord(word), false, JSON.stringify(word));
   }
+});
+
+test("EMPTY_SHARED_HINTS is frozen, so no caller can fill the shared fallback", () => {
+  assert.ok(Object.isFrozen(EMPTY_SHARED_HINTS));
+  assert.ok(Object.isFrozen(EMPTY_SHARED_HINTS.space));
+  assert.ok(Object.isFrozen(EMPTY_SHARED_HINTS.workspace));
 });
 
 test("selectSharedHintWords drops words that are not term-like and trims the rest", () => {

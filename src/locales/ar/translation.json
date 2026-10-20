@@ -1476,6 +1476,7 @@
       "memberCount_many": "{{count}} عضوًا",
       "memberCount_other": "{{count}} عضو",
       "emptyList": "لا توجد كلمات في {{list}} بعد",
+      "allHiddenList": "جميع الكلمات في {{list}} مخفية عنك",
       "noMatches": "لا توجد كلمات تطابق «{{query}}»",
       "deletedForEveryone": "تم حذف «{{word}}» للجميع",
       "undo": "تراجع",

@@ -148,6 +148,9 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
     capabilityAvailable: status !== "unavailable",
     workspace,
     serverPaused: snapshot?.meta?.paused ?? null,
+    hasWords:
+      (snapshot?.entries.length ?? 0) > 0 ||
+      (snapshot?.meta?.scopes ?? []).some((scope) => scope.word_count > 0),
   });
 
   // Same membership rule as agentNameDictionaryChanges: a stored spelling that
@@ -335,6 +338,10 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
           scope.space_id === (openList === "workspace" ? null : openList.slice("space:".length))
       )
     : undefined;
+  // Hidden words still belong to the list, so it only counts as empty with none at all.
+  const openListHasEntries =
+    openScope !== undefined &&
+    (snapshot?.entries ?? []).some((entry) => entry.spaceId === openScope.space_id);
   const readOnlyTarget: AddTargetOption | null =
     readOnlyList && openScope
       ? { target: openScope.space_id, label: openEntry?.label ?? "" }
@@ -342,6 +349,10 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
   const headerDetail = openScope
     ? t("dictionary.shared.memberCount", { count: openScope.member_count })
     : String(rows.length);
+
+  // The dialog animates out after the request clears, so it keeps showing the last title.
+  const lastDeleteTitle = useRef("");
+  if (actions.deleteTitle !== null) lastDeleteTitle.current = actions.deleteTitle;
 
   const emptyPersonalState = (
     <div className="flex min-h-64 items-start px-6 py-6">
@@ -365,7 +376,7 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
   };
 
   const listCard =
-    !locked && singleList && listIsEmpty && openScope ? (
+    !locked && singleList && listIsEmpty && openScope && !openListHasEntries ? (
       <SharedListEmpty
         listName={openEntry?.label ?? ""}
         memberCount={openScope.member_count}
@@ -418,9 +429,11 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
         </div>
         {rows.length === 0 ? (
           <p dir="auto" className="py-6 text-center text-xs text-foreground/45">
-            {listIsEmpty
-              ? t("dictionary.shared.emptyList", { list: openEntry?.label ?? "" })
-              : t("dictionary.shared.noMatches", { query: search.trim() })}
+            {!listIsEmpty
+              ? t("dictionary.shared.noMatches", { query: search.trim() })
+              : openListHasEntries
+                ? t("dictionary.shared.allHiddenList", { list: openEntry?.label ?? "" })
+                : t("dictionary.shared.emptyList", { list: openEntry?.label ?? "" })}
           </p>
         ) : (
           <DictionaryWordList
@@ -456,7 +469,7 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
         onOpenChange={(open) => {
           if (!open) actions.cancelDelete();
         }}
-        title={actions.deleteTitle ?? ""}
+        title={actions.deleteTitle ?? lastDeleteTitle.current}
         confirmText={t("dictionary.shared.actions.deleteForEveryone")}
         onConfirm={actions.confirmDelete}
         variant="destructive"

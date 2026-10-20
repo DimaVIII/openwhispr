@@ -3625,6 +3625,7 @@
       "memberCount_one": "{{count}} miembro",
       "memberCount_other": "{{count}} miembros",
       "emptyList": "Aún no hay palabras en {{list}}",
+      "allHiddenList": "Todas las palabras de {{list}} están ocultas para ti",
       "noMatches": "Ninguna palabra coincide con «{{query}}»",
       "deletedForEveryone": "«{{word}}» eliminada para todos",
       "undo": "Deshacer",

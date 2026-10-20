@@ -3573,6 +3573,7 @@
       "memberCount_one": "{{count}} membro",
       "memberCount_other": "{{count}} membri",
       "emptyList": "Ancora nessuna parola in {{list}}",
+      "allHiddenList": "Tutte le parole di {{list}} sono nascoste per te",
       "noMatches": "Nessuna parola corrisponde a «{{query}}»",
       "deletedForEveryone": "«{{word}}» eliminata per tutti",
       "undo": "Annulla",

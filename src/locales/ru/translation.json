@@ -3601,6 +3601,7 @@
       "memberCount_many": "{{count}} участников",
       "memberCount_other": "{{count}} участника",
       "emptyList": "В {{list}} пока нет слов",
+      "allHiddenList": "Все слова в {{list}} скрыты для вас",
       "noMatches": "Нет слов, совпадающих с «{{query}}»",
       "deletedForEveryone": "«{{word}}» удалено для всех",
       "undo": "Отменить",

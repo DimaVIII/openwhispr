@@ -57,9 +57,16 @@ const MOCKS = {
   `,
   "/services/SyncService": `
     export const syncService = {
-      syncSharedDictionaryNow: async () => { globalThis.__calls.push(["syncShared"]); },
+      syncSharedDictionaryNow: async () => {
+        globalThis.__calls.push(["syncShared"]);
+        if (globalThis.__results?.syncShared === "reject") throw new Error("offline");
+      },
       syncDictionaryNow: async () => { globalThis.__calls.push(["syncPersonal"]); },
     };
+  `,
+  "/utils/logger": `
+    const record = (level) => (...args) => { globalThis.__calls.push(["log:" + level, ...args]); };
+    export default { warn: record("warn"), error: record("error"), info: record("info"), debug: record("debug") };
   `,
   "/ui/dropdown-menu": `
     import { createElement } from "react";
@@ -531,6 +538,81 @@ test("Sync pulls the shared lists and the personal dictionary", async (t) => {
   assert.ok(calls.some(([name]) => name === "syncPersonal"));
 });
 
+test("a failed Sync is logged, not left as an unhandled rejection, and stops spinning", async (t) => {
+  const unhandled = [];
+  const onUnhandled = (reason) => unhandled.push(reason);
+  process.on("unhandledRejection", onUnhandled);
+  t.after(() => process.off("unhandledRejection", onUnhandled));
+  const { container, calls } = await renderView(t);
+  globalThis.__results.syncShared = "reject";
+  const syncButton = () => byAttribute(container, "aria-label", "dictionary.shared.toolbar.sync");
+  await click(syncButton());
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(unhandled, []);
+  assert.ok(
+    calls.some(([name]) => name === "log:warn"),
+    "the failure is logged"
+  );
+
+  // The button ignores clicks while syncing, so a second run shows it was reset.
+  await click(syncButton());
+  assert.equal(calls.filter(([name]) => name === "syncShared").length, 2);
+});
+
+test("a Personal rename to a word only hidden under a shared copy goes through", async (t) => {
+  const snapshot = {
+    ...SNAPSHOT,
+    entries: [...SNAPSHOT.entries, entry("e-supabase", "Supabase", null)],
+  };
+  const { container, calls } = await renderView(t, {
+    shared: { snapshot, movedPersonal: ["Supabase"] },
+  });
+  await openList(container, "personal");
+  const editButton = byAttribute(
+    rowFor(container, "OpenWhispr"),
+    "aria-label",
+    named("dictionary.editWord", "OpenWhispr")
+  );
+  await click(editButton);
+  const editor = () =>
+    findElement(rowFor(container, "OpenWhispr"), (node) => node.tagName === "INPUT");
+  await type(editor(), "supabase");
+  await pressEnter(editor());
+  assert.ok(!container.textContent.includes("dictionary.shared.alreadyIn"));
+  assert.deepEqual(calls.filter(([name]) => name === "updateCustomDictionary").at(-1), [
+    "updateCustomDictionary",
+    { add: ["supabase"], remove: ["OpenWhispr"] },
+  ]);
+});
+
+test("a Personal rename to a visible Personal word or the agent name is refused", async (t) => {
+  const { container, calls } = await renderView(t);
+  await openList(container, "personal");
+  for (const word of ["supabase", "whispr"]) {
+    await click(
+      byAttribute(
+        rowFor(container, "OpenWhispr"),
+        "aria-label",
+        named("dictionary.editWord", "OpenWhispr")
+      )
+    );
+    const editor = findElement(rowFor(container, "OpenWhispr"), (node) => node.tagName === "INPUT");
+    await type(editor, word);
+    await pressEnter(editor);
+    assert.ok(
+      rowFor(container, "OpenWhispr").textContent.includes(
+        'dictionary.shared.alreadyIn{"list":"dictionary.shared.personal"}'
+      ),
+      word
+    );
+    await keyDown(editor, "Escape");
+  }
+  assert.equal(
+    calls.find(([name]) => name === "updateCustomDictionary"),
+    undefined
+  );
+});
+
 test("a requested list opens first and the request is cleared", async (t) => {
   const { container } = await renderView(t, {
     shared: { requestedList: `space:${SALES}` },
@@ -907,6 +989,24 @@ test("a paused list shows its words dimmed and read-only", async (t) => {
   assert.ok(container.textContent.includes('dictionary.shared.locked.wordCount{"count":2}'));
 });
 
+test("a free workspace's empty lists ask a member to upgrade, even though the API says paused", async (t) => {
+  const snapshot = {
+    entries: [],
+    hiddenIds: [],
+    meta: {
+      ...SNAPSHOT.meta,
+      paused: true,
+      scopes: SNAPSHOT.meta.scopes.map((scope) => ({ ...scope, word_count: 0 })),
+    },
+  };
+  const { container } = await renderView(t, { shared: { snapshot } });
+  globalThis.__workspace = { ...globalThis.__workspace, plan: "pro", role: "member" };
+  await openList(container, "workspace");
+  assert.ok(container.textContent.includes("dictionary.shared.locked.upgradeMember"));
+  assert.ok(!container.textContent.includes("dictionary.shared.locked.paused"));
+  assert.equal(buttonWithText(container, "integrations.api.viewPlans"), null);
+});
+
 test("an empty list imports into itself or sends the member to Personal", async (t) => {
   const SUPPORT = "33333333-3333-4333-8333-333333333333";
   const snapshot = {
@@ -935,4 +1035,16 @@ test("an empty list imports into itself or sends the member to Personal", async 
   await click(buttonWithText(container, "dictionary.shared.empty.shareFromPersonal"));
   assert.equal(pickerEntry(container, "personal").getAttribute("aria-current"), "true");
   assert.ok(rowFor(container, "OpenWhispr"), "Personal is open");
+});
+
+test("a list whose words are all hidden says so, without the empty list's buttons", async (t) => {
+  const snapshot = { ...SNAPSHOT, hiddenIds: ["e-qdrant", "e-sherpa"] };
+  const { container } = await renderView(t, { shared: { snapshot } });
+  await openList(container, `space:${ENGINEERING}`);
+  assert.ok(
+    container.textContent.includes('dictionary.shared.allHiddenList{"list":"Engineering"}')
+  );
+  assert.ok(!container.textContent.includes("dictionary.shared.emptyList"));
+  assert.equal(buttonWithText(container, "dictionary.shared.empty.import"), null);
+  assert.equal(buttonWithText(container, "dictionary.shared.empty.shareFromPersonal"), null);
 });

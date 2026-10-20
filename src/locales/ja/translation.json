@@ -3501,6 +3501,7 @@
       "memberCount_one": "{{count}} 人のメンバー",
       "memberCount_other": "{{count}} 人のメンバー",
       "emptyList": "{{list}} にはまだ単語がありません",
+      "allHiddenList": "{{list}} の単語はすべて自分には非表示になっています",
       "noMatches": "「{{query}}」に一致する単語はありません",
       "deletedForEveryone": "「{{word}}」を全員から削除しました",
       "undo": "元に戻す",

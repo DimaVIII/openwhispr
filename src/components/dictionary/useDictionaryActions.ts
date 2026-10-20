@@ -14,6 +14,7 @@ import {
 import { syncService } from "../../services/SyncService";
 import { useSharedDictionaryStore } from "../../stores/sharedDictionaryStore";
 import { parseDictionaryImportText } from "../../helpers/dictionaryImport";
+import logger from "../../utils/logger";
 import type { SharedDictionarySnapshot } from "../../types/sharedDictionary";
 import type { AddTarget } from "./DictionaryAddField";
 import { visiblePersonalWords, type DictionaryRow } from "./dictionaryViewModel";
@@ -162,7 +163,10 @@ export function useDictionaryActions({
   const editRow = async (row: DictionaryRow, word: string): Promise<string | null> => {
     if (word === row.word) return null;
     if (row.kind === "personal") {
-      if (customDictionary.some((other) => other !== row.word && sameWord(other, word))) {
+      // Like the add field: a word hidden under a shared copy doesn't block the
+      // rename, which makes it personal again.
+      const taken = wordsInTarget("personal");
+      if (taken.some((other) => other !== row.word && sameWord(other, word))) {
         return t("dictionary.shared.alreadyIn", { list: t("dictionary.shared.personal") });
       }
       updateCustomDictionary({ add: [word], remove: [row.word] });
@@ -343,8 +347,15 @@ export function useDictionaryActions({
 
   const sync = async (): Promise<void> => {
     setSyncing(true);
+    // The toolbar fires this without awaiting it, so a failure must not escape.
+    const logFailure = (error: unknown): void => {
+      logger.warn("Dictionary sync failed", { error: (error as Error)?.message }, "dictionary");
+    };
     try {
-      await Promise.all([syncService.syncSharedDictionaryNow(), syncService.syncDictionaryNow()]);
+      await Promise.all([
+        syncService.syncSharedDictionaryNow().catch(logFailure),
+        syncService.syncDictionaryNow().catch(logFailure),
+      ]);
     } finally {
       setSyncing(false);
     }
