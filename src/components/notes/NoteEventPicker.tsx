@@ -6,7 +6,7 @@ import { useUiLocale } from "../../hooks/useUiLocale";
 import { formatEventWhen } from "../../utils/dateFormatting";
 import {
   eventsOnDay,
-  isBeforeStoredWindow,
+  startsBeforeStoredWindow,
   searchLinkableEvents,
 } from "../../utils/noteEventPicker";
 import type { LinkableCalendarEvent } from "../../types/calendar";
@@ -70,7 +70,7 @@ export default function NoteEventPicker({
       emptyState = { message: t("notes.eventLink.noResults") };
     } else {
       emptyState = {
-        message: isBeforeStoredWindow(noteDay)
+        message: startsBeforeStoredWindow(noteDay)
           ? t("notes.eventLink.outsideWindow", { days: CALENDAR_LOOKBACK_DAYS })
           : t("notes.eventLink.noEventsOnDay"),
         hint: t("notes.eventLink.searchOtherDays"),
@@ -112,6 +112,7 @@ export default function NoteEventPicker({
             key={event.id}
             type="button"
             onClick={() => onSelect(event)}
+            aria-pressed={event.id === linkedEventId}
             className={ROW_CLASS}
           >
             <EventDot color={event.calendar_color} />

@@ -136,6 +136,8 @@ test("marks the linked event and offers removal first", async (t) => {
 
   const rows = rowTexts(host).filter((text) => text !== "");
   assert.equal(rows[0], "notes.eventLink.removeEvent");
+  assert.equal(rowWith(host, "Team Standup").getAttribute("aria-pressed"), "true");
+  assert.equal(rowWith(host, "Focus").getAttribute("aria-pressed"), "false");
   assert.equal(!!rowWith(host, "Team Standup").querySelector("svg[aria-hidden='true']"), true);
   assert.equal(rowWith(host, "Focus").querySelectorAll("svg").length, 0);
 

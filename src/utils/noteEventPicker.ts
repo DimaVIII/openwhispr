@@ -13,16 +13,18 @@ function nextLocalMidnight(day: Date): Date {
   return new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1);
 }
 
-/** Events that overlap the note's local calendar day, in their given order. */
+/** Events that overlap the note's local calendar day: all-day ones first, then in their given order. */
 export function eventsOnDay<T extends CalendarEvent>(events: T[], day: Date): T[] {
   const dayStart = startOfLocalDay(day).getTime();
   const dayEnd = nextLocalMidnight(day).getTime();
-  return events.filter((event) => {
-    const start = parseEventDate(event.start_time)?.getTime();
-    const end = parseEventDate(event.end_time)?.getTime();
-    if (start === undefined || end === undefined) return false;
-    return start < dayEnd && Math.max(end, start + 1) > dayStart;
-  });
+  return events
+    .filter((event) => {
+      const start = parseEventDate(event.start_time)?.getTime();
+      const end = parseEventDate(event.end_time)?.getTime();
+      if (start === undefined || end === undefined) return false;
+      return start < dayEnd && Math.max(end, start + 1) > dayStart;
+    })
+    .sort((a, b) => Number(Boolean(b.is_all_day)) - Number(Boolean(a.is_all_day)));
 }
 
 /** Title or guest matches across every stored event, nearest to the note first. */
@@ -51,7 +53,7 @@ export function searchLinkableEvents<T extends CalendarEvent>(
     .slice(0, limit);
 }
 
-/** True when the whole local day ended before the locally stored history. */
-export function isBeforeStoredWindow(day: Date, now = Date.now()): boolean {
-  return nextLocalMidnight(day).getTime() <= now - CALENDAR_LOOKBACK_MS;
+/** True when the local day starts before the stored history, so some or all of its events aren't stored. */
+export function startsBeforeStoredWindow(day: Date, now = Date.now()): boolean {
+  return startOfLocalDay(day).getTime() < now - CALENDAR_LOOKBACK_MS;
 }

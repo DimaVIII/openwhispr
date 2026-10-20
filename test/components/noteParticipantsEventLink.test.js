@@ -54,7 +54,11 @@ test.after(async () => {
 });
 
 const dana = { email: "dana@x.com", displayName: "Dana", responseStatus: null, self: false };
+const frank = { email: "frank@x.com", displayName: "Frank", responseStatus: null, self: false };
 const eve = { email: "eve@x.com", displayName: "Eve", responseStatus: "accepted", self: false };
+// The note's created_at in the SQLite UTC form, for 13:45 local time on the
+// Standup's day, so the note's day matches in every time zone.
+const NOTE_CREATED_AT = new Date(2026, 9, 20, 13, 45).toISOString().replace("T", " ").slice(0, 19);
 const STANDUP = {
   id: "evt-standup",
   calendar_id: "cal",
@@ -99,25 +103,30 @@ async function mount(t, props, { events = [STANDUP] } = {}) {
       await callback();
       await new Promise((resolve) => setTimeout(resolve, 30));
     });
-  await act(() =>
-    root.render(
-      React.createElement(mod.default, {
-        noteId: 7,
-        participants: [dana],
-        dateLabel: "Oct 20",
-        dateTitle: "Oct 20, 2026 · 1:45 PM",
-        noteCreatedAt: "2026-10-20 12:45:00",
-        linkedEventId: null,
-        linkedEvent: null,
-        canEdit: true,
-        ...props,
-      })
-    )
-  );
+  const render = (overrides) =>
+    act(() =>
+      root.render(
+        React.createElement(mod.default, {
+          noteId: 7,
+          participants: [dana],
+          dateLabel: "Oct 20",
+          dateTitle: "Oct 20, 2026 · 1:45 PM",
+          noteCreatedAt: NOTE_CREATED_AT,
+          linkedEventId: null,
+          linkedEvent: null,
+          canEdit: true,
+          ...props,
+          ...overrides,
+        })
+      )
+    );
+  await render();
   const trigger = host.querySelector("button");
   await act(() => trigger.click());
-  return { act, trigger, calls };
+  return { act, trigger, calls, render };
 }
+
+const savedParticipants = (call) => JSON.parse(call[1].participants);
 
 // Strings and booleans only: printing a happy-dom element in a failed assert
 // runs the test process out of memory.
@@ -129,16 +138,47 @@ const attendeeInput = () =>
   !!happyWindow.document.querySelector('input[placeholder="Add attendees..."]');
 
 test("an editor links an event and its guests merge in one write", async (t) => {
-  const { act, calls } = await mount(t);
+  const { act, calls } = await mount(t, { participants: [dana, frank] });
 
   await act(() => buttonWith("notes.eventLink.selectEvent").click());
   await act(() => buttonWith("Team Standup").click());
 
-  assert.deepEqual(calls.updateNote, [
-    [7, { participants: JSON.stringify([dana, eve]), calendar_event_id: "evt-standup" }],
-  ]);
+  assert.equal(calls.updateNote.length, 1);
+  assert.equal(calls.updateNote[0][0], 7);
+  assert.equal(calls.updateNote[0][1].calendar_event_id, "evt-standup");
+  assert.deepEqual(
+    savedParticipants(calls.updateNote[0]),
+    [dana, frank, eve],
+    "existing attendees stay, in order, and only new guests are added"
+  );
   assert.equal(attendeeInput(), true, "back on the attendees view");
   assert.equal(bodyText().includes("Team Standup"), true);
+});
+
+test("picking the already-linked event changes nothing", async (t) => {
+  const { act, calls } = await mount(t, {
+    participants: [frank],
+    linkedEventId: "evt-standup",
+    linkedEvent: STANDUP,
+  });
+
+  await act(() => buttonWith("Team Standup").click());
+  await act(() => buttonWith("Team Standup").click());
+
+  assert.deepEqual(calls.updateNote, [], "guests the user removed don't come back");
+  assert.equal(attendeeInput(), true);
+});
+
+test("the event list closes when edit rights turn out to be view-only", async (t) => {
+  const { act, render, calls } = await mount(t);
+  await act(() => buttonWith("notes.eventLink.selectEvent").click());
+  assert.equal(attendeeInput(), false, "the event list is open");
+
+  await render({ canEdit: false });
+
+  assert.equal(attendeeInput(), true, "back on the attendees view");
+  assert.equal(!!buttonWith("Team Standup"), false);
+  assert.deepEqual(calls.updateNote, []);
 });
 
 test("Join opens the meeting link and never starts a recording", async (t) => {
@@ -214,7 +254,9 @@ test("a Google event opens in Google Calendar, beside Join", async (t) => {
     { events: [linked] }
   );
 
-  await act(() => buttonWith("notes.eventLink.calendar").click());
+  const button = buttonWith("notes.eventLink.calendar");
+  assert.equal(button.getAttribute("aria-label"), "notes.eventLink.openInGoogle");
+  await act(() => button.click());
   assert.deepEqual(calls.openExternal, ["https://www.google.com/calendar/event?eid=abc"]);
 });
 

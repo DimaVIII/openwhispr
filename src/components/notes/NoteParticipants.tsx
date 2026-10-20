@@ -78,6 +78,12 @@ export default function NoteParticipants({
     viewRef.current = view;
   }, [view]);
 
+  // Edit rights can resolve after the dropdown opened (a shared note's role
+  // loads from the network); a viewer never keeps the event list.
+  useEffect(() => {
+    if (!canEdit) setView("people");
+  }, [canEdit]);
+
   useEffect(() => {
     if (!open || !canEdit) return;
     let cancelled = false;
@@ -115,21 +121,24 @@ export default function NoteParticipants({
 
   const linkEvent = useCallback(
     (event: LinkableCalendarEvent) => {
+      setView("people");
+      // Re-picking the linked event must not re-add guests the user removed.
+      if (!canEdit || event.id === localLinkedId) return;
       const merged = mergeEventAttendees(localParticipants, parseAttendees(event));
       setLocalParticipants(merged);
       setLocalLinkedId(event.id);
       saveParticipants(merged, { calendar_event_id: event.id });
-      setView("people");
     },
-    [localParticipants, saveParticipants]
+    [canEdit, localLinkedId, localParticipants, saveParticipants]
   );
 
   const unlinkEvent = useCallback(() => {
+    setView("people");
+    if (!canEdit) return;
     setLocalLinkedId(null);
     // "" (not NULL) so the unlink syncs: the cloud keeps a NULL as "unchanged".
     window.electronAPI.updateNote(noteId, { calendar_event_id: "" });
-    setView("people");
-  }, [noteId]);
+  }, [canEdit, noteId]);
 
   const resolvedEvent: (CalendarEvent & { calendar_color?: string | null }) | null = localLinkedId
     ? (events?.find((event) => event.id === localLinkedId) ??
@@ -142,6 +151,10 @@ export default function NoteParticipants({
       ? resolvedEvent.web_link
       : null;
   const linkLookupDone = linkedEvent !== undefined && (!canEdit || events !== null);
+  const openInCalendarLabel =
+    resolvedEvent?.provider === "microsoft"
+      ? t("notes.eventLink.openInOutlook")
+      : t("notes.eventLink.openInGoogle");
 
   const addParticipant = useCallback(
     (email: string, displayName?: string | null) => {
@@ -254,7 +267,7 @@ export default function NoteParticipants({
           setView("people");
         }}
       >
-        {view === "events" ? (
+        {view === "events" && canEdit ? (
           <NoteEventPicker
             events={events}
             loadFailed={eventsFailed}
@@ -322,14 +335,12 @@ export default function NoteParticipants({
                       <button
                         type="button"
                         onClick={() => window.electronAPI.openExternal(calendarUrl)}
+                        aria-label={openInCalendarLabel}
+                        title={openInCalendarLabel}
                         className={EVENT_ACTION_CLASS}
                       >
                         <ExternalLink size={14} className="shrink-0" />
-                        {joinUrl
-                          ? t("notes.eventLink.calendar")
-                          : resolvedEvent?.provider === "microsoft"
-                            ? t("notes.eventLink.openInOutlook")
-                            : t("notes.eventLink.openInGoogle")}
+                        {joinUrl ? t("notes.eventLink.calendar") : openInCalendarLabel}
                       </button>
                     )}
                   </div>
