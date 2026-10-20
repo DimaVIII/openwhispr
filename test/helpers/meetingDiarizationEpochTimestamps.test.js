@@ -111,7 +111,7 @@ const runRendererCompletion = (live, payload, seed = []) => {
     seedLength: seed.length,
     segments: payload.segments,
     removedSegments: payload.removedSegments,
-  });
+  }).segments;
 };
 
 const stripIds = (segments) => segments.map(({ id: _id, ...segment }) => segment);

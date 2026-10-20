@@ -430,7 +430,10 @@ let segmentsRefValue: TranscriptSegment[] = [];
 // session's diarization covers only its own audio, so its result must not be
 // matched against the seeded rows. Keyed by diarization session at stop.
 let sessionSeedLength = 0;
-const seedLengthByDiarizationSession = new Map<string, number>();
+const seedLengthByDiarizationSession = new Map<
+  string,
+  { noteId: number | null; seedLength: number }
+>();
 let preparePromise: Promise<void> | null = null;
 let ipcCleanups: Array<() => void> = [];
 let speakerIdentifications: SpeakerIdentification[] = [];
@@ -1714,7 +1717,10 @@ export async function stopRecording(expectedSessionId?: string): Promise<StopRec
           );
           if (result?.diarizationSessionId) {
             stoppedDiarizationSessionId = result.diarizationSessionId;
-            seedLengthByDiarizationSession.set(stoppedDiarizationSessionId, seedLength);
+            seedLengthByDiarizationSession.set(stoppedDiarizationSessionId, {
+              noteId: recordingNoteId,
+              seedLength,
+            });
             useMeetingRecordingStore.setState({
               diarizationSessionId: stoppedDiarizationSessionId,
             });
@@ -1842,7 +1848,7 @@ if (typeof window !== "undefined") {
       // Read after the getNote await: a skipped diarization is sent before the
       // stop call that records this session's seed length returns.
       const seedLength = data.sessionId
-        ? (seedLengthByDiarizationSession.get(data.sessionId) ?? 0)
+        ? (seedLengthByDiarizationSession.get(data.sessionId)?.seedLength ?? 0)
         : 0;
       if (data.sessionId) seedLengthByDiarizationSession.delete(data.sessionId);
       // No note means no safe base to merge into, and writing to a deleted one
@@ -1861,7 +1867,7 @@ if (typeof window !== "undefined") {
         recordingNoteId,
         targetNoteId,
       });
-      const enriched = mergeSessionDiarization({
+      const { segments: enriched, removedCount } = mergeSessionDiarization({
         existing,
         seedLength,
         segments: data.segments,
@@ -1878,6 +1884,13 @@ if (typeof window !== "undefined") {
       } catch (error) {
         publish([]);
         throw error;
+      }
+      // A later session resumed from this note seeded the rows just removed,
+      // so its seed now ends that many rows earlier.
+      for (const pending of seedLengthByDiarizationSession.values()) {
+        if (pending.noteId === targetNoteId && pending.seedLength > seedLength) {
+          pending.seedLength -= removedCount;
+        }
       }
       publish(enriched);
 

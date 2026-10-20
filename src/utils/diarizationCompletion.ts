@@ -89,20 +89,26 @@ export function withoutRemovedSegments<
 }
 
 // Merges main's result into this session's rows only: the first `seedLength`
-// rows are a resumed note's earlier sessions and stay as saved.
+// rows are a resumed note's earlier sessions and stay as saved. `removedCount`
+// is how many of this session's rows were dropped.
 export function mergeSessionDiarization(params: {
   existing: TranscriptSegment[];
   seedLength: number;
   segments: Array<Omit<TranscriptSegment, "id"> & { id?: string }>;
   removedSegments?: RemovedTranscriptSegment[] | null;
-}): TranscriptSegment[] {
+}): { segments: TranscriptSegment[]; removedCount: number } {
   const { existing, seedLength, segments, removedSegments } = params;
   const seededCount = Math.min(seedLength, existing.length);
-  return [
-    ...existing.slice(0, seededCount),
-    ...mergeTranscriptSegments(
-      withoutRemovedSegments(existing.slice(seededCount), removedSegments),
-      segments.map((segment, index) => ({ ...segment, id: segment.id || `diarized-${index}` }))
-    ),
-  ];
+  const sessionRows = existing.slice(seededCount);
+  const keptRows = withoutRemovedSegments(sessionRows, removedSegments);
+  return {
+    segments: [
+      ...existing.slice(0, seededCount),
+      ...mergeTranscriptSegments(
+        keptRows,
+        segments.map((segment, index) => ({ ...segment, id: segment.id || `diarized-${index}` }))
+      ),
+    ],
+    removedCount: sessionRows.length - keptRows.length,
+  };
 }
