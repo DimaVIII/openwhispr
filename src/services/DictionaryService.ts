@@ -8,6 +8,8 @@ interface DictionaryEntryInput {
   client_dict_id?: string;
   created_at?: string;
   updated_at?: string;
+  // Set once the word was shared into a team list; null makes it plain personal.
+  shared_at: string | null;
 }
 
 export interface CloudDictionaryEntry {
@@ -16,6 +18,8 @@ export interface CloudDictionaryEntry {
   word: string;
   source: DictionarySource;
   deleted_at: string | null;
+  // Absent from an API that predates sharing.
+  shared_at?: string | null;
   created_at: string;
   updated_at: string;
 }

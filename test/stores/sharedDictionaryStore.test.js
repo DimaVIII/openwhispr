@@ -1,0 +1,149 @@
+// The shared dictionary store follows workspaceStore's active workspace: every
+// change empties the hints at once, then publishes the new workspace's words
+// from the local mirror. Loads started under an older generation never publish.
+
+const test = require("node:test");
+const assert = require("node:assert/strict");
+
+const harness = require("../helpers/harness/browserGlobals.js");
+const {
+  cloudEntry,
+  createSharedDictionaryDb,
+} = require("../helpers/harness/sharedDictionaryFakes.js");
+
+const W1 = "11111111-1111-4111-8111-111111111111";
+const W2 = "22222222-2222-4222-8222-222222222222";
+const W3 = "44444444-4444-4444-8444-444444444444";
+const EMPTY = { space: [], workspace: [] };
+
+const flush = () => new Promise((resolve) => setImmediate(resolve));
+
+function workspace(id) {
+  return { id, name: id, slug: id, my_role: "member" };
+}
+
+async function setup(t, { workspaces = [] } = {}) {
+  harness.resetBrowserGlobals();
+  harness.installBrowserGlobals();
+  const db = createSharedDictionaryDb();
+  db.seed(W1, { entries: [cloudEntry(W1, "Qdrant")] });
+  db.seed(W2, { entries: [cloudEntry(W2, "Biscuit")] });
+  const sentToMain = [];
+  harness.window.electronAPI = {
+    ...db.api,
+    setSharedDictionaryHints: async (hints) => {
+      sentToMain.push(hints);
+    },
+    cloudApiRequest: async ({ path }) =>
+      path === "/api/workspaces"
+        ? { success: true, data: { data: workspaces } }
+        : { success: false, status: 404 },
+  };
+
+  const { useWorkspaceStore } = require("../../src/stores/workspaceStore.ts");
+  const { useSharedDictionaryStore } = require("../../src/stores/sharedDictionaryStore.ts");
+  const { useSettingsStore } = require("../../src/stores/settingsStore.ts");
+  useWorkspaceStore.getState().resetForAccountChange();
+  await flush();
+  sentToMain.length = 0;
+
+  const hints = () => useSettingsStore.getState().sharedDictionaryHints;
+  const persisted = () => JSON.parse(harness.localStorage.getItem("sharedDictionaryHints"));
+  return {
+    db,
+    sentToMain,
+    hints,
+    persisted,
+    useWorkspaceStore,
+    useSharedDictionaryStore,
+    setWorkspaces(next) {
+      workspaces = next;
+    },
+  };
+}
+
+test("switching active workspace reloads hints", async (t) => {
+  const ctx = await setup(t);
+  ctx.useWorkspaceStore.getState().setActiveWorkspaceId(W1);
+  await flush();
+  assert.deepEqual(ctx.hints(), { space: [], workspace: ["Qdrant"] });
+  const generation = ctx.useSharedDictionaryStore.getState().generation;
+
+  ctx.useWorkspaceStore.getState().setActiveWorkspaceId(W2);
+
+  // Emptied synchronously, for this window, the other windows and main.
+  assert.deepEqual(ctx.hints(), EMPTY);
+  assert.deepEqual(ctx.persisted(), { workspaceId: W2, ...EMPTY });
+  assert.deepEqual(ctx.sentToMain.at(-1), EMPTY);
+  const state = ctx.useSharedDictionaryStore.getState();
+  assert.equal(state.workspaceId, W2);
+  assert.equal(state.generation, generation + 1);
+  assert.equal(state.snapshot, null);
+
+  await flush();
+  assert.deepEqual(ctx.hints(), { space: [], workspace: ["Biscuit"] });
+  assert.deepEqual(ctx.persisted(), { workspaceId: W2, space: [], workspace: ["Biscuit"] });
+  assert.deepEqual(ctx.sentToMain.at(-1), { space: [], workspace: ["Biscuit"] });
+  assert.deepEqual(
+    ctx.useSharedDictionaryStore.getState().snapshot.entries.map((entry) => entry.word),
+    ["Biscuit"]
+  );
+});
+
+test("refresh() auto-selecting the only workspace loads its hints", async (t) => {
+  const ctx = await setup(t, { workspaces: [workspace(W1)] });
+  assert.equal(ctx.useWorkspaceStore.getState().activeWorkspaceId, null);
+
+  await ctx.useWorkspaceStore.getState().refresh();
+  await flush();
+
+  assert.equal(ctx.useSharedDictionaryStore.getState().workspaceId, W1);
+  assert.deepEqual(ctx.hints(), { space: [], workspace: ["Qdrant"] });
+});
+
+test("refresh() dropping the active workspace empties hints", async (t) => {
+  const ctx = await setup(t, { workspaces: [workspace(W1)] });
+  ctx.useWorkspaceStore.getState().setActiveWorkspaceId(W1);
+  await flush();
+  assert.deepEqual(ctx.hints().workspace, ["Qdrant"]);
+
+  // The member left W1 and belongs to two others: nothing is auto-selected.
+  ctx.setWorkspaces([workspace(W2), workspace(W3)]);
+  await ctx.useWorkspaceStore.getState().refresh();
+  await flush();
+
+  assert.equal(ctx.useWorkspaceStore.getState().activeWorkspaceId, null);
+  assert.equal(ctx.useSharedDictionaryStore.getState().workspaceId, null);
+  assert.deepEqual(ctx.hints(), EMPTY);
+  assert.deepEqual(ctx.persisted(), { workspaceId: null, ...EMPTY });
+});
+
+test("a load from an older generation never publishes", async (t) => {
+  const ctx = await setup(t);
+  ctx.useWorkspaceStore.getState().setActiveWorkspaceId(W1);
+  await flush();
+  const { generation } = ctx.useSharedDictionaryStore.getState();
+  ctx.db.seed(W1, { entries: [cloudEntry(W1, "Orukeet")] });
+
+  await ctx.useSharedDictionaryStore.getState().load(W1, generation - 1);
+  assert.deepEqual(ctx.hints().workspace, ["Qdrant"]);
+  await ctx.useSharedDictionaryStore.getState().load(W2, generation);
+  assert.deepEqual(ctx.hints().workspace, ["Qdrant"], "nor one for another workspace");
+
+  await ctx.useSharedDictionaryStore.getState().reload();
+  assert.deepEqual(ctx.hints().workspace, ["Qdrant", "Orukeet"]);
+});
+
+test("an account change empties the hints", async (t) => {
+  const ctx = await setup(t);
+  ctx.useWorkspaceStore.getState().setActiveWorkspaceId(W1);
+  await flush();
+  ctx.useSharedDictionaryStore.getState().setRequestedList("workspace");
+
+  ctx.useWorkspaceStore.getState().resetForAccountChange();
+
+  assert.deepEqual(ctx.hints(), EMPTY);
+  const state = ctx.useSharedDictionaryStore.getState();
+  assert.equal(state.workspaceId, null);
+  assert.equal(state.requestedList, null);
+});

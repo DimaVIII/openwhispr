@@ -4,6 +4,7 @@ import {
   noteAwaitsCloudResolution,
 } from "../helpers/noteFieldSync.js";
 import type {
+  DictionaryEntryItem,
   NoteItem,
   FolderItem,
   SpaceItem,
@@ -17,7 +18,8 @@ import { FoldersService } from "./FoldersService.js";
 import { SpacesService, type MySpace } from "./SpacesService.js";
 import { TranscriptionsService } from "./TranscriptionsService.js";
 import { syncPendingAnalytics } from "./AnalyticsService.js";
-import { DictionaryService } from "./DictionaryService.js";
+import { DictionaryService, type CloudDictionaryEntry } from "./DictionaryService.js";
+import { SharedDictionaryService } from "./SharedDictionaryService";
 import { SnippetService, type CloudSnippetEntry } from "./SnippetService.js";
 import { CloudApiError, isAuthContextError } from "./cloudApi.js";
 import { LeaderboardService } from "./LeaderboardService";
@@ -42,6 +44,23 @@ import {
   isCloudBackupAllowed,
 } from "../stores/policyRules";
 import { usePolicyStore } from "../stores/policyStore";
+import { useSettingsStore } from "../stores/settingsStore";
+import {
+  SHARED_DICTIONARY_CAPABILITY_KEY,
+  useSharedDictionaryStore,
+} from "../stores/sharedDictionaryStore";
+import { useWorkspaceStore } from "../stores/workspaceStore";
+import { EMPTY_SHARED_HINTS, selectSharedHintWords } from "../utils/sharedDictionaryHints";
+import type {
+  CloudSharedEntry,
+  CloudSharedHide,
+  SharedContributor,
+  SharedDictionaryHideRecord,
+  SharedDictionaryMeta,
+  SharedDictionaryPage,
+  SharedDictionarySnapshot,
+  SharedScope,
+} from "../types/sharedDictionary";
 import {
   buildNoteCreatePayload,
   buildNoteUpdatePayload,
@@ -169,6 +188,137 @@ const PURGED_SPACE_GUARD_LOCK = "openwhispr-purged-spaces";
 // written only inside the SYNC_ALL_LOCK pass, so it needs no lock of its own.
 const NOTE_UPDATE_404_KEY = "noteUpdate404Counts";
 const FOLDER_UPDATE_404_KEY = "folderUpdate404Counts";
+
+const SHARED_DICTIONARY_PAGE_LIMIT = 200;
+// Writers on different lists can commit out of updated_at order, so every
+// delta re-reads this much before the stored cursor; re-applied rows are no-ops.
+const SHARED_DICTIONARY_READ_OVERLAP_MS = 10_000;
+// Covers both cursor families: lastSyncedAt.sharedDictionary.<ws> and
+// lastSyncedAt.sharedDictionaryHides.<ws>, each with an `.id` companion.
+const SHARED_DICTIONARY_CURSOR_PREFIX = "lastSyncedAt.sharedDictionary";
+const SHARED_DICTIONARY_WELCOMED_PREFIX = "sharedDictionaryWelcomed.";
+// Personal rows pulled before shared_at existed never got it; one full re-read
+// of the personal dictionary picks it up.
+const DICTIONARY_SHARED_AT_BACKFILL_KEY = "dictionarySharedAtBackfill";
+
+interface SharedCursor {
+  at: string;
+  id: string | null;
+}
+
+const sharedEntriesCursorKey = (workspaceId: string): string =>
+  `${SHARED_DICTIONARY_CURSOR_PREFIX}.${workspaceId}`;
+const sharedHidesCursorKey = (workspaceId: string): string =>
+  `${SHARED_DICTIONARY_CURSOR_PREFIX}Hides.${workspaceId}`;
+
+function readSharedCursor(key: string): SharedCursor | null {
+  const at = localStorage.getItem(key);
+  if (!at || Number.isNaN(Date.parse(at))) return null;
+  return { at, id: localStorage.getItem(`${key}.id`) };
+}
+
+// The stored cursor never moves backwards, whatever the server clock says.
+function writeSharedCursor(
+  key: string,
+  previous: SharedCursor | null,
+  at: string | undefined,
+  id: string | null
+): void {
+  const next =
+    at && !Number.isNaN(Date.parse(at)) && (!previous || Date.parse(at) >= Date.parse(previous.at))
+      ? at
+      : previous?.at;
+  if (!next) return;
+  localStorage.setItem(key, next);
+  const nextId = id ?? previous?.id ?? null;
+  if (nextId) localStorage.setItem(`${key}.id`, nextId);
+  else localStorage.removeItem(`${key}.id`);
+}
+
+function clearSharedCursors(workspaceId: string): void {
+  for (const key of [sharedEntriesCursorKey(workspaceId), sharedHidesCursorKey(workspaceId)]) {
+    localStorage.removeItem(key);
+    localStorage.removeItem(`${key}.id`);
+  }
+}
+
+function removeLocalStorageKeysWithPrefix(prefix: string): void {
+  const keys: string[] = [];
+  for (let index = 0; index < localStorage.length; index++) {
+    const key = localStorage.key(index);
+    if (key?.startsWith(prefix)) keys.push(key);
+  }
+  for (const key of keys) localStorage.removeItem(key);
+}
+
+function overlappedSince(cursor: SharedCursor): string {
+  return new Date(Date.parse(cursor.at) - SHARED_DICTIONARY_READ_OVERLAP_MS).toISOString();
+}
+
+const scopeKey = (scope: SharedScope): string => scope.space_id ?? "workspace";
+
+// A list the stored meta didn't have (a member added to a space, a restored
+// space, the member re-added): rows pruned earlier are unchanged on the
+// server, so only a snapshot brings them back.
+function hasReturningScope(stored: SharedScope[], incoming: SharedScope[]): boolean {
+  const known = new Set(stored.map(scopeKey));
+  return incoming.some((scope) => !known.has(scopeKey(scope)));
+}
+
+// The API names only the contributors of the page it returns; later pages win.
+function mergeContributors(lists: SharedContributor[][]): SharedContributor[] {
+  const byUser = new Map<string, SharedContributor>();
+  for (const list of lists) {
+    for (const contributor of list) byUser.set(contributor.user_id, contributor);
+  }
+  return [...byUser.values()];
+}
+
+function countApplyingSharedWords(snapshot: SharedDictionarySnapshot | null | undefined): number {
+  if (!snapshot) return 0;
+  const hints = selectSharedHintWords(snapshot);
+  return hints.space.length + hints.workspace.length;
+}
+
+function isSharedDictionaryCursorExpired(err: unknown): boolean {
+  return (
+    err instanceof CloudApiError &&
+    err.status === 410 &&
+    err.code === "SHARED_DICTIONARY_CURSOR_EXPIRED"
+  );
+}
+
+// The member can't read this workspace's lists any more.
+function isSharedDictionaryAccessLost(err: unknown): boolean {
+  return (
+    err instanceof CloudApiError &&
+    ((err.status === 404 && err.code === "SHARED_DICTIONARY_NOT_MEMBER") ||
+      (err.status === 403 && err.code === "SSO_REQUIRED"))
+  );
+}
+
+type SharedEntriesPull = "snapshot" | "delta" | "scopesReturned";
+
+// batch-create takes shared_at as an ISO timestamp with an offset.
+function toCloudSharedAt(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value);
+  const ms = Date.parse(hasZone ? value : normalizeTimestamp(value));
+  return Number.isNaN(ms) ? null : new Date(ms).toISOString();
+}
+
+// Same version on both sides, but the local row predates shared_at (pulled by
+// a build that didn't store it): take the cloud's. A pending local edit wins.
+function sharedAtOnlyDiffers(
+  cloudEntry: CloudDictionaryEntry,
+  local: DictionaryEntryItem,
+  cloudTs: string,
+  localTs: string
+): boolean {
+  if (cloudTs !== localTs || local.sync_status === "pending") return false;
+  if (cloudEntry.shared_at === undefined) return false;
+  return Boolean(cloudEntry.shared_at) !== Boolean(local.shared_at);
+}
 
 interface ConversationCreateSource {
   client_conversation_id?: string | null;
@@ -417,6 +567,18 @@ export class SyncService {
     // Both hold account-scoped/local numeric ids that collide across accounts.
     localStorage.removeItem("activeWorkspaceId");
     localStorage.removeItem("notesTree.expanded");
+    // Shared lists, hides and the arrival toast belong to the departing account.
+    removeLocalStorageKeysWithPrefix(SHARED_DICTIONARY_CURSOR_PREFIX);
+    removeLocalStorageKeysWithPrefix(SHARED_DICTIONARY_WELCOMED_PREFIX);
+    localStorage.removeItem(SHARED_DICTIONARY_CAPABILITY_KEY);
+    useSharedDictionaryStore.getState().resetForAccountChange();
+    try {
+      await window.electronAPI?.clearSharedDictionary?.();
+    } catch (err) {
+      // Never block sign-out; the cleared cursors make the next account
+      // snapshot (and replace) whatever is left.
+      console.error("Shared dictionary cleanup failed:", err);
+    }
   }
 
   // lastSyncedAt is written only when a syncAll() pass completes, and
@@ -513,6 +675,9 @@ export class SyncService {
       await navigator.locks.request(SYNC_ALL_LOCK, { ifAvailable: !waitForLock }, async (lock) => {
         if (!lock) return;
         teamSpacesReady = await this.syncSpaces(authGeneration);
+        if (!hasValidatedAuthContext()) return;
+        // Both branches below: shared lists follow membership, not cloud backup.
+        await this.syncSharedDictionary(authGeneration);
         if (!hasValidatedAuthContext()) return;
         if (full) {
           await this.syncFolders();
@@ -641,6 +806,20 @@ export class SyncService {
       console.error("Dictionary sync failed:", err);
     } finally {
       this.syncing = false;
+    }
+  }
+
+  // The Dictionary page's Sync button. Waits for the sync lock rather than
+  // flagging a re-run: a running syncAll() may already be past its shared pass.
+  async syncSharedDictionaryNow(): Promise<void> {
+    if (!this.canSyncTeamSpaces()) return;
+    const authGeneration = getValidatedAuthGeneration();
+    if (authGeneration == null) return;
+    try {
+      await navigator.locks.request(SYNC_ALL_LOCK, () => this.syncSharedDictionary(authGeneration));
+    } catch (err) {
+      if (isAuthContextError(err)) return;
+      console.error("Shared dictionary sync failed:", err);
     }
   }
 
@@ -2593,6 +2772,9 @@ export class SyncService {
             source: e.source,
             created_at: e.created_at,
             updated_at: e.updated_at,
+            // A plain re-push clears shared_at on the server, so a moved word
+            // must resend it.
+            shared_at: toCloudSharedAt(e.shared_at),
           }))
         );
         const byClientId = new Map(created.map((c) => [c.client_dict_id, c]));
@@ -2678,7 +2860,11 @@ export class SyncService {
           // Last-writer-wins on normalized timestamps (see normalizeTimestamp).
           const cloudTs = normalizeTimestamp(cloudEntry.updated_at);
           const localTs = local ? normalizeTimestamp(local.updated_at) : "";
-          if (!local || cloudTs > localTs) {
+          if (
+            !local ||
+            cloudTs > localTs ||
+            sharedAtOnlyDiffers(cloudEntry, local, cloudTs, localTs)
+          ) {
             await window.electronAPI.upsertDictionaryFromCloud?.(
               cloudEntry as unknown as Record<string, unknown>
             );
@@ -2707,6 +2893,272 @@ export class SyncService {
       if (changed) await window.electronAPI.broadcastDictionaryUpdated?.();
     } catch (err) {
       console.error("Dictionary pull failed:", err);
+    }
+  }
+
+  private backfillPersonalSharedAt(): void {
+    if (localStorage.getItem(DICTIONARY_SHARED_AT_BACKFILL_KEY) != null) return;
+    localStorage.removeItem("lastSyncedAt.dictionary");
+    localStorage.removeItem("lastSyncedAt.dictionary.id");
+    localStorage.setItem(DICTIONARY_SHARED_AT_BACKFILL_KEY, "true");
+  }
+
+  /**
+   * Mirrors the active workspace's shared lists and the member's hides. DB
+   * writes are keyed by workspace and always safe; publishing (the store's
+   * load, the hints) and the arrival event happen only while the account and
+   * workspace the pass started under are still current.
+   */
+  private async syncSharedDictionary(authGeneration: number): Promise<void> {
+    this.backfillPersonalSharedAt();
+    const store = useSharedDictionaryStore.getState();
+    const generation = store.generation;
+    const workspaceId = useWorkspaceStore.getState().activeWorkspaceId;
+    const isCurrent = (): boolean => {
+      const current = useSharedDictionaryStore.getState();
+      return current.generation === generation && current.workspaceId === workspaceId;
+    };
+    const api = window.electronAPI;
+
+    try {
+      const required = [
+        "getSharedDictionary",
+        "applySharedDictionaryPull",
+        "replaceSharedDictionary",
+        "applySharedDictionaryHides",
+        "replaceSharedDictionaryHides",
+        "clearSharedDictionary",
+      ] as const;
+      const missing = required.filter((name) => typeof api?.[name] !== "function");
+      if (missing.length > 0) {
+        throw new Error(
+          `Shared dictionary IPC bindings missing — preload out of date: ${missing.join(", ")}`
+        );
+      }
+
+      if (!workspaceId) {
+        await api.clearSharedDictionary!();
+        removeLocalStorageKeysWithPrefix(SHARED_DICTIONARY_CURSOR_PREFIX);
+        if (isCurrent()) {
+          useSettingsStore.getState().setSharedDictionaryHints(EMPTY_SHARED_HINTS, null);
+        }
+        return;
+      }
+
+      if (isCurrent()) store.setSyncing(true);
+      const before = await api.getSharedDictionary!(workspaceId);
+      await this.pullSharedDictionary(workspaceId, before.meta, authGeneration);
+      store.setStatus("ready");
+
+      if (!isCurrent()) return;
+      await store.load(workspaceId, generation);
+      if (!isCurrent()) return;
+      this.announceSharedDictionaryArrival(workspaceId, countApplyingSharedWords(before));
+    } catch (err) {
+      if (isAuthContextError(err)) throw err;
+      if (workspaceId && isSharedDictionaryAccessLost(err)) {
+        clearSharedCursors(workspaceId);
+        this.teamPassMovedWork = true;
+        try {
+          await api?.clearSharedDictionary?.(workspaceId);
+        } catch (clearErr) {
+          console.error("Shared dictionary cleanup failed:", clearErr);
+        }
+        if (isCurrent()) await store.load(workspaceId, generation);
+        return;
+      }
+      // A plain 404 is an API without the shared dictionary routes: nothing
+      // to sync, nothing to tell the user.
+      if (isHttpStatus(err, 404)) {
+        store.setStatus("unavailable");
+        return;
+      }
+      console.error("Shared dictionary sync failed:", err);
+    } finally {
+      if (isCurrent()) useSharedDictionaryStore.getState().setSyncing(false);
+    }
+  }
+
+  private announceSharedDictionaryArrival(workspaceId: string, applyingBefore: number): void {
+    const welcomedKey = `${SHARED_DICTIONARY_WELCOMED_PREFIX}${workspaceId}`;
+    const count = countApplyingSharedWords(useSharedDictionaryStore.getState().snapshot);
+    if (applyingBefore > 0 || count === 0 || localStorage.getItem(welcomedKey) != null) return;
+    localStorage.setItem(welcomedKey, "true");
+    window.dispatchEvent(
+      new CustomEvent("shared-dictionary-arrived", { detail: { workspaceId, count } })
+    );
+  }
+
+  // An expired cursor or a returning list re-runs the whole pass as a snapshot,
+  // once; a snapshot can neither expire nor bring a list back.
+  private async pullSharedDictionary(
+    workspaceId: string,
+    storedMeta: SharedDictionaryMeta | null,
+    authGeneration: number
+  ): Promise<void> {
+    let forceSnapshot = false;
+    while (true) {
+      try {
+        const entries = await this.pullSharedEntries(
+          workspaceId,
+          forceSnapshot ? null : storedMeta,
+          authGeneration
+        );
+        if (entries === "scopesReturned") {
+          clearSharedCursors(workspaceId);
+          forceSnapshot = true;
+          continue;
+        }
+        await this.pullSharedHides(workspaceId, entries === "snapshot", authGeneration);
+        return;
+      } catch (err) {
+        if (forceSnapshot || !isSharedDictionaryCursorExpired(err)) throw err;
+        clearSharedCursors(workspaceId);
+        forceSnapshot = true;
+      }
+    }
+  }
+
+  private async pullSharedEntries(
+    workspaceId: string,
+    storedMeta: SharedDictionaryMeta | null,
+    authGeneration: number
+  ): Promise<SharedEntriesPull> {
+    const api = window.electronAPI;
+    const key = sharedEntriesCursorKey(workspaceId);
+    const stored = readSharedCursor(key);
+    const limit = SHARED_DICTIONARY_PAGE_LIMIT;
+
+    // No cursor, or no mirror to apply a delta to: page the whole snapshot
+    // into memory and write it once, so a pass cut short never half-replaces.
+    if (!stored || !storedMeta) {
+      const entries: CloudSharedEntry[] = [];
+      const contributors: SharedContributor[][] = [];
+      let page: SharedDictionaryPage = { limit };
+      while (true) {
+        const response = await SharedDictionaryService.list(workspaceId, page);
+        await assertAuthGenerationCurrent(authGeneration);
+        entries.push(...response.entries);
+        contributors.push(response.contributors);
+        if (response.hasMore) {
+          const last = response.entries.at(-1);
+          if (!last || (last.created_at === page.cursor && last.id === page.cursorId)) {
+            throw new Error("Shared dictionary snapshot stopped advancing");
+          }
+          page = { cursor: last.created_at, cursorId: last.id, limit };
+          continue;
+        }
+        const meta: SharedDictionaryMeta = {
+          scopes: response.scopes,
+          contributors: mergeContributors(contributors),
+          paused: response.paused,
+        };
+        const result = await api.replaceSharedDictionary!(workspaceId, { entries, meta });
+        if (result?.changed) this.teamPassMovedWork = true;
+        writeSharedCursor(key, null, response.server_time, entries.at(-1)?.id ?? null);
+        return "snapshot";
+      }
+    }
+
+    // Starts before the stored cursor (see SHARED_DICTIONARY_READ_OVERLAP_MS),
+    // with no since_id, and re-applies the overlap idempotently.
+    const contributors: SharedContributor[][] = [storedMeta.contributors];
+    let page: SharedDictionaryPage = { since: overlappedSince(stored), limit };
+    let lastId: string | null = null;
+    while (true) {
+      const response = await SharedDictionaryService.list(workspaceId, page);
+      await assertAuthGenerationCurrent(authGeneration);
+      contributors.push(response.contributors);
+      const upserts = response.entries.filter((entry) => !entry.deleted_at);
+      const deletedIds = response.entries
+        .filter((entry) => entry.deleted_at)
+        .map((entry) => entry.id);
+      const last = response.entries.at(-1);
+      if (last) lastId = last.id;
+
+      if (response.hasMore) {
+        const result = await api.applySharedDictionaryPull!(workspaceId, { upserts, deletedIds });
+        if (result?.changed) this.teamPassMovedWork = true;
+        // Stall guard: the next request must start after this one.
+        if (!last || (last.updated_at === page.since && last.id === page.sinceId)) {
+          throw new Error("Shared dictionary delta stopped advancing");
+        }
+        page = { since: last.updated_at, sinceId: last.id, limit };
+        continue;
+      }
+
+      if (hasReturningScope(storedMeta.scopes, response.scopes)) return "scopesReturned";
+      const meta: SharedDictionaryMeta = {
+        scopes: response.scopes,
+        contributors: mergeContributors(contributors),
+        paused: response.paused,
+      };
+      const result = await api.applySharedDictionaryPull!(workspaceId, {
+        upserts,
+        deletedIds,
+        meta,
+      });
+      if (result?.changed) this.teamPassMovedWork = true;
+      writeSharedCursor(key, stored, response.server_time, lastId);
+      return "delta";
+    }
+  }
+
+  private async pullSharedHides(
+    workspaceId: string,
+    snapshot: boolean,
+    authGeneration: number
+  ): Promise<void> {
+    const api = window.electronAPI;
+    const key = sharedHidesCursorKey(workspaceId);
+    const stored = snapshot ? null : readSharedCursor(key);
+    const limit = SHARED_DICTIONARY_PAGE_LIMIT;
+    const toRecord = (hide: CloudSharedHide): SharedDictionaryHideRecord => ({
+      entryId: hide.entry_id,
+      updatedAt: hide.updated_at,
+    });
+
+    if (!stored) {
+      const hidden: SharedDictionaryHideRecord[] = [];
+      let page: SharedDictionaryPage = { limit };
+      while (true) {
+        const response = await SharedDictionaryService.hides(workspaceId, page);
+        await assertAuthGenerationCurrent(authGeneration);
+        hidden.push(...response.hides.filter((hide) => !hide.deleted_at).map(toRecord));
+        if (response.hasMore) {
+          const last = response.hides.at(-1);
+          if (!last || (last.updated_at === page.cursor && last.entry_id === page.cursorId)) {
+            throw new Error("Shared dictionary hides snapshot stopped advancing");
+          }
+          page = { cursor: last.updated_at, cursorId: last.entry_id, limit };
+          continue;
+        }
+        await api.replaceSharedDictionaryHides!(workspaceId, hidden);
+        writeSharedCursor(key, null, response.server_time, hidden.at(-1)?.entryId ?? null);
+        return;
+      }
+    }
+
+    let page: SharedDictionaryPage = { since: overlappedSince(stored), limit };
+    let lastId: string | null = null;
+    while (true) {
+      const response = await SharedDictionaryService.hides(workspaceId, page);
+      await assertAuthGenerationCurrent(authGeneration);
+      const result = await api.applySharedDictionaryHides!(workspaceId, {
+        hidden: response.hides.filter((hide) => !hide.deleted_at).map(toRecord),
+        unhidden: response.hides.filter((hide) => hide.deleted_at).map((hide) => hide.entry_id),
+      });
+      if (result?.changed) this.teamPassMovedWork = true;
+      const last = response.hides.at(-1);
+      if (last) lastId = last.entry_id;
+      if (!response.hasMore) {
+        writeSharedCursor(key, stored, response.server_time, lastId);
+        return;
+      }
+      if (!last || (last.updated_at === page.since && last.entry_id === page.sinceId)) {
+        throw new Error("Shared dictionary hides delta stopped advancing");
+      }
+      page = { since: last.updated_at, sinceId: last.entry_id, limit };
     }
   }
 
