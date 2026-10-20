@@ -11,6 +11,7 @@ import { SnippetsView } from '@/components/features/SnippetsView';
 import { SyncStatusLabel } from '@/components/notes/SyncStatusLabel';
 import { useDictionaryStore, type DictionaryEntry } from '@/store/useDictionaryStore';
 import { safeHaptics, formatRelativeTime } from '@/lib/utils';
+import { useSharedDictionaryStore } from '@/store/useSharedDictionaryStore';
 import { iosColor } from '@/config/colors';
 
 type Filter = 'all' | 'manual' | 'learned';
@@ -147,6 +148,18 @@ function EntryList({
   );
 }
 
+// Shared words apply to dictation but are managed on desktop, so this is read-only.
+function SharedDictionaryLine({ className }: { className?: string }) {
+  const summary = useSharedDictionaryStore((s) => s.summary);
+  if (!summary) return null;
+  const { count, workspaceName } = summary;
+  const text =
+    count === 1
+      ? `1 team word from ${workspaceName} also applies. Manage them on desktop.`
+      : `${count} team words from ${workspaceName} also apply. Manage them on desktop.`;
+  return <Text className={`text-[12px] text-tertiaryLabel ${className ?? ''}`}>{text}</Text>;
+}
+
 function EmptyState({ onAdd }: { onAdd: () => void }) {
   return (
     <View className="flex-1 items-center px-8 pt-12">
@@ -176,6 +189,7 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
         <SystemIcon name="plus" mdName="Plus" size={15} color="#fff" />
         <Text className="text-[15px] font-semibold text-white">Add your first word</Text>
       </Pressable>
+      <SharedDictionaryLine className="mt-6 text-center" />
     </View>
   );
 }
@@ -216,7 +230,8 @@ function ModeToggle({ mode, onChange }: { mode: Mode; onChange: (mode: Mode) => 
 }
 
 export default function DictionaryScreen() {
-  const entries = useDictionaryStore((s) => s.entries);
+  const allEntries = useDictionaryStore((s) => s.entries);
+  const sharedWordsLower = useSharedDictionaryStore((s) => s.sharedWordsLower);
   const isLoaded = useDictionaryStore((s) => s.isLoaded);
   const load = useDictionaryStore((s) => s.load);
   const addWords = useDictionaryStore((s) => s.addWords);
@@ -229,6 +244,14 @@ export default function DictionaryScreen() {
   useEffect(() => {
     if (!isLoaded) load();
   }, [isLoaded, load]);
+
+  // A word moved into a shared list stays a personal row, but it is listed once:
+  // under the team words, until its shared copy is gone.
+  const entries = useMemo(
+    () =>
+      allEntries.filter((e) => !(e.sharedAt && sharedWordsLower.has(e.word.trim().toLowerCase()))),
+    [allEntries, sharedWordsLower],
+  );
 
   const counts = useMemo(() => {
     let manual = 0;
@@ -306,6 +329,7 @@ export default function DictionaryScreen() {
 
               <View className="mx-4">
                 <SyncStatusLabel />
+                <SharedDictionaryLine />
               </View>
 
               <ScrollView
