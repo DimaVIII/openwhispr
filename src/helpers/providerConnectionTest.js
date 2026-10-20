@@ -6,7 +6,9 @@ const ENDPOINTS = {
   // The largest page each API allows, so a valid but older model is still listed.
   anthropic: "https://api.anthropic.com/v1/models?limit=1000",
   gemini: "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000",
-  openrouter: "https://openrouter.ai/api/v1/models",
+  // OpenRouter's model list is public, so it cannot vouch for a key. The key route
+  // describes the key that calls it.
+  openrouter: "https://openrouter.ai/api/v1/key",
   corti: "https://ai.eu.corti.app/v1/models",
   // Public too, so it vouches only for the model; testTinfoilKey checks the key.
   tinfoil: "https://inference.tinfoil.sh/v1/models",
@@ -155,6 +157,15 @@ function buildModelEndpoints(base) {
   });
 }
 
+// Where the app sends a custom server's audio: buildApiUrl(normalizeBaseUrl(url),
+// "/audio/transcriptions") in src/config/constants.ts and transcriptionRoute.ts.
+// buildApiUrl normalises its base again, which strips a suffix a trailing slash hid
+// from the first pass, so this address takes the same two passes.
+function buildTranscriptionEndpoint(base) {
+  const { path, query, hash } = splitUrlDecorators(normalizeBaseUrl(normalizeBaseUrl(base)));
+  return joinUrlDecorators(`${path}/audio/transcriptions`, query, hash);
+}
+
 function resolveProviderRequest(config) {
   const provider = String(config?.provider || "").toLowerCase();
   const apiKey = typeof config?.apiKey === "string" ? config.apiKey.trim() : "";
@@ -164,6 +175,7 @@ function resolveProviderRequest(config) {
   // Authorization across origins), so a redirect fails the check instead. Custom
   // servers may redirect within themselves, such as adding a trailing slash.
   let redirect = "error";
+  let transcriptionEndpoint;
 
   if (provider === "openai") {
     const override = normalizeBaseUrl(
@@ -196,6 +208,7 @@ function resolveProviderRequest(config) {
       );
     }
     endpoints = buildModelEndpoints(parsed.toString());
+    transcriptionEndpoint = buildTranscriptionEndpoint(parsed.toString());
     redirect = "follow";
   }
 
@@ -225,7 +238,7 @@ function resolveProviderRequest(config) {
     }
   }
 
-  return { endpoint: endpoints[0], endpoints, headers, redirect };
+  return { endpoint: endpoints[0], endpoints, headers, redirect, transcriptionEndpoint };
 }
 
 // When several candidate endpoints fail, report the most actionable failure. An answer that
@@ -407,9 +420,11 @@ async function testProviderConnection(
 
   const model = String(config?.model || "").trim();
   let failure = null;
+  let everyListMissing = true;
   for (const endpoint of request.endpoints) {
     const next = await probe(endpoint, request, fetchImpl, async (response) => {
       if (!response.ok) return describeResponseFailure(response, provider);
+      if (provider === "openrouter") return describeOpenRouterKey(response);
       // AssemblyAI's probe lists transcripts, not models, so a 200 is the whole signal.
       if (provider === "assemblyai" || (await responseOffersModel(response, model, provider))) {
         return null;
@@ -421,9 +436,50 @@ async function testProviderConnection(
         ? testTinfoilKey(request, config.apiKey.trim(), fetchImpl, runPaidCheck)
         : { success: true };
     }
+    everyListMissing = everyListMissing && next.status === 404;
     failure = pickFailure(failure, next);
   }
+  if (everyListMissing && provider === "custom" && config?.scope === "transcription") {
+    return testTranscriptionEndpoint(request, model, fetchImpl);
+  }
   return { success: false, ...failure };
+}
+
+// OpenRouter's key route describes the key that called it. A management key (formerly a
+// provisioning key) only administers other keys and can never run a request. Only a 200
+// carries that description; any other 2xx has no key to read, so it keeps its status.
+async function describeOpenRouterKey(response) {
+  if (response.status !== 200) return describeStatusFailure(response.status, "openrouter");
+  const key = (await readJson(response))?.data;
+  if (!key?.is_management_key && !key?.is_provisioning_key) return null;
+  return { ...describeStatusFailure(401, "openrouter"), status: response.status };
+}
+
+// A speech-only server may publish no model list. Its transcription address answers a
+// request that carries no audio with 400 or 422, which proves the address without
+// transcribing anything. The model is not checked.
+async function testTranscriptionEndpoint(request, model, fetchImpl) {
+  const body = new FormData();
+  body.append("model", model);
+  const failure = await probe(
+    request.transcriptionEndpoint,
+    request,
+    fetchImpl,
+    async (response) => {
+      if (response.status === 400 || response.status === 422) return null;
+      // Nothing takes transcriptions at this address.
+      if (response.status === 404 || response.status === 405) {
+        return {
+          errorCode: "transcriptionEndpointNotFound",
+          error: "Nothing takes transcriptions at this address.",
+          status: response.status,
+        };
+      }
+      return describeStatusFailure(response.status, "custom");
+    },
+    { method: "POST", body }
+  );
+  return failure ? { success: false, ...failure } : { success: true };
 }
 
 // Deepgram is checked by key alone, since its model names don't match the app's model ids.

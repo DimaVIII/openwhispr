@@ -218,6 +218,7 @@ const CLOUD_CHUNK_SEGMENT_SECONDS = 240;
 
 const { createAbortError } = require("./abortError");
 const { describeCortiTokenFailure, testProviderConnection } = require("./providerConnectionTest");
+const { createConnectionCheckCache } = require("./connectionCheckCache");
 const { PAID_KEY_CHECKS_FILE, createPaidKeyCheck } = require("./paidKeyCheck");
 const { createUploadCancelRegistry } = require("./uploadCancelRegistry");
 const { applyOpenWhisprOriginHeader } = require("./sessionHeaders");
@@ -1591,10 +1592,12 @@ class IPCHandlers {
       return true;
     });
 
+    // Every panel showing the same credentials and model shares one answer.
+    const cachedConnectionCheck = createConnectionCheckCache();
     const runPaidKeyCheck = createPaidKeyCheck(() =>
       path.join(app.getPath("userData"), PAID_KEY_CHECKS_FILE)
     );
-    ipcMain.handle("test-provider-connection", async (_event, config) => {
+    const checkProviderConnection = async (config) => {
       if (config?.provider === "corti" && config?.scope === "transcription") {
         try {
           const clientId = String(config.clientId || "").trim();
@@ -1618,7 +1621,10 @@ class IPCHandlers {
         }
       }
       return testProviderConnection(config, fetch, runPaidKeyCheck);
-    });
+    };
+    ipcMain.handle("test-provider-connection", (_event, config) =>
+      cachedConnectionCheck(config, () => checkProviderConnection(config))
+    );
 
     ipcMain.handle("window-minimize", () => {
       if (this.windowManager.controlPanelWindow) {
