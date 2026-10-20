@@ -93,6 +93,7 @@ function harness() {
     const armMeetingSystemAudioSilenceTimer = noop;
     const startMeetingSystemAudioWatchdog = noop;
     const flushPendingMeetingMicChunks = noop;
+    const setMeetingSystemAudioStrategy = noop;
     const flushPendingMicFinals = () => events.push("flush");
     const stopMeetingAec = asyncNoop;
     const startMeetingAec = asyncNoop;
