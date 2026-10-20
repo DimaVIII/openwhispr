@@ -131,6 +131,7 @@ export async function pushDictionary(checkpoint: SyncCheckpoint = uncheckedSync)
           source: entry.source,
           created_at: entry.createdAt ?? undefined,
           updated_at: entry.updatedAt ?? undefined,
+          ...(entry.sharedAt ? { shared_at: entry.sharedAt } : {}),
         },
       });
       continue;

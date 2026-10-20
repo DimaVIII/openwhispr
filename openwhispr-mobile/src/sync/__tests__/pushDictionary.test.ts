@@ -135,3 +135,56 @@ describe('pushDictionary POLICY_CLOUD_BACKUP_BLOCKED propagation', () => {
     expect(mockDb.update).toHaveBeenCalled();
   });
 });
+
+describe('pushDictionary shared_at on create', () => {
+  const SHARED_AT = '2026-10-20T09:00:00.000Z';
+
+  it('sends the stored shared_at when a pending create has one', async () => {
+    pendingRows = [entry({ remoteId: null, sharedAt: SHARED_AT })];
+    mockBatchCreate.mockResolvedValue([]);
+
+    await pushDictionary();
+
+    expect(mockBatchCreate).toHaveBeenCalledWith([
+      expect.objectContaining({ client_dict_id: 'client-dict-1', shared_at: SHARED_AT }),
+    ]);
+  });
+
+  it.each([[null], [undefined]])('omits shared_at when the row has %s', async (sharedAt) => {
+    pendingRows = [entry({ remoteId: null, sharedAt })];
+    mockBatchCreate.mockResolvedValue([]);
+
+    await pushDictionary();
+
+    const [payloads] = mockBatchCreate.mock.calls[0];
+    expect(payloads[0]).not.toHaveProperty('shared_at');
+  });
+
+  it('carries shared_at when a row is re-created after its update 404ed', async () => {
+    pendingRows = [entry({ remoteId: 'remote-dict-1', sharedAt: SHARED_AT })];
+    mockUpdate.mockRejectedValue({ status: 404, message: 'gone' });
+    await pushDictionary();
+    expect(mockBatchCreate).not.toHaveBeenCalled();
+
+    // The 404 cleared the remoteId, so the next run takes the create path.
+    pendingRows = [entry({ remoteId: null, sharedAt: SHARED_AT })];
+    mockBatchCreate.mockResolvedValue([]);
+    await pushDictionary();
+
+    expect(mockBatchCreate).toHaveBeenCalledWith([
+      expect.objectContaining({ shared_at: SHARED_AT }),
+    ]);
+  });
+
+  it('leaves the update payload unchanged', async () => {
+    pendingRows = [entry({ remoteId: 'remote-dict-1', sharedAt: SHARED_AT })];
+    mockUpdate.mockResolvedValue({ id: 'remote-dict-1', updated_at: SHARED_AT });
+
+    await pushDictionary();
+
+    expect(mockUpdate).toHaveBeenCalledWith('remote-dict-1', {
+      word: 'openwhispr',
+      source: 'manual',
+    });
+  });
+});

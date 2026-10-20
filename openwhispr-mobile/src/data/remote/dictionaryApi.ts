@@ -21,6 +21,9 @@ export interface DictionaryPushInput {
   client_dict_id: string;
   created_at?: string;
   updated_at?: string;
+  // The API clears shared_at on a plain batch-create of an existing word, so a
+  // row that was moved into a shared list must resend it.
+  shared_at?: string;
 }
 
 async function fetchList(
