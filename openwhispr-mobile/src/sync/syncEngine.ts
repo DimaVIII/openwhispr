@@ -19,7 +19,9 @@ import { pushDictionary } from './pushDictionary';
 import { pullSnippets } from './pullSnippets';
 import { pushSnippets } from './pushSnippets';
 import { syncSpaces, type SyncSpacesResult } from './syncSpaces';
+import { pullSharedDictionary } from './pullSharedDictionary';
 import { useDictionaryStore } from '@/store/useDictionaryStore';
+import { useSharedDictionaryStore } from '@/store/useSharedDictionaryStore';
 import { useSnippetsStore } from '@/store/useSnippetsStore';
 import { runInitialBackfillIfNeeded } from './initialBackfill';
 import { resetAllPullCursors } from './pullCursors';
@@ -186,11 +188,12 @@ function reconcileSyncIdentity(auth: ReturnType<typeof useAuthStore.getState>): 
       useNotesStore.getState().loadVoiceProfiles();
       useNotesStore.setState({ meetingSpeakerEmbeddingsByNoteId: {} });
       resetSubscriptionCache();
-      // Immediately clear in-memory dictionary + snippets so any UI/transcription
-      // path that reads them between now and the post-pull load() doesn't see the
-      // previous user's data.
+      // Immediately clear in-memory dictionary + snippets + shared words so any
+      // UI/transcription path that reads them between now and the post-pull
+      // load() doesn't see the previous user's data.
       useDictionaryStore.getState().reset();
       useSnippetsStore.getState().reset();
+      useSharedDictionaryStore.getState().reset();
     } else if (lastUserId) {
       // The rows stay, but the server migrated billing only: every remote id
       // and pull cursor on this device still belongs to the anonymous user.
@@ -224,6 +227,34 @@ async function retryPrivateNoteDeletes(checkpoint: SyncCheckpoint): Promise<void
     // A lost team permission must not prevent unrelated notes from syncing.
     Sentry.captureException(error, { tags: { sync: 'private-note-deletion' } });
   }
+}
+
+// Shared dictionary words follow workspace membership, never cloud backup or a
+// personal subscription, so this runs for every signed-in account, whichever
+// branch the run takes. Isolated like snippets: a failure here never stops the
+// rest of the run. A missing endpoint is handled (quietly) inside the pull.
+async function syncSharedDictionary(checkpoint: SyncCheckpoint): Promise<void> {
+  try {
+    checkpoint();
+    await pullSharedDictionary(checkpoint);
+    checkpoint();
+  } catch (err) {
+    if (err instanceof SyncCancelledError) throw err;
+    if (isQuietNetworkError(err)) {
+      Sentry.addBreadcrumb({
+        category: 'sync',
+        message: 'shared dictionary pass: network-level error (offline?)',
+        level: 'info',
+        data: { err: String(err) },
+      });
+    } else {
+      Sentry.captureException(err, { tags: { sync: 'shared-dictionary' } });
+    }
+  }
+  useSharedDictionaryStore
+    .getState()
+    .load()
+    .catch((err) => Sentry.captureException(err, { tags: { sync: 'shared-dictionary-load' } }));
 }
 
 async function runSyncNow(reason: SyncReason): Promise<void> {
@@ -322,6 +353,9 @@ async function runSyncNow(reason: SyncReason): Promise<void> {
       message: `spaces (capable=${spacesResult.capable}, active=${spacesResult.activeSpaces.length})`,
       level: 'info',
     });
+
+    await syncSharedDictionary(checkpoint);
+    checkpoint();
 
     if (personalSyncAllowed) {
       await runInitialBackfillIfNeeded(userId, checkpoint);
@@ -560,11 +594,13 @@ export function initSyncTriggers(): void {
         resetSubscriptionCache();
         requestSync('sign-in');
       } else {
-        // Sign-out: clear in-memory dictionary + snippets so the previous
-        // user's data doesn't bleed into a guest session or transcription
-        // prompts before the next sync wipes/reloads SQLite.
+        // Sign-out: clear in-memory dictionary + snippets (and the shared
+        // words) so the previous user's data doesn't bleed into a guest
+        // session or transcription prompts before the next sync wipes/reloads
+        // SQLite.
         useDictionaryStore.getState().reset();
         useSnippetsStore.getState().reset();
+        useSharedDictionaryStore.getState().reset();
         // After a real account signs out, whoever signs in next is a new
         // account, not a link, so the next id change has to be free to wipe.
         // An anonymous session signing out keeps the link armed: the rows
