@@ -46,30 +46,15 @@ export function dictionaryPromptLimit({ provider = "", endpoint = "", model = ""
   return WHISPER_PROMPT_CHARS;
 }
 
-// Cuts at the last comma inside the budget so no entry is sent half-spelled.
-// Returns the (possibly shorter) prompt plus what changed, for logging.
-// Callers must classify dictionary echoes against the returned prompt, not the
-// original: the echo filter needs 70% of the prompt's words back, which a full
-// echo of a trimmed prompt only clears when measured against the same string.
-export function trimDictionaryPrompt(prompt, maxChars) {
-  if (!prompt || prompt.length <= maxChars) {
-    return { prompt, originalLength: prompt ? prompt.length : 0, truncated: false };
-  }
-  const head = prompt.slice(0, maxChars);
-  const lastComma = head.lastIndexOf(",");
-  return {
-    prompt: lastComma > 0 ? head.slice(0, lastComma) : head,
-    originalLength: prompt.length,
-    truncated: true,
-  };
-}
-
 // Builds the dictionary prompt from priority tiers (personal, space, workspace).
 // Whole words are kept greedily, highest tier first, so a long shared list can
 // only ever crowd out lower-priority words. They are emitted lowest tier first:
 // Whisper-family decoders keep the TAIL of an over-long prompt, so the user's
 // own words belong there. A personal-only list that fits is the plain
 // ", "-joined string it always was.
+// Callers must classify dictionary echoes against the returned prompt, not the
+// full list: the echo filter needs 70% of the prompt's words back, which a full
+// echo of a capped prompt only clears when measured against the same string.
 export function formatDictionaryPrompt(tiers, maxChars) {
   const kept = tiers.map(() => []);
   let length = 0;

@@ -140,13 +140,21 @@ import {
   payloadSendsDictionaryBias,
   stripTrailingDictionaryEcho,
 } from "../utils/dictionaryEchoFilter.js";
-import { dictionaryPromptLimit, trimDictionaryPrompt } from "../utils/dictionaryPromptCap.js";
+import {
+  dictionaryPromptLimit,
+  formatDictionaryPrompt,
+  WHISPER_PROMPT_CHARS,
+} from "../utils/dictionaryPromptCap.js";
 import {
   dictionaryKeywordOverflow,
   dictionaryKeywords,
   usesTranscriptionKeywords,
 } from "../utils/dictionaryKeywords.js";
-import { getDictionaryHintWords } from "../utils/snippets";
+import {
+  getDictionaryHintTiers,
+  getDictionaryHintWords,
+  getEffectiveDictionaryWords,
+} from "../utils/snippets";
 import { normalizeAgentSelectionContext } from "../utils/agentSelectionContext";
 import { getAgentName } from "../utils/agentName";
 import { shouldDisplayDictationPreview } from "../utils/transcriptionPreview";
@@ -831,9 +839,15 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     return this.workletBlobUrl;
   }
 
-  getCustomDictionaryPrompt() {
-    const words = getDictionaryHintWords(getSettings());
-    return words.length > 0 ? words.join(", ") : null;
+  // Personal words and snippet triggers end the prompt, where a Whisper decoder
+  // reads, and shared words are dropped first when it runs long. A caller with a
+  // provider request limit passes it. Without one (OpenWhispr Cloud, local
+  // engines) the personal list is sent whole, as it always was, and shared words
+  // only fill what is left of the Whisper budget.
+  getCustomDictionaryPrompt(maxChars) {
+    const tiers = getDictionaryHintTiers(getSettings());
+    const budget = maxChars ?? Math.max(WHISPER_PROMPT_CHARS, tiers[0].join(", ").length);
+    return formatDictionaryPrompt(tiers, budget) || null;
   }
 
   // Script conversion targets whatever the user ends up pasting: the translation
@@ -886,10 +900,11 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
   // Check the dictionary on its own as well as the full prompt: the echo filter needs
   // 70% of the prompt's words to appear, and a Chinese script bias counts as one more
   // word, which alone pushes a one- or two-term dictionary under the threshold.
-  isDictionaryEcho(text) {
+  // Pass the dictionary the request carried when it was built with its own budget.
+  isDictionaryEcho(text, dictionaryPrompt = this.getCustomDictionaryPrompt()) {
     return (
-      matchesDictionaryPrompt(text, this.getCustomDictionaryPrompt()) ||
-      matchesDictionaryPrompt(text, this.getWhisperPrompt())
+      matchesDictionaryPrompt(text, dictionaryPrompt) ||
+      matchesDictionaryPrompt(text, this.getWhisperPrompt(getSettings(), dictionaryPrompt))
     );
   }
 
@@ -3876,8 +3891,10 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     };
   }
 
+  // Personal words first, then the active workspace's shared words; no snippet
+  // triggers, which are phrases rather than terms.
   getCustomDictionaryArray() {
-    return getSettings().customDictionary;
+    return getEffectiveDictionaryWords(getSettings());
   }
 
   getCustomPrompt() {
@@ -4056,32 +4073,41 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       const endpoint = this.getTranscriptionEndpoint(route);
 
       // gpt-transcribe takes the dictionary on its own keywords[] channel (see
-      // dictionaryKeywords), so its prompt carries only the Chinese script bias and
+      // dictionaryKeywords), highest priority first so the keyword cap only ever
+      // drops shared words. Its prompt carries only the Chinese script bias and
       // the terms past the keyword cap.
       const usesKeywords = usesTranscriptionKeywords(model);
-      const dictionary = this.getCustomDictionaryPrompt();
+      const keywordDictionary = usesKeywords
+        ? getDictionaryHintWords(apiSettings).join(", ") || null
+        : null;
 
       // Prompt budgets follow each provider's real limit (see dictionaryPromptCap):
       // Groq's 896-char request cap, the Whisper decoders' window, and a far
       // larger context guard for the 4o transcribe models, which are LLMs and
-      // read the whole thing. The cut is a request bound, not a priority rule:
-      // Whisper decoders read the tail of whatever they are given.
+      // read the whole thing. The script bias shares the budget, so the
+      // dictionary gets what it leaves, cut between whole terms.
       const MAX_PROMPT_CHARS = dictionaryPromptLimit({ provider, endpoint, model });
-      const trimmedPrompt = trimDictionaryPrompt(
-        this.getWhisperPrompt(
-          apiSettings,
-          usesKeywords ? dictionaryKeywordOverflow(dictionary) : dictionary
-        ),
-        MAX_PROMPT_CHARS
+      const scriptBias = this.getWhisperPrompt(apiSettings, null);
+      const dictionaryBudget = Math.max(
+        0,
+        MAX_PROMPT_CHARS - (scriptBias ? scriptBias.length + 1 : 0)
       );
-      const dictionaryPrompt = trimmedPrompt.prompt;
+      const uncutDictionary = usesKeywords
+        ? dictionaryKeywordOverflow(keywordDictionary)
+        : this.getCustomDictionaryPrompt(Infinity);
+      const promptDictionary = usesKeywords
+        ? formatDictionaryPrompt([uncutDictionary?.split(", ") ?? []], dictionaryBudget) || null
+        : this.getCustomDictionaryPrompt(dictionaryBudget);
+      const promptTruncated = (promptDictionary?.length ?? 0) < (uncutDictionary?.length ?? 0);
+      // Echoes are classified against this exact string (see dictionaryPromptCap).
+      const dictionaryPrompt = this.getWhisperPrompt(apiSettings, promptDictionary);
       if (dictionaryPrompt && model !== "orukeet-v0.1.0") {
-        if (trimmedPrompt.truncated) {
+        if (promptTruncated) {
           logger.debug(
             "Custom dictionary prompt truncated",
             {
-              originalLength: trimmedPrompt.originalLength,
-              truncatedLength: dictionaryPrompt.length,
+              originalLength: uncutDictionary.length,
+              truncatedLength: promptDictionary?.length ?? 0,
               maxChars: MAX_PROMPT_CHARS,
             },
             "transcription"
@@ -4090,7 +4116,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
         formData.append("prompt", dictionaryPrompt);
       }
       if (usesKeywords) {
-        for (const keyword of dictionaryKeywords(dictionary)) {
+        for (const keyword of dictionaryKeywords(keywordDictionary)) {
           formData.append("keywords[]", keyword);
         }
       }
@@ -4098,9 +4124,9 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       // plus the prompt's overflow; when the overflow was capped, count only the
       // keywords.
       const sentDictionaryPrompt = usesKeywords
-        ? trimmedPrompt.truncated
-          ? dictionaryKeywords(dictionary).join(", ")
-          : dictionary
+        ? promptTruncated
+          ? dictionaryKeywords(keywordDictionary).join(", ")
+          : keywordDictionary
         : dictionaryPrompt;
 
       const shouldStream = this.shouldStreamTranscription(model, provider);
@@ -4253,7 +4279,9 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
 
       // Check for text - handle both empty string and missing field
       if (result.text && result.text.trim().length > 0) {
-        if (this.isDictionaryEcho(result.text)) {
+        if (
+          this.isDictionaryEcho(result.text, usesKeywords ? keywordDictionary : promptDictionary)
+        ) {
           throw dictionaryEchoError();
         }
         timings.transcriptionProcessingDurationMs = Math.round(performance.now() - apiCallStart);

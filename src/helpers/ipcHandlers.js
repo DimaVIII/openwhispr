@@ -698,6 +698,9 @@ class IPCHandlers {
     this._autoLearnEnabled = true; // Default on, synced from renderer
     this._autoLearnDebounceTimer = null;
     this._autoLearnLatestData = null;
+    // The active workspace's applying shared words, as the renderer last sent
+    // them (dictionary-set-shared-hints). Empty until the first send.
+    this._sharedDictionaryHints = { space: [], workspace: [] };
     this._textEditHandler = null;
     this._activeRecordingPipeline = null;
     this._onboardingDemoSession = null;
@@ -1254,12 +1257,18 @@ class IPCHandlers {
     return folder?.name || "Personal";
   }
 
+  // Every word that already applies: personal plus the active workspace's shared
+  // words. A hidden, paused or other workspace's word is not in the hints, so
+  // auto-learn can still add it to Personal.
   _getDictionarySafe() {
+    let personal;
     try {
-      return this.databaseManager.getDictionary();
+      personal = this.databaseManager.getDictionary();
     } catch {
-      return [];
+      personal = [];
     }
+    const { space, workspace } = this._sharedDictionaryHints;
+    return [...personal, ...space, ...workspace];
   }
 
   _cleanupTextEditMonitor() {
@@ -2237,6 +2246,13 @@ class IPCHandlers {
     ipcMain.handle("db-shared-dictionary-clear", async (_event, workspaceId) => {
       if (workspaceId != null) requireWorkspaceId(workspaceId);
       return this.databaseManager.clearSharedDictionary(workspaceId);
+    });
+
+    ipcMain.handle("dictionary-set-shared-hints", async (_event, hints) => {
+      const isWordList = (value) =>
+        Array.isArray(value) && value.every((word) => typeof word === "string");
+      if (!isWordList(hints?.space) || !isWordList(hints?.workspace)) return;
+      this._sharedDictionaryHints = { space: [...hints.space], workspace: [...hints.workspace] };
     });
 
     ipcMain.handle("db-broadcast-dictionary-updated", async () => {

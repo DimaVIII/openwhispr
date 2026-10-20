@@ -25,12 +25,13 @@ import DictionaryEmptyIllustration from "./DictionaryEmptyIllustration";
 import { useSettings } from "../hooks/useSettings";
 import { getAgentName } from "../utils/agentName";
 import { parseDictionaryImportText } from "../helpers/dictionaryImport";
-import { getDictionaryHintWords } from "../utils/snippets";
-import { WHISPER_DECODER_PROMPT_CHARS } from "../utils/dictionaryPromptCap";
+import { getDictionaryHintTiers } from "../utils/snippets";
+import { formatDictionaryPrompt, WHISPER_DECODER_PROMPT_CHARS } from "../utils/dictionaryPromptCap";
 
 export default function DictionaryView() {
   const { t } = useTranslation();
-  const { customDictionary, updateCustomDictionary, snippets } = useSettings();
+  const { customDictionary, updateCustomDictionary, snippets, sharedDictionaryHints } =
+    useSettings();
   const agentName = getAgentName();
   const { toast } = useToast();
 
@@ -46,11 +47,15 @@ export default function DictionaryView() {
   const pendingImportCount = useMemo(() => parseDictionaryImportText(bulkText).length, [bulkText]);
 
   // Length of the prompt string the STT request builds (words + snippet
-  // triggers, comma-joined), so the warning fires on real request size. A
-  // Chinese script bias adds ~21 chars on top for zh-CN / zh-TW users.
+  // triggers + shared words, comma-joined), so the warning fires on real request
+  // size. A Chinese script bias adds ~21 chars on top for zh-CN / zh-TW users.
   const promptChars = useMemo(
-    () => getDictionaryHintWords({ customDictionary, snippets }).join(", ").length,
-    [customDictionary, snippets]
+    () =>
+      formatDictionaryPrompt(
+        getDictionaryHintTiers({ customDictionary, snippets, sharedDictionaryHints }),
+        Infinity
+      ).length,
+    [customDictionary, snippets, sharedDictionaryHints]
   );
 
   // Same membership rule as agentNameDictionaryChanges: a stored spelling that

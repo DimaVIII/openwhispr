@@ -242,6 +242,18 @@ function parseSharedHints(raw: string | null): SharedHintWords {
   }
 }
 
+// Main keeps the hints in memory only, for auto-learn; a failed send just
+// leaves its previous copy in place.
+function sendSharedHintsToMain(hints: SharedHintWords): void {
+  window.electronAPI?.setSharedDictionaryHints?.(hints)?.catch((err: unknown) => {
+    logger.warn(
+      "Failed to send shared dictionary hints to main",
+      { error: (err as Error)?.message },
+      "settings"
+    );
+  });
+}
+
 function readStringArray(key: string, fallback: string[]): string[] {
   if (!isBrowser) return fallback;
   const stored = localStorage.getItem(key);
@@ -2150,9 +2162,13 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   setCleanupModel: createStringSetter("cleanupModel"),
 
   // A derived cache of the shared dictionary for the prompt path; main owns the
-  // data, so nothing is written back.
+  // data, so nothing is written back. Main gets a copy so auto-learn never adds a
+  // word the workspace already applies.
   setSharedDictionaryHints: (hints: SharedHintWords) => {
-    if (isBrowser) localStorage.setItem("sharedDictionaryHints", JSON.stringify(hints));
+    if (isBrowser) {
+      localStorage.setItem("sharedDictionaryHints", JSON.stringify(hints));
+      sendSharedHintsToMain(hints);
+    }
     set({ sharedDictionaryHints: hints });
   },
 
@@ -3405,6 +3421,9 @@ export async function initializeSettings(): Promise<void> {
         "settings"
       );
     }
+
+    // Main starts every launch with no hints; prime it with the persisted ones.
+    sendSharedHintsToMain(useSettingsStore.getState().sharedDictionaryHints);
 
     try {
       const [
