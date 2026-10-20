@@ -183,6 +183,7 @@ const {
 const { downsample24kTo16k, pcm16ToWav } = require("../utils/audioUtils");
 const postMigrationDetector = require("./postMigrationDetector");
 const screenContextCapture = require("./screenContextCapture");
+const { classifyToneAppCategory } = require("./toneAppCategories");
 const {
   DEFAULT_EXPECTED_SPEAKER_COUNT,
   MAX_SPEAKER_COUNT,
@@ -1738,6 +1739,19 @@ class IPCHandlers {
       void this.selectionManager?.captureTarget?.();
       const pid = (await this.textEditMonitor?.captureTargetPid?.()) ?? null;
       return { success: true, pid };
+    });
+
+    // Tone & Style: which kind of app the dictation is going into. Runs while
+    // the user speaks; only the category reaches the renderer.
+    ipcMain.handle("capture-dictation-app-category", async () => {
+      const context = await this.selectionManager?.getTargetAppContext?.();
+      const category = classifyToneAppCategory(context);
+      debugLogger.debug("Dictation app category", {
+        category,
+        hasWindowTitle: !!context?.windowTitle,
+        hasUrlHost: !!context?.urlHost,
+      });
+      return category;
     });
 
     ipcMain.handle("force-stop-dictation", () => {
@@ -10091,6 +10105,8 @@ class IPCHandlers {
             promptMode: opts.promptMode,
             purpose: opts.purpose,
             screenContext: opts.screenContext,
+            tone: opts.tone,
+            appCategory: opts.appCategory,
             language: opts.language,
             locale: opts.locale,
             sessionId: this.sessionId,
