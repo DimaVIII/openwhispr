@@ -262,7 +262,6 @@ function SpeakerPicker({
   const trimmed = search.trim();
   const trimmedLower = trimmed.toLowerCase();
 
-  // Naming a speaker "You" is how the transcript knows a voice is the user's.
   const youLabel = t("notes.speaker.you");
   const youLower = youLabel.trim().toLowerCase();
   const thisIsMe = t("notes.speaker.thisIsMe");

@@ -234,8 +234,12 @@ test("This is me adds the voice to the user's existing profile", async (t) => {
     t,
     chat([{ id: "a", text: "hello", source: "mic", timestamp: 1, speaker: "speaker_0" }], {
       onMapSpeaker: (...args) => calls.push(args),
-      // Saved in English or with other casing: still the user's profile.
-      speakerProfiles: [{ id: 7, display_name: "you", email: "me@example.com" }],
+      // Saved in English or with other casing: still the user's profile, and
+      // picked over the label used as a name in this note.
+      speakerProfiles: [
+        { id: 7, display_name: "you", email: "me@example.com" },
+        { display_name: YOU, email: null },
+      ],
     })
   );
   await act(() => buttonWithText("notes.speaker.label").click());
