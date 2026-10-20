@@ -80,6 +80,60 @@ async function waitFor(predicate, label) {
   throw new Error(`timed out waiting for ${label}`);
 }
 
+test("AI Summary generates from meeting or personal material with the detailed template and stable identity", async (t) => {
+  const { BUILTIN_ACTIONS, GENERATE_NOTES_KEY, LEGACY_DETAILED_NOTES } =
+    await import("../../src/helpers/builtinActions.js");
+  const { compileTemplatePrompt } = await import("../../src/helpers/templatePrompts.js");
+  const { store, calls, updates } = await loadStore(t);
+  const builtin = BUILTIN_ACTIONS.find((action) => action.translationKey === GENERATE_NOTES_KEY);
+  const action = {
+    ...builtin,
+    id: 1,
+    translation_key: GENERATE_NOTES_KEY,
+    client_id: GENERATE_NOTES_KEY,
+  };
+  for (const isMeetingNote of [true, false]) {
+    const noteId = isMeetingNote ? 801 : 802;
+    const input = isMeetingNote
+      ? "## Meeting Transcript\nAlice: I will send the Acme proposal by Friday."
+      : "Acme proposal: send by Friday. Budget $250,000.";
+    store.runBackgroundAction(
+      noteId,
+      input,
+      "material-hash",
+      action,
+      { modelId: "gpt-4.1", isCloudMode: true, isMeetingNote },
+      LABELS
+    );
+    await waitFor(() => updates.some((update) => update.noteId === noteId), "summary save");
+    assert.equal(calls.at(-1).text, input);
+    assert.equal(
+      calls.at(-1).config.systemPrompt,
+      compileTemplatePrompt(
+        { ...LEGACY_DETAILED_NOTES, translation_key: LEGACY_DETAILED_NOTES.translationKey },
+        { isMeetingNote }
+      )
+    );
+    assert.equal(updates.at(-1).payload.enhancement_template_id, GENERATE_NOTES_KEY);
+  }
+  globalThis.__processTextResult = "NOTHING_TO_SUMMARIZE";
+  store.runBackgroundAction(
+    803,
+    "Hello. Testing.",
+    "empty-hash",
+    action,
+    { modelId: "gpt-4.1", isCloudMode: true, isMeetingNote: true },
+    LABELS
+  );
+  let notices = [];
+  await waitFor(() => (notices = store.consumeErrorEvents()).length > 0, "empty material notice");
+  assert.equal(notices[0].messageKey, "notes.actions.errors.nothingToSummarize");
+  assert.equal(
+    updates.some((update) => update.noteId === 803),
+    false
+  );
+});
+
 test("templates and summary actions carry source fidelity once, apart from the material and the saved summary", async (t) => {
   const { SOURCE_FIDELITY_RULE } = await import("../../src/helpers/sourceFidelity.js");
   const { BUILTIN_ACTIONS } = await import("../../src/helpers/builtinActions.js");
