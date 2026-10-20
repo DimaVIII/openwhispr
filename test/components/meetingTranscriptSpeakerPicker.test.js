@@ -255,6 +255,15 @@ test("the user's own chip doesn't offer Add contact", async (t) => {
       [
         { id: "a", text: "me", source: "mic", timestamp: 1, speaker: "speaker_0" },
         { id: "b", text: "them", source: "mic", timestamp: 2, speaker: "speaker_1" },
+        // A remote voice that recording matched to the user's profile.
+        {
+          id: "c",
+          text: "remote",
+          source: "system",
+          timestamp: 3,
+          speaker: "speaker_2",
+          speakerName: YOU,
+        },
       ],
       {
         speakerMappings: { speaker_0: YOU, speaker_1: "Alice" },
@@ -280,7 +289,11 @@ test("Assign to offers This is me for a selection", async (t) => {
       count: 2,
       onClear: () => {},
       onAssignName: (...args) => calls.push(args),
-      offerSelf: true,
+      selectedSegments: [
+        { id: "a", text: "me", source: "mic", timestamp: 1, speaker: "speaker_0" },
+        { id: "b", text: "them", source: "mic", timestamp: 2, speaker: "speaker_1" },
+      ],
+      speakerMappings: { speaker_0: YOU },
       t: (key) => key,
     })
   );
@@ -295,7 +308,11 @@ test("Assign to leaves This is me out when every selected line is the user's", a
       count: 2,
       onClear: () => {},
       onAssignName: () => {},
-      offerSelf: false,
+      selectedSegments: [
+        { id: "a", text: "me", source: "mic", timestamp: 1, speaker: "speaker_0" },
+        { id: "b", text: "me too", source: "mic", timestamp: 2, speaker: "you" },
+      ],
+      speakerMappings: { speaker_0: YOU },
       t: (key) => key,
     })
   );

@@ -597,7 +597,8 @@ export function SelectionBar({
   speakerProfiles,
   participants,
   onAssignName,
-  offerSelf,
+  selectedSegments,
+  speakerMappings,
   t,
 }: {
   count: number;
@@ -605,11 +606,15 @@ export function SelectionBar({
   speakerProfiles?: SpeakerProfileLite[];
   participants?: Array<{ email: string; displayName: string | null }>;
   onAssignName: (name: string, email?: string | null, profileId?: number) => void;
-  // False when every selected line is already the user's.
-  offerSelf: boolean;
+  selectedSegments: TranscriptSegment[];
+  speakerMappings?: Record<string, string>;
   t: (key: string, opts?: Record<string, unknown>) => string;
 }) {
   const [open, setOpen] = useState(false);
+  // Left out when every selected line is already the user's.
+  const offerSelf = selectedSegments.some(
+    (segment) => !isSelfSideSegment(segment, speakerMappings, t("notes.speaker.you"))
+  );
   return (
     <div
       className="flex items-center gap-3 rounded-md border border-border/70 bg-surface-2/95 backdrop-blur px-3 py-1.5 text-xs shadow-lg"
@@ -709,10 +714,10 @@ const SegmentRow = memo(function SegmentRow({
 
   // The user's own voice profile isn't a contact.
   const canAddContact =
-    !selfSide &&
     !!matchedProfile &&
     matchedProfile.id != null &&
     !matchedProfile.email &&
+    !isYouSpeakerName(matchedProfile.display_name, t("notes.speaker.you")) &&
     !!onAttachSpeakerEmail;
 
   const labelElement = hasSpeaker && (
