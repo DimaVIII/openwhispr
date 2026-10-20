@@ -150,3 +150,30 @@ test("preserves policy and upgrade metadata from authenticated cloud failures", 
     minAppVersion: "2.0.0",
   });
 });
+
+test("keeps top-level conflicts of a failure body that has no data envelope", async () => {
+  const state = { current: { token: "token-a", generation: 23 } };
+  const conflicts = [{ id: "personal-1", word: "Kubernetes" }];
+  const handler = createHandler(
+    state,
+    async () =>
+      new Response(
+        JSON.stringify({
+          error: "A personal word changed",
+          code: "SHARED_DICTIONARY_PERSONAL_CHANGED",
+          conflicts,
+        }),
+        { status: 409 }
+      )
+  );
+
+  const result = await handler({
+    method: "POST",
+    path: "/api/shared-dictionary/share",
+    expectedAuthGeneration: 23,
+  });
+
+  assert.equal(result.status, 409);
+  assert.equal(result.code, "SHARED_DICTIONARY_PERSONAL_CHANGED");
+  assert.deepEqual(result.details, { conflicts });
+});
