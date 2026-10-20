@@ -1,8 +1,18 @@
 import type { ToolDefinition, ToolResult } from "./ToolRegistry";
 
+export interface SharedDictionaryWord {
+  id: string;
+  word: string;
+}
+
 export interface DictionaryActions {
   getDictionary(): string[];
   updateDictionary(changes: { add: string[]; remove: string[] }): void;
+  // Shared words that apply to the user right now. Async because the shared
+  // mirror lives in the main process, behind IPC.
+  getSharedWords(): Promise<SharedDictionaryWord[]>;
+  // A teammate's word is only ever hidden for the user, never deleted.
+  hideSharedWords(ids: string[]): Promise<void>;
 }
 
 export const cleanWordList = (values: unknown): string[] =>
@@ -23,7 +33,7 @@ export function createUpdateDictionaryTool(actions: DictionaryActions): ToolDefi
   return {
     name: "update_dictionary",
     description:
-      "Add words to or remove words from the user's custom dictionary: the names, jargon, and terms transcription must spell exactly. To fix a spelling, remove the old word and add the corrected one in the same call.",
+      "Add words to or remove words from the user's custom dictionary: the names, jargon, and terms transcription must spell exactly. To fix a spelling, remove the old word and add the corrected one in the same call. Words a teammate shared with the team are not the user's to delete: removing one only hides it for the user.",
     parameters: {
       type: "object",
       properties: {
@@ -43,16 +53,27 @@ export function createUpdateDictionaryTool(actions: DictionaryActions): ToolDefi
     readOnly: false,
 
     async execute(args: Record<string, unknown>): Promise<ToolResult> {
-      const existing = new Set(actions.getDictionary().map((word) => word.toLowerCase()));
-      const has = (word: string) => existing.has(word.toLowerCase());
+      const personal = new Set(actions.getDictionary().map((word) => word.toLowerCase()));
+      const sharedEntries = await actions.getSharedWords();
+      const sharedIdsByWord = new Map<string, string[]>();
+      for (const { id, word } of sharedEntries) {
+        const key = word.toLowerCase();
+        sharedIdsByWord.set(key, [...(sharedIdsByWord.get(key) ?? []), id]);
+      }
+      const inPersonal = (word: string) => personal.has(word.toLowerCase());
+      const inShared = (word: string) => sharedIdsByWord.has(word.toLowerCase());
+      const has = (word: string) => inPersonal(word) || inShared(word);
+
       const requestedAdd = cleanWordList(args.add);
       const requestedRemove = cleanWordList(args.remove);
+      // Added words always land in Personal; one a teammate already shares counts as present.
       const add = requestedAdd.filter((word) => !has(word));
       const alreadyPresent = requestedAdd.filter(has);
-      const remove = requestedRemove.filter(has);
+      const remove = requestedRemove.filter(inPersonal);
+      const hidden = requestedRemove.filter((word) => !inPersonal(word) && inShared(word));
       const notFound = requestedRemove.filter((word) => !has(word));
 
-      if (add.length === 0 && remove.length === 0) {
+      if (add.length === 0 && remove.length === 0 && hidden.length === 0) {
         const reasons = [
           notFound.length ? `Not in the dictionary: ${quoteList(notFound)}` : "",
           alreadyPresent.length ? `Already in the dictionary: ${quoteList(alreadyPresent)}` : "",
@@ -64,14 +85,30 @@ export function createUpdateDictionaryTool(actions: DictionaryActions): ToolDefi
         };
       }
 
-      actions.updateDictionary({ add, remove });
+      if (hidden.length > 0) {
+        const ids = hidden.flatMap((word) => sharedIdsByWord.get(word.toLowerCase()) ?? []);
+        try {
+          await actions.hideSharedWords(ids);
+        } catch {
+          return {
+            success: false,
+            data: null,
+            displayText: `Could not hide ${quoteList(hidden)} from the shared dictionary. Nothing was changed`,
+          };
+        }
+      }
+
+      if (add.length > 0 || remove.length > 0) actions.updateDictionary({ add, remove });
       const summary = [
         add.length ? `Added ${quoteList(add)}` : "",
         remove.length ? `Removed ${quoteList(remove)}` : "",
+        hidden.length
+          ? `Hidden for you ${quoteList(hidden)} (shared with your team, so it stays for them)`
+          : "",
       ].filter(Boolean);
       return {
         success: true,
-        data: { added: add, removed: remove, alreadyPresent, notFound },
+        data: { added: add, removed: remove, hidden, alreadyPresent, notFound },
         displayText: summary.join("; "),
       };
     },

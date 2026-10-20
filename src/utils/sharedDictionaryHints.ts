@@ -1,4 +1,7 @@
-import type { SharedDictionarySnapshot } from "../types/sharedDictionary";
+import type {
+  SharedDictionarySnapshot,
+  SharedDictionarySnapshotEntry,
+} from "../types/sharedDictionary";
 
 export interface SharedHintWords {
   space: string[];
@@ -28,14 +31,15 @@ export function isTermLikeSharedWord(word: string): boolean {
 }
 
 /**
- * The shared words that may reach the STT prompt: live, term-like entries the
- * member can still read and has not hidden. Everything is empty while sharing
- * is paused or before the first sync pass, so the prompt never carries words
- * the workspace has switched off.
+ * The shared entries that apply to this member: live, readable (their list is
+ * one of the member's scopes) and not hidden. Empty while sharing is paused or
+ * before the first sync pass.
  */
-export function selectSharedHintWords(snapshot: SharedDictionarySnapshot): SharedHintWords {
+export function selectAppliedSharedEntries(
+  snapshot: SharedDictionarySnapshot
+): SharedDictionarySnapshotEntry[] {
   const { meta } = snapshot;
-  if (!meta || meta.paused) return { space: [], workspace: [] };
+  if (!meta || meta.paused) return [];
 
   const hidden = new Set(snapshot.hiddenIds);
   const readableSpaces = new Set<string>();
@@ -45,16 +49,25 @@ export function selectSharedHintWords(snapshot: SharedDictionarySnapshot): Share
     else readableSpaces.add(scope.space_id);
   }
 
+  return snapshot.entries.filter((entry) => {
+    if (hidden.has(entry.cloudId)) return false;
+    return entry.spaceId === null ? workspaceReadable : readableSpaces.has(entry.spaceId);
+  });
+}
+
+/**
+ * The shared words that may reach the STT prompt: applied, term-like entries.
+ * Everything is empty while sharing is paused or before the first sync pass, so
+ * the prompt never carries words the workspace has switched off.
+ */
+export function selectSharedHintWords(snapshot: SharedDictionarySnapshot): SharedHintWords {
   const space: string[] = [];
   const workspace: string[] = [];
-  for (const entry of snapshot.entries) {
-    if (hidden.has(entry.cloudId) || !isTermLikeSharedWord(entry.word)) continue;
+  for (const entry of selectAppliedSharedEntries(snapshot)) {
+    if (!isTermLikeSharedWord(entry.word)) continue;
     const word = entry.word.trim();
-    if (entry.spaceId === null) {
-      if (workspaceReadable) workspace.push(word);
-    } else if (readableSpaces.has(entry.spaceId)) {
-      space.push(word);
-    }
+    if (entry.spaceId === null) workspace.push(word);
+    else space.push(word);
   }
   return { space, workspace };
 }

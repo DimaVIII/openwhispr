@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
+  selectAppliedSharedEntries,
   selectSharedHintWords,
   isTermLikeSharedWord,
   EMPTY_SHARED_HINTS,
@@ -107,4 +108,17 @@ test("selectSharedHintWords drops words that are not term-like and trims the res
     space: ["C++"],
     workspace: ["Q3 OKRs"],
   });
+});
+
+test("selectAppliedSharedEntries keeps ids of readable, non-hidden entries and is empty when paused or unsynced", () => {
+  const entries = [
+    entry("e1", SPACE_A, "Kubernetes"),
+    entry("e2", SPACE_A, "Hidden"),
+    entry("e3", SPACE_B, "OutOfScope"),
+    entry("e4", null, "Acme"),
+  ];
+  const ids = (snapshot) => selectAppliedSharedEntries(snapshot).map((item) => item.cloudId);
+  assert.deepEqual(ids({ entries, hiddenIds: ["e2"], meta: meta() }), ["e1", "e4"]);
+  assert.deepEqual(ids({ entries, hiddenIds: [], meta: meta({ paused: true }) }), []);
+  assert.deepEqual(ids({ entries, hiddenIds: [], meta: null }), []);
 });
