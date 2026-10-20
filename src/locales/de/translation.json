@@ -3877,7 +3877,15 @@
     "emptyTitle": "Füge Wörter zu deinem Wörterbuch hinzu",
     "emptyDescription": "Füge Wörter hinzu, die {{agentName}} immer richtig erkennen soll: Namen, Tools, Abkürzungen.",
     "addFirstWord": "Füge dein erstes Wort hinzu",
-    "agentDefault": "Standardmäßig enthalten"
+    "agentDefault": "Standardmäßig enthalten",
+    "shared": {
+      "allWords": "Alle Wörter",
+      "personal": "Persönlich",
+      "group": "Geteilt",
+      "allShared": "Alle geteilten",
+      "everyoneAt": "Alle bei {{workspace}}",
+      "hidden": "Ausgeblendet"
+    }
   },
   "support": {
     "documentation": "Dokumentation",

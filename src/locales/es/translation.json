@@ -3578,7 +3578,15 @@
     "emptyTitle": "Añade palabras a tu diccionario",
     "emptyDescription": "Añade palabras que {{agentName}} siempre debe reconocer: nombres, herramientas, siglas.",
     "addFirstWord": "Añade tu primera palabra",
-    "agentDefault": "Añadido por defecto"
+    "agentDefault": "Añadido por defecto",
+    "shared": {
+      "allWords": "Todas las palabras",
+      "personal": "Personal",
+      "group": "Compartidas",
+      "allShared": "Todas las compartidas",
+      "everyoneAt": "Todos en {{workspace}}",
+      "hidden": "Ocultas"
+    }
   },
   "insights": {
     "title": "Estadísticas",

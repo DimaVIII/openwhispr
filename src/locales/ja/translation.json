@@ -3454,7 +3454,15 @@
     "emptyTitle": "辞書に単語を追加しましょう",
     "emptyDescription": "{{agentName}}に正しく認識してほしい言葉を追加しましょう。名前、ツール、略語など。",
     "addFirstWord": "最初の単語を追加",
-    "agentDefault": "デフォルトで追加済み"
+    "agentDefault": "デフォルトで追加済み",
+    "shared": {
+      "allWords": "すべての単語",
+      "personal": "個人",
+      "group": "共有",
+      "allShared": "すべての共有",
+      "everyoneAt": "{{workspace}} の全員",
+      "hidden": "非表示"
+    }
   },
   "referral": {
     "title": "紹介して特典をゲット",

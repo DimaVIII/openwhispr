@@ -3877,7 +3877,15 @@
     "emptyTitle": "Add words to your dictionary",
     "emptyDescription": "Add words for {{agentName}} to always get right: names, tools, acronyms.",
     "addFirstWord": "Add your first word",
-    "agentDefault": "Added by default"
+    "agentDefault": "Added by default",
+    "shared": {
+      "allWords": "All words",
+      "personal": "Personal",
+      "group": "Shared",
+      "allShared": "All shared",
+      "everyoneAt": "Everyone at {{workspace}}",
+      "hidden": "Hidden"
+    }
   },
   "support": {
     "documentation": "Documentation",

@@ -3526,7 +3526,15 @@
     "emptyTitle": "向词典添加词语",
     "emptyDescription": "添加希望{{agentName}}始终识别正确的词：名字、工具、缩写。",
     "addFirstWord": "添加第一个词",
-    "agentDefault": "默认添加"
+    "agentDefault": "默认添加",
+    "shared": {
+      "allWords": "全部词汇",
+      "personal": "个人",
+      "group": "共享",
+      "allShared": "全部共享",
+      "everyoneAt": "{{workspace}} 全员",
+      "hidden": "已隐藏"
+    }
   },
   "insights": {
     "title": "统计",

@@ -3552,7 +3552,15 @@
     "emptyTitle": "Добавьте слова в словарь",
     "emptyDescription": "Добавьте слова, которые {{agentName}} всегда должен распознавать: имена, инструменты, аббревиатуры.",
     "addFirstWord": "Добавьте первое слово",
-    "agentDefault": "Добавлено по умолчанию"
+    "agentDefault": "Добавлено по умолчанию",
+    "shared": {
+      "allWords": "Все слова",
+      "personal": "Личные",
+      "group": "Общие",
+      "allShared": "Все общие",
+      "everyoneAt": "Все в {{workspace}}",
+      "hidden": "Скрытые"
+    }
   },
   "insights": {
     "title": "Статистика",

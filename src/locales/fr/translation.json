@@ -3877,7 +3877,15 @@
     "emptyTitle": "Ajoutez des mots à votre dictionnaire",
     "emptyDescription": "Ajoutez les mots que {{agentName}} doit toujours reconnaître : noms, outils, acronymes.",
     "addFirstWord": "Ajoutez votre premier mot",
-    "agentDefault": "Ajouté par défaut"
+    "agentDefault": "Ajouté par défaut",
+    "shared": {
+      "allWords": "Tous les mots",
+      "personal": "Personnels",
+      "group": "Partagés",
+      "allShared": "Tous les partagés",
+      "everyoneAt": "Tout le monde chez {{workspace}}",
+      "hidden": "Masqués"
+    }
   },
   "support": {
     "documentation": "Documentation",

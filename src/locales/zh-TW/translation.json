@@ -3526,7 +3526,15 @@
     "emptyTitle": "將詞語加入字典",
     "emptyDescription": "新增希望{{agentName}}始終辨識正確的詞：名字、工具、縮寫。",
     "addFirstWord": "新增第一個詞",
-    "agentDefault": "預設加入"
+    "agentDefault": "預設加入",
+    "shared": {
+      "allWords": "全部詞彙",
+      "personal": "個人",
+      "group": "共享",
+      "allShared": "全部共享",
+      "everyoneAt": "{{workspace}} 全員",
+      "hidden": "已隱藏"
+    }
   },
   "insights": {
     "title": "統計",
