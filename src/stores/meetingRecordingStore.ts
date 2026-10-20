@@ -1709,11 +1709,13 @@ export async function stopRecording(expectedSessionId?: string): Promise<StopRec
       persist: persistTranscript,
       fallbackTranscript: () => useMeetingRecordingStore.getState().transcript,
       stop: async () => {
+        // Set before cleanup's awaits: the final transcript write is already
+        // posted, so an earlier session's result can land from here on.
+        const seed = { noteId: recordingNoteId, seedLength: sessionSeedLength };
+        stoppingSeed = seed;
         await cleanup();
 
         let stoppedDiarizationSessionId: string | null = null;
-        const seed = { noteId: recordingNoteId, seedLength: sessionSeedLength };
-        stoppingSeed = seed;
         try {
           const result = await window.electronAPI?.meetingTranscriptionStop?.(
             sessionId ?? undefined
@@ -1876,6 +1878,14 @@ if (typeof window !== "undefined") {
         removedSegments: data.removedSegments,
       });
 
+      // A later session resumed from this note seeded the rows about to be
+      // removed, so its seed ends that many rows earlier once this write lands.
+      // Only sessions whose final write is already posted count: one posted
+      // after this write puts the rows back.
+      const laterSeeds = [...seedLengthByDiarizationSession.values(), stoppingSeed].filter(
+        (pending): pending is NonNullable<typeof stoppingSeed> =>
+          pending?.noteId === targetNoteId && pending.seedLength > seedLength
+      );
       try {
         // Awaited so the next queued completion's getNote is guaranteed to
         // read this write — without it the ordering depends on db-update-note
@@ -1887,13 +1897,7 @@ if (typeof window !== "undefined") {
         publish([]);
         throw error;
       }
-      // A later session resumed from this note seeded the rows just removed,
-      // so its seed now ends that many rows earlier.
-      for (const pending of [...seedLengthByDiarizationSession.values(), stoppingSeed]) {
-        if (pending?.noteId === targetNoteId && pending.seedLength > seedLength) {
-          pending.seedLength -= removedCount;
-        }
-      }
+      for (const pending of laterSeeds) pending.seedLength -= removedCount;
       publish(enriched);
 
       if (data.speakerEmbeddings) {
