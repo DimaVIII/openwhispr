@@ -35,8 +35,8 @@ anyway), physical access to an unlocked device, and attacks that need the user t
 
 ## Where untrusted input enters (desktop)
 
-- **IPC** (`preload.js`, `src/helpers/ipcHandlers.js`): the renderer runs with context isolation. Treat the
-  renderer as compromised-able (it renders notes, Markdown, transcripts and model output) and check that a
+- **IPC** (`preload.js`, `src/helpers/ipcHandlers.js`): the renderer runs with context isolation. Assume the
+  renderer can be compromised (it renders notes, Markdown, transcripts and model output) and check that a
   handler doesn't give it more than it needs: arbitrary file reads or writes, `shell.openExternal` with a
   non-http(s) URL, process spawning, or secrets it shouldn't see.
 - **Rendering**: notes are Markdown via Tiptap (`src/components/ui/RichTextEditor*.ts*`, `html: false`), chat
@@ -44,9 +44,11 @@ anyway), physical access to an unlocked device, and attacks that need the user t
   data to a third party, matter.
 - **Loopback HTTP servers**: the CLI bridge (`src/helpers/cliBridge.js`, 127.0.0.1:8200–8219, bearer token in
   `~/.openwhispr/cli-bridge.json`; `POST /v1/transcribe` takes a file path checked by `approveAudioPath`) and
-  the OAuth PKCE loopback flow (`src/helpers/oauthLoopbackFlow.js`, used by calendars, Slack, Linear).
+  the OAuth PKCE loopback flow (`src/helpers/oauthLoopbackFlow.js`, used by the Google and Microsoft calendars,
+  Gmail, Slack and Linear). Slack and Linear redirect through an openwhispr.com relay that forwards to the
+  loopback port carried in `state` (`v1.<port>.<nonce>`), so check what a forged or replayed callback can do.
 - **Deep links**: `openwhispr://` (`main.js` `open-url`, `second-instance`, `linuxUrlSchemeHandler.js`):
-  OAuth callbacks, note links, workspace invitations, upgrade links.
+  sign-in and OAuth callbacks, note links, workspace invitations, upgrade links. Any web page can open one.
 - **Agent tools and connectors** (`src/helpers/connectors/`, `src/services/`, `src/components/chat/`): any
   action other people see (sending an email, posting to Slack, creating a Linear or GitHub issue or comment)
   must go through `prepare` → an approval card the user confirms → `commit`. The model must never reach
@@ -60,7 +62,9 @@ anyway), physical access to an unlocked device, and attacks that need the user t
 - **Native helpers and child processes**: `resources/*.c`, `resources/*.swift`, `native/`, and the code that
   spawns them (paste helpers, key and mic listeners, text monitor, system-audio capture, whisper.cpp,
   sherpa-onnx, llama-server, Qdrant, FFmpeg, yt-dlp). Command or argument injection, path traversal, and memory
-  safety bugs in the C sources on input they parse (stdin protocol, audio buffers, window titles).
+  safety bugs in the C and C++ sources on input they parse (stdin protocol, audio buffers, window titles).
+  `native/meeting-aec-helper/` runs WebRTC echo cancellation over meeting audio, which includes the remote
+  party's audio.
 - **Files and downloads**: audio import and transcription of user-chosen or URL-sourced media, model downloads
   (`scripts/lib/download-utils.js`, `src/helpers/modelManagerBridge.js`, `whisper.js`, `parakeet.js`), temp
   files, auto-update.
@@ -73,20 +77,22 @@ anyway), physical access to an unlocked device, and attacks that need the user t
   (`src/lib/notes/noteShareTokens.ts`).
 - The keyboard extension (`plugins/keyboard-extension/`) and the App Group storage it shares with the app
   (`modules/app-group-storage/`): what a host app can read or trigger, and what the extension stores.
-- Background uploads (`modules/background-uploader/`), BYOK provider requests (`plugins/provider-networking/`),
-  StoreKit and paywall handling, secrets in the keychain versus plain storage.
+- Background uploads (`modules/background-uploader/`), the App Transport Security exception that lets the app
+  reach AI providers on the local network (`plugins/provider-networking/`), StoreKit and paywall handling,
+  secrets in the keychain versus plain storage.
 
 ## Components that matter most / least
 
 Most: the connector approval flow, credential storage and OAuth flows, IPC handlers, the CLI bridge, deep link
-handling, renderer XSS, the native C helpers, the mobile keyboard extension and App Group storage.
+handling, renderer XSS, the native C and C++ helpers, the mobile keyboard extension and App Group storage.
 
 Less: UI layout, onboarding copy, i18n files, build scripts that only run on a maintainer's machine or in CI
 (still report a supply chain issue in them).
 
 Out of scope: `node_modules/`, downloaded third-party binaries under `resources/bin/` (whisper.cpp, sherpa-onnx,
 Qdrant, llama-server, yt-dlp, FFmpeg) and vulnerabilities inside third-party dependencies themselves (report how
-we call them, not the library bug), `docs/`, `examples/`, `admin/`, `agent-skills/`, `nix/` packaging.
+we call them, not the library bug), `docs/`, `examples/`, `agent-skills/` (Markdown instructions for AI
+agents), `nix/` packaging.
 
 ## How to exercise it
 
@@ -95,7 +101,8 @@ we call them, not the library bug), `docs/`, `examples/`, `admin/`, `agent-skill
   (e.g. `test/helpers/connectors/`, `test/helpers/cliBridge*.test.js`), which are the easiest place to write a
   reproducer.
 - Native helpers are compiled into `resources/bin/` during the image build (`linux-key-listener`,
-  `linux-fast-paste`, `linux-text-monitor`, `linux-system-audio-helper`).
+  `linux-fast-paste`, `linux-text-monitor`, `linux-system-audio-helper`, `meeting-aec-helper-linux-<arch>`).
+  FFmpeg is at `node_modules/ffmpeg-static/ffmpeg`, the binary the app decodes imported audio with.
 - Mobile tests: `cd openwhispr-mobile && node_modules/.bin/jest --ci --runInBand <path>`.
 - The full Electron app can't be launched in this image (no display, no Electron binary); prefer unit-level
   reproducers against the real module.
@@ -105,14 +112,16 @@ we call them, not the library bug), `docs/`, `examples/`, `admin/`, `agent-skill
 - **Critical**: remote code execution from content the app takes in (audio file, transcript, note, invite,
   deep link, web page); a connector action sent without the user confirming the card, or sending different
   content than the card showed; a web page or another app obtaining API keys, OAuth tokens or session tokens.
-- **High**: renderer XSS from synced or shared content; reading or writing arbitrary files through IPC or the
-  CLI bridge; command injection into a helper process; prompt injection that exfiltrates notes, transcripts or
-  contacts to a third party (e.g. through a rendered image URL or a tool); one OpenWhispr account's data or
-  connector logins reachable from another account on the same device; memory corruption in a native helper on
-  attacker-controlled input.
-- **Medium**: secrets or note content written to logs; a deep link that changes settings or account state
-  without the user's intent; leaking data across the App Group to the keyboard extension beyond what it needs;
-  denial of service that needs a remote trigger and survives a restart.
+- **High**: a deep link or OAuth callback that, without the user confirming, signs the user into another
+  account, joins a workspace, or shares notes or recordings (their later notes and dictations would reach
+  someone else); renderer XSS from synced or shared content; reading or writing arbitrary files through IPC
+  or the CLI bridge; command injection into a helper process; prompt injection that exfiltrates notes,
+  transcripts or contacts to a third party (e.g. through a rendered image URL or a tool); one OpenWhispr
+  account's data or connector logins reachable from another account on the same device; memory corruption in
+  a native helper on attacker-controlled input.
+- **Medium**: secrets or note content written to logs; a deep link that changes a setting without the user's
+  intent; leaking data across the App Group to the keyboard extension beyond what it needs; denial of service
+  that needs a remote trigger and survives a restart.
 - **Low**: local denial of service, crashes on malformed local files, missing hardening with no demonstrated
   impact.
 

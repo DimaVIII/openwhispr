@@ -10,9 +10,10 @@ ENV DEBIAN_FRONTEND=noninteractive \
     CI=1 \
     ELECTRON_OVERRIDE_DIST_PATH=/tmp
 
-# Headers for the Linux native helpers in resources/ (key listener, paste, text monitor, PipeWire audio).
+# Headers for the Linux native helpers in resources/ (key listener, paste, text monitor, PipeWire audio), and
+# CMake for the meeting echo-cancellation helper in native/.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates build-essential pkg-config git python3 \
+      ca-certificates build-essential cmake pkg-config git python3 \
       libx11-dev libxtst-dev libatspi2.0-dev libglib2.0-dev libpipewire-0.3-dev \
     && rm -rf /var/lib/apt/lists/*
 
@@ -22,18 +23,22 @@ WORKDIR /src
 
 # Desktop app (Electron main process, preload, React renderer).
 # --ignore-scripts skips the Electron download and the rebuild of native modules for Electron's ABI;
-# better-sqlite3 is then built for this Node so the database-backed tests run instead of skipping.
+# better-sqlite3 is then built for this Node so the database-backed tests run instead of skipping. It also
+# skips ffmpeg-static's binary download, so that runs on its own: audio import decodes through it.
 RUN npm ci --ignore-scripts --no-audit --no-fund \
-    && npm rebuild better-sqlite3
+    && npm rebuild better-sqlite3 \
+    && node node_modules/ffmpeg-static/install.js
 
-# Native Linux helpers, compiled from source as a release build does.
+# Native Linux helpers, compiled from source as a release build does. The meeting echo-cancellation helper
+# fetches its pinned WebRTC and Abseil sources here, while the network is still up.
 RUN npm run compile:linuxkeys \
     && npm run compile:linux-paste \
     && npm run compile:text-monitor \
-    && npm run compile:linux-system-audio
+    && npm run compile:linux-system-audio \
+    && node scripts/build-meeting-aec-helper.js
 
-# Mobile app (Expo / React Native). Its iOS and Android native code can't be built on Linux, so only the
-# TypeScript side is installed and tested here; the Swift and Kotlin sources are in the checkout for review.
+# Mobile app (Expo / React Native). Its iOS native code can't be built on Linux, so only the TypeScript side
+# is installed and tested here; the Swift sources are in the checkout for review.
 RUN cd openwhispr-mobile \
     && npm ci --ignore-scripts --no-audit --no-fund \
     && node_modules/.bin/patch-package --error-on-fail \
