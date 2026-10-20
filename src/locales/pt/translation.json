@@ -3629,6 +3629,13 @@
         "body": "Adicione os termos que esta equipe usa ou compartilhe alguns da sua lista pessoal. Todos em {{list}} ({{count}}) vão recebê-los.",
         "import": "Importar uma lista",
         "shareFromPersonal": "Compartilhar de Pessoais"
+      },
+      "arrival": {
+        "title_one": "{{count}} palavra da equipe adicionada",
+        "title_other": "{{count}} palavras da equipe adicionadas",
+        "description": "As palavras compartilhadas de {{workspace}} agora valem para o seu ditado e para as notas das suas reuniões.",
+        "descriptionNoWorkspace": "As palavras compartilhadas da sua equipe agora valem para o seu ditado e para as notas das suas reuniões.",
+        "viewWords": "Ver palavras"
       }
     }
   },

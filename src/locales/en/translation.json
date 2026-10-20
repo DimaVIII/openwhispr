@@ -3980,6 +3980,13 @@
         "body": "Add the terms this team uses, or share some from your personal list. Everyone in {{list}} ({{count}}) will get them.",
         "import": "Import a list",
         "shareFromPersonal": "Share from Personal"
+      },
+      "arrival": {
+        "title_one": "{{count}} team word added",
+        "title_other": "{{count}} team words added",
+        "description": "{{workspace}}'s shared words now apply to your dictation and meeting notes.",
+        "descriptionNoWorkspace": "Your team's shared words now apply to your dictation and meeting notes.",
+        "viewWords": "View words"
       }
     }
   },

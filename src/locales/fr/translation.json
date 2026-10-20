@@ -3980,6 +3980,13 @@
         "body": "Ajoutez les termes qu'utilise cette équipe, ou partagez-en depuis votre liste personnelle. Tout le monde dans {{list}} ({{count}}) les recevra.",
         "import": "Importer une liste",
         "shareFromPersonal": "Partager depuis Personnels"
+      },
+      "arrival": {
+        "title_one": "{{count}} mot d'équipe ajouté",
+        "title_other": "{{count}} mots d'équipe ajoutés",
+        "description": "Les mots partagés de {{workspace}} s'appliquent désormais à votre dictée et à vos notes de réunion.",
+        "descriptionNoWorkspace": "Les mots partagés de votre équipe s'appliquent désormais à votre dictée et à vos notes de réunion.",
+        "viewWords": "Voir les mots"
       }
     }
   },

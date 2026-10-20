@@ -45,6 +45,7 @@ const ARABIC_PLURAL_BASES = [
   "dictionary.shared.deletedPersonalMany",
   "dictionary.shared.locked.paused",
   "dictionary.shared.locked.wordCount",
+  "dictionary.shared.arrival.title",
   "insights.days",
   "insights.longestStreak",
   "insights.dayTooltip",

@@ -3557,6 +3557,13 @@
         "body": "このチームが使う用語を追加するか、個人リストから共有しましょう。{{list}} の全員（{{count}} 人）に届きます。",
         "import": "リストをインポート",
         "shareFromPersonal": "個人から共有"
+      },
+      "arrival": {
+        "title_one": "チームの単語を {{count}} 件追加しました",
+        "title_other": "チームの単語を {{count}} 件追加しました",
+        "description": "{{workspace}} の共有単語が、音声入力と会議ノートに適用されるようになりました。",
+        "descriptionNoWorkspace": "チームの共有単語が、音声入力と会議ノートに適用されるようになりました。",
+        "viewWords": "単語を表示"
       }
     }
   },

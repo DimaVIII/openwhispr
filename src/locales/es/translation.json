@@ -3681,6 +3681,13 @@
         "body": "Añade los términos que usa este equipo o comparte algunos de tu lista personal. Todos en {{list}} ({{count}}) los recibirán.",
         "import": "Importar una lista",
         "shareFromPersonal": "Compartir desde Personal"
+      },
+      "arrival": {
+        "title_one": "{{count}} palabra del equipo añadida",
+        "title_other": "{{count}} palabras del equipo añadidas",
+        "description": "Las palabras compartidas de {{workspace}} ya se aplican a tu dictado y a tus notas de reuniones.",
+        "descriptionNoWorkspace": "Las palabras compartidas de tu equipo ya se aplican a tu dictado y a tus notas de reuniones.",
+        "viewWords": "Ver palabras"
       }
     }
   },

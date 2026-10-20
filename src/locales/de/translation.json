@@ -3980,6 +3980,13 @@
         "body": "Füge die Begriffe hinzu, die dieses Team verwendet, oder teile einige aus deiner persönlichen Liste. Alle in {{list}} ({{count}}) bekommen sie.",
         "import": "Liste importieren",
         "shareFromPersonal": "Aus Persönlich teilen"
+      },
+      "arrival": {
+        "title_one": "{{count}} Teamwort hinzugefügt",
+        "title_other": "{{count}} Teamwörter hinzugefügt",
+        "description": "Die gemeinsamen Wörter von {{workspace}} gelten jetzt für dein Diktat und deine Meeting-Notizen.",
+        "descriptionNoWorkspace": "Die gemeinsamen Wörter deines Teams gelten jetzt für dein Diktat und deine Meeting-Notizen.",
+        "viewWords": "Wörter ansehen"
       }
     }
   },

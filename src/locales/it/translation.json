@@ -3629,6 +3629,13 @@
         "body": "Aggiungi i termini che usa questo team o condividine alcuni dal tuo elenco personale. Tutti in {{list}} ({{count}}) li riceveranno.",
         "import": "Importa un elenco",
         "shareFromPersonal": "Condividi da Personali"
+      },
+      "arrival": {
+        "title_one": "{{count}} parola del team aggiunta",
+        "title_other": "{{count}} parole del team aggiunte",
+        "description": "Le parole condivise di {{workspace}} ora valgono per il tuo dettato e per le note delle riunioni.",
+        "descriptionNoWorkspace": "Le parole condivise del tuo team ora valgono per il tuo dettato e per le note delle riunioni.",
+        "viewWords": "Vedi le parole"
       }
     }
   },

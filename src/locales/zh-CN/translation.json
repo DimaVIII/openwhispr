@@ -3627,6 +3627,13 @@
         "body": "添加这个团队使用的术语，或从你的个人列表中共享一些。{{list}} 中的所有人（{{count}}）都会收到。",
         "import": "导入列表",
         "shareFromPersonal": "从个人共享"
+      },
+      "arrival": {
+        "title_one": "已添加 {{count}} 个团队词汇",
+        "title_other": "已添加 {{count}} 个团队词汇",
+        "description": "{{workspace}} 的共享词汇现已应用于你的听写和会议笔记。",
+        "descriptionNoWorkspace": "你团队的共享词汇现已应用于你的听写和会议笔记。",
+        "viewWords": "查看词汇"
       }
     }
   },
