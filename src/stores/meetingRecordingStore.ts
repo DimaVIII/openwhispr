@@ -434,6 +434,8 @@ const seedLengthByDiarizationSession = new Map<
   string,
   { noteId: number | null; seedLength: number }
 >();
+// The stopping session's seed, until its stop call returns and keys it above.
+let stoppingSeed: { noteId: number | null; seedLength: number } | null = null;
 let preparePromise: Promise<void> | null = null;
 let ipcCleanups: Array<() => void> = [];
 let speakerIdentifications: SpeakerIdentification[] = [];
@@ -1710,17 +1712,15 @@ export async function stopRecording(expectedSessionId?: string): Promise<StopRec
         await cleanup();
 
         let stoppedDiarizationSessionId: string | null = null;
-        const seedLength = sessionSeedLength;
+        const seed = { noteId: recordingNoteId, seedLength: sessionSeedLength };
+        stoppingSeed = seed;
         try {
           const result = await window.electronAPI?.meetingTranscriptionStop?.(
             sessionId ?? undefined
           );
           if (result?.diarizationSessionId) {
             stoppedDiarizationSessionId = result.diarizationSessionId;
-            seedLengthByDiarizationSession.set(stoppedDiarizationSessionId, {
-              noteId: recordingNoteId,
-              seedLength,
-            });
+            seedLengthByDiarizationSession.set(stoppedDiarizationSessionId, seed);
             useMeetingRecordingStore.setState({
               diarizationSessionId: stoppedDiarizationSessionId,
             });
@@ -1737,6 +1737,8 @@ export async function stopRecording(expectedSessionId?: string): Promise<StopRec
             { error: (err as Error).message },
             "meeting"
           );
+        } finally {
+          stoppingSeed = null;
         }
         return stoppedDiarizationSessionId;
       },
@@ -1887,8 +1889,8 @@ if (typeof window !== "undefined") {
       }
       // A later session resumed from this note seeded the rows just removed,
       // so its seed now ends that many rows earlier.
-      for (const pending of seedLengthByDiarizationSession.values()) {
-        if (pending.noteId === targetNoteId && pending.seedLength > seedLength) {
+      for (const pending of [...seedLengthByDiarizationSession.values(), stoppingSeed]) {
+        if (pending?.noteId === targetNoteId && pending.seedLength > seedLength) {
           pending.seedLength -= removedCount;
         }
       }

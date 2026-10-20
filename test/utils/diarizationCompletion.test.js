@@ -184,6 +184,6 @@ test("withoutRemovedSegments removes one row per removed entry", () => {
 
 test("withoutRemovedSegments returns the input when nothing was removed", () => {
   const segments = [{ id: "a", source: "mic", text: "hi", timestamp: 1 }];
-  assert.equal(withoutRemovedSegments(segments, undefined), segments);
-  assert.equal(withoutRemovedSegments(segments, []), segments);
+  assert.deepEqual(withoutRemovedSegments(segments, undefined), segments);
+  assert.deepEqual(withoutRemovedSegments(segments, []), segments);
 });

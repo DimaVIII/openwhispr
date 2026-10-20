@@ -290,54 +290,67 @@ test("an earlier session's diarization that lands after the note was resumed sti
 });
 
 // An earlier session's result that removes rows after the note was resumed
-// must not leave the resumed session's seed covering its own first row.
-test("rows an earlier session's diarization removes don't shift a resumed session's seed", async (t) => {
-  const { api, state, notes } = createElectronAPI();
-  const { store, parseTranscriptSegments } = await loadModules(t, api);
-  const note = notes.get(NOTE_ID);
-  const echo = { text: "Yeah.", source: "mic", timestamp: 1760000001500 };
+// must not leave the resumed session's seed covering its own first row, even
+// when it lands while the resumed session's stop call is still running.
+for (const duringStop of [false, true]) {
+  test(`rows an earlier session's diarization removes don't shift a resumed session's seed${duringStop ? " (mid-stop)" : ""}`, async (t) => {
+    const { api, state, notes } = createElectronAPI();
+    const { store, parseTranscriptSegments } = await loadModules(t, api);
+    const note = notes.get(NOTE_ID);
+    const echo = { text: "Yeah.", source: "mic", timestamp: 1760000001500 };
 
-  state.stopDiarizationSessionId = "diar-1";
-  assert.equal(await store.startRecording(START_ARGS), true);
-  state.segmentCallback({
-    type: "final",
-    source: "system",
-    text: "Yeah.",
-    timestamp: 1760000001000,
-  });
-  state.segmentCallback({ type: "final", ...echo });
-  await store.stopRecording();
+    state.stopDiarizationSessionId = "diar-1";
+    assert.equal(await store.startRecording(START_ARGS), true);
+    state.segmentCallback({
+      type: "final",
+      source: "system",
+      text: "Yeah.",
+      timestamp: 1760000001000,
+    });
+    state.segmentCallback({ type: "final", ...echo });
+    await store.stopRecording();
 
-  state.stopDiarizationSessionId = "diar-2";
-  const seedSegments = parseTranscriptSegments(note.transcript);
-  assert.equal(await store.startRecording({ ...START_ARGS, seedSegments }), true);
-  state.segmentCallback({
-    type: "final",
-    source: "system",
-    text: "Sure, go ahead.",
-    timestamp: 1760000100000,
-  });
-  await store.stopRecording();
+    state.stopDiarizationSessionId = "diar-2";
+    const seedSegments = parseTranscriptSegments(note.transcript);
+    assert.equal(await store.startRecording({ ...START_ARGS, seedSegments }), true);
+    state.segmentCallback({
+      type: "final",
+      source: "system",
+      text: "Sure, go ahead.",
+      timestamp: 1760000100000,
+    });
+    const earlierResult = async () => {
+      state.diarizationCallback({
+        noteId: NOTE_ID,
+        sessionId: "diar-1",
+        segments: [diarized("Yeah.", 1.0, "Carol")],
+        removedSegments: [echo],
+      });
+      await settle();
+    };
+    if (duringStop) {
+      const stop = api.meetingTranscriptionStop;
+      api.meetingTranscriptionStop = async () => {
+        await earlierResult();
+        return stop();
+      };
+    }
+    await store.stopRecording();
+    if (!duringStop) await earlierResult();
 
-  state.diarizationCallback({
-    noteId: NOTE_ID,
-    sessionId: "diar-1",
-    segments: [diarized("Yeah.", 1.0, "Carol")],
-    removedSegments: [echo],
-  });
-  await settle();
-  state.diarizationCallback({
-    noteId: NOTE_ID,
-    sessionId: "diar-2",
-    segments: [diarized("Sure, go ahead.", 2.0, "Dave")],
-  });
-  await settle();
+    state.diarizationCallback({
+      noteId: NOTE_ID,
+      sessionId: "diar-2",
+      segments: [diarized("Sure, go ahead.", 2.0, "Dave")],
+    });
+    await settle();
 
-  assert.deepEqual(rowsOf(note), [
-    ["Yeah.", 1.0, "Carol"],
-    ["Sure, go ahead.", 2.0, "Dave"],
-  ]);
-});
+    assert.deepEqual(rowsOf(note), [
+      ["Yeah.", 1.0, "Carol"],
+      ["Sure, go ahead.", 2.0, "Dave"],
+    ]);
+  });
+}
 
 // Main sends a skipped diarization before the stop call returns, so the
 // listener must read the seed length only after its getNote round trip.
