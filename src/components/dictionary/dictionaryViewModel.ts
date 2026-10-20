@@ -42,6 +42,7 @@ interface RowsInput {
   snapshot: Snapshot;
   workspaceName: string;
   currentUserId: string | null;
+  access: SharedAccessState;
   search: string;
   sort: SortKey;
 }
@@ -173,15 +174,24 @@ function spaceEntriesFirst(
 }
 
 // Each word once, in the priority dictation uses: personal, then space, then workspace.
+// While shared words don't apply (locked or paused), moved personal words keep
+// applying at personal priority, so Personal and All words show them again.
+function personalWordsShown(input: RowsInput): string[] {
+  if (input.access !== "available") return input.personal;
+  return visiblePersonalWords(input.personal, input.movedPersonal, input.snapshot);
+}
+
 function allWordsRows(input: RowsInput): DictionaryRow[] {
   const seen = new Set<string>();
   const rows: DictionaryRow[] = [];
-  for (const word of visiblePersonalWords(input.personal, input.movedPersonal, input.snapshot)) {
+  for (const word of personalWordsShown(input)) {
     const key = wordKey(word);
     if (seen.has(key)) continue;
     seen.add(key);
     rows.push(personalRow(word));
   }
+  // Shared words only join All words while they apply.
+  if (input.access !== "available") return rows;
   for (const entry of spaceEntriesFirst(visibleSharedEntries(input.snapshot))) {
     const key = wordKey(entry.word);
     if (seen.has(key)) continue;
@@ -192,7 +202,7 @@ function allWordsRows(input: RowsInput): DictionaryRow[] {
 }
 
 function unsortedRows(list: ListKey, input: RowsInput): DictionaryRow[] {
-  const { personal, movedPersonal, snapshot } = input;
+  const { snapshot } = input;
   const inSingleList = (spaceId: string | null): DictionaryRow[] =>
     visibleSharedEntries(snapshot)
       .filter((entry) => entry.spaceId === spaceId)
@@ -202,7 +212,7 @@ function unsortedRows(list: ListKey, input: RowsInput): DictionaryRow[] {
     case "all":
       return allWordsRows(input);
     case "personal":
-      return visiblePersonalWords(personal, movedPersonal, snapshot).map(personalRow);
+      return personalWordsShown(input).map(personalRow);
     case "allShared":
       // One row per list entry: the same word in two lists is two rows.
       return visibleSharedEntries(snapshot).map((entry) =>
@@ -263,28 +273,29 @@ export function buildPicker(input: {
   const countIn = (spaceId: string | null): number | null =>
     snapshot ? visible.filter((entry) => entry.spaceId === spaceId).length : null;
 
-  const allWordsCount = allWordsRows({
+  const rowsInput: RowsInput = {
     personal,
     movedPersonal,
     snapshot,
     workspaceName,
     currentUserId: null,
+    access,
     search: "",
     sort: "az",
-  }).length;
+  };
 
   const entries: PickerEntry[] = [
     {
       key: "all",
       label: t("dictionary.shared.allWords"),
-      count: allWordsCount,
+      count: allWordsRows(rowsInput).length,
       locked: false,
       group: "top",
     },
     {
       key: "personal",
       label: t("dictionary.shared.personal"),
-      count: visiblePersonalWords(personal, movedPersonal, snapshot).length,
+      count: personalWordsShown(rowsInput).length,
       locked: false,
       group: "top",
     },
@@ -328,18 +339,20 @@ export function buildPicker(input: {
 
 export function defaultAddTarget(
   list: ListKey,
-  lastUsed: ShareTarget | "personal" | null
+  // undefined is "nothing remembered"; null is the workspace list.
+  lastUsed: ShareTarget | "personal" | undefined
 ): ShareTarget | "personal" {
   if (list === "personal") return "personal";
   if (list === "workspace") return null;
   if (list.startsWith("space:")) return list.slice("space:".length);
-  return lastUsed ?? "personal";
+  return lastUsed === undefined ? "personal" : lastUsed;
 }
 
 export function shareTargetsFor(
   words: string[],
   snapshot: SharedDictionarySnapshot,
-  workspaceName: string
+  workspaceName: string,
+  t: TFunction
 ): Array<{ target: ShareTarget; label: string; memberCount: number; alreadyShared: boolean }> {
   const wanted = words.map(wordKey).filter(Boolean);
   const entries = readableEntries(snapshot);
@@ -357,7 +370,10 @@ export function shareTargetsFor(
     );
     return {
       target: scope.space_id,
-      label: scope.space_id === null ? workspaceName : scope.name,
+      label:
+        scope.space_id === null
+          ? t("dictionary.shared.everyoneAt", { workspace: workspaceName })
+          : scope.name,
       memberCount: scope.member_count,
       alreadyShared: wanted.length > 0 && wanted.every((word) => inList.has(word)),
     };

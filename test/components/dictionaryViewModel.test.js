@@ -60,6 +60,7 @@ const rowInput = (overrides = {}) => ({
   snapshot: null,
   workspaceName: "Acme",
   currentUserId: "u-me",
+  access: "available",
   search: "",
   sort: "az",
   ...overrides,
@@ -359,15 +360,17 @@ test("defaultAddTarget: the open list's target, else the last used one", () => {
   for (const list of ["all", "allShared", "hidden"]) {
     assert.equal(defaultAddTarget(list, SALES), SALES);
     assert.equal(defaultAddTarget(list, "personal"), "personal");
-    assert.equal(defaultAddTarget(list, null), "personal");
+    assert.equal(defaultAddTarget(list, undefined), "personal");
+    // null is the workspace list, not "nothing remembered".
+    assert.equal(defaultAddTarget(list, null), null);
   }
 });
 
 test("shareTargetsFor lists the workspace first, then spaces, with member counts", () => {
   const snap = snapshot([]);
   snap.meta.scopes.reverse();
-  assert.deepEqual(shareTargetsFor(["Qdrant"], snap, "Acme"), [
-    { target: null, label: "Acme", memberCount: 12, alreadyShared: false },
+  assert.deepEqual(shareTargetsFor(["Qdrant"], snap, "Acme", t), [
+    { target: null, label: "Everyone at Acme", memberCount: 12, alreadyShared: false },
     { target: SALES, label: "Sales", memberCount: 4, alreadyShared: false },
     { target: ENGINEERING, label: "Engineering", memberCount: 5, alreadyShared: false },
   ]);
@@ -381,7 +384,10 @@ test("Already shared when the list has the word in another case", () => {
   ]);
   const byTarget = (given) =>
     Object.fromEntries(
-      shareTargetsFor(given, snap, "Acme").map((item) => [String(item.target), item.alreadyShared])
+      shareTargetsFor(given, snap, "Acme", t).map((item) => [
+        String(item.target),
+        item.alreadyShared,
+      ])
     );
   assert.deepEqual(byTarget(["QDRANT"]), { null: true, [ENGINEERING]: true, [SALES]: false });
   // Every word must be there, not just one of them.
@@ -391,4 +397,46 @@ test("Already shared when the list has the word in another case", () => {
     [SALES]: false,
   });
   assert.deepEqual(byTarget([]), { null: false, [ENGINEERING]: false, [SALES]: false });
+});
+
+test("paused or locked: All words and Personal show personal words only, moved words included", () => {
+  const snap = snapshot([entry("e1", "Qdrant", null), entry("e2", "Kubernetes", ENGINEERING)]);
+  const base = {
+    personal: ["OpenWhispr", "Qdrant"],
+    movedPersonal: ["Qdrant"],
+    snapshot: snap,
+    workspaceName: "Acme",
+  };
+  for (const access of ["paused", "upgradeAdmin", "upgradeMember", "unavailable", "noWorkspace"]) {
+    const picker = buildPicker({ ...base, access, t });
+    const count = (key) => picker.find((item) => item.key === key).count;
+    assert.equal(count("all"), 2, access);
+    assert.equal(count("personal"), 2, access);
+    // The dimmed shared entries keep the real snapshot's counts.
+    assert.equal(count("allShared"), 2, access);
+    assert.equal(count("workspace"), 1, access);
+    const input = rowInput({ ...base, access });
+    assert.deepEqual(words(rowsForList("all", input)), ["OpenWhispr", "Qdrant"], access);
+    assert.deepEqual(words(rowsForList("personal", input)), ["OpenWhispr", "Qdrant"], access);
+    assert.deepEqual(words(rowsForList("allShared", input)), ["Kubernetes", "Qdrant"], access);
+  }
+});
+
+test("available: a moved word with a live shared copy leaves Personal and All words show shared rows", () => {
+  const base = {
+    personal: ["OpenWhispr", "Qdrant"],
+    movedPersonal: ["Qdrant"],
+    snapshot: snapshot([entry("e1", "Qdrant", null), entry("e2", "Kubernetes", ENGINEERING)]),
+    workspaceName: "Acme",
+  };
+  const picker = buildPicker({ ...base, access: "available", t });
+  assert.equal(picker.find((item) => item.key === "all").count, 3);
+  assert.equal(picker.find((item) => item.key === "personal").count, 1);
+  assert.deepEqual(words(rowsForList("personal", rowInput(base))), ["OpenWhispr"]);
+});
+
+test("visiblePersonalWords is what clear-all and export act on", () => {
+  const snap = snapshot([entry("e1", "Qdrant", null)]);
+  const acted = visiblePersonalWords(["OpenWhispr", "Qdrant"], ["Qdrant"], snap);
+  assert.deepEqual(acted, ["OpenWhispr"]);
 });
