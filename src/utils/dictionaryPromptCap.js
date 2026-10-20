@@ -63,3 +63,25 @@ export function trimDictionaryPrompt(prompt, maxChars) {
     truncated: true,
   };
 }
+
+// Builds the dictionary prompt from priority tiers (personal, space, workspace).
+// Whole words are kept greedily, highest tier first, so a long shared list can
+// only ever crowd out lower-priority words. They are emitted lowest tier first:
+// Whisper-family decoders keep the TAIL of an over-long prompt, so the user's
+// own words belong there. A personal-only list that fits is the plain
+// ", "-joined string it always was.
+export function formatDictionaryPrompt(tiers, maxChars) {
+  const kept = tiers.map(() => []);
+  let length = 0;
+  let count = 0;
+  outer: for (let tier = 0; tier < tiers.length; tier++) {
+    for (const word of tiers[tier]) {
+      const next = length + word.length + (count > 0 ? 2 : 0);
+      if (next > maxChars) break outer;
+      length = next;
+      count++;
+      kept[tier].push(word);
+    }
+  }
+  return kept.reverse().flat().join(", ");
+}

@@ -65,6 +65,7 @@ import type {
   ChatAgentSettings,
 } from "../hooks/useSettings";
 import type { Snippet } from "../utils/snippets";
+import { EMPTY_SHARED_HINTS, type SharedHintWords } from "../utils/sharedDictionaryHints";
 import type { EnterpriseSetupMode } from "../types/enterpriseIdentity";
 import { getManagedScopeResolution } from "./enterpriseIdentityStore";
 
@@ -223,6 +224,22 @@ export const MIC_WARM_HOLD_CHOICES = [0, 10, 60, 900] as const;
 
 function snapMicWarmHold(value: number): number {
   return (MIC_WARM_HOLD_CHOICES as readonly number[]).includes(value) ? value : 0;
+}
+
+// Defensive on every read: this key is shared between windows and a stale or
+// hand-edited value must never break the dictionary prompt.
+function parseSharedHints(raw: string | null): SharedHintWords {
+  if (raw === null) return EMPTY_SHARED_HINTS;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null) return EMPTY_SHARED_HINTS;
+    const { space, workspace } = parsed as Record<string, unknown>;
+    const words = (value: unknown): string[] =>
+      Array.isArray(value) ? value.filter((w): w is string => typeof w === "string") : [];
+    return { space: words(space), workspace: words(workspace) };
+  } catch {
+    return EMPTY_SHARED_HINTS;
+  }
 }
 
 function readStringArray(key: string, fallback: string[]): string[] {
@@ -1146,6 +1163,7 @@ export interface SettingsState
   setCleanupCloudMode: (value: string) => void;
   setCleanupCloudBaseUrl: (value: string) => void;
   setCustomDictionary: (words: string[]) => void;
+  setSharedDictionaryHints: (hints: SharedHintWords) => void;
   updateCustomDictionary: (changes: { add?: string[]; remove?: string[] }) => void;
   applyCustomDictionaryFromExternal: (words: string[]) => void;
   setSnippets: (snippets: Snippet[]) => void;
@@ -1561,6 +1579,9 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   cortiEnvironment: readString("cortiEnvironment", "us"),
   cortiTenant: readString("cortiTenant", "base"),
   customDictionary: readStringArray("customDictionary", []),
+  sharedDictionaryHints: parseSharedHints(
+    isBrowser ? localStorage.getItem("sharedDictionaryHints") : null
+  ),
   snippets: (() => {
     try {
       const parsed = JSON.parse(readString("snippets", "[]"));
@@ -2127,6 +2148,13 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   setUseDictationAgent: createBooleanSetter("useDictationAgent"),
   setCleanupProvider: createStringSetter("cleanupProvider"),
   setCleanupModel: createStringSetter("cleanupModel"),
+
+  // A derived cache of the shared dictionary for the prompt path; main owns the
+  // data, so nothing is written back.
+  setSharedDictionaryHints: (hints: SharedHintWords) => {
+    if (isBrowser) localStorage.setItem("sharedDictionaryHints", JSON.stringify(hints));
+    set({ sharedDictionaryHints: hints });
+  },
 
   // Replaces the whole dictionary: anything absent from `words` is deleted.
   // Editing specific words wants updateCustomDictionary instead (#1295).
@@ -3818,6 +3846,8 @@ export async function initializeSettings(): Promise<void> {
       } catch {
         value = [];
       }
+    } else if (key === "sharedDictionaryHints") {
+      value = parseSharedHints(newValue);
     } else if (NUMERIC_SETTINGS.has(key)) {
       const parsed = Number(newValue);
       if (Number.isNaN(parsed)) {

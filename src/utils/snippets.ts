@@ -1,3 +1,5 @@
+import type { SharedHintWords } from "./sharedDictionaryHints";
+
 export interface Snippet {
   trigger: string;
   replacement: string;
@@ -116,22 +118,68 @@ export function expandSnippets(text: string, snippets?: Snippet[] | null): strin
     .replace(regex, (match) => resolveReplacement(match, replacements) ?? match);
 }
 
+interface DictionaryHintSettings {
+  customDictionary?: string[] | null;
+  snippets?: Snippet[] | null;
+  sharedDictionaryHints?: SharedHintWords | null;
+}
+
+function wordList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((w): w is string => typeof w === "string") : [];
+}
+
+// Shared words never repeat a word seen in a higher tier (or earlier in their
+// own); case-insensitive so the user's own spelling wins over a teammate's.
+function dedupeBelow(words: string[], seen: Set<string>): string[] {
+  const kept: string[] = [];
+  for (const word of words) {
+    const key = word.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    kept.push(word);
+  }
+  return kept;
+}
+
+function sharedTiers(
+  settings: DictionaryHintSettings | null | undefined,
+  personal: string[]
+): [string[], string[]] {
+  const seen = new Set(wordList(personal).map((word) => word.toLowerCase()));
+  const space = dedupeBelow(wordList(settings?.sharedDictionaryHints?.space), seen);
+  const workspace = dedupeBelow(wordList(settings?.sharedDictionaryHints?.workspace), seen);
+  return [space, workspace];
+}
+
+/**
+ * Hint words in priority order: [personal + snippet triggers, space, workspace].
+ * Snippet triggers rank with personal words so they survive both the STT prompt
+ * and the cleanup-model suffix. The personal tier is returned as saved (no
+ * dedupe) so a list without shared words is exactly what it always was.
+ */
+export function getDictionaryHintTiers(settings?: DictionaryHintSettings | null): string[][] {
+  const dictionary = Array.isArray(settings?.customDictionary) ? settings.customDictionary : [];
+  const snippets = Array.isArray(settings?.snippets) ? settings.snippets : [];
+  const triggers = snippets
+    .map((s) => s?.trigger)
+    .filter((t): t is string => typeof t === "string" && t.length > 0);
+  const personal = [...dictionary, ...triggers];
+  return [personal, ...sharedTiers(settings, personal)];
+}
+
 /**
  * Dictionary words plus snippet triggers — the hint list fed to the STT
  * prompt and cleanup-model dictionary suffix so triggers survive both.
  */
-export function getDictionaryHintWords(
-  settings?: {
-    customDictionary?: string[] | null;
-    snippets?: Snippet[] | null;
-  } | null
-): string[] {
-  const dictionary = Array.isArray(settings?.customDictionary) ? settings.customDictionary : [];
-  const snippets = Array.isArray(settings?.snippets) ? settings.snippets : [];
-  if (snippets.length === 0) return [...dictionary];
+export function getDictionaryHintWords(settings?: DictionaryHintSettings | null): string[] {
+  return getDictionaryHintTiers(settings).flat();
+}
 
-  const triggers = snippets
-    .map((s) => s?.trigger)
-    .filter((t): t is string => typeof t === "string" && t.length > 0);
-  return [...dictionary, ...triggers];
+/**
+ * The words the user's dictionary effectively contains, for counts and display:
+ * personal, then space, then workspace, without snippet triggers.
+ */
+export function getEffectiveDictionaryWords(settings?: DictionaryHintSettings | null): string[] {
+  const personal = Array.isArray(settings?.customDictionary) ? settings.customDictionary : [];
+  return [personal, ...sharedTiers(settings, personal)].flat();
 }

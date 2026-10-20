@@ -5,6 +5,8 @@ const {
   expandSnippets,
   findSnippetTriggerRanges,
   getDictionaryHintWords,
+  getDictionaryHintTiers,
+  getEffectiveDictionaryWords,
 } = require("../../src/utils/snippets.ts");
 
 test("expands a trigger containing Turkish capital İ", () => {
@@ -157,4 +159,43 @@ test("findSnippetTriggerRanges reports only ranges expandSnippets will replace",
 
   assert.equal(expandSnippets("imza raporu hazırla", snippets), "imza raporu hazırla");
   assert.deepEqual(findSnippetTriggerRanges("imza raporu hazırla", snippets), []);
+});
+
+test("tiers dedupe case-insensitively with personal spelling", () => {
+  const tiers = getDictionaryHintTiers({
+    customDictionary: ["OpenWhispr"],
+    sharedDictionaryHints: { space: [], workspace: ["openwhispr", "ARR"] },
+  });
+  assert.deepEqual(tiers, [["OpenWhispr"], [], ["ARR"]]);
+});
+
+test("snippet triggers rank in the personal tier", () => {
+  const tiers = getDictionaryHintTiers({
+    customDictionary: ["Piha"],
+    snippets: [{ trigger: "sig", replacement: "Regards" }],
+    sharedDictionaryHints: { space: ["Kube", "SIG"], workspace: ["Acme"] },
+  });
+  assert.deepEqual(tiers, [["Piha", "sig"], ["Kube"], ["Acme"]]);
+});
+
+test("getDictionaryHintWords without shared hints is unchanged", () => {
+  assert.deepEqual(
+    getDictionaryHintWords({
+      customDictionary: ["a", "b"],
+      snippets: [{ trigger: "t", replacement: "x" }],
+    }),
+    ["a", "b", "t"]
+  );
+  assert.deepEqual(getDictionaryHintWords(null), []);
+});
+
+test("getEffectiveDictionaryWords omits triggers", () => {
+  assert.deepEqual(
+    getEffectiveDictionaryWords({
+      customDictionary: ["Piha"],
+      snippets: [{ trigger: "sig", replacement: "Regards" }],
+      sharedDictionaryHints: { space: ["Kube"], workspace: ["piha", "Acme"] },
+    }),
+    ["Piha", "Kube", "Acme"]
+  );
 });
