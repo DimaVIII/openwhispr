@@ -433,6 +433,15 @@ describe('pullSharedDictionary', () => {
     expect((await loadSharedDictionaryState())?.entries).toEqual({});
   });
 
+  it('a different workspace drops the old words before its first snapshot', async () => {
+    await seedStored({ ...STORED, workspaceId: 'ws-old' });
+    mockFetchSharedDictionary.mockRejectedValueOnce(apiError(500));
+
+    await expect(pullSharedDictionary()).rejects.toThrow('failed');
+
+    expect(await loadSharedDictionaryState()).toBeNull();
+  });
+
   it('plain 404 sets the unavailable flag and does not throw', async () => {
     const isolated = loadIsolatedPull();
     await seedStored();

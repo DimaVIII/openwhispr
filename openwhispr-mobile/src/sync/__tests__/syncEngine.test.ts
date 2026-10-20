@@ -990,6 +990,18 @@ describe('shared dictionary pull', () => {
     expect(useSyncStore.getState().lastError).toBeNull();
   });
 
+  it('does not reload the stored words when the account changed during a failed pull', async () => {
+    mockPullSharedDictionary.mockImplementation(async () => {
+      mockAuthState.user = null;
+      throw new ApiError('boom', 500);
+    });
+
+    requestSync('manual');
+    await flush();
+
+    expect(mockLoadSharedDictionary).not.toHaveBeenCalled();
+  });
+
   it('a network-level shared pull failure stays out of Sentry', async () => {
     mockPullSharedDictionary.mockRejectedValue(new TypeError('Network request failed'));
 

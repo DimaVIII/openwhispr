@@ -254,6 +254,9 @@ async function syncSharedDictionary(checkpoint: SyncCheckpoint): Promise<void> {
       Sentry.captureException(err, { tags: { sync: 'shared-dictionary' } });
     }
   }
+  // A failed pull falls through to here: if the account changed meanwhile, the
+  // stored words are no longer this user's to publish.
+  checkpoint();
   useSharedDictionaryStore.getState().load().catch(reportSharedDictionaryLoadError);
 }
 

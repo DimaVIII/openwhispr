@@ -353,6 +353,9 @@ export async function pullSharedDictionary(
     const base = stored?.workspaceId === workspace.id ? stored : null;
     if (!base) {
       checkpoint(true);
+      // The old workspace's words go too: if this workspace's first snapshot
+      // fails, they must not be republished as its words.
+      await saveSharedDictionaryState(null);
       resetSharedDictionaryCursors();
     }
 

@@ -1,9 +1,10 @@
 import { create } from 'zustand';
 import { selectSharedHintWords, type SharedHintWords } from '@/lib/sharedDictionaryHints';
 
-// The sync modules are required where they're used: every dictation path reads
-// `hints` (src/lib/dictationHints.ts), and a static import would pull the whole
-// data layer into each of them.
+// The sync modules are required where they're used: src/lib/dictationHints.ts
+// imports this store and is imported by every dictation path, so a static
+// import of `@/sync/*` would drag the data layer (and `expo/fetch`) into all of
+// them and break test isolation.
 
 export interface SharedDictionarySummary {
   count: number;
@@ -16,7 +17,7 @@ interface SharedDictionaryStoreState {
   /**
    * lower(word) of every live shared entry, hidden or not: a personal word
    * moved into a shared list leaves the personal list while its shared copy
-   * exists, even when the member hid that copy.
+   * exists, even when the member hid that copy. Empty while sharing is paused.
    */
   sharedWordsLower: Set<string>;
   /** How many shared words apply, or null when none do. */
@@ -55,9 +56,11 @@ export const useSharedDictionaryStore = create<SharedDictionaryStoreState>((set)
     const count = hints.space.length + hints.workspace.length;
     set({
       hints,
-      sharedWordsLower: new Set(
-        Object.values(state.entries).map((entry) => entry.word.trim().toLowerCase()),
-      ),
+      // While paused the words apply at personal priority, so the Personal
+      // list keeps showing them.
+      sharedWordsLower: state.paused
+        ? new Set()
+        : new Set(Object.values(state.entries).map((entry) => entry.word.trim().toLowerCase())),
       summary: count > 0 ? { count, workspaceName: state.workspaceName } : null,
     });
   },

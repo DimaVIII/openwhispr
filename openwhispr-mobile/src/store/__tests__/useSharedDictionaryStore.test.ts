@@ -67,14 +67,16 @@ describe('useSharedDictionaryStore', () => {
     expect([...sharedWordsLower].sort()).toEqual(['acme', 'gizmo', 'hidden', 'line\nbreak']);
   });
 
-  it('applies nothing while paused, but still knows the shared words', async () => {
+  it('applies nothing while paused, and keeps moved words in the personal list', async () => {
     await saveSharedDictionaryState({ ...STATE, paused: true });
     await useSharedDictionaryStore.getState().load();
 
     const { hints, sharedWordsLower, summary } = useSharedDictionaryStore.getState();
     expect(hints).toEqual({ space: [], workspace: [] });
     expect(summary).toBeNull();
-    expect(sharedWordsLower.has('acme')).toBe(true);
+    // A paused list stops applying at shared priority, but the moved words keep
+    // applying as personal words, so the Personal list must still show them.
+    expect(sharedWordsLower.size).toBe(0);
   });
 
   it('empties when the stored state is gone', async () => {
