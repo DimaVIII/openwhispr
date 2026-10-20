@@ -57,6 +57,11 @@ async function appleIntelligenceReady(): Promise<ModeSwitchResult | null> {
     Alert.alert('On-Device Unavailable', message);
     return 'refused';
   }
+  // Changing the iPhone's language restarts every app, so this page can't wait for it.
+  if (readiness.status === 'unsupportedLanguage') {
+    Alert.alert('On-Device Unavailable', `${message} Then come back and choose On-Device again.`);
+    return 'refused';
+  }
   Alert.alert(
     'On-Device Unavailable',
     `${message} Keep this page open and On-Device turns on once Apple Intelligence is ready.`,

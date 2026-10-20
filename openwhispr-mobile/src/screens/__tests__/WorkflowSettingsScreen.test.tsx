@@ -1443,8 +1443,7 @@ function modeRow(title: string): { props: { accessibilityState?: Record<string, 
 }
 
 describe('an iPhone that cannot run Apple Intelligence', () => {
-  const NEEDS =
-    "Apple Intelligence isn't available on this iPhone. It needs an iPhone 15 Pro or later, with Apple Intelligence set up in Settings → Apple Intelligence & Siri.";
+  const NEEDS = 'On-Device AI needs an iPhone with Apple Intelligence (iPhone 15 Pro or later).';
 
   beforeEach(() => {
     mockLocalReadiness.mockResolvedValue({ status: 'unsupportedDevice', tokenCounting: false });
@@ -1475,8 +1474,16 @@ describe('an iPhone that cannot run Apple Intelligence', () => {
   it.each([
     ['appleIntelligenceOff', 'Apple Intelligence is turned off in iOS Settings.'],
     ['modelNotReady', 'Apple Intelligence is downloading its model.'],
+    [
+      'unsupportedLanguage',
+      "Apple Intelligence doesn't support Polish (Poland), your iPhone's language.",
+    ],
   ])('keeps On-Device available and says why while it is %s', async (status, reason) => {
-    mockLocalReadiness.mockResolvedValue({ status, tokenCounting: false });
+    mockLocalReadiness.mockResolvedValue({
+      status,
+      tokenCounting: false,
+      deviceLanguage: 'Polish (Poland)',
+    });
     mockScope = 'cleanup';
     render(<WorkflowSettingsScreen />);
 

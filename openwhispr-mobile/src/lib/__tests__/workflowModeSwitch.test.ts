@@ -139,7 +139,7 @@ it('switches uploads to On-Device with the model picked for them before', async 
 });
 
 // Settings can fix these, so the page finishes the switch once Apple Intelligence is ready.
-it.each(['appleIntelligenceOff', 'modelNotReady', 'unsupportedLanguage'])(
+it.each(['appleIntelligenceOff', 'modelNotReady'])(
   'waits for Apple Intelligence when it is %s',
   async (status) => {
     mockLocalReasoningReadiness.mockResolvedValue({ status });
@@ -151,6 +151,17 @@ it.each(['appleIntelligenceOff', 'modelNotReady', 'unsupportedLanguage'])(
     expect(mockUpdateConfig).not.toHaveBeenCalled();
   },
 );
+
+// Changing the iPhone's language restarts the app, so the page sends the user back instead.
+it('asks to come back once the language is changed rather than waiting', async () => {
+  mockLocalReasoningReadiness.mockResolvedValue({ status: 'unsupportedLanguage' });
+  await expect(switchWorkflowMode('cleanup', 'local')).resolves.toBe('refused');
+  expect(alert).toHaveBeenCalledWith(
+    'On-Device Unavailable',
+    'Apple Intelligence is turned off. Then come back and choose On-Device again.',
+  );
+  expect(mockUpdateConfig).not.toHaveBeenCalled();
+});
 
 // Nothing in iOS Settings makes these ready, so the page must not wait for them.
 it.each(['unsupportedDevice', 'disabled', 'unavailable'])(

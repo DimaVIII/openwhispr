@@ -1,4 +1,4 @@
-import { AppleLLM } from '@/lib/appleLLM';
+import { AppleLLM, type AppleLLMAvailability } from '@/lib/appleLLM';
 import type {
   LocalReasoningErrorCode,
   LocalReasoningReadiness,
@@ -18,6 +18,11 @@ export const LOCAL_TOKEN_CHAR_RATIO = 3.5;
 // might not fit would come back cut short. The margin covers the punctuation and capitals cleanup
 // adds.
 export const LOCAL_CLEANUP_MAX_TRANSCRIPT_TOKENS = Math.floor(LOCAL_OUTPUT_TOKEN_RESERVE * 0.8);
+
+const LANGUAGE_SETTINGS = 'Settings → General → Language & Region';
+
+// A generation refused for its language: the text's, which can be in any language, or the iPhone's.
+export const UNSUPPORTED_LANGUAGE_MESSAGE = `Apple Intelligence doesn't support this language. If it's your iPhone's, choose another in ${LANGUAGE_SETTINGS}.`;
 
 let cachedReadiness: Promise<LocalReasoningReadiness> | null = null;
 
@@ -56,16 +61,8 @@ export async function getLocalReasoningReadiness(options?: {
   cachedReadiness = (async () => {
     try {
       const availability = await AppleLLM.getAvailability();
-      // iOS gives no availability reason for an unsupported language, so it can report the
-      // iPhone as ineligible, or Apple Intelligence as off, when the language is what's wrong.
-      // The check only explains why it is unavailable; it never stops Apple Intelligence that runs.
-      if (availability.status !== 'available' && availability.localeSupported === false) {
-        return {
-          status: 'unsupportedLanguage',
-          deviceLanguage: availability.deviceLanguage,
-          tokenCounting: false,
-        };
-      }
+      const languageReadiness = languageReadinessFor(availability);
+      if (languageReadiness) return languageReadiness;
       switch (availability.status) {
         case 'available':
           return {
@@ -86,7 +83,11 @@ export async function getLocalReasoningReadiness(options?: {
             tokenCounting: availability.tokenCounting === true,
           };
         case 'deviceNotEligible':
-          return { status: 'unsupportedDevice', tokenCounting: false };
+          return {
+            status: 'unsupportedDevice',
+            tokenCounting: false,
+            ...siriMismatch(availability),
+          };
         case 'unsupportedOS':
           return { status: 'unsupportedOS', tokenCounting: false };
         default:
@@ -102,6 +103,34 @@ export async function getLocalReasoningReadiness(options?: {
   })();
 
   return cachedReadiness;
+}
+
+// iOS has no availability reason for the iPhone and Siri being set to different languages, or to
+// one Apple Intelligence doesn't support; it reports Apple Intelligence as off. So the language
+// explains only that. A model still downloading means Apple Intelligence is on, an ineligible
+// iPhone stays one, and Apple Intelligence that runs is never stopped.
+function languageReadinessFor(availability: AppleLLMAvailability): LocalReasoningReadiness | null {
+  if (
+    availability.status !== 'appleIntelligenceNotEnabled' &&
+    availability.status !== 'unavailable'
+  ) {
+    return null;
+  }
+  const mismatch = siriMismatch(availability);
+  if (!mismatch.siriLanguage && availability.localeSupported !== false) return null;
+  return {
+    status: 'unsupportedLanguage',
+    deviceLanguage: availability.deviceLanguage,
+    tokenCounting: false,
+    ...mismatch,
+  };
+}
+
+function siriMismatch(
+  availability: AppleLLMAvailability,
+): Pick<LocalReasoningReadiness, 'deviceLanguage' | 'siriLanguage'> {
+  if (availability.siriLanguageMatches !== false || !availability.siriLanguage) return {};
+  return { deviceLanguage: availability.deviceLanguage, siriLanguage: availability.siriLanguage };
 }
 
 export function isLocalReasoningRequired(options: ReasoningRoutingOptions = {}): boolean {
@@ -208,8 +237,8 @@ export async function fitsLocalCleanupOutput(text: string): Promise<boolean> {
 }
 
 // This iPhone runs Apple Intelligence, even if it is turned off in Settings, still preparing its
-// model, or set to a language it doesn't support. Disabled in AI Models or unavailable says nothing
-// about the device either way.
+// model, or kept off by its language. Disabled in AI Models or unavailable says nothing about the
+// device either way.
 export function canRunLocalReasoning(readiness?: LocalReasoningReadiness | null): boolean {
   return (
     readiness?.status === 'ready' ||
@@ -219,18 +248,33 @@ export function canRunLocalReasoning(readiness?: LocalReasoningReadiness | null)
   );
 }
 
-export const UNSUPPORTED_LANGUAGE_MESSAGE = "Apple Intelligence doesn't support this language.";
-
 // Unlike Apple Intelligence being off or still downloading, nothing in Settings fixes these.
 export function isLocalReasoningUnsupported(readiness?: LocalReasoningReadiness | null): boolean {
   return readiness?.status === 'unsupportedDevice' || readiness?.status === 'unsupportedOS';
 }
 
+// What keeps Apple Intelligence off when the language does, in one sentence.
+export function getLocalReasoningLanguageNote(readiness: LocalReasoningReadiness): string {
+  if (readiness.siriLanguage) {
+    return 'Apple Intelligence needs your iPhone and Siri set to the same language.';
+  }
+  return readiness.deviceLanguage
+    ? `Apple Intelligence doesn't support ${readiness.deviceLanguage}, your iPhone's language.`
+    : "Apple Intelligence doesn't support your iPhone's language.";
+}
+
+function siriMismatchAdvice(readiness: LocalReasoningReadiness): string {
+  const device = readiness.deviceLanguage ? ` and your iPhone to ${readiness.deviceLanguage}` : '';
+  return `Siri is set to ${readiness.siriLanguage}${device}. Change Siri's in Settings → Siri, or your iPhone's in ${LANGUAGE_SETTINGS}.`;
+}
+
 export function getLocalReasoningUnavailableMessage(readiness?: LocalReasoningReadiness): string {
   switch (readiness?.status) {
-    // iOS also reports an eligible iPhone this way while Apple Intelligence isn't set up on it.
     case 'unsupportedDevice':
-      return "Apple Intelligence isn't available on this iPhone. It needs an iPhone 15 Pro or later, with Apple Intelligence set up in Settings → Apple Intelligence & Siri.";
+      // Shown with the hardware need in case iOS reports a language mismatch this way too.
+      return readiness.siriLanguage
+        ? `On-Device AI needs an iPhone with Apple Intelligence (iPhone 15 Pro or later), set to the same language as Siri. ${siriMismatchAdvice(readiness)}`
+        : 'On-Device AI needs an iPhone with Apple Intelligence (iPhone 15 Pro or later).';
     case 'unsupportedOS':
       return 'On-Device AI needs iOS 26 or later on an iPhone with Apple Intelligence.';
     case 'disabled':
@@ -239,12 +283,10 @@ export function getLocalReasoningUnavailableMessage(readiness?: LocalReasoningRe
       return "Apple Intelligence is turned off, so this can't run on-device. Turn it on in Settings → Apple Intelligence & Siri.";
     case 'modelNotReady':
       return 'Apple Intelligence is still downloading its model. Check Settings → Apple Intelligence & Siri, and keep your iPhone on Wi-Fi and charging.';
-    case 'unsupportedLanguage': {
-      const language = readiness.deviceLanguage
-        ? `${readiness.deviceLanguage}, your iPhone's language`
-        : "your iPhone's language";
-      return `Apple Intelligence doesn't support ${language}. Choose a supported one in Settings → General → Language & Region.`;
-    }
+    case 'unsupportedLanguage':
+      return readiness.siriLanguage
+        ? `${getLocalReasoningLanguageNote(readiness)} ${siriMismatchAdvice(readiness)}`
+        : `${getLocalReasoningLanguageNote(readiness)} Choose a supported one in ${LANGUAGE_SETTINGS}.`;
     case 'unavailable':
     default:
       return 'Local Apple Intelligence is unavailable on this device.';
@@ -263,7 +305,6 @@ export function toLocalReasoningError(error: unknown): LocalReasoningError {
   }
 
   switch (code) {
-    // The iPhone's language, or the text's, which the transcript can be in whatever the setting.
     case 'APPLE_LLM_UNSUPPORTED_LANGUAGE':
       return new LocalReasoningError(code, UNSUPPORTED_LANGUAGE_MESSAGE);
     case 'APPLE_LLM_GUARDRAIL':

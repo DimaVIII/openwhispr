@@ -6,7 +6,11 @@ import { SystemIcon } from '@/components/ui/SystemIcon';
 import { OpenWhisprMark } from '@/components/ui/OpenWhisprMark';
 import { BRAND } from '@/config/colors';
 import { useOnboardingStep } from '@/hooks/useOnboardingStep';
-import { canRunLocalReasoning, getLocalReasoningReadiness } from '@/lib/localReasoning';
+import {
+  canRunLocalReasoning,
+  getLocalReasoningLanguageNote,
+  getLocalReasoningReadiness,
+} from '@/lib/localReasoning';
 import { chooseOnboardingMode } from '@/lib/onboardingMode';
 import { useConfigStore } from '@/store/useConfigStore';
 import { useModelDownloadStore } from '@/store/useModelDownloadStore';
@@ -46,7 +50,7 @@ function privateCleanupLine(
         readiness?.status === 'appleIntelligenceOff'
           ? 'Starts once it’s on in Settings → Apple Intelligence & Siri.'
           : readiness?.status === 'unsupportedLanguage'
-            ? 'Starts once your iPhone is set to a language it supports, in Settings → General → Language & Region.'
+            ? `${getLocalReasoningLanguageNote(readiness)} Starts once that's changed in Settings.`
             : undefined,
     };
   }

@@ -18,6 +18,7 @@ Pod::Spec.new do |s|
   s.static_framework = true
 
   s.dependency 'ExpoModulesCore'
+  s.frameworks = 'Intents'
   s.weak_framework = 'FoundationModels'
 
   s.pod_target_xcconfig = {

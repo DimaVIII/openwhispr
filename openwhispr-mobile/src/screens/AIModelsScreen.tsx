@@ -44,7 +44,7 @@ function localReasoningStatusLabel(readiness: LocalReasoningReadiness | null): s
     case 'modelNotReady':
       return 'Downloading model';
     case 'unsupportedLanguage':
-      return 'Language not supported';
+      return readiness.siriLanguage ? 'Siri language differs' : 'Language not supported';
     case 'unavailable':
       return 'Not eligible';
     case 'unsupportedDevice':

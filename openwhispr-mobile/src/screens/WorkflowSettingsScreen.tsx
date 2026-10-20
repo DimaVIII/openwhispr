@@ -66,6 +66,7 @@ import {
 } from '@/lib/workflowModeSwitch';
 import { getPrivateModeReadiness } from '@/lib/privateMode';
 import {
+  getLocalReasoningLanguageNote,
   getLocalReasoningReadiness,
   getLocalReasoningUnavailableMessage,
   isLocalReasoningUnsupported,
@@ -98,7 +99,6 @@ const APPLE_INTELLIGENCE_POLL_MS = 10_000;
 const APPLE_INTELLIGENCE_STATUSES: Partial<Record<LocalReasoningReadiness['status'], string>> = {
   appleIntelligenceOff: 'Apple Intelligence is turned off in iOS Settings.',
   modelNotReady: 'Apple Intelligence is downloading its model.',
-  unsupportedLanguage: "Apple Intelligence doesn't support your iPhone's language.",
 };
 const PROVIDER_SETUP_URLS: Record<string, string> = {
   openai: 'https://platform.openai.com/api-keys',
@@ -370,7 +370,10 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
   const onDeviceUnsupported = isLocalReasoningUnsupported(appleIntelligence)
     ? getLocalReasoningUnavailableMessage(appleIntelligence ?? undefined)
     : null;
-  const onDeviceStatus = appleIntelligence && APPLE_INTELLIGENCE_STATUSES[appleIntelligence.status];
+  const onDeviceStatus =
+    appleIntelligence?.status === 'unsupportedLanguage'
+      ? getLocalReasoningLanguageNote(appleIntelligence)
+      : appleIntelligence && APPLE_INTELLIGENCE_STATUSES[appleIntelligence.status];
   // Nothing is shown as picked when the On-Device text workflow can never run on this iPhone.
   const pickedMode =
     !speechScope && onDeviceUnsupported && selection.mode === 'local' ? null : selection.mode;
