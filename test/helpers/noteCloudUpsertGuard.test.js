@@ -289,3 +289,18 @@ test("linking or unlinking an event retires an outstanding assistant Undo", (t) 
     assert.equal(db.getNoteUndos().length, 0);
   }
 });
+
+test("clearing a linked note's event with null stores the synced blank", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+  const linked = db.saveNote("Meeting", "", "meeting").note;
+  db.updateNote(linked.id, { calendar_event_id: "evt-1" });
+  const unlinked = db.saveNote("Notes", "", "personal").note;
+
+  // The local API and other non-UI callers may unlink with null.
+  db.updateNote(linked.id, { calendar_event_id: null });
+  db.updateNote(unlinked.id, { calendar_event_id: null });
+
+  assert.equal(db.getNote(linked.id).calendar_event_id, "");
+  assert.equal(db.getNote(unlinked.id).calendar_event_id, null, "a never-linked note stays NULL");
+});

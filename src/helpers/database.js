@@ -3408,6 +3408,10 @@ class DatabaseManager {
       const previous = this.getNote(id);
       if (!previous) return { success: false, error: "Note not found" };
       updates = { ...updates };
+      // An unlink is stored as "" so it syncs: the cloud keeps a NULL as "unchanged".
+      if (updates.calendar_event_id === null && previous.calendar_event_id) {
+        updates.calendar_event_id = "";
+      }
       const clears = updates.clear_fields ?? [];
       if (!Array.isArray(clears) || clears.some((field) => !NOTE_TEXT_FIELDS.includes(field))) {
         return { success: false, error: "Invalid note clear fields" };
