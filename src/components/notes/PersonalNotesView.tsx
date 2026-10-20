@@ -32,7 +32,7 @@ import {
   type MeetingIdentity,
 } from "../../utils/llmTranscript";
 import type { MentionPerson } from "../../utils/mentionMarkdown";
-import type { CalendarAttendee } from "../../types/calendar";
+import type { CalendarAttendee, CalendarEvent } from "../../types/calendar";
 import {
   useNotes,
   useSpaces,
@@ -386,16 +386,31 @@ export default function PersonalNotesView({
     [activeNote, folders]
   );
 
-  const [calendarEventName, setCalendarEventName] = useState<string | null>(null);
+  // The linked event's stored row, tagged with the id it was looked up for so a
+  // stale lookup never shows against another link.
+  const [linkedEventLookup, setLinkedEventLookup] = useState<{
+    id: string;
+    event: CalendarEvent | null;
+  } | null>(null);
+  const linkedEventId = activeNote?.calendar_event_id || null;
   useEffect(() => {
-    if (!activeNote?.calendar_event_id) {
-      setCalendarEventName(null);
-      return;
-    }
-    window.electronAPI.gcalGetEvent?.(activeNote.calendar_event_id).then((result) => {
-      setCalendarEventName(result?.success && result.event?.summary ? result.event.summary : null);
+    if (!linkedEventId) return;
+    let cancelled = false;
+    window.electronAPI.gcalGetEvent?.(linkedEventId).then((result) => {
+      if (!cancelled) {
+        setLinkedEventLookup({ id: linkedEventId, event: result?.success ? result.event : null });
+      }
     });
-  }, [activeNote?.calendar_event_id]);
+    return () => {
+      cancelled = true;
+    };
+  }, [linkedEventId]);
+  const linkedEvent = !linkedEventId
+    ? null
+    : linkedEventLookup?.id === linkedEventId
+      ? linkedEventLookup.event
+      : undefined;
+  const calendarEventName = linkedEvent?.summary ?? null;
 
   const startRecording = useCallback(() => startRecordingForNote(activeNote ?? null), [activeNote]);
 
@@ -877,7 +892,7 @@ export default function PersonalNotesView({
               onSetSessionDiarizationEnabled={setSessionDiarizationEnabled}
               onSetSessionExpectedCount={setSessionExpectedCount}
               folderName={activeFolderName}
-              calendarEventName={calendarEventName}
+              linkedEvent={linkedEvent}
               folders={editorFolders}
               onMoveToFolder={handleMoveToFolder}
               onCreateFolderAndMove={handleCreateFolderAndMove}
