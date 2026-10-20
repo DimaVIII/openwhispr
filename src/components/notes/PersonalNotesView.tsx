@@ -740,8 +740,14 @@ export default function PersonalNotesView({
     let formattedTranscript = "";
     let meetingContext = "";
     let isMeetingNote = false;
+    let hasPlainTranscript = false;
     let knownPeople: MentionPerson[] = [];
     if (rawTranscript) {
+      const identity: MeetingIdentity = {
+        selfName: user?.name?.trim() || null,
+        selfEmail: user?.email?.trim() || null,
+        participants: parseNoteParticipants(editorNote.participants),
+      };
       const segments = parseTranscriptSegments(rawTranscript);
       if (segments.length > 0) {
         isMeetingNote = true;
@@ -750,15 +756,16 @@ export default function PersonalNotesView({
         const speakerMappings: Record<string, string> = {};
         for (const m of mappingRows) speakerMappings[m.speaker_id] = m.display_name;
 
-        const identity: MeetingIdentity = {
-          selfName: user?.name?.trim() || null,
-          selfEmail: user?.email?.trim() || null,
-          participants: parseNoteParticipants(editorNote.participants),
-        };
         const selfLabel = identity.selfName || t("notes.speaker.you");
         meetingContext = buildMeetingContext(identity, selfLabel);
         formattedTranscript = buildLlmTranscript(segments, speakerMappings, selfLabel, t);
         knownPeople = collectKnownPeople(identity, speakerMappings, segments);
+      } else {
+        // Plain text shows no speakers, so the run gets no Meeting Context: the model
+        // can't tell who "I" is, and an invitee list invites guessed owners. The
+        // invitees still turn an owner the transcript names into a mention (#2666).
+        hasPlainTranscript = true;
+        knownPeople = collectKnownPeople(identity, {}, []);
       }
       if (!formattedTranscript) {
         formattedTranscript = rawTranscript;
@@ -775,6 +782,7 @@ export default function PersonalNotesView({
       isCloudMode,
       modelId: effectiveModelId,
       isMeetingNote,
+      hasPlainTranscript,
       knownPeople,
       fromSummary,
       material,

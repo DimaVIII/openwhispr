@@ -47,7 +47,7 @@ const MOCKS = {
     export const useNotesOnboarding = () => ({ isComplete: true, complete() {} });
   `,
   "/hooks/useTeamSpacesCapability": `export const useTeamSpacesCapability = () => false;`,
-  "/hooks/useAuth": `export const useAuth = () => ({ isSignedIn: false, user: null });`,
+  "/hooks/useAuth": `export const useAuth = () => ({ isSignedIn: false, user: globalThis.__user ?? null });`,
   "/stores/noteStore": `
     const note = () => globalThis.__note;
     export const setActiveNoteId = () => {};
@@ -274,3 +274,57 @@ for (const { name, transcribing, liveNoteId, expectLive } of [
     }
   });
 }
+
+const AI_SUMMARY = {
+  id: 2,
+  kind: "template",
+  name: "AI Summary",
+  prompt: "Summarize",
+  sections: null,
+};
+const PARTICIPANTS = JSON.stringify([
+  { email: "josh@example.com", displayName: "Josh Padoa", self: true },
+  { email: "wes@example.com", displayName: "Wes Kim" },
+]);
+
+async function runSummaryOn(t, note) {
+  const calls = await mountView(t);
+  globalThis.__noteActionCalls = [];
+  globalThis.__user = { name: "Josh Padoa", email: "josh@example.com" };
+  t.after(() => {
+    delete globalThis.__noteActionCalls;
+    delete globalThis.__user;
+  });
+  globalThis.__note = { ...NOTE, ...note };
+  await calls.rerender();
+  await React.act(async () => {
+    await globalThis.__editorProps.onRunNoteAction(AI_SUMMARY);
+  });
+  assert.equal(globalThis.__noteActionCalls.length, 1);
+  const [, input, , options] = globalThis.__noteActionCalls[0];
+  return { input, options };
+}
+
+test("a transcript stored as plain text runs as one, with the user and the invitees for owner mentions", async (t) => {
+  const transcript = "Wes, can you fix the build by Friday? Sure, I'll do it.";
+  const { input, options } = await runSummaryOn(t, { transcript, participants: PARTICIPANTS });
+  assert.equal(options.hasPlainTranscript, true);
+  assert.equal(options.isMeetingNote, false, "plain text has no speaker lines to split along");
+  assert.deepEqual(options.knownPeople, [
+    { name: "Josh Padoa", email: "josh@example.com" },
+    { name: "Wes Kim", email: "wes@example.com" },
+  ]);
+  assert.equal(
+    input,
+    `${NOTE.content}\n\n## Meeting Transcript\n${transcript}`,
+    "no Meeting Context, and the transcript as stored"
+  );
+});
+
+test("a note without a transcript keeps the personal-note run", async (t) => {
+  const { input, options } = await runSummaryOn(t, { transcript: "", participants: PARTICIPANTS });
+  assert.equal(input, NOTE.content);
+  assert.equal(options.isMeetingNote, false);
+  assert.ok(!options.hasPlainTranscript);
+  assert.deepEqual(options.knownPeople, []);
+});
