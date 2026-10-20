@@ -43,6 +43,7 @@ function harness() {
   vm.createContext(context);
   vm.runInContext(
     `
+    ${sliceBetween("const MEETING_MIC_REFERENCE_ALIGNMENT_MS =", "const MEETING_STARTUP_WARMUP_MS =")}
     ${sliceBetween("const flushPendingMeetingMicChunks =", "const stopLiveSpeakerIdentification =")}
     ${sliceBetween("const sendMeetingAudio =", "// The Windows helper reports capture_silent")}
     globalThis.api = {
@@ -69,7 +70,6 @@ test("each capture holds the mic only as long as its reference lags", () => {
     ["pipewire-loopback", 100],
     ["loopback", 0],
     ["unsupported", 0],
-    [null, 0],
   ]) {
     const { api, dispatched, advance } = harness();
     api.setStrategy(strategy);

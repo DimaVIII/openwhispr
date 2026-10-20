@@ -8001,6 +8001,20 @@ class IPCHandlers {
       return win;
     };
 
+    // System audio captured in main (the macOS tap, the Windows and Linux
+    // helpers) arrives on its own schedule, unsynchronized with the renderer's
+    // mic, so mic chunks wait for that reference before echo analysis. Each
+    // waits only as long as its reference lags: the echo detector searches
+    // 500 ms back, and every millisecond held comes out of what's left for
+    // speaker latency.
+    const MEETING_MIC_REFERENCE_ALIGNMENT_MS = {
+      native: 320,
+      "wasapi-loopback": 100,
+      "pipewire-loopback": 100,
+    };
+    // Only a reference chunk received this recently holds the mic, so a capture
+    // that stopped or went idle doesn't delay it.
+    const MEETING_MIC_REFERENCE_RECENT_MS = 1000;
     const MEETING_STARTUP_WARMUP_MS = 1500;
     const MEETING_MIC_BLEED_LOOKBACK_MS = 500;
     const MEETING_MIC_STATS_LOG_LIMIT = 200;
@@ -8301,22 +8315,6 @@ class IPCHandlers {
         dispatchMeetingAudioBuffer(next.buffer, "mic");
       }
     };
-
-    // System audio captured in main (the macOS tap, the Windows and Linux
-    // helpers) arrives on its own schedule, unsynchronized with the renderer's
-    // mic, so mic chunks wait for that reference before echo analysis. The
-    // capability mode can't tell these apart: it reads "loopback" on Windows
-    // and Linux for the helpers and for renderer loopback alike. Each waits only
-    // as long as its reference lags: the echo detector searches 500 ms back, and
-    // every millisecond held comes out of what's left for speaker latency.
-    const MEETING_MIC_REFERENCE_ALIGNMENT_MS = {
-      native: 320,
-      "wasapi-loopback": 100,
-      "pipewire-loopback": 100,
-    };
-    // A live capture keeps sending, silence included, so one that stopped
-    // mid-session no longer delays the mic.
-    const MEETING_MIC_REFERENCE_RECENT_MS = 1000;
 
     const meetingMicNeedsReferenceAlignment = () =>
       Object.hasOwn(MEETING_MIC_REFERENCE_ALIGNMENT_MS, meetingSystemAudioStrategy) &&
