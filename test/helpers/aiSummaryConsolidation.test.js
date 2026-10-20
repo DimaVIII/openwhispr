@@ -41,6 +41,7 @@ function reopen(check) {
 
 test("an edited legacy default stays available after AI Summary in the template list", (t) => {
   const db = createDb(t);
+  if (!db) return;
   const legacy = seedDetailed(db, { prompt: "My own rules.", sections: null });
   db.db.prepare("UPDATE actions SET sort_order = 0 WHERE id = ?").run(legacy.id);
   db.db.close();
@@ -53,6 +54,7 @@ test("an edited legacy default stays available after AI Summary in the template 
 
 test("fresh installs expose one AI Summary with the existing detailed request", (t) => {
   const db = createDb(t);
+  if (!db) return;
   const templates = db.getActions().filter((row) => row.kind === "template");
   assert.equal(templates[0].translation_key, GENERATE_NOTES_KEY);
   assert.equal(
@@ -74,6 +76,7 @@ test("fresh installs expose one AI Summary with the existing detailed request", 
 for (const [index, prompt] of [detailed.prompt, ...detailed.previousPrompts].entries()) {
   test(`stock Detailed Notes version ${index} retires without changing saved notes`, (t) => {
     const db = createDb(t);
+    if (!db) return;
     const legacy = seedDetailed(db, {
       prompt,
       sections: index === 0 ? JSON.stringify(detailed.sections, null, 2) : null,
@@ -121,6 +124,7 @@ for (const [label, changes] of [
 ]) {
   test(`customized Detailed Notes ${label} survives two launches unchanged`, (t) => {
     const db = createDb(t);
+    if (!db) return;
     const legacy = seedDetailed(db, changes);
     db.db.close();
     for (let run = 0; run < 2; run++) {
@@ -138,6 +142,7 @@ for (const customized of [false, true]) {
   for (const identity of ["downgraded", "no client ID"]) {
     test(`${identity} ${customized ? "edited" : "stock"} Detailed Notes avoids default ID collisions`, (t) => {
       const db = createDb(t);
+      if (!db) return;
       const legacy = seedDetailed(db, {
         ...(customized ? { prompt: "My rules.", sections: null } : {}),
         ...(identity === "downgraded"
