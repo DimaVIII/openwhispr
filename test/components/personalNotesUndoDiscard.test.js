@@ -350,3 +350,20 @@ test("a note without a transcript keeps the personal-note run", async (t) => {
   assert.ok(!options.hasPlainTranscript);
   assert.deepEqual(options.knownPeople, []);
 });
+
+// An upload whose provider returned no segments saves its transcript as the
+// note's text and leaves the transcript empty, so that text is the transcript.
+test("an upload whose transcript is the note's text runs as a plain transcript", async (t) => {
+  const content = "Alice, can you fix the build by Friday? Sure.";
+  const { input, options } = await runSummaryOn(t, {
+    note_type: "upload",
+    content,
+    transcript: "",
+    participants: null,
+  });
+  assert.equal(options.hasPlainTranscript, true);
+  assert.equal(options.isMeetingNote, false);
+  assert.equal(input, `## Meeting Transcript\n${content}`, "not the user's own notes");
+  assert.deepEqual(options.material, { notes: "", meetingContext: "", transcript: content });
+  assert.deepEqual(options.knownPeople, [{ name: "Sam Rivera", email: "sam@example.com" }]);
+});

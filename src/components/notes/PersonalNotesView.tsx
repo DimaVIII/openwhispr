@@ -736,13 +736,17 @@ export default function PersonalNotesView({
     const noteContent = editorNote.content;
     const hasNotes = !!noteContent.trim();
     if (!hasNotes && !rawTranscript) return;
+    // An upload whose provider returned no segments saved its transcript as the
+    // note's text and left the transcript empty (#2666).
+    const transcriptInContent = !rawTranscript && editorNote.note_type === "upload";
+    const transcriptText = transcriptInContent ? noteContent : rawTranscript;
 
     let formattedTranscript = "";
     let meetingContext = "";
     let isMeetingNote = false;
     let hasPlainTranscript = false;
     let knownPeople: MentionPerson[] = [];
-    if (rawTranscript) {
+    if (transcriptText) {
       const identity: MeetingIdentity = {
         selfName: user?.name?.trim() || null,
         selfEmail: user?.email?.trim() || null,
@@ -768,13 +772,13 @@ export default function PersonalNotesView({
         knownPeople = collectKnownPeople(identity, {}, []);
       }
       if (!formattedTranscript) {
-        formattedTranscript = rawTranscript;
+        formattedTranscript = transcriptText;
       }
     }
 
     const { input, fromSummary, material } = buildNoteRunInput(action, {
       summary: editorEnhancedContent,
-      notes: noteContent,
+      notes: transcriptInContent ? "" : noteContent,
       meetingContext,
       transcript: formattedTranscript,
     });

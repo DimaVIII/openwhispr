@@ -421,7 +421,7 @@ CONTENT RULES:
 
 Instructions: `;
 
-export const PLAIN_TRANSCRIPT_INPUT_PREAMBLE = `The material is a transcript in plain text: its lines carry no speaker labels, so it doesn't show who said what. Manual notes the user took may precede the transcript. Never guess or invent who said something; name a person only where the transcript or the user's notes name them. For action items: ${PLAIN_TRANSCRIPT_OWNER_RULE} Where an instruction below says to use "You" or "Them" when no name is available, end the line after the action instead.
+export const PLAIN_TRANSCRIPT_INPUT_PREAMBLE = `The material is a transcript in plain text: its lines carry no speaker labels, so it doesn't show who said what. Manual notes the user took may precede the transcript. Never guess or invent who said something; name a person only where the transcript or the user's notes name them. For action items: ${PLAIN_TRANSCRIPT_OWNER_RULE} Where an instruction below says to use "You" or "Them" when no name is available, end the line after the action instead. Where an instruction below asks to attribute points by label or to each person, attribute a point only to someone the transcript or the user's notes name, and group the rest by topic. Never write "[name unclear]" in place of who said or owns something.
 
 `;
 

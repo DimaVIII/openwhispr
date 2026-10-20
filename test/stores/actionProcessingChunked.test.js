@@ -154,6 +154,7 @@ test("refused material is summarised in parts, then merged with the action promp
       /this part only/i.test(call.config.systemPrompt),
       "part prompt is the part-notes prompt"
     );
+    assert.match(call.config.systemPrompt, /naming who said it by label/);
     assert.ok(call.config.maxTokens <= 2048);
   });
   assert.ok(
@@ -711,6 +712,20 @@ test("a transcript without speaker labels is packed without a prose prefix", asy
       .split("Meeting at 10:").length - 1,
     1
   );
+  // A part told every line has a label would attribute by guess, and the merge
+  // would take its guessed owner as stated (#2666).
+  for (const part of parts) {
+    assert.match(
+      part.config.systemPrompt,
+      /a transcript in plain text, whose lines carry no speaker labels/
+    );
+    assert.match(part.config.systemPrompt, /with its owner only where the material names one/);
+    assert.match(
+      part.config.systemPrompt,
+      /NEVER guess or invent who said something or who owns a task/
+    );
+    assert.doesNotMatch(part.config.systemPrompt, /speaker's label|by label|Meeting Context/);
+  }
   const { compileTemplatePrompt } = await import("../../src/helpers/templatePrompts.js");
   assert.ok(
     calls

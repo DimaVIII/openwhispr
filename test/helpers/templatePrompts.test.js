@@ -244,6 +244,16 @@ test("standalone templates and a first summary describe a plain transcript inste
     /Where an instruction below says to use "You" or "Them" when no name is available, end the line after the action instead/,
     "it outranks the Action Items section's You or Them fallback"
   );
+  assert.match(
+    PLAIN_TRANSCRIPT_INPUT_PREAMBLE,
+    /Where an instruction below asks to attribute points by label or to each person, attribute a point only to someone the transcript or the user's notes name, and group the rest by topic/,
+    "it outranks sections that attribute by label, such as Stand-up's Updates by Person"
+  );
+  assert.match(
+    PLAIN_TRANSCRIPT_INPUT_PREAMBLE,
+    /Never write "\[name unclear\]" in place of who said or owns something/,
+    "the unclear-name rule never becomes an owner or a heading"
+  );
   assert.doesNotMatch(PLAIN_TRANSCRIPT_INPUT_PREAMBLE, /There is no transcript/);
 
   const editedDetailed = { prompt: "My own notes rules.", translation_key: DETAILED_NOTES_KEY };
