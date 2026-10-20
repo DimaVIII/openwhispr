@@ -242,12 +242,9 @@ export const isSelfSideSegment = (
   const name = resolveSegmentSpeakerName(segment, speakerMappings);
   if (name) {
     // On a call the user is the mic, so a remote voice that recording matched to
-    // their voice profile is a misidentification; only a mapping or a name the
-    // user set moves it across.
-    const autoNamedRemote =
-      segment.source === "system" &&
-      !isTranscriptSpeakerLocked(segment) &&
-      !(segment.speaker && speakerMappings?.[segment.speaker]);
+    // their voice profile is a misidentification; only a name the user set, which
+    // locks its rows, moves it across. Mappings also hold automatic matches.
+    const autoNamedRemote = segment.source === "system" && !isTranscriptSpeakerLocked(segment);
     return !autoNamedRemote && isYouSpeakerName(name, youLabel);
   }
   if (
