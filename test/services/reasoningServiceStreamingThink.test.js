@@ -752,20 +752,26 @@ test("cloud agent streaming correlates events to the initiating request", async 
   assert.deepEqual(bridge.cleanupCounts, { chunk: 1, error: 1, end: 1 });
 });
 
-test("a cloud stream never tells main it is a note chat", async (t) => {
+test("a cloud stream sends main only the options the API request carries", async (t) => {
   const bridge = createAgentStreamBridge();
-  const { reasoningService } = await loadReasoningService(t, "openwhispr-cloud-agent-note-chat-", {
+  const { reasoningService } = await loadReasoningService(t, "openwhispr-cloud-agent-options-", {
     window: { electronAPI: bridge.electronAPI },
   });
   const stream = reasoningService.processTextStreamingCloud([{ role: "user", content: "hello" }], {
     systemPrompt: "Answer the user.",
-    // A caller built before the API dropped memory (openwhispr-api#243).
+    tools: [{ name: "get_note", description: "Read a note", parameters: {} }],
+    screenContext: { data: "aGVsbG8=", mediaType: "image/jpeg" },
+    // Retired with assistant memory (openwhispr-api#243); must not reach main.
     noteChat: true,
   });
   const pending = stream.next();
   await waitForMicrotasks();
 
-  assert.equal("noteChat" in bridge.startCalls[0][2], false);
+  assert.deepEqual(Object.keys(bridge.startCalls[0][2]).sort(), [
+    "screenContext",
+    "systemPrompt",
+    "tools",
+  ]);
   reasoningService.cancelActiveStream();
   await pending;
 });
