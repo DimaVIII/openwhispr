@@ -68,10 +68,10 @@ export interface RemovedTranscriptSegment {
 // removed entry.
 export function withoutRemovedSegments<
   Segment extends { text: string; source: string; timestamp?: number },
->(segments: Segment[], removed: RemovedTranscriptSegment[] | null | undefined): Segment[] {
+>(segments: Segment[], removed: RemovedTranscriptSegment[] | undefined): Segment[] {
   if (!removed?.length) return segments;
 
-  const keyOf = (segment: { text: string; source: string; timestamp?: number }): string =>
+  const keyOf = (segment: Segment | RemovedTranscriptSegment): string =>
     `${segment.source}|${segment.timestamp ?? ""}|${segment.text}`;
   const pending = new Map<string, number>();
   for (const segment of removed) {
@@ -95,7 +95,7 @@ export function mergeSessionDiarization(params: {
   existing: TranscriptSegment[];
   seedLength: number;
   segments: Array<Omit<TranscriptSegment, "id"> & { id?: string }>;
-  removedSegments?: RemovedTranscriptSegment[] | null;
+  removedSegments?: RemovedTranscriptSegment[];
 }): { segments: TranscriptSegment[]; removedCount: number } {
   const { existing, seedLength, segments, removedSegments } = params;
   const seededCount = Math.min(seedLength, existing.length);

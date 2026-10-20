@@ -23,43 +23,11 @@ const {
 } = require("./transcriptionTimeout");
 
 const DIARIZATION_TIMEOUT_MS = 3600000; // 60 minutes
-// mergeWithTranscript runs on timestamps already normalized to seconds from
-// the start of the recording, so this window is in seconds too.
+// splitMicEchoDuplicates runs on timestamps already normalized to seconds from
+// the start of the recording, so this window is in seconds too, though
+// buildMergedCandidates calls it windowMs.
 const POST_MERGE_CONTEXT_WINDOW_S = 6;
 const POST_MERGE_CONTEXT_MERGE_LIMIT = 3;
-
-// Splits out echo-flagged mic segments whose text matches nearby system audio.
-// `removed` holds the same objects that were passed in, so callers can map
-// them back to their original rows.
-const splitMicEchoDuplicates = (segments) => {
-  const systemSegments = segments.filter((seg) => seg.source === "system" && seg.text);
-  if (!systemSegments.length) return { kept: segments, removed: [] };
-
-  const kept = [];
-  const removed = [];
-  for (const seg of segments) {
-    if (isMicEchoDuplicate(seg, systemSegments)) removed.push(seg);
-    else kept.push(seg);
-  }
-  return { kept, removed };
-};
-
-const isMicEchoDuplicate = (seg, systemSegments) => {
-  if (seg.source !== "mic" || !seg.text) return false;
-  if (!seg.likelyRenderBleed && !seg.hasBleedEvidence && seg.suppressionReason !== "double_talk") {
-    return false;
-  }
-
-  const matcher =
-    seg.suppressionReason === "double_talk" ? transcriptsLooselyOverlap : transcriptsOverlap;
-  const candidates = buildMergedCandidates({
-    segments: systemSegments,
-    timestamp: seg.timestamp,
-    windowMs: POST_MERGE_CONTEXT_WINDOW_S,
-    mergeLimit: POST_MERGE_CONTEXT_MERGE_LIMIT,
-  });
-  return candidates.some((candidateText) => matcher(seg.text, candidateText));
-};
 
 const SEGMENTATION_MODEL_URL =
   "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2";
@@ -439,8 +407,37 @@ class DiarizationManager {
     return segments;
   }
 
+  // Splits out echo-flagged mic segments whose text matches nearby system audio.
+  // `removed` holds the same objects that were passed in, so callers can map
+  // them back to their original rows.
   splitMicEchoDuplicates(segments) {
-    return splitMicEchoDuplicates(segments || []);
+    const systemSegments = segments.filter((seg) => seg.source === "system" && seg.text);
+    if (!systemSegments.length) return { kept: segments, removed: [] };
+
+    const removed = [];
+    const kept = segments.filter((seg) => {
+      if (seg.source !== "mic" || !seg.text) return true;
+      if (
+        !seg.likelyRenderBleed &&
+        !seg.hasBleedEvidence &&
+        seg.suppressionReason !== "double_talk"
+      ) {
+        return true;
+      }
+
+      const matcher =
+        seg.suppressionReason === "double_talk" ? transcriptsLooselyOverlap : transcriptsOverlap;
+      const candidates = buildMergedCandidates({
+        segments: systemSegments,
+        timestamp: seg.timestamp,
+        windowMs: POST_MERGE_CONTEXT_WINDOW_S,
+        mergeLimit: POST_MERGE_CONTEXT_MERGE_LIMIT,
+      });
+      if (!candidates.some((candidateText) => matcher(seg.text, candidateText))) return true;
+      removed.push(seg);
+      return false;
+    });
+    return { kept, removed };
   }
 
   capSpeakerClusters(segments, cap) {

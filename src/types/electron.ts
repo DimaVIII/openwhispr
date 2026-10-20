@@ -6,6 +6,7 @@ import type { UsageResponse } from "../lib/usageStore";
 import type { OrgPolicy } from "./policy";
 import type { TechnicalErrorDetailsData } from "../components/ui/useToast";
 import type { ProviderSettingsTarget } from "../utils/describeProviderError";
+import type { RemovedTranscriptSegment } from "../utils/diarizationCompletion";
 import type {
   ManagedEnterpriseConfig,
   ManagedEnterpriseRequestContext,
@@ -3388,11 +3389,7 @@ declare global {
             speakerLockSource?: "user" | "diarization" | "suggestion";
           }>;
           speakerEmbeddings?: Record<string, number[]> | null;
-          removedSegments?: Array<{
-            text: string;
-            source: "mic" | "system";
-            timestamp?: number;
-          }>;
+          removedSegments?: RemovedTranscriptSegment[];
         }) => void
       ) => () => void;
 
