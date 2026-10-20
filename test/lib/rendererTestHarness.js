@@ -262,17 +262,21 @@ async function createRendererServer(
     server: { middlewareMode: true },
   });
   addTeardown(t, async () => {
-    await vite.close();
-    // A closed server is never freed: Vite 8's native resolve plugin (rolldown)
-    // holds its JS callbacks through V8 global handles, and they reach the
-    // server. Emptying its module graphs releases the transformed and evaluated
-    // modules (~50 MB per server), so a file can still create one per test.
-    for (const environment of Object.values(vite.environments)) {
-      for (const value of Object.values(environment.moduleGraph ?? {})) {
-        if (value instanceof Map || value instanceof Set) value.clear();
+    try {
+      await vite.close();
+    } finally {
+      // A closed server is never freed: Vite 8's native resolve plugin
+      // (rolldown) holds its JS callbacks through V8 global handles, and they
+      // reach the server. Emptying its module graphs drops the module nodes,
+      // which on Vite 8.1.4 frees ~50 MB per server, so a file can still
+      // create one per test.
+      for (const environment of Object.values(vite.environments)) {
+        for (const value of Object.values(environment.moduleGraph ?? {})) {
+          if (value instanceof Map || value instanceof Set) value.clear();
+        }
       }
+      fs.rmSync(cacheDir, { recursive: true, force: true });
     }
-    fs.rmSync(cacheDir, { recursive: true, force: true });
   });
   return vite;
 }
