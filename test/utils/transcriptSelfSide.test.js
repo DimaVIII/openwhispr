@@ -31,14 +31,10 @@ test("an undiarized mic stays on the user's side", async () => {
   assert.equal(isSelfSideSegment({ source: "system" }, undefined, YOU), false);
 });
 
-test("naming a cluster You moves it to the user's side", async () => {
+test("naming a cluster You moves it to the user's side, any other name moves it off", async () => {
   const { isSelfSideSegment } = await load();
   assert.equal(
     isSelfSideSegment({ source: "mic", speaker: "speaker_1" }, { speaker_1: " you " }, YOU),
-    true
-  );
-  assert.equal(
-    isSelfSideSegment({ source: "system", speaker: "speaker_0" }, { speaker_0: "You" }, YOU),
     true
   );
   assert.equal(isSelfSideSegment({ source: "mic", speaker: "you" }, { you: "Alice" }, YOU), false);
@@ -104,14 +100,7 @@ test("a remote voice matched to the user's voice profile stays on the other side
   const remote = { source: "system", speaker: "speaker_0" };
   assert.equal(isSelfSideSegment({ ...remote, suggestedName: "You" }, {}, YOU), false);
   assert.equal(isSelfSideSegment({ ...remote, speakerName: "You" }, {}, YOU), false);
-  // The user's own naming still moves it, as before.
+  // An automatic match can write a mapping too, so only the user's lock moves it.
+  assert.equal(isSelfSideSegment(remote, { speaker_0: "You" }, YOU), false);
   assert.equal(isSelfSideSegment(userLocked(remote, "You"), {}, YOU), true);
-  assert.equal(isSelfSideSegment(remote, { speaker_0: "You" }, YOU), true);
-});
-
-test("isYouSpeakerName accepts English You and the current label", async () => {
-  const { isYouSpeakerName } = await load();
-  assert.equal(isYouSpeakerName(" YOU ", "Du"), true);
-  assert.equal(isYouSpeakerName("du", "Du"), true);
-  assert.equal(isYouSpeakerName("Youssef", "Du"), false);
 });
