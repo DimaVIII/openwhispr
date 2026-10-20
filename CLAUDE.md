@@ -432,6 +432,9 @@ Non-secret env vars persisted to `.env` (via `saveAllKeysToEnvFile()`):
   - **Anthropic** (Via IPC bridge to avoid CORS):
     - Claude Fable 5.1 (`claude-fable-5-1`) - Most capable Claude model, Mythos-class, 1M context
     - Claude Fable 5 (`claude-fable-5`) - Previous Mythos-class flagship, 1M context
+    - Claude Opus 5.5 (`claude-opus-5-5`) - Latest Opus model for complex reasoning and agentic work, 1M context
+    - Claude Sonnet 5.5 (`claude-sonnet-5-5`) - Latest Sonnet, fast and capable for everyday work, 1M context
+    - Claude Haiku 5.5 (`claude-haiku-5-5`) - Fastest, lowest-cost Claude model, 1M context
     - Claude Sonnet 5 (`claude-sonnet-5`) - Fast, capable agentic model at lower cost
     - Claude Sonnet 4.6 (`claude-sonnet-4-6`) - Balanced performance
     - Claude Haiku 4.5 (`claude-haiku-4-5`) - Fast with near-frontier intelligence
@@ -441,7 +444,7 @@ Non-secret env vars persisted to `.env` (via `saveAllKeysToEnvFile()`):
     - Claude Opus 4.6 (`claude-opus-4-6`) - Previous Opus generation, 1M context
     - Claude Sonnet 4.5 (`claude-sonnet-4-5`) - Previous Sonnet generation
     - Claude Opus 4.5 (`claude-opus-4-5`) - Earlier Opus model
-    - Models from Opus 4.7 onward reject `temperature` (`supportsTemperature: false`); the Anthropic IPC bridge sends no thinking parameters, so no Anthropic entry carries `supportsThinking`
+    - Models from Opus 4.7 onward (including the 5.5 generation) reject `temperature` (`supportsTemperature: false`); the Anthropic IPC bridge sends no thinking parameters, so no Anthropic entry carries `supportsThinking`
   - **Google Gemini** (Direct API integration):
     - Gemini 3.5 Flash (`gemini-3.5-flash`) - Latest fast, high-capability Gemini model
     - Gemini 3.5 Flash Lite (`gemini-3.5-flash-lite`) - Fastest, most cost-effective 3.5 model
