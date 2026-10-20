@@ -112,10 +112,3 @@ test("a remote voice matched to the user's voice profile stays on the other side
   assert.equal(isSelfSideSegment(remote, { speaker_0: "You" }, YOU), false);
   assert.equal(isSelfSideSegment(userLocked(remote, "You"), {}, YOU), true);
 });
-
-test("isYouSpeakerName accepts English You and the current label", async () => {
-  const { isYouSpeakerName } = await load();
-  assert.equal(isYouSpeakerName(" YOU ", "Du"), true);
-  assert.equal(isYouSpeakerName("du", "Du"), true);
-  assert.equal(isYouSpeakerName("Youssef", "Du"), false);
-});

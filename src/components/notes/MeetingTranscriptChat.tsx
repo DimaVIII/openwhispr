@@ -829,8 +829,8 @@ export function MeetingTranscriptChat({
     let nextIdx = 0;
     segments.forEach((segment, i) => {
       if (segment.source === "mic" && !segment.speaker) return;
-      // A "you" stretch reassigned to someone else sits with the other speakers.
-      if (segment.speaker === "you" && rowMeta[i].selfSide) return;
+      // Bubbles on the user's side aren't colored, so they take no slot.
+      if (rowMeta[i].selfSide) return;
       const key = rowMeta[i].key;
       if (!map.has(key)) {
         map.set(key, nextIdx % SPEAKER_COLORS.length);
@@ -984,7 +984,9 @@ export function MeetingTranscriptChat({
                   <SegmentRow
                     segment={segment}
                     selfSide={selfSide}
-                    sameSpeaker={i > 0 && rowMeta[i - 1].key === key}
+                    sameSpeaker={
+                      i > 0 && rowMeta[i - 1].key === key && rowMeta[i - 1].selfSide === selfSide
+                    }
                     isFirst={i === 0}
                     isNewest={i === segments.length - 1}
                     colorIdx={isSystemSpeaker ? (colorByKey.get(key) ?? 0) : 0}
