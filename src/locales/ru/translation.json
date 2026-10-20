@@ -3416,6 +3416,7 @@
       "speakersIdentified": "Участники определены",
       "typeNamePlaceholder": "Введите имя",
       "knownSpeakers": "Известные собеседники",
+      "thisIsMe": "Это я",
       "meetingAttendees": "Участники встречи",
       "assignName": "Назначить имя",
       "isThisPerson": "Это {{name}}?",

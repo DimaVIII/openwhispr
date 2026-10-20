@@ -262,3 +262,11 @@ test("an owner without an email stays distinct from a same-name invitee", async 
   const line = "- [ ] Send the proposal — Alex Morgan";
   assert.equal(tagActionItemOwners(line, people), line);
 });
+
+test("a You saved in another UI language still labels the note owner", async () => {
+  const { resolveLlmSpeakerLabel } = await load();
+  const german = (key, options) => (key === "notes.speaker.you" ? "Du" : t(key, options));
+  const segment = { source: "mic", speaker: "speaker_0", text: "hi" };
+  assert.equal(resolveLlmSpeakerLabel(segment, { speaker_0: "You" }, "Casey", german), "Casey");
+  assert.equal(resolveLlmSpeakerLabel(segment, { speaker_0: "Du" }, "Casey", german), "Casey");
+});
