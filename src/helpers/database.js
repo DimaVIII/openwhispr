@@ -740,10 +740,12 @@ class DatabaseManager {
             row.icon === legacy.icon
           ) {
             this.db.prepare("DELETE FROM actions WHERE id = ?").run(row.id);
-          } else if (row.client_id === null) {
+          } else {
             this.db
-              .prepare("UPDATE actions SET client_id = ? WHERE id = ?")
-              .run(legacy.translationKey, row.id);
+              .prepare(
+                "UPDATE actions SET client_id = COALESCE(client_id, ?), sort_order = ? WHERE id = ?"
+              )
+              .run(legacy.translationKey, legacy.sortOrder, row.id);
           }
         }
 

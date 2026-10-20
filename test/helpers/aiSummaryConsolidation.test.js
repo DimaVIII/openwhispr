@@ -39,6 +39,18 @@ function reopen(check) {
   }
 }
 
+test("an edited legacy default stays available after AI Summary in the template list", (t) => {
+  const db = createDb(t);
+  const legacy = seedDetailed(db, { prompt: "My own rules.", sections: null });
+  db.db.prepare("UPDATE actions SET sort_order = 0 WHERE id = ?").run(legacy.id);
+  db.db.close();
+  reopen((next) => {
+    const templates = next.getActions().filter((row) => row.kind === "template");
+    assert.equal(templates[0].translation_key, GENERATE_NOTES_KEY);
+    assert.equal(templates.find((row) => row.id === legacy.id).sort_order, 1);
+  });
+});
+
 test("fresh installs expose one AI Summary with the existing detailed request", (t) => {
   const db = createDb(t);
   const templates = db.getActions().filter((row) => row.kind === "template");
