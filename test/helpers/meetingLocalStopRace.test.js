@@ -217,7 +217,7 @@ test("stop waits for a timer pass still transcribing before it captures the sess
   assert.deepEqual(plain(diarizations[0][3].map((segment) => segment.text)), [
     "said just before stop",
   ]);
-  assert.equal(sent.length, 1, "the final reaches the meeting window");
+  assert.equal(sent.length, 1, "the final is sent before the reset clears the window");
   assert.deepEqual(plain(api.segments), [], "nothing is left for the next session");
 });
 

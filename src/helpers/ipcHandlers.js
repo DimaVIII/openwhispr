@@ -8616,7 +8616,6 @@ class IPCHandlers {
       return meetingLocalTranscribePromise;
     };
 
-    // Stops the timer and waits out a pass still in flight.
     const settleLocalMeetingTranscription = async () => {
       if (meetingLocalTimer) {
         clearInterval(meetingLocalTimer);
@@ -9202,8 +9201,8 @@ class IPCHandlers {
       // scoped stop/auto-end matching.
       const recordingSessionId = options.sessionId;
       meetingStartedAt = Date.now();
-      // Stop captures and clears the segments, but a final that lands after a
-      // stop must not open the next session's transcript.
+      // Stop captures and clears the segments, but a stop that fails partway
+      // (the audio tap won't stop) never gets there.
       meetingDiarizationSegments = [];
       meetingConnectionOptions = options;
       meetingConnectionWin = BrowserWindow.fromWebContents(event.sender);
