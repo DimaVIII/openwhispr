@@ -12214,6 +12214,15 @@ class IPCHandlers {
       }
     });
 
+    ipcMain.handle("calendar-get-linkable-events", async () => {
+      try {
+        return { success: true, events: this.databaseManager.getLinkableCalendarEvents() };
+      } catch (error) {
+        debugLogger.debug("Linkable calendar events failed", { error: error.message }, "calendar");
+        return { success: false, events: [] };
+      }
+    });
+
     // Microsoft Calendar
     ipcMain.handle("mcal-start-oauth", async () => {
       try {

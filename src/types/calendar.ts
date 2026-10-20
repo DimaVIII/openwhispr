@@ -28,6 +28,8 @@ export interface CalendarEvent {
   self_response_status: CalendarResponseStatus | "unknown";
 }
 
+export type LinkableCalendarEvent = CalendarEvent & { calendar_color: string | null };
+
 export type CalendarAvailabilityStatus = "free" | "tentative" | "busy" | "unavailable" | "unknown";
 
 export interface CalendarAvailabilityRequest {

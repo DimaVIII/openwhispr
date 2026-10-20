@@ -453,3 +453,107 @@ test("events from two and three days ago never surface as active, upcoming or av
   );
   db.db.close();
 });
+
+function insertAppleCalendar(db, id, color = null) {
+  db.db
+    .prepare("INSERT INTO apple_calendars (id, title, color) VALUES (?, ?, ?)")
+    .run(id, id, color);
+}
+
+test("linkable events cover selected calendars and skip cancelled and declined ones", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+  insertCalendar(db, "google", "google-calendar");
+  insertCalendar(db, "google", "hidden-google", 0);
+  insertCalendar(db, "microsoft", "ms-calendar");
+  db.upsertCalendarEvents([
+    restEvent("google", "google-calendar", "tentative", {
+      start_time: "2026-07-22T12:00:00Z",
+      end_time: "2026-07-22T13:00:00Z",
+      status: "tentative",
+    }),
+    restEvent("google", "google-calendar", "confirmed"),
+    restEvent("microsoft", "ms-calendar", "cancelled", { status: "cancelled" }),
+    restEvent("google", "google-calendar", "declined", { self_response_status: "declined" }),
+    restEvent("google", "hidden-google", "hidden"),
+  ]);
+
+  assert.deepEqual(
+    db.getLinkableCalendarEvents().map((event) => event.id),
+    ["confirmed", "tentative"]
+  );
+  db.db.close();
+});
+
+test("a declined REST event keeps its Apple mirror out of the linkable list", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+  insertCalendar(db, "google", "google-calendar");
+  insertAppleCalendar(db, "apple-calendar");
+  db.upsertCalendarEvents([
+    restEvent("google", "google-calendar", "declined", {
+      summary: "Standup",
+      self_response_status: "declined",
+    }),
+    appleEvent("mirror", {
+      summary: "Standup",
+      start_time: "2026-07-22T10:00:00Z",
+      end_time: "2026-07-22T11:00:00Z",
+    }),
+  ]);
+
+  assert.deepEqual(db.getLinkableCalendarEvents(), []);
+  db.db.close();
+});
+
+test("linkable events carry their calendar's colour only when it is a hex colour", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+  insertCalendar(db, "google", "google-calendar");
+  insertCalendar(db, "microsoft", "ms-calendar");
+  insertAppleCalendar(db, "apple-calendar", "#FF0000");
+  db.db.prepare("UPDATE google_calendars SET background_color = '#1A73E8'").run();
+  db.db.prepare("UPDATE microsoft_calendars SET background_color = 'auto'").run();
+  db.upsertCalendarEvents([
+    restEvent("google", "google-calendar", "google-event"),
+    restEvent("microsoft", "ms-calendar", "ms-event", { summary: "Other" }),
+    appleEvent("apple-event"),
+  ]);
+
+  const colors = Object.fromEntries(
+    db.getLinkableCalendarEvents().map((event) => [event.id, event.calendar_color])
+  );
+  assert.deepEqual(colors, {
+    "apple-event": "#FF0000",
+    "google-event": "#1A73E8",
+    "ms-event": null,
+  });
+  db.db.close();
+});
+
+test("linkable events include all-day rows and recent past events", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+  insertCalendar(db, "google", "google-calendar");
+  const twoDaysAgo = Date.now() - 2 * 86_400_000;
+  db.upsertCalendarEvents([
+    restEvent("google", "google-calendar", "all-day", {
+      start_time: "2026-07-22",
+      end_time: "2026-07-23",
+      is_all_day: true,
+    }),
+    restEvent("google", "google-calendar", "two-days-ago", {
+      start_time: new Date(twoDaysAgo).toISOString(),
+      end_time: new Date(twoDaysAgo + 3_600_000).toISOString(),
+    }),
+  ]);
+
+  assert.deepEqual(
+    db
+      .getLinkableCalendarEvents()
+      .map((event) => event.id)
+      .sort(),
+    ["all-day", "two-days-ago"]
+  );
+  db.db.close();
+});

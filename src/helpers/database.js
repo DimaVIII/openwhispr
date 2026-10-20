@@ -5158,6 +5158,49 @@ class DatabaseManager {
     }
   }
 
+  // Every stored event on the user's selected calendars that a note can link
+  // to (not cancelled or declined), with its calendar's colour for the picker.
+  getLinkableCalendarEvents() {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      const colors = new Map(
+        this.db
+          .prepare(
+            `SELECT 'google' AS provider, id, background_color AS color FROM google_calendars
+             UNION ALL
+             SELECT 'microsoft', id, background_color FROM microsoft_calendars
+             UNION ALL
+             SELECT 'apple', id, color FROM apple_calendars`
+          )
+          .all()
+          .map((row) => [`${row.provider}:${row.id}`, row.color])
+      );
+      return this.db
+        .prepare(
+          dedupedEventsQuery(
+            `status IN ('confirmed', 'tentative') AND ${SELECTED_CALENDAR_EVENT_FILTER}`
+          )
+        )
+        .all()
+        .filter((event) => event.self_response_status !== "declined")
+        .map((row) => {
+          const event = stripDedupeColumn(row);
+          const color = colors.get(`${event.provider}:${event.calendar_id}`);
+          return {
+            ...event,
+            calendar_color: /^#[0-9a-f]{6}$/i.test(color ?? "") ? color : null,
+          };
+        });
+    } catch (error) {
+      debugLogger.error(
+        "Error getting linkable calendar events",
+        { error: error.message },
+        "calendar"
+      );
+      throw error;
+    }
+  }
+
   getCalendarEventById(eventId) {
     try {
       if (!this.db) throw new Error("Database not initialized");
