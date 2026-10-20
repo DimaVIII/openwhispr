@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, type ReactNode } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Calendar, ChevronDown, ExternalLink, Users, Video, X } from "../icons";
 import { cn } from "../lib/utils";
@@ -60,6 +60,8 @@ export default function NoteParticipants({
   >([]);
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<"people" | "events">("people");
+  // Read by the popover's Escape handler, which can run with a stale closure.
+  const viewRef = useRef(view);
   const [events, setEvents] = useState<LinkableCalendarEvent[] | null>(null);
   const [eventsFailed, setEventsFailed] = useState(false);
   const [localLinkedId, setLocalLinkedId] = useState(linkedEventId || null);
@@ -71,6 +73,10 @@ export default function NoteParticipants({
   useEffect(() => {
     setLocalLinkedId(linkedEventId || null);
   }, [linkedEventId]);
+
+  useEffect(() => {
+    viewRef.current = view;
+  }, [view]);
 
   useEffect(() => {
     if (!open || !canEdit) return;
@@ -238,7 +244,16 @@ export default function NoteParticipants({
           <ChevronDown size={14} className="shrink-0 text-foreground/50" />
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-72 p-0">
+      <PopoverContent
+        className="w-72 p-0"
+        // The popover takes Escape on document capture, before the list's own
+        // input sees it, so step back from the event list here instead.
+        onEscapeKeyDown={(event) => {
+          if (viewRef.current !== "events") return;
+          event.preventDefault();
+          setView("people");
+        }}
+      >
         {view === "events" ? (
           <NoteEventPicker
             events={events}

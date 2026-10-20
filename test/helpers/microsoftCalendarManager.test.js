@@ -200,6 +200,7 @@ test("_syncCalendar backfills stripped recurring occurrences from their series m
       id: "master-1",
       subject: "Standup",
       isAllDay: false,
+      webLink: "https://outlook.office365.com/owa/?itemid=master-1",
       onlineMeeting: { joinUrl: "https://teams.microsoft.com/l/meetup-join/abc" },
       organizer: { emailAddress: { address: "organizer@example.com" } },
       attendees: [
@@ -215,12 +216,20 @@ test("_syncCalendar backfills stripped recurring occurrences from their series m
 
   assert.equal(masterFetches.length, 1);
   assert.match(masterFetches[0], /^\/me\/calendars\/cal-1\/events\/master-1\?\$select=/);
+  assert.ok(
+    new URL(masterFetches[0], "https://graph.microsoft.com").searchParams
+      .get("$select")
+      .split(",")
+      .includes("webLink"),
+    "the master fetch asks for its web link"
+  );
 
   const occurrence = upserted.find((event) => event.id === "occ-1");
   assert.equal(occurrence.summary, "Standup");
   assert.equal(occurrence.start_time, "2026-07-20T09:25:00Z");
   assert.equal(occurrence.hangout_link, "https://teams.microsoft.com/l/meetup-join/abc");
   assert.equal(occurrence.organizer_email, "organizer@example.com");
+  assert.equal(occurrence.web_link, "https://outlook.office365.com/owa/?itemid=master-1");
   assert.equal(occurrence.attendees_count, 1);
   assert.equal(upserted.find((event) => event.id === "occ-2").summary, "Standup");
   assert.equal(upserted.find((event) => event.id === "evt-1").summary, "One-off");

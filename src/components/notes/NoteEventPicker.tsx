@@ -93,13 +93,6 @@ export default function NoteEventPicker({
           dir="auto"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") {
-              e.preventDefault();
-              e.stopPropagation();
-              onBack();
-            }
-          }}
           placeholder={t("notes.eventLink.searchPlaceholder")}
           className="w-full px-1 py-1.5 rounded-md bg-transparent text-xs text-foreground placeholder:text-foreground/45 outline-none border-none appearance-none"
           autoFocus

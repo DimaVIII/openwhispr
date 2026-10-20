@@ -8,8 +8,10 @@ const { broadcastToWindows } = require("./windowBroadcast");
 
 const GRAPH_API_BASE = "https://graph.microsoft.com/v1.0";
 
+// webLink is the series' page: a stripped occurrence has none of its own, and
+// the series is the nearest page to open without a request per occurrence.
 const SERIES_MASTER_FIELDS =
-  "subject,isAllDay,isCancelled,showAs,responseStatus,onlineMeeting,onlineMeetingUrl,location,bodyPreview,organizer,attendees";
+  "subject,isAllDay,isCancelled,showAs,responseStatus,onlineMeeting,onlineMeetingUrl,location,bodyPreview,organizer,attendees,webLink";
 
 // Graph's deltaLink permanently encodes the calendarView window it was created
 // with — it never rolls forward. Sync from CALENDAR_LOOKBACK_MS back to 38 days

@@ -173,20 +173,6 @@ test("shows the right empty state", async (t) => {
   assert.equal(message(host), "notes.eventLink.noResults");
 });
 
-test("Escape goes back without closing", async (t) => {
-  const { act, host, calls } = await mount(t, { events: EVENTS });
-  const escape = new happyWindow.KeyboardEvent("keydown", {
-    key: "Escape",
-    bubbles: true,
-    cancelable: true,
-  });
-
-  await act(() => searchInput(host).dispatchEvent(escape));
-
-  assert.equal(calls.back, 1);
-  assert.equal(escape.defaultPrevented, true);
-});
-
 test("titles keep their own direction", async (t) => {
   const { host } = await mount(t, { events: EVENTS });
 

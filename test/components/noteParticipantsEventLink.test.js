@@ -238,3 +238,36 @@ test("an Apple event has no calendar button", async (t) => {
   assert.equal(!!buttonWith("notes.eventLink.calendar"), false);
   assert.equal(!!buttonWith("notes.eventLink.openInGoogle"), false);
 });
+
+test("Escape in the event list goes back to the attendees without closing the dropdown", async (t) => {
+  const { act } = await mount(t);
+  await act(() => buttonWith("notes.eventLink.selectEvent").click());
+  const search = happyWindow.document.querySelector(
+    'input[placeholder="notes.eventLink.searchPlaceholder"]'
+  );
+  assert.equal(!!search, true);
+
+  await act(() =>
+    search.dispatchEvent(
+      new happyWindow.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })
+    )
+  );
+
+  assert.equal(attendeeInput(), true, "the dropdown stays open on the attendees view");
+  assert.equal(bodyText().includes("notes.eventLink.selectEvent"), true);
+});
+
+test("Escape on the attendees view still closes the dropdown", async (t) => {
+  const { act } = await mount(t);
+  assert.equal(attendeeInput(), true);
+
+  await act(() =>
+    happyWindow.document
+      .querySelector('input[placeholder="Add attendees..."]')
+      .dispatchEvent(
+        new happyWindow.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })
+      )
+  );
+
+  assert.equal(attendeeInput(), false);
+});
