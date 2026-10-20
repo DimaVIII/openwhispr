@@ -479,7 +479,8 @@ Josh can cut this task without touching Tasks 1–6.
 - **The list-opening row uses `ChevronDown`,** as Granola does, not `ChevronRight`.
 - **Escape** is handled in `PopoverContent`'s `onEscapeKeyDown`, reading the view from a ref. The popover takes Escape on document capture, before the list's input, and that handler was seen running with a stale closure (Codex review).
 - **Recurring Outlook occurrences** take the series master's `webLink` (added to its `$select`) (Codex review).
-- **All-day mirrors** now pair by local start day and title in `dedupedEventsQuery`; before, every all-day event a Mac also syncs showed twice outside UTC (final review).
+- **All-day mirrors** now pair by local start and end days and title in `dedupedEventsQuery` (an Apple end at the next midnight or at 23:59:59 both match); before, every all-day event a Mac also syncs showed twice outside UTC (final review and its recheck).
+- **`eventsOnDay` lists all-day events first,** then the rest in start order (final review).
 - **`isBeforeStoredWindow` became `startsBeforeStoredWindow`:** a day the stored history only partly covers also gets the outside-the-window message (final review).
 - **Re-picking the linked event** goes back without merging its guests again, and the list is shown and saved only while `canEdit` (final review).
 - **`updateNote`** stores an explicit NULL unlink of a linked note as `""` (final review).

@@ -32,7 +32,7 @@ Out of scope: Granola's "Create folder for this meeting" banner, renaming the no
 2. Merging attendees keeps everyone already on the note and appends the event's guests. Duplicates are matched by email, ignoring case and spaces. A guest the provider flags as the user (`self`) is marked self.
 3. The picker opens on the note's local day. The search box matches titles and attendee names or emails across every stored event, and works offline and with an expired provider token, because it reads only the local table.
 4. Each provider stores at least 3 days of history after its next full sync. Existing Google and Microsoft sync tokens are discarded once so that sync happens on first launch. Apple's helper snapshot covers the same 3 days.
-5. Unlinking syncs. It never comes back on another device, for a teammate, or after a later pull.
+5. Unlinking syncs. Once everyone with the note runs this build, it never comes back on another device, for a teammate, or after a later pull (see the rollout limitation in Decision 2).
 6. Viewers (`canEditNote` false) see a linked event and can Join or Open it, but can't link, change or remove one.
 7. A linked id this device can't resolve shows a quiet fallback row in the dropdown, with no Join or Open buttons.
 8. Meeting detection, reminders, Upcoming and availability behave as before. They only read events near now.
@@ -118,7 +118,7 @@ The capsule keeps showing the note's date and attendees whether or not an event 
 - **Excluded:** cancelled events (`status IN ('confirmed','tentative')`) and events the user declined. Declined events are filtered in JS after the query, as `getActiveEvents` does, so a declined REST row still suppresses its Apple mirror.
 - **All-day events** are included and labelled "All day". Date-only values are read as local dates (`parseEventDate`).
 - **Dot colour** is the calendar's colour (`google_calendars.background_color`, `microsoft_calendars.background_color`, `apple_calendars.color`) when it's a `#RRGGBB` hex. Otherwise the dot is neutral.
-- **Default list:** events that overlap the note's local day (`created_at`), in start order.
+- **Default list:** events that overlap the note's local day (`created_at`): all-day events first, then in start order.
 - **Search:** case-insensitive substring match on the title or an attendee's name or email, across all stored rows. Up to 50 results, closest to the note's date first.
 
 ### 7. Empty and error states
@@ -130,7 +130,7 @@ All of these are inside the list view, in this order:
 | No calendar connected (no Google, Microsoft or Apple account in the settings store) | "Connect a calendar in Settings → Integrations to link events"                             |
 | The IPC failed                                                                      | "Couldn't load calendar events"                                                            |
 | A search found nothing                                                              | "No matching events"                                                                       |
-| The note's day is before the stored window and has no events                        | "Only events from the last 3 days can be linked" + "Search to find events from other days" |
+| The note's day starts before the stored window and has no events                    | "Only events from the last 3 days can be linked" + "Search to find events from other days" |
 | The note's day has no events                                                        | "No events on this day" + "Search to find events from other days"                          |
 
 Being offline, signed out, or having an expired provider token needs no state of its own: the picker reads only local rows. Team notes while signed out follow the existing permission resolution.
