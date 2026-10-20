@@ -629,7 +629,7 @@
         {
           "id": "claude-opus-5",
           "name": "Claude Opus 5",
-          "description": "Most capable Opus model, 1M context",
+          "description": "Previous Opus flagship, 1M context",
           "descriptionKey": "models.descriptions.cloud.anthropic_claude_opus_5",
           "supportsTemperature": false,
           "supportsVision": true

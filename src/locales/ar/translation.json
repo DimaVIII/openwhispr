@@ -305,7 +305,7 @@
         "openai_gpt_5_6_terra": "GPT-5.6 متوازن للعمل اليومي",
         "openai_gpt_5_6_luna": "GPT-5.6 الأسرع والأقل تكلفة",
         "openai_gpt_5_5": "نموذج رائد للاستنتاج المعقد",
-        "anthropic_claude_opus_5": "نموذج Opus الأكثر قدرة، سياق 1 مليون",
+        "anthropic_claude_opus_5": "نموذج Opus الرائد السابق، سياق 1 مليون",
         "anthropic_claude_opus_4_8": "نموذج Opus قوي مضبوط من أجل الصدق والموثوقية",
         "anthropic_claude_opus_4_7": "نموذج Opus قوي",
         "anthropic_claude_opus_4_6": "جيل Opus السابق، سياق 1 مليون",

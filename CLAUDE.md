@@ -438,7 +438,7 @@ Non-secret env vars persisted to `.env` (via `saveAllKeysToEnvFile()`):
     - Claude Sonnet 5 (`claude-sonnet-5`) - Fast, capable agentic model at lower cost
     - Claude Sonnet 4.6 (`claude-sonnet-4-6`) - Balanced performance
     - Claude Haiku 4.5 (`claude-haiku-4-5`) - Fast with near-frontier intelligence
-    - Claude Opus 5 (`claude-opus-5`) - Most capable Opus model, 1M context
+    - Claude Opus 5 (`claude-opus-5`) - Previous Opus flagship, 1M context
     - Claude Opus 4.8 (`claude-opus-4-8`) - Powerful Opus model tuned for honesty and reliability, 1M context
     - Claude Opus 4.7 (`claude-opus-4-7`) - Powerful Opus model, 1M context
     - Claude Opus 4.6 (`claude-opus-4-6`) - Previous Opus generation, 1M context
