@@ -23,6 +23,9 @@ export interface UserConfig {
   // Set once note chat has its own selection, copied from the voice assistant's it used to share.
   // New installs start with it; older configs get it from noteChatSplitConfig at launch.
   noteChatSplit?: boolean;
+  // Set once note formatting follows its own selection in Local Mode instead of running on this
+  // iPhone. New installs start with it; older configs get it from notesLocalModeSplitConfig.
+  notesLocalModeSplit?: boolean;
   defaultMode: ProcessingMode;
   cleanupEnabled?: boolean;
   autoGenerateNoteTitle?: boolean;

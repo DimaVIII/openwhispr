@@ -5,7 +5,6 @@ import type {
   ReasoningRoutingOptions,
   UserConfig,
 } from '@/types';
-import type { ProcessingMode } from '@/types';
 
 export const LOCAL_CONTEXT_FALLBACK_SIZE = 4096;
 export const LOCAL_OUTPUT_TOKEN_RESERVE = 900;
@@ -120,24 +119,15 @@ function languageReadinessFor(availability: AppleLLMAvailability): LocalReasonin
   };
 }
 
+// A private note, or no account to reach Cloud with, keeps note formatting on this iPhone. Local
+// Mode doesn't: note formatting follows its own selection, and notes made there are private.
 export function isLocalReasoningRequired(options: ReasoningRoutingOptions = {}): boolean {
   if (options.isPrivateNote) return true;
-  if (getActiveMode() === 'private') return true;
   return !getAuthUser();
 }
 
 export function isAppleLocalIntelligenceEnabled(config = getUserConfig()): boolean {
   return config?.appleLocalIntelligenceEnabled ?? true;
-}
-
-function getActiveMode(): ProcessingMode {
-  try {
-    const { useProcessingModeStore } =
-      require('@/store/useProcessingModeStore') as typeof import('@/store/useProcessingModeStore');
-    return useProcessingModeStore.getState().activeMode;
-  } catch {
-    return 'cloud';
-  }
 }
 
 // Lazy require to break a module cycle (localReasoning ← useNotesStore ← … ←

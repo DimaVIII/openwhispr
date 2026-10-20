@@ -59,11 +59,12 @@ describe('local reasoning readiness policy', () => {
     expect(mockAppleAvailability).not.toHaveBeenCalled();
   });
 
-  it('uses local reasoning in private mode when Apple Intelligence is ready', async () => {
+  // Note formatting follows its own selection in Local Mode; a note made there is private.
+  it('does not require local reasoning for a shared note in Local Mode', async () => {
     mockProcessingState.activeMode = 'private';
 
-    await expect(shouldUseLocalReasoning({ isPrivateNote: false })).resolves.toBe(true);
-    expect(mockAppleAvailability).toHaveBeenCalledTimes(1);
+    await expect(shouldUseLocalReasoning({ isPrivateNote: false })).resolves.toBe(false);
+    await expect(shouldUseLocalReasoning({ isPrivateNote: true })).resolves.toBe(true);
   });
 
   it('uses local reasoning for signed-out content when ready', async () => {
