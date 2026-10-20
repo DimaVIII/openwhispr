@@ -226,20 +226,38 @@ function snapMicWarmHold(value: number): number {
   return (MIC_WARM_HOLD_CHOICES as readonly number[]).includes(value) ? value : 0;
 }
 
-// Defensive on every read: this key is shared between windows and a stale or
-// hand-edited value must never break the dictionary prompt.
-function parseSharedHints(raw: string | null): SharedHintWords {
+const SHARED_HINTS_KEY = "sharedDictionaryHints";
+// workspaceStore's ACTIVE_WORKSPACE_KEY. Not imported, so this store stays off
+// the workspace service's import graph.
+const ACTIVE_WORKSPACE_STORAGE_KEY = "activeWorkspaceId";
+
+// Hints are persisted with the workspace they were built for. The key is shared
+// between windows and survives restarts, so hints written under another
+// workspace (or account) never apply, and a stale or hand-edited value never
+// breaks the dictionary prompt.
+function parseSharedHints(raw: string | null, activeWorkspaceId: string | null): SharedHintWords {
   if (raw === null) return EMPTY_SHARED_HINTS;
   try {
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== "object" || parsed === null) return EMPTY_SHARED_HINTS;
-    const { space, workspace } = parsed as Record<string, unknown>;
-    const words = (value: unknown): string[] =>
-      Array.isArray(value) ? value.filter((w): w is string => typeof w === "string") : [];
+    const { workspaceId, space, workspace } = parsed as Record<string, unknown>;
+    if (workspaceId !== null && typeof workspaceId !== "string") return EMPTY_SHARED_HINTS;
+    if (workspaceId !== activeWorkspaceId) return EMPTY_SHARED_HINTS;
+    if (!Array.isArray(space) || !Array.isArray(workspace)) return EMPTY_SHARED_HINTS;
+    const words = (value: unknown[]): string[] =>
+      value.filter((w): w is string => typeof w === "string");
     return { space: words(space), workspace: words(workspace) };
   } catch {
     return EMPTY_SHARED_HINTS;
   }
+}
+
+function readPersistedSharedHints(): SharedHintWords {
+  if (!isBrowser) return EMPTY_SHARED_HINTS;
+  return parseSharedHints(
+    localStorage.getItem(SHARED_HINTS_KEY),
+    localStorage.getItem(ACTIVE_WORKSPACE_STORAGE_KEY)
+  );
 }
 
 // Main keeps the hints in memory only, for auto-learn; a failed send just
@@ -1175,7 +1193,7 @@ export interface SettingsState
   setCleanupCloudMode: (value: string) => void;
   setCleanupCloudBaseUrl: (value: string) => void;
   setCustomDictionary: (words: string[]) => void;
-  setSharedDictionaryHints: (hints: SharedHintWords) => void;
+  setSharedDictionaryHints: (hints: SharedHintWords, workspaceId: string | null) => void;
   updateCustomDictionary: (changes: { add?: string[]; remove?: string[] }) => void;
   applyCustomDictionaryFromExternal: (words: string[]) => void;
   setSnippets: (snippets: Snippet[]) => void;
@@ -1591,9 +1609,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   cortiEnvironment: readString("cortiEnvironment", "us"),
   cortiTenant: readString("cortiTenant", "base"),
   customDictionary: readStringArray("customDictionary", []),
-  sharedDictionaryHints: parseSharedHints(
-    isBrowser ? localStorage.getItem("sharedDictionaryHints") : null
-  ),
+  sharedDictionaryHints: readPersistedSharedHints(),
   snippets: (() => {
     try {
       const parsed = JSON.parse(readString("snippets", "[]"));
@@ -2163,10 +2179,10 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
 
   // A derived cache of the shared dictionary for the prompt path; main owns the
   // data, so nothing is written back. Main gets a copy so auto-learn never adds a
-  // word the workspace already applies.
-  setSharedDictionaryHints: (hints: SharedHintWords) => {
+  // word the workspace already applies. Cleared hints are EMPTY with no workspace.
+  setSharedDictionaryHints: (hints: SharedHintWords, workspaceId: string | null) => {
     if (isBrowser) {
-      localStorage.setItem("sharedDictionaryHints", JSON.stringify(hints));
+      localStorage.setItem(SHARED_HINTS_KEY, JSON.stringify({ workspaceId, ...hints }));
       sendSharedHintsToMain(hints);
     }
     set({ sharedDictionaryHints: hints });
@@ -3838,6 +3854,12 @@ export async function initializeSettings(): Promise<void> {
 
   // Sync Zustand store when another window writes to localStorage
   window.addEventListener("storage", (event) => {
+    // Another window switched or cleared the workspace: the persisted hints
+    // belong to the old one now.
+    if (event.storageArea === localStorage && event.key === ACTIVE_WORKSPACE_STORAGE_KEY) {
+      useSettingsStore.setState({ sharedDictionaryHints: readPersistedSharedHints() });
+      return;
+    }
     if (!event.key || event.storageArea !== localStorage || event.newValue === null) return;
 
     const { key, newValue } = event;
@@ -3865,8 +3887,8 @@ export async function initializeSettings(): Promise<void> {
       } catch {
         value = [];
       }
-    } else if (key === "sharedDictionaryHints") {
-      value = parseSharedHints(newValue);
+    } else if (key === SHARED_HINTS_KEY) {
+      value = parseSharedHints(newValue, localStorage.getItem(ACTIVE_WORKSPACE_STORAGE_KEY));
     } else if (NUMERIC_SETTINGS.has(key)) {
       const parsed = Number(newValue);
       if (Number.isNaN(parsed)) {

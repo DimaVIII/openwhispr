@@ -5,7 +5,7 @@ import { compileSummaryActionPrompt, compileTemplatePrompt } from "../helpers/te
 import reasoningService from "../services/ReasoningService";
 import { getSettings, selectResolvedNoteFormatting } from "./settingsStore";
 import { appendDictionarySuffix } from "../config/prompts";
-import { getEffectiveDictionaryWords } from "../utils/snippets";
+import { getLlmDictionaryWords } from "../utils/snippets";
 import { generateNoteTitle } from "../utils/generateTitle";
 import { buildNoteFormattingOverrides } from "../helpers/noteFormattingOverrides";
 import { tagActionItemOwners, type MentionPerson } from "../utils/mentionMarkdown";
@@ -491,7 +491,9 @@ export function runBackgroundAction(
       const providerOverrides = buildNoteFormattingOverrides(noteFormatting, options.isCloudMode);
       const systemPrompt = appendDictionarySuffix(
         instructions,
-        options.isMeetingNote ? getEffectiveDictionaryWords(settings) : undefined,
+        options.isMeetingNote
+          ? getLlmDictionaryWords(settings, { includeTriggers: false })
+          : undefined,
         settings.uiLanguage
       );
       const requestConfig: ReasoningConfig = {

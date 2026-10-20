@@ -143,7 +143,7 @@ import {
 import {
   dictionaryPromptLimit,
   formatDictionaryPrompt,
-  WHISPER_PROMPT_CHARS,
+  GROQ_PROMPT_CHARS,
 } from "../utils/dictionaryPromptCap.js";
 import {
   dictionaryKeywordOverflow,
@@ -154,6 +154,8 @@ import {
   getDictionaryHintTiers,
   getDictionaryHintWords,
   getEffectiveDictionaryWords,
+  getKeytermDictionaryWords,
+  getLlmDictionaryWords,
 } from "../utils/snippets";
 import { normalizeAgentSelectionContext } from "../utils/agentSelectionContext";
 import { getAgentName } from "../utils/agentName";
@@ -263,7 +265,7 @@ function dictationAgentPrompt(settings, agentName) {
   return resolvePrompt("dictationAgent", {
     agentName,
     language: settings.preferredLanguage,
-    customDictionary: getDictionaryHintWords(settings),
+    customDictionary: getLlmDictionaryWords(settings, { includeTriggers: true }),
     uiLanguage: settings.uiLanguage,
   });
 }
@@ -359,7 +361,7 @@ function resolveReasoningRoute(
         systemPrompt: resolvePrompt("translate", {
           agentName,
           targetLanguageLabel: getLanguageLabel(settings.translationTargetLanguage),
-          customDictionary: getDictionaryHintWords(settings),
+          customDictionary: getLlmDictionaryWords(settings, { includeTriggers: true }),
           uiLanguage: settings.uiLanguage,
         }),
       },
@@ -843,10 +845,18 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
   // reads, and shared words are dropped first when it runs long. A caller with a
   // provider request limit passes it. Without one (OpenWhispr Cloud, local
   // engines) the personal list is sent whole, as it always was, and shared words
-  // only fill what is left of the Whisper budget.
+  // only fill what is left of Groq's budget beside the script bias: the Cloud
+  // API's Groq route keeps the HEAD of an over-long prompt, so a prompt that
+  // opens with shared words must never reach that limit.
   getCustomDictionaryPrompt(maxChars) {
-    const tiers = getDictionaryHintTiers(getSettings());
-    const budget = maxChars ?? Math.max(WHISPER_PROMPT_CHARS, tiers[0].join(", ").length);
+    const settings = getSettings();
+    const tiers = getDictionaryHintTiers(settings);
+    let budget = maxChars;
+    if (budget === undefined) {
+      const scriptBias = this.getWhisperPrompt(settings, null);
+      const sharedBudget = GROQ_PROMPT_CHARS - (scriptBias ? scriptBias.length + 1 : 0);
+      budget = Math.max(sharedBudget, tiers[0].join(", ").length);
+    }
     return formatDictionaryPrompt(tiers, budget) || null;
   }
 
@@ -3083,7 +3093,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
           /\{\{agentName\}\}/g,
           agentName?.trim() || "Assistant"
         ),
-        dictionary: getDictionaryHintWords(settings),
+        dictionary: getLlmDictionaryWords(settings, { includeTriggers: true }),
         toneSentence,
       });
       selectionConfig.responseFormat = SELECTION_EDIT_RESPONSE_FORMAT;
@@ -3231,7 +3241,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
             agentName,
             promptMode: "cleanup",
             purpose: "cleanup",
-            customDictionary: getDictionaryHintWords(settings),
+            customDictionary: getLlmDictionaryWords(settings, { includeTriggers: true }),
             customPrompt,
             language: this.getCleanupLanguage(settings),
             locale: settings.uiLanguage || "en",
@@ -3779,7 +3789,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
               agentName,
               promptMode: "cleanup",
               purpose: "cleanup",
-              customDictionary: getDictionaryHintWords(settings),
+              customDictionary: getLlmDictionaryWords(settings, { includeTriggers: true }),
               customPrompt,
               ...toneStyle,
               language: this.getCleanupLanguage(settings),
@@ -3902,7 +3912,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
   }
 
   getKeyterms() {
-    return this.getCustomDictionaryArray();
+    return getKeytermDictionaryWords(getSettings());
   }
 
   async processWithOpenAIAPI(audioBlob, metadata = {}, wasCancelled = neverCancelled) {
@@ -4881,7 +4891,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       return undefined;
     return {
       agentName: getAgentName() || "",
-      customDictionary: getDictionaryHintWords(settings),
+      customDictionary: getLlmDictionaryWords(settings, { includeTriggers: true }),
       customPrompt: this.getCustomPrompt(),
       ...(settings.toneStyleEnabled
         ? resolveDictationToneStyle(settings.toneStyles, appCategory)
@@ -6099,7 +6109,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
                   agentName,
                   promptMode: "cleanup",
                   purpose: "cleanup",
-                  customDictionary: getDictionaryHintWords(stSettings),
+                  customDictionary: getLlmDictionaryWords(stSettings, { includeTriggers: true }),
                   customPrompt,
                   ...toneStyle,
                   language: this.getCleanupLanguage(stSettings),

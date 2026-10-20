@@ -7,6 +7,10 @@ const {
   getDictionaryHintWords,
   getDictionaryHintTiers,
   getEffectiveDictionaryWords,
+  getKeytermDictionaryWords,
+  getLlmDictionaryWords,
+  MAX_SHARED_KEYTERMS,
+  MAX_SHARED_WORDS_IN_LLM_PROMPTS,
 } = require("../../src/utils/snippets.ts");
 
 test("expands a trigger containing Turkish capital İ", () => {
@@ -198,4 +202,46 @@ test("getEffectiveDictionaryWords omits triggers", () => {
     }),
     ["Piha", "Kube", "Acme"]
   );
+});
+
+const teamWords = (prefix, count) => Array.from({ length: count }, (_, i) => `${prefix}${i}`);
+
+test("keyterms keep every personal word and at most 100 shared ones", () => {
+  assert.equal(MAX_SHARED_KEYTERMS, 100);
+  const personal = teamWords("Mine", 150);
+  const keyterms = getKeytermDictionaryWords({
+    customDictionary: ["Piha", ...personal],
+    snippets: [{ trigger: "sig", replacement: "Regards" }],
+    sharedDictionaryHints: { space: teamWords("Space", 30), workspace: teamWords("Team", 500) },
+  });
+
+  assert.deepEqual(keyterms.slice(0, 151), ["Piha", ...personal], "personal words come first");
+  const shared = keyterms.slice(151);
+  assert.equal(shared.length, 100);
+  assert.deepEqual(shared.slice(0, 30), teamWords("Space", 30), "space words before workspace");
+  assert.ok(!keyterms.includes("sig"), "snippet triggers are not keyterms");
+});
+
+test("keyterms without shared words are the personal dictionary", () => {
+  assert.deepEqual(getKeytermDictionaryWords({ customDictionary: ["Piha", "Biscuit"] }), [
+    "Piha",
+    "Biscuit",
+  ]);
+});
+
+test("LLM prompts get every personal word and at most 200 shared ones", () => {
+  assert.equal(MAX_SHARED_WORDS_IN_LLM_PROMPTS, 200);
+  const settings = {
+    customDictionary: ["Piha", "Biscuit"],
+    snippets: [{ trigger: "sig", replacement: "Regards" }],
+    sharedDictionaryHints: { space: ["Kube"], workspace: teamWords("Team", 500) },
+  };
+
+  const withTriggers = getLlmDictionaryWords(settings, { includeTriggers: true });
+  assert.deepEqual(withTriggers.slice(0, 4), ["Piha", "Biscuit", "sig", "Kube"]);
+  assert.equal(withTriggers.length, 3 + 200);
+
+  const withoutTriggers = getLlmDictionaryWords(settings, { includeTriggers: false });
+  assert.deepEqual(withoutTriggers.slice(0, 3), ["Piha", "Biscuit", "Kube"]);
+  assert.equal(withoutTriggers.length, 2 + 200);
 });

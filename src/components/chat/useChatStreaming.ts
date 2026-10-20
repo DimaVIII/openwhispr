@@ -35,7 +35,7 @@ import {
 } from "../../config/prompts";
 import { resolveUnavailableCapabilities } from "../../config/agentCapabilities";
 import type { ToneAppCategory } from "../../config/toneStyle";
-import { getDictionaryHintWords } from "../../utils/snippets";
+import { getLlmDictionaryWords } from "../../utils/snippets";
 import { noteAttendeesContext, withoutAttendeesFence } from "../../utils/noteAttendees";
 import { FULL_TRANSCRIPT_MAX_TOKENS } from "../../utils/transcriptEvidence";
 import { createToolRegistry } from "../../services/tools";
@@ -536,7 +536,7 @@ export function useChatStreaming({
               ? { tones: settings.toneStyles, destination: options?.destinationAppCategory }
               : undefined,
           }),
-          getDictionaryHintWords(settings),
+          getLlmDictionaryWords(settings, { includeTriggers: true }),
           settings.uiLanguage
         );
 

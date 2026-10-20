@@ -42,6 +42,9 @@ function captureRequests(t) {
   return requests;
 }
 
+// The zh-CN script bias getWhisperPrompt puts in front of the dictionary.
+const ZH_CN_BIAS = "以下是简体中文。语言、学习、软件、网络。";
+
 const teamWords = (prefix, count) =>
   Array.from({ length: count }, (_, i) => `${prefix}${String(i).padStart(4, "0")}`);
 
@@ -142,7 +145,7 @@ test("the OpenAI transcription request carries the formatted prompt", async (t) 
     }).processWithOpenAIAPI(audioBlob(), {});
 
     const prompt = requests[0].prompt;
-    assert.match(prompt, /^以下是简体中文。\S* Team0000,/, "the bias leads, then shared words");
+    assert.ok(prompt.startsWith(`${ZH_CN_BIAS} Team0000, `), "the bias leads, then shared words");
     assert.ok(prompt.length <= 890, `bias plus dictionary must fit, got ${prompt.length}`);
     assert.ok(prompt.endsWith(", Piha"));
   });
@@ -180,9 +183,23 @@ test("paths with no provider limit still send a long personal list whole", async
     setSettings(dictionarySettings({ personal, workspace: ["ARR"] }));
     assert.equal(createManager().getCustomDictionaryPrompt(), personalPrompt);
 
+    // The Cloud API's Groq route keeps the head of an over-long prompt, so a
+    // prompt that opens with shared words stays inside Groq's limit.
     setSettings(dictionarySettings({ personal: ["Piha"], workspace: teamWords("Team", 300) }));
     const prompt = createManager().getCustomDictionaryPrompt();
-    assert.ok(prompt.length <= 900, `shared words stay inside the Whisper budget`);
+    assert.ok(prompt.length <= 890, `shared words stay inside Groq's budget, got ${prompt.length}`);
+    assert.ok(prompt.length > 880, "the budget is used, not a smaller one");
+    assert.ok(prompt.endsWith(", Piha"));
+  });
+
+  await t.test("with a Chinese script bias the whole prompt stays inside Groq's limit", () => {
+    setSettings(dictionarySettings({ personal: ["Piha"], workspace: teamWords("Team", 300) }));
+    const manager = createManager({ getEffectiveSttLanguage: () => "zh-CN" });
+
+    const prompt = manager.getWhisperPrompt();
+
+    assert.ok(prompt.startsWith(`${ZH_CN_BIAS} Team0000, `));
+    assert.ok(prompt.length <= 890, `bias plus dictionary must fit, got ${prompt.length}`);
     assert.ok(prompt.endsWith(", Piha"));
   });
 
@@ -208,4 +225,16 @@ test("paths with no provider limit still send a long personal list whole", async
     assert.equal(seen[0], manager.getCustomDictionaryPrompt());
     assert.ok(seen[0].endsWith(", Piha"));
   });
+});
+
+test("dictation keyterms keep every personal word and at most 100 shared ones", async (t) => {
+  const { setSettings, createManager } = await setUp(t, "openwhispr-dictionary-keyterms-");
+  setSettings(dictionarySettings({ personal: ["Piha"], workspace: teamWords("Team", 500) }));
+
+  const keyterms = createManager().getKeyterms();
+
+  assert.equal(keyterms[0], "Piha");
+  assert.equal(keyterms.length, 1 + 100);
+  // The echo strip still knows every shared word the prompt may have carried.
+  assert.equal(createManager().getCustomDictionaryArray().length, 1 + 500);
 });

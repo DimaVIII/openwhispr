@@ -175,11 +175,47 @@ export function getDictionaryHintWords(settings?: DictionaryHintSettings | null)
   return getDictionaryHintTiers(settings).flat();
 }
 
+function effectiveTiers(settings?: DictionaryHintSettings | null): string[][] {
+  const personal = Array.isArray(settings?.customDictionary) ? settings.customDictionary : [];
+  return [personal, ...sharedTiers(settings, personal)];
+}
+
 /**
  * The words the user's dictionary effectively contains, for counts and display:
  * personal, then space, then workspace, without snippet triggers.
  */
 export function getEffectiveDictionaryWords(settings?: DictionaryHintSettings | null): string[] {
-  const personal = Array.isArray(settings?.customDictionary) ? settings.customDictionary : [];
-  return [personal, ...sharedTiers(settings, personal)].flat();
+  return effectiveTiers(settings).flat();
+}
+
+// Streaming providers add one request parameter per keyterm (Deepgram, Corti),
+// so a team list must not be able to break every member's stream.
+export const MAX_SHARED_KEYTERMS = 100;
+// Teammates' words ride in LLM system prompts; a bounded list keeps a long one
+// from crowding out the instructions.
+export const MAX_SHARED_WORDS_IN_LLM_PROMPTS = 200;
+
+// Every personal word, then shared words up to `maxShared`, space words first.
+function withSharedCapped([personal, space, workspace]: string[][], maxShared: number): string[] {
+  const keptSpace = space.slice(0, maxShared);
+  const keptWorkspace = workspace.slice(0, maxShared - keptSpace.length);
+  return [...personal, ...keptSpace, ...keptWorkspace];
+}
+
+/** Keyterms for STT providers: every personal word, at most MAX_SHARED_KEYTERMS shared ones. */
+export function getKeytermDictionaryWords(settings?: DictionaryHintSettings | null): string[] {
+  return withSharedCapped(effectiveTiers(settings), MAX_SHARED_KEYTERMS);
+}
+
+/**
+ * Dictionary words for LLM prompts (cleanup, agent, translation, chat, notes):
+ * every personal word (and snippet trigger when asked for), at most
+ * MAX_SHARED_WORDS_IN_LLM_PROMPTS shared ones.
+ */
+export function getLlmDictionaryWords(
+  settings: DictionaryHintSettings | null | undefined,
+  { includeTriggers }: { includeTriggers: boolean }
+): string[] {
+  const tiers = includeTriggers ? getDictionaryHintTiers(settings) : effectiveTiers(settings);
+  return withSharedCapped(tiers, MAX_SHARED_WORDS_IN_LLM_PROMPTS);
 }
