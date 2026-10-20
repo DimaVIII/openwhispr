@@ -6506,7 +6506,9 @@ class DatabaseManager {
         localFolderId,
         spaceId,
         cloudNote.participants || null,
-        cloudNote.calendar_event_id || null,
+        // "" is the cloud's record of a deliberate unlink; NULL means the API
+        // omitted the field, which the COALESCE above treats as "keep local".
+        cloudNote.calendar_event_id ?? null,
         cloudNote.diarization_enabled ?? null,
         normalizeStoredSpeakerCount(cloudNote.expected_speaker_count),
         cloudNote.updated_by_user_id || null,
