@@ -26,8 +26,8 @@ const DIARIZATION_TIMEOUT_MS = 3600000; // 60 minutes
 // splitMicEchoDuplicates runs on timestamps already normalized to seconds from
 // the start of the recording, so this window is in seconds too, though
 // buildMergedCandidates calls it windowMs.
-const POST_MERGE_CONTEXT_WINDOW_S = 6;
-const POST_MERGE_CONTEXT_MERGE_LIMIT = 3;
+const ECHO_DUPLICATE_WINDOW_S = 6;
+const ECHO_DUPLICATE_MERGE_LIMIT = 3;
 
 const SEGMENTATION_MODEL_URL =
   "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2";
@@ -414,15 +414,16 @@ class DiarizationManager {
     const systemSegments = segments.filter((seg) => seg.source === "system" && seg.text);
     if (!systemSegments.length) return { kept: segments, removed: [] };
 
+    const kept = [];
     const removed = [];
-    const kept = segments.filter((seg) => {
-      if (seg.source !== "mic" || !seg.text) return true;
+    for (const seg of segments) {
       if (
-        !seg.likelyRenderBleed &&
-        !seg.hasBleedEvidence &&
-        seg.suppressionReason !== "double_talk"
+        seg.source !== "mic" ||
+        !seg.text ||
+        (!seg.likelyRenderBleed && !seg.hasBleedEvidence && seg.suppressionReason !== "double_talk")
       ) {
-        return true;
+        kept.push(seg);
+        continue;
       }
 
       const matcher =
@@ -430,13 +431,12 @@ class DiarizationManager {
       const candidates = buildMergedCandidates({
         segments: systemSegments,
         timestamp: seg.timestamp,
-        windowMs: POST_MERGE_CONTEXT_WINDOW_S,
-        mergeLimit: POST_MERGE_CONTEXT_MERGE_LIMIT,
+        windowMs: ECHO_DUPLICATE_WINDOW_S,
+        mergeLimit: ECHO_DUPLICATE_MERGE_LIMIT,
       });
-      if (!candidates.some((candidateText) => matcher(seg.text, candidateText))) return true;
-      removed.push(seg);
-      return false;
-    });
+      const isEcho = candidates.some((candidateText) => matcher(seg.text, candidateText));
+      (isEcho ? removed : kept).push(seg);
+    }
     return { kept, removed };
   }
 
