@@ -44,11 +44,11 @@ Out of scope: Granola's "Create folder for this meeting" banner, renaming the no
 
 One shared constant, `CALENDAR_LOOKBACK_DAYS = 3`, lives in a new shared ESM module, `src/helpers/calendarCacheWindow.js`. Main-process managers and the renderer both read it.
 
-| Provider | Today | Change |
-|---|---|---|
-| Google | full sync `timeMin = now − 2 h − 48 h` (`googleCalendarManager.js:174-179`) | `timeMin = now − 3 d`. `timeMax` is unchanged |
-| Microsoft | delta `startDateTime = now − 24 h − 2 h` (`microsoftCalendarManager.js:431-436`) | `startDateTime = now − 3 d`. End is unchanged |
-| Apple | Swift `predicateForEvents(now − (2 h + 300 s), …)` (`macos-calendar-listener.swift:31,252`) | the app passes `--lookback-seconds <3 d>`. The helper uses the larger of that value and its old minimum |
+| Provider  | Today                                                                                       | Change                                                                                                  |
+| --------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Google    | full sync `timeMin = now − 2 h − 48 h` (`googleCalendarManager.js:174-179`)                 | `timeMin = now − 3 d`. `timeMax` is unchanged                                                           |
+| Microsoft | delta `startDateTime = now − 24 h − 2 h` (`microsoftCalendarManager.js:431-436`)            | `startDateTime = now − 3 d`. End is unchanged                                                           |
+| Apple     | Swift `predicateForEvents(now − (2 h + 300 s), …)` (`macos-calendar-listener.swift:31,252`) | the app passes `--lookback-seconds <3 d>`. The helper uses the larger of that value and its old minimum |
 
 Three days covers both old lookbacks, so availability, which needs at most 2 h + 48 h of padding, never loses coverage. A test pins that invariant.
 
@@ -99,6 +99,7 @@ Several notes per event already exist and are handled. `getOwnNoteByCalendarEven
   - Mobile: it writes a JSON string as the id (`openwhispr-mobile/src/lib/calendar/meetingContext.ts:145`).
 
   In all of these cases the id doesn't resolve. The capsule then shows the date, and the dropdown's top row says the event isn't in this device's calendars. There's no title, no Join and no broken chip. An editor can still replace or remove the link.
+
 - **Merged attendees are visible to the team.** Merging adds the guests to `participants`, which syncs. That's the user's own action, the same as adding attendees by hand today.
 
 ### 5. The read-only chip is replaced by the dropdown row
@@ -120,13 +121,13 @@ The capsule keeps showing the note's date and attendees whether or not an event 
 
 All of these are inside the list view, in this order:
 
-| State | Shown |
-|---|---|
-| No calendar connected (no Google, Microsoft or Apple account in the settings store) | "Connect a calendar in Settings → Integrations to link events" |
-| The IPC failed | "Couldn't load calendar events" |
-| A search found nothing | "No matching events" |
-| The note's day is before the stored window and has no events | "Only events from the last 3 days can be linked" + "Search to find events from other days" |
-| The note's day has no events | "No events on this day" + "Search to find events from other days" |
+| State                                                                               | Shown                                                                                      |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| No calendar connected (no Google, Microsoft or Apple account in the settings store) | "Connect a calendar in Settings → Integrations to link events"                             |
+| The IPC failed                                                                      | "Couldn't load calendar events"                                                            |
+| A search found nothing                                                              | "No matching events"                                                                       |
+| The note's day is before the stored window and has no events                        | "Only events from the last 3 days can be linked" + "Search to find events from other days" |
+| The note's day has no events                                                        | "No events on this day" + "Search to find events from other days"                          |
 
 Being offline, signed out, or having an expired provider token needs no state of its own: the picker reads only local rows. Team notes while signed out follow the existing permission resolution.
 

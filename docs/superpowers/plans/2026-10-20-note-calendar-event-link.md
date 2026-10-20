@@ -2,14 +2,14 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:executing-plans. The main agent implements every task itself. Reviewers are read-only and never edit the branch. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-| Field | Value |
-|---|---|
-| `deep_research` | yes, in `docs/superpowers/research/2026-10-20-note-calendar-event-link-research.md`. Its live-fetch recommendation is superseded by Josh's "store 3 days locally" decision (spec Decision 1) |
-| `codex_review` | yes |
-| `plan_status` | approved 2026-10-20 by Josh (this revision: capsule keeps the date, search only) |
-| Execution method | main agent implements; reviewers are read-only |
-| Review path | Codex branch review, then a final `/deep-review` |
-| Spec | `docs/superpowers/specs/2026-10-20-note-calendar-event-link-design.md`. Read it first: every decision below argues from it |
+| Field            | Value                                                                                                                                                                                        |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `deep_research`  | yes, in `docs/superpowers/research/2026-10-20-note-calendar-event-link-research.md`. Its live-fetch recommendation is superseded by Josh's "store 3 days locally" decision (spec Decision 1) |
+| `codex_review`   | yes                                                                                                                                                                                          |
+| `plan_status`    | approved 2026-10-20 by Josh (this revision: capsule keeps the date, search only)                                                                   |
+| Execution method | main agent implements; reviewers are read-only                                                                                                                                               |
+| Review path      | Codex branch review, then a final `/deep-review`                                                                                                                                             |
+| Spec             | `docs/superpowers/specs/2026-10-20-note-calendar-event-link-design.md`. Read it first: every decision below argues from it                                                                   |
 
 **Goal:** from the note header's date and attendees dropdown, an editor can search their locally stored calendar events and link one to the note, which merges its guests. They can also Join the meeting, open it in Google Calendar or Outlook, or remove the link, and the removal syncs.
 
@@ -48,29 +48,30 @@
 
 ## File map
 
-| File | Responsibility | Task |
-|---|---|---|
-| `src/helpers/calendarCacheWindow.js` (create, ESM) | `CALENDAR_LOOKBACK_DAYS`, `CALENDAR_LOOKBACK_MS` | 1 |
-| `src/helpers/googleCalendarManager.js` | full-sync `timeMin` | 1, 7 |
-| `src/helpers/microsoftCalendarManager.js` | `_deltaUrl` start | 1, 7 |
-| `src/helpers/appleCalendarManager.js` | `_helperArgs` passes `--lookback-seconds` | 1 |
-| `resources/macos-calendar-listener.swift` | reads `--lookback-seconds` | 1 |
-| `src/helpers/database.js` | token resets v5/v6, pull tombstone, `getLinkableCalendarEvents`, `web_link` | 1, 2, 3, 7 |
-| `src/helpers/ipcHandlers.js`, `preload.js`, `src/types/electron.ts`, `src/types/calendar.ts` | `calendar-get-linkable-events`, types | 3, 7 |
-| `src/utils/noteAttendees.ts` | `mergeEventAttendees` | 4 |
-| `src/utils/noteEventPicker.ts` (create) | `eventsOnDay`, `searchLinkableEvents`, `isBeforeStoredWindow` | 4 |
-| `src/utils/dateFormatting.ts`, `src/components/UpcomingMeetings.tsx` | shared `formatTimeRange`, `formatEventWhen` | 4 |
-| `src/components/notes/NoteEventPicker.tsx` (create) | nested list view | 5 |
-| `src/components/notes/NoteParticipants.tsx` | event row, link/unlink, Join/Open | 6, 7 |
-| `src/components/notes/NoteEditor.tsx`, `PersonalNotesView.tsx` | `linkedEvent` plumbing, chip removed | 6 |
-| `src/locales/*/translation.json` (11) | `notes.eventLink.*` | 5, 6, 7 |
-| `CLAUDE.md` | calendar manager bullets, picker note | 8 |
+| File                                                                                         | Responsibility                                                              | Task       |
+| -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ---------- |
+| `src/helpers/calendarCacheWindow.js` (create, ESM)                                           | `CALENDAR_LOOKBACK_DAYS`, `CALENDAR_LOOKBACK_MS`                            | 1          |
+| `src/helpers/googleCalendarManager.js`                                                       | full-sync `timeMin`                                                         | 1, 7       |
+| `src/helpers/microsoftCalendarManager.js`                                                    | `_deltaUrl` start                                                           | 1, 7       |
+| `src/helpers/appleCalendarManager.js`                                                        | `_helperArgs` passes `--lookback-seconds`                                   | 1          |
+| `resources/macos-calendar-listener.swift`                                                    | reads `--lookback-seconds`                                                  | 1          |
+| `src/helpers/database.js`                                                                    | token resets v5/v6, pull tombstone, `getLinkableCalendarEvents`, `web_link` | 1, 2, 3, 7 |
+| `src/helpers/ipcHandlers.js`, `preload.js`, `src/types/electron.ts`, `src/types/calendar.ts` | `calendar-get-linkable-events`, types                                       | 3, 7       |
+| `src/utils/noteAttendees.ts`                                                                 | `mergeEventAttendees`                                                       | 4          |
+| `src/utils/noteEventPicker.ts` (create)                                                      | `eventsOnDay`, `searchLinkableEvents`, `isBeforeStoredWindow`               | 4          |
+| `src/utils/dateFormatting.ts`, `src/components/UpcomingMeetings.tsx`                         | shared `formatTimeRange`, `formatEventWhen`                                 | 4          |
+| `src/components/notes/NoteEventPicker.tsx` (create)                                          | nested list view                                                            | 5          |
+| `src/components/notes/NoteParticipants.tsx`                                                  | event row, link/unlink, Join/Open                                           | 6, 7       |
+| `src/components/notes/NoteEditor.tsx`, `PersonalNotesView.tsx`                               | `linkedEvent` plumbing, chip removed                                        | 6          |
+| `src/locales/*/translation.json` (11)                                                        | `notes.eventLink.*`                                                         | 5, 6, 7    |
+| `CLAUDE.md`                                                                                  | calendar manager bullets, picker note                                       | 8          |
 
 ---
 
 ### Task 1: Store 3 days of history for every provider
 
 **Files:**
+
 - Create: `src/helpers/calendarCacheWindow.js`, `test/helpers/calendarCacheWindow.test.js`
 - Modify:
   - `src/helpers/googleCalendarManager.js:5-11,170-180`
@@ -81,11 +82,13 @@
 - Test: `test/helpers/googleCalendarManager.test.js`, `test/helpers/microsoftCalendarManager.test.js`, `test/helpers/appleCalendarManager.test.js`, `test/helpers/calendarDatabase.test.js`
 
 **Interfaces:**
+
 - Produces:
   - `export const CALENDAR_LOOKBACK_DAYS = 3`
   - `export const CALENDAR_LOOKBACK_MS = CALENDAR_LOOKBACK_DAYS * 24 * 60 * 60 * 1000`
 
   Both are ESM, like `calendarAvailability.js`. CJS callers load them with `require()`.
+
 - Produces: `AppleCalendarManager#_helperArgs(requestAccess: boolean): string[]`, which returns `["--lookback-seconds", String(CALENDAR_LOOKBACK_MS / 1000), ...(requestAccess ? ["--request"] : [])]`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -129,6 +132,7 @@
 ### Task 2: Make unlinking sync
 
 **Files:**
+
 - Modify: `src/helpers/database.js:6498` (`upsertNoteFromCloud`'s `calendar_event_id` param)
 - Test:
   - `test/helpers/noteCloudUpsertGuard.test.js`
@@ -136,6 +140,7 @@
   - `test/helpers/syncServiceNotes.test.js` (its `setup` and `createFakeCloud` harness; `fakeCloud.js` already coalesces only null/undefined, like the server)
 
 **Interfaces:**
+
 - Produces: an unlinked note row has `calendar_event_id === ""`. A pulled cloud `""` clears a local id, and a pulled `null` or missing value keeps it.
 
 - [ ] **Step 1: Write the failing tests**
@@ -166,6 +171,7 @@
 ### Task 3: Linkable events query and IPC
 
 **Files:**
+
 - Modify:
   - `src/helpers/database.js` (new method beside `getCalendarEventById` at `:5150`)
   - `src/helpers/ipcHandlers.js` (beside `gcal-get-event` at `:12208`)
@@ -175,6 +181,7 @@
 - Test: `test/helpers/calendarDatabase.test.js`
 
 **Interfaces:**
+
 - Produces: `DatabaseManager#getLinkableCalendarEvents(): LinkableCalendarEvent[]`.
   - Runs `dedupedEventsQuery("status IN ('confirmed', 'tentative') AND " + SELECTED_CALENDAR_EVENT_FILTER)`.
   - Then, in JS: drops `self_response_status === "declined"` (after the query, as `getActiveEvents` does, so the declined REST row still suppresses its Apple mirror), and applies `stripDedupeColumn`.
@@ -205,6 +212,7 @@
 ### Task 4: Pure picker helpers
 
 **Files:**
+
 - Create: `src/utils/noteEventPicker.ts`, `test/utils/noteEventPicker.test.js`
 - Modify:
   - `src/utils/noteAttendees.ts`
@@ -213,6 +221,7 @@
 - Test: `test/services/noteAttendees.test.js`, `test/utils/dateFormatting.test.js`
 
 **Interfaces:**
+
 - Consumes: `LinkableCalendarEvent` (Task 3), `CALENDAR_LOOKBACK_MS` (Task 1), and the existing `parseEventDate` and `CalendarAttendee`.
 - Produces:
   - `mergeEventAttendees(current: CalendarAttendee[], incoming: CalendarAttendee[]): CalendarAttendee[]`
@@ -225,7 +234,7 @@
   - `formatTimeRange(locale: string, startTime: string, endTime: string): string`, moved verbatim from UpcomingMeetings.
   - `formatEventWhen(event: CalendarEvent, locale: string, allDayLabel: string): string`
     - The date part is `toLocaleDateString(locale, { weekday: "short", month: "short", day: "numeric" })` of the parsed start.
-    - Joined with ` · ` to `allDayLabel` when `is_all_day`, otherwise to `formatTimeRange`.
+    - Joined with `·` to `allDayLabel` when `is_all_day`, otherwise to `formatTimeRange`.
 
 - [ ] **Step 1: Write the failing tests.** Build dates with `new Date(y, m, d, h)` and date-only strings so the tests pass in any time zone.
   - `mergeEventAttendees` tests:
@@ -253,10 +262,12 @@
 ### Task 5: The event list view (`NoteEventPicker`)
 
 **Files:**
+
 - Create: `src/components/notes/NoteEventPicker.tsx`, `test/components/noteEventPicker.test.js`
 - Modify: all 11 `src/locales/*/translation.json`, and `test/components/fieldDirectionPolicy.test.js` (that test lists every `<input>` per component file, so add `"src/components/notes/NoteEventPicker.tsx": ["auto"]` for the search input)
 
 **Interfaces:**
+
 - Consumes: Task 4's helpers and `LinkableCalendarEvent`.
 - Produces: `export default function NoteEventPicker(props: NoteEventPickerProps)`, with these props:
 
@@ -279,6 +290,7 @@
   - **Which rows.** `eventsOnDay(events, noteDay)` while the query is empty, otherwise `searchLinkableEvents(events, query, noteDay)`.
   - **Empty states,** in spec §7's order, with the keys below. `outsideWindow` gets `{ days: CALENDAR_LOOKBACK_DAYS }`.
   - **Locale** comes from `useUiLocale()`.
+
 - i18n (English shown; translate for the other 10 locales):
 
   ```json
@@ -303,7 +315,7 @@
   The block goes under `notes`, beside `participants`.
 
 - [ ] **Step 1: Write the failing tests.** Mount the component directly in happy-dom, following `test/components/meetingTranscriptSpeakerPicker.test.js`. Without an i18next instance `t()` returns the key, so assert on keys.
-  - "opens on the note's day and filters by search": three events, two on the note's day. Two rows render. Typing "stand" leaves the Team Standup row, and its subtitle contains ` · `.
+  - "opens on the note's day and filters by search": three events, two on the note's day. Two rows render. Typing "stand" leaves the Team Standup row, and its subtitle contains `·`.
   - "marks the linked event and offers removal first": with `linkedEventId` set, the first row's text is `notes.eventLink.removeEvent` and the linked row contains the check icon. Clicking remove calls `onRemove` once.
   - "selecting an event hands it back": clicking a row calls `onSelect` with that event object.
   - "shows the right empty state":
@@ -326,6 +338,7 @@
 ### Task 6: Link, unlink and Join in the attendees dropdown
 
 **Files:**
+
 - Modify:
   - `src/components/notes/NoteParticipants.tsx`
   - `src/components/notes/NoteEditor.tsx` (`:10` remove `LinkIcon` if it's unused, `:230`/`:267` the prop, `:1032-1043` the capsule and the chip)
@@ -333,6 +346,7 @@
 - Create: `test/components/noteParticipantsEventLink.test.js`
 
 **Interfaces:**
+
 - Consumes: `NoteEventPicker` (Task 5), `mergeEventAttendees` and `formatEventWhen` (Task 4), `calendarGetLinkableEvents` (Task 3), and `getMeetingJoinUrl` (`src/helpers/meetingJoinUrl.js`).
 - Produces new `NoteParticipants` props:
   - `noteCreatedAt: string`
@@ -387,6 +401,7 @@
 Josh can cut this task without touching Tasks 1–6.
 
 **Files:**
+
 - Modify:
   - `src/helpers/database.js` (an `ALTER TABLE calendar_events ADD COLUMN web_link TEXT` with the duplicate-column guard beside `:1003`; a v6 reset block after v5; `upsertCalendarEvents` column and param)
   - `src/helpers/googleCalendarManager.js` (`web_link: item.htmlLink || null`)
@@ -397,6 +412,7 @@ Josh can cut this task without touching Tasks 1–6.
 - Test: `googleCalendarManager.test.js`, `microsoftCalendarManager.test.js`, `calendarDatabase.test.js`, `noteParticipantsEventLink.test.js`
 
 **Interfaces:**
+
 - Produces: `CalendarEvent.web_link`. It's null for Apple rows, and for rows synced before the v6 reset until their next full sync.
 
 - [ ] **Step 1: Write the failing tests.**
@@ -421,6 +437,7 @@ Josh can cut this task without touching Tasks 1–6.
 ### Task 8: Docs, full validation, manual acceptance
 
 **Files:**
+
 - Modify `CLAUDE.md`:
   - The Google, Microsoft and Apple manager bullets: they keep 3 days of history (`calendarCacheWindow.js`), and the v5 reset.
   - The shared-table bullet: the note header links an event from local rows, and an unlink is stored as `""`.
