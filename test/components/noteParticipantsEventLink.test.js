@@ -148,11 +148,59 @@ test("an editor links an event and its guests merge in one write", async (t) => 
   assert.equal(calls.updateNote[0][1].calendar_event_id, "evt-standup");
   assert.deepEqual(
     savedParticipants(calls.updateNote[0]),
-    [dana, frank, eve],
-    "existing attendees stay, in order, and only new guests are added"
+    [dana, frank, { ...eve, addedByEvent: "evt-standup" }],
+    "existing attendees stay, in order, and only new guests are added, tagged with the event"
   );
   assert.equal(attendeeInput(), true, "back on the attendees view");
   assert.equal(bodyText().includes("Team Standup"), true);
+});
+
+test("removing an event you just linked takes off its guests and keeps everyone else", async (t) => {
+  const { act, calls } = await mount(t, { participants: [frank] });
+
+  await act(() => buttonWith("notes.eventLink.selectEvent").click());
+  await act(() => buttonWith("Team Standup").click());
+  await act(() => buttonWith("Team Standup").click());
+  await act(() => buttonWith("notes.eventLink.removeEvent").click());
+
+  assert.equal(calls.updateNote.length, 2);
+  assert.deepEqual(calls.updateNote[1][1], {
+    participants: JSON.stringify([frank]),
+    calendar_event_id: "",
+  });
+  assert.equal(/\bEve\b/.test(bodyText()), false, "the guest the event added is gone");
+  assert.equal(bodyText().includes("Frank"), true);
+});
+
+test("switching to another event swaps the first event's guests for the new one's", async (t) => {
+  const gail = { email: "gail@x.com", displayName: "Gail", responseStatus: null, self: false };
+  const focus = {
+    ...STANDUP,
+    id: "evt-focus",
+    summary: "Focus",
+    hangout_link: null,
+    attendees: JSON.stringify([gail]),
+  };
+  const { act, calls } = await mount(
+    t,
+    {
+      participants: [frank, { ...gail, addedByEvent: "evt-focus" }],
+      linkedEventId: "evt-focus",
+      linkedEvent: focus,
+    },
+    { events: [focus, STANDUP] }
+  );
+
+  await act(() => buttonWith("Focus").click());
+  await act(() => buttonWith("Team Standup").click());
+
+  assert.equal(calls.updateNote.length, 1);
+  assert.equal(calls.updateNote[0][1].calendar_event_id, "evt-standup");
+  assert.deepEqual(savedParticipants(calls.updateNote[0]), [
+    frank,
+    { ...dana, addedByEvent: "evt-standup" },
+    { ...eve, addedByEvent: "evt-standup" },
+  ]);
 });
 
 test("picking the already-linked event changes nothing", async (t) => {
@@ -198,15 +246,22 @@ test("no Join without a meeting link", async (t) => {
   assert.equal(!!buttonWith("notes.eventLink.join"), false);
 });
 
-test("removing the event writes a blank link and keeps the attendees", async (t) => {
-  const { act, calls } = await mount(t, { linkedEventId: "evt-standup", linkedEvent: STANDUP });
+test("removing the event writes a blank link and keeps attendees it didn't add", async (t) => {
+  const { act, calls } = await mount(t, {
+    participants: [dana, frank, { ...eve, addedByEvent: "evt-standup" }],
+    linkedEventId: "evt-standup",
+    linkedEvent: STANDUP,
+  });
 
   await act(() => buttonWith("Team Standup").click());
   await act(() => buttonWith("notes.eventLink.removeEvent").click());
 
-  assert.deepEqual(calls.updateNote, [[7, { calendar_event_id: "" }]]);
+  assert.deepEqual(calls.updateNote, [
+    [7, { participants: JSON.stringify([dana, frank]), calendar_event_id: "" }],
+  ]);
   assert.equal(bodyText().includes("notes.eventLink.selectEvent"), true);
-  assert.equal(bodyText().includes("Dana"), true);
+  assert.equal(bodyText().includes("Dana"), true, "a guest who was on the note before stays");
+  assert.equal(/\bEve\b/.test(bodyText()), false, "the guest the event added is gone");
 });
 
 test("a viewer sees the linked event but cannot change it", async (t) => {

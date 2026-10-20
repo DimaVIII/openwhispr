@@ -200,6 +200,30 @@ test("joining a calendar meeting resumes the user's own note for the event", asy
   assert.equal(meetingNavigations[0].folderId, 3);
 });
 
+test("a joined meeting's new note tags the event's attendees", async () => {
+  const { engine } = createEngine();
+  const db = createJoinDatabase(null);
+  const updates = [];
+  db.databaseManager.getCalendarEventById = (id) => ({
+    id,
+    summary: "Weekly sync",
+    attendees: JSON.stringify([{ email: "dana@x.com", displayName: "Dana", self: false }]),
+  });
+  db.databaseManager.updateNote = (id, update) => {
+    updates.push(update);
+    return { note: { id, ...update } };
+  };
+  engine.databaseManager = db.databaseManager;
+
+  await engine.joinCalendarMeeting("event-1");
+
+  assert.equal(updates.length, 1);
+  assert.equal(updates[0].calendar_event_id, "event-1");
+  assert.deepEqual(JSON.parse(updates[0].participants), [
+    { email: "dana@x.com", displayName: "Dana", self: false, addedByEvent: "event-1" },
+  ]);
+});
+
 test("joining a calendar meeting with no note of the user's own creates one", async () => {
   const { engine, meetingNavigations } = createEngine();
   const db = createJoinDatabase(null);

@@ -23,11 +23,13 @@ export function parseNoteParticipants(raw: string | null | undefined): CalendarA
 /**
  * The note's attendees plus a linked event's guests: existing people stay
  * first, guests are matched by email, and a guest fills in a missing name or
- * the user's own `self` flag rather than adding a duplicate.
+ * the user's own `self` flag rather than adding a duplicate. Guests this adds
+ * are tagged with the event, so removing it takes exactly them off again.
  */
 export function mergeEventAttendees(
   current: CalendarAttendee[],
-  incoming: CalendarAttendee[]
+  incoming: CalendarAttendee[],
+  eventId: string
 ): CalendarAttendee[] {
   const merged = current.map((attendee) => ({ ...attendee }));
   const byEmail = new Map(
@@ -49,11 +51,20 @@ export function mergeEventAttendees(
       responseStatus: guest.responseStatus ?? null,
       self: Boolean(guest.self),
       ...(guest.resource ? { resource: true } : {}),
+      addedByEvent: eventId,
     };
     merged.push(added);
     byEmail.set(email, added);
   }
   return merged;
+}
+
+/** The attendees left when the event is removed: everyone it didn't add. */
+export function removeEventAttendees(
+  attendees: CalendarAttendee[],
+  eventId: string
+): CalendarAttendee[] {
+  return attendees.filter((attendee) => attendee.addedByEvent !== eventId);
 }
 
 /**

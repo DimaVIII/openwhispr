@@ -89,15 +89,25 @@ test("other context loses the attendee fence's tag name, whatever brackets surro
   assert.equal(withoutAttendeesFence("Kickoff"), "Kickoff");
 });
 
-test("mergeEventAttendees appends new guests after the existing ones", async () => {
+test("mergeEventAttendees appends new guests after the existing ones, tagged with the event", async () => {
   const { mergeEventAttendees } = await load();
   const dana = { email: "dana@x.com", displayName: "Dana", responseStatus: null, self: false };
   const eve = { email: "Eve@X.com", displayName: "Eve", responseStatus: "accepted", self: false };
 
-  assert.deepEqual(mergeEventAttendees([dana], [eve, { ...dana, email: "DANA@X.COM" }]), [
-    dana,
-    { email: "eve@x.com", displayName: "Eve", responseStatus: "accepted", self: false },
-  ]);
+  assert.deepEqual(
+    mergeEventAttendees([dana], [eve, { ...dana, email: "DANA@X.COM" }], "evt-1"),
+    [
+      dana,
+      {
+        email: "eve@x.com",
+        displayName: "Eve",
+        responseStatus: "accepted",
+        self: false,
+        addedByEvent: "evt-1",
+      },
+    ],
+    "only the guest the event added carries its tag"
+  );
 });
 
 test("mergeEventAttendees fills a missing display name and keeps the self flag", async () => {
@@ -106,7 +116,8 @@ test("mergeEventAttendees fills a missing display name and keeps the self flag",
   assert.deepEqual(
     mergeEventAttendees(
       [{ email: "me@x.com", displayName: null, self: false }],
-      [{ email: "Me@x.com ", displayName: "Me", self: true }]
+      [{ email: "Me@x.com ", displayName: "Me", self: true }],
+      "evt-1"
     ),
     [{ email: "me@x.com", displayName: "Me", self: true }]
   );
@@ -115,12 +126,24 @@ test("mergeEventAttendees fills a missing display name and keeps the self flag",
 test("mergeEventAttendees ignores guests without an email", async () => {
   const { mergeEventAttendees } = await load();
 
-  assert.deepEqual(mergeEventAttendees([], [{ email: null, displayName: "Room" }]), []);
+  assert.deepEqual(mergeEventAttendees([], [{ email: null, displayName: "Room" }], "evt-1"), []);
 });
 
 test("mergeEventAttendees leaves the attendees alone for an event without guests", async () => {
   const { mergeEventAttendees } = await load();
   const current = [{ email: "dana@x.com", displayName: "Dana", responseStatus: null, self: false }];
 
-  assert.deepEqual(mergeEventAttendees(current, []), current);
+  assert.deepEqual(mergeEventAttendees(current, [], "evt-1"), current);
+});
+
+test("removeEventAttendees takes off only the attendees that event added", async () => {
+  const { removeEventAttendees } = await load();
+  const manual = { email: "dana@x.com", displayName: "Dana", responseStatus: null, self: false };
+  const fromEvent = { ...manual, email: "eve@x.com", addedByEvent: "evt-1" };
+  const fromOtherEvent = { ...manual, email: "frank@x.com", addedByEvent: "evt-2" };
+
+  assert.deepEqual(removeEventAttendees([manual, fromEvent, fromOtherEvent], "evt-1"), [
+    manual,
+    fromOtherEvent,
+  ]);
 });

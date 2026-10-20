@@ -13,7 +13,7 @@ import { syncSessionExpectedCountFromParticipants } from "../../stores/meetingRe
 import { useSettingsStore } from "../../stores/settingsStore";
 import { parseAttendees } from "../../utils/calendarAttendees";
 import { formatEventWhen, normalizeDbDate } from "../../utils/dateFormatting";
-import { mergeEventAttendees } from "../../utils/noteAttendees";
+import { mergeEventAttendees, removeEventAttendees } from "../../utils/noteAttendees";
 
 const MAX_STACKED_AVATARS = 2;
 
@@ -124,7 +124,11 @@ export default function NoteParticipants({
       setView("people");
       // Re-picking the linked event must not re-add guests the user removed.
       if (event.id === localLinkedId) return;
-      const merged = mergeEventAttendees(localParticipants, parseAttendees(event));
+      // Switching events swaps the previous event's guests for this one's.
+      const kept = localLinkedId
+        ? removeEventAttendees(localParticipants, localLinkedId)
+        : localParticipants;
+      const merged = mergeEventAttendees(kept, parseAttendees(event), event.id);
       setLocalParticipants(merged);
       setLocalLinkedId(event.id);
       saveParticipants(merged, { calendar_event_id: event.id });
@@ -134,10 +138,14 @@ export default function NoteParticipants({
 
   const unlinkEvent = useCallback(() => {
     setView("people");
+    const kept = localLinkedId
+      ? removeEventAttendees(localParticipants, localLinkedId)
+      : localParticipants;
+    setLocalParticipants(kept);
     setLocalLinkedId(null);
     // "" (not NULL) so the unlink syncs: the cloud keeps a NULL as "unchanged".
-    window.electronAPI.updateNote(noteId, { calendar_event_id: "" });
-  }, [noteId]);
+    saveParticipants(kept, { calendar_event_id: "" });
+  }, [localLinkedId, localParticipants, saveParticipants]);
 
   const resolvedEvent: (CalendarEvent & { calendar_color?: string | null }) | null = localLinkedId
     ? (events?.find((event) => event.id === localLinkedId) ??

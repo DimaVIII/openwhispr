@@ -83,6 +83,8 @@ export interface CalendarAttendee {
   responseStatus: CalendarResponseStatus | null;
   self: boolean;
   resource?: boolean;
+  /** The calendar event that put this attendee on a note; removing that event removes them. */
+  addedByEvent?: string;
 }
 
 export interface Contact {
