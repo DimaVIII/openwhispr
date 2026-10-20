@@ -21,6 +21,42 @@ export function parseNoteParticipants(raw: string | null | undefined): CalendarA
 }
 
 /**
+ * The note's attendees plus a linked event's guests: existing people stay
+ * first, guests are matched by email, and a guest fills in a missing name or
+ * the user's own `self` flag rather than adding a duplicate.
+ */
+export function mergeEventAttendees(
+  current: CalendarAttendee[],
+  incoming: CalendarAttendee[]
+): CalendarAttendee[] {
+  const merged = current.map((attendee) => ({ ...attendee }));
+  const byEmail = new Map(
+    merged.map((attendee) => [attendee.email.toLowerCase().trim(), attendee])
+  );
+  for (const guest of incoming) {
+    if (!isAttendee(guest)) continue;
+    const email = guest.email.toLowerCase().trim();
+    if (!email) continue;
+    const existing = byEmail.get(email);
+    if (existing) {
+      if (!existing.displayName && guest.displayName) existing.displayName = guest.displayName;
+      if (guest.self) existing.self = true;
+      continue;
+    }
+    const added: CalendarAttendee = {
+      email,
+      displayName: guest.displayName || null,
+      responseStatus: guest.responseStatus ?? null,
+      self: Boolean(guest.self),
+      ...(guest.resource ? { resource: true } : {}),
+    };
+    merged.push(added);
+    byEmail.set(email, added);
+  }
+  return merged;
+}
+
+/**
  * The attendees as the signed-in user sees them. A participant's `self` flag
  * marks whoever recorded the meeting, so it means "the user" only on the
  * user's own note; on someone else's (a team note) that person is an
