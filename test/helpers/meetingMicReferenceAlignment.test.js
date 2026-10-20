@@ -78,11 +78,11 @@ test("each capture holds the mic only as long as its reference lags", () => {
     if (holdMs > 0) {
       advance(holdMs - 1);
       api.system();
-      assert.deepEqual(dispatched, [], String(strategy));
+      assert.deepEqual(dispatched, [], strategy);
       advance(1);
       api.system();
     }
-    assert.deepEqual(dispatched, ["a"], String(strategy));
+    assert.deepEqual(dispatched, ["a"], strategy);
   }
 });
 

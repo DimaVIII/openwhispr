@@ -8324,7 +8324,7 @@ class IPCHandlers {
     const setMeetingSystemAudioStrategy = (strategy) => {
       meetingSystemAudioStrategy = strategy;
       // A capture that fell back no longer delivers the reference these
-      // chunks are waiting for, so don't hold them until stop.
+      // chunks are waiting for, so release them now.
       if (!meetingMicNeedsReferenceAlignment()) {
         flushPendingMeetingMicChunks(true);
       }
