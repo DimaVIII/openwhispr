@@ -3832,8 +3832,6 @@
     "clearTitle": "Clear dictionary?",
     "clearDescription": "This will remove all words from your custom dictionary. This action cannot be undone.",
     "addWord": "Add word",
-    "addPlaceholder": "Add words separated by commas — OpenWhispr, Supabase, John Snow, ARR",
-    "removeWord": "Remove {{word}}",
     "clearAll": "Clear all",
     "add": "Add",
     "importWords": "Import words",
@@ -3841,8 +3839,6 @@
     "separateWithCommas": "One word per line, or comma-separated",
     "wordsReady_one": "{{count}} word ready",
     "wordsReady_other": "{{count}} words ready",
-    "import": "Import",
-    "yourDictionary": "Your dictionary",
     "promptLimitNotice": "Your dictionary is {{chars}} characters. Groq and Whisper models read only the last few hundred characters of it, so a shorter list works better there. Other models get the full list.",
     "exportDictionary": "Export dictionary",
     "exportFailed": "Export failed",
@@ -3898,7 +3894,12 @@
         "delete": "Delete",
         "hide": "Hide for me",
         "deleteForEveryone": "Delete for everyone",
-        "unhide": "Unhide"
+        "unhide": "Unhide",
+        "shareWord": "Share {{word}}",
+        "deleteWord": "Delete {{word}}",
+        "hideWord": "Hide {{word}} for me",
+        "deleteForEveryoneWord": "Delete {{word}} for everyone",
+        "unhideWord": "Unhide {{word}}"
       },
       "attribution": {
         "you": "You",
@@ -3923,13 +3924,18 @@
       "memberCount_one": "{{count}} member",
       "memberCount_other": "{{count}} members",
       "emptyList": "No words in {{list}} yet",
-      "noMatches": "No words match “{{query}}”",
-      "deletedForEveryone": "Deleted “{{word}}” for everyone",
+      "noMatches": "No words match \"{{query}}\"",
+      "deletedForEveryone": "Deleted \"{{word}}\" for everyone",
       "undo": "Undo",
       "errors": {
         "generic": "Couldn't update {{list}}. Try again.",
         "listFull": "{{list}} is full"
-      }
+      },
+      "deleteOneTitle": "Delete \"{{word}}\" for everyone in {{list}}?",
+      "deleteManyTitle_one": "Delete {{count}} word for everyone in {{list}}?",
+      "deleteManyTitle_other": "Delete {{count}} words for everyone in {{list}}?",
+      "deletedManyForEveryone_one": "Deleted {{count}} word for everyone",
+      "deletedManyForEveryone_other": "Deleted {{count}} words for everyone"
     }
   },
   "support": {

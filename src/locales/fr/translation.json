@@ -3832,8 +3832,6 @@
     "clearTitle": "Vider le dictionnaire ?",
     "clearDescription": "Cela supprimera tous les mots de votre dictionnaire personnalisé. Cette action est irréversible.",
     "addWord": "Ajouter un mot",
-    "addPlaceholder": "Ajoutez des mots séparés par des virgules — OpenWhispr, Supabase, John Snow, ARR",
-    "removeWord": "Supprimer {{word}}",
     "clearAll": "Tout effacer",
     "add": "Ajouter",
     "importWords": "Importer des mots",
@@ -3841,8 +3839,6 @@
     "separateWithCommas": "Un mot par ligne, ou séparés par des virgules",
     "wordsReady_one": "{{count}} mot prêt",
     "wordsReady_other": "{{count}} mots prêts",
-    "import": "Importer",
-    "yourDictionary": "Votre dictionnaire",
     "promptLimitNotice": "Votre dictionnaire compte {{chars}} caractères. Les modèles Groq et Whisper n'en lisent que les dernières centaines de caractères : une liste plus courte y fonctionne mieux. Les autres modèles reçoivent la liste complète.",
     "exportDictionary": "Exporter le dictionnaire",
     "exportFailed": "Échec de l'exportation",
@@ -3898,7 +3894,12 @@
         "delete": "Supprimer",
         "hide": "Masquer pour moi",
         "deleteForEveryone": "Supprimer pour tous",
-        "unhide": "Afficher"
+        "unhide": "Afficher",
+        "shareWord": "Partager {{word}}",
+        "deleteWord": "Supprimer {{word}}",
+        "hideWord": "Masquer {{word}} pour moi",
+        "deleteForEveryoneWord": "Supprimer {{word}} pour tous",
+        "unhideWord": "Afficher {{word}}"
       },
       "attribution": {
         "you": "Vous",
@@ -3929,7 +3930,12 @@
       "errors": {
         "generic": "Impossible de mettre à jour {{list}}. Réessayez.",
         "listFull": "{{list}} est pleine"
-      }
+      },
+      "deleteOneTitle": "Supprimer « {{word}} » pour tous dans {{list}} ?",
+      "deleteManyTitle_one": "Supprimer {{count}} mot pour tous dans {{list}} ?",
+      "deleteManyTitle_other": "Supprimer {{count}} mots pour tous dans {{list}} ?",
+      "deletedManyForEveryone_one": "{{count}} mot supprimé pour tous",
+      "deletedManyForEveryone_other": "{{count}} mots supprimés pour tous"
     }
   },
   "support": {

@@ -3479,19 +3479,15 @@
   },
   "dictionary": {
     "addWord": "Adicionar palavra",
-    "removeWord": "Remover {{word}}",
     "clearAll": "Limpar tudo",
     "clearTitle": "Limpar o dicionário?",
     "clearDescription": "Isso removerá todas as palavras do seu dicionário personalizado. Esta ação não pode ser desfeita.",
-    "addPlaceholder": "Adicione palavras separadas por vírgulas — OpenWhispr, Supabase, John Snow, ARR",
     "add": "Adicionar",
     "importWords": "Importar palavras",
     "importPlaceholder": "Cole palavras separadas por vírgulas ou novas linhas...",
     "separateWithCommas": "Uma palavra por linha, ou separadas por vírgulas",
     "wordsReady_one": "{{count}} palavra pronta",
     "wordsReady_other": "{{count}} palavras prontas",
-    "import": "Importar",
-    "yourDictionary": "Seu dicionário",
     "promptLimitNotice": "Seu dicionário tem {{chars}} caracteres. Os modelos Groq e Whisper leem apenas as últimas centenas de caracteres, portanto uma lista mais curta funciona melhor ali. Os demais modelos recebem a lista completa.",
     "exportDictionary": "Exportar dicionário",
     "exportFailed": "Falha ao exportar",
@@ -3547,7 +3543,12 @@
         "delete": "Excluir",
         "hide": "Ocultar para mim",
         "deleteForEveryone": "Excluir para todos",
-        "unhide": "Mostrar"
+        "unhide": "Mostrar",
+        "shareWord": "Compartilhar {{word}}",
+        "deleteWord": "Excluir {{word}}",
+        "hideWord": "Ocultar {{word}} para mim",
+        "deleteForEveryoneWord": "Excluir {{word}} para todos",
+        "unhideWord": "Mostrar {{word}}"
       },
       "attribution": {
         "you": "Você",
@@ -3578,7 +3579,12 @@
       "errors": {
         "generic": "Não foi possível atualizar {{list}}. Tente novamente.",
         "listFull": "{{list}} está cheia"
-      }
+      },
+      "deleteOneTitle": "Excluir “{{word}}” para todos em {{list}}?",
+      "deleteManyTitle_one": "Excluir {{count}} palavra para todos em {{list}}?",
+      "deleteManyTitle_other": "Excluir {{count}} palavras para todos em {{list}}?",
+      "deletedManyForEveryone_one": "{{count}} palavra excluída para todos",
+      "deletedManyForEveryone_other": "{{count}} palavras excluídas para todos"
     }
   },
   "insights": {

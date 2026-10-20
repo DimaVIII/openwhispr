@@ -36,6 +36,8 @@ const ARABIC_PLURAL_BASES = [
   "notes.overview.meta.members",
   "dictionary.wordsReady",
   "dictionary.shared.memberCount",
+  "dictionary.shared.deleteManyTitle",
+  "dictionary.shared.deletedManyForEveryone",
   "insights.days",
   "insights.longestStreak",
   "insights.dayTooltip",

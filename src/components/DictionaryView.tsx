@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Download, NotebookPen, PanelRight, Plus, Sparkles } from "./icons";
 import { Textarea } from "./ui/textarea";
@@ -8,7 +8,6 @@ import { cn } from "./lib/utils";
 import { CARD_SURFACE_CLASS } from "./ui/surfaces";
 import { ConfirmDialog } from "./ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
-import { useToast } from "./ui/useToast";
 import SnippetsView from "./SnippetsView";
 import DictionaryEmptyIllustration from "./DictionaryEmptyIllustration";
 import { DictionaryListPicker } from "./dictionary/DictionaryListPicker";
@@ -19,6 +18,7 @@ import {
   type AddTargetOption,
 } from "./dictionary/DictionaryAddField";
 import { DictionaryWordList } from "./dictionary/DictionaryWordList";
+import { useDictionaryActions } from "./dictionary/useDictionaryActions";
 import {
   buildPicker,
   defaultAddTarget,
@@ -26,7 +26,6 @@ import {
   rowsForList,
   shareTargetsFor,
   SORT_LABEL_KEYS,
-  visiblePersonalWords,
   type DictionaryRow,
   type SortKey,
 } from "./dictionary/dictionaryViewModel";
@@ -34,15 +33,6 @@ import { useSettings } from "../hooks/useSettings";
 import { useWorkspace } from "../hooks/useWorkspace";
 import { useAuth } from "../hooks/useAuth";
 import { useSharedDictionaryStore, type ListKey } from "../stores/sharedDictionaryStore";
-import {
-  SharedDictionaryActionError,
-  addSharedWords,
-  deleteSharedWords,
-  editSharedWord,
-  setSharedWordsHidden,
-  type SharedDictionaryActionReason,
-} from "../services/sharedDictionaryActions";
-import { syncService } from "../services/SyncService";
 import { getAgentName } from "../utils/agentName";
 import { parseDictionaryImportText } from "../helpers/dictionaryImport";
 import { getDictionaryHintTiers } from "../utils/snippets";
@@ -88,8 +78,6 @@ function readRememberedTarget(): AddTarget | undefined {
 const isSharedList = (list: ListKey): boolean => list !== "all" && list !== "personal";
 const sameWord = (left: string, right: string): boolean =>
   left.trim().toLowerCase() === right.trim().toLowerCase();
-const reasonOf = (error: unknown): SharedDictionaryActionReason =>
-  error instanceof SharedDictionaryActionError ? error.reason : "network";
 
 export default function DictionaryView() {
   const { t } = useTranslation();
@@ -97,7 +85,6 @@ export default function DictionaryView() {
   const { active: workspace } = useWorkspace();
   const { isSignedIn, user } = useAuth();
   const agentName = getAgentName();
-  const { toast } = useToast();
 
   const status = useSharedDictionaryStore((state) => state.status);
   const snapshot = useSharedDictionaryStore((state) => state.snapshot);
@@ -117,7 +104,6 @@ export default function DictionaryView() {
   const [pickedTarget, setPickedTarget] = useState<{ list: ListKey; target: AddTarget } | null>(
     null
   );
-  const [manualSyncing, setManualSyncing] = useState(false);
   const [bulkText, setBulkText] = useState("");
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
@@ -150,13 +136,6 @@ export default function DictionaryView() {
     const agentWord = agentName.trim().toLowerCase();
     return customDictionary.filter((word) => word.trim().toLowerCase() !== agentWord);
   }, [customDictionary, agentName]);
-
-  // Clear-all and export leave out words moved into a team list: they stay
-  // under the shared copy as the member's fallback.
-  const visiblePersonal = useMemo(
-    () => visiblePersonalWords(userWords, movedPersonal, snapshot),
-    [userWords, movedPersonal, snapshot]
-  );
 
   const pickerEntries = useMemo(
     () => buildPicker({ personal: userWords, movedPersonal, snapshot, workspaceName, access, t }),
@@ -226,139 +205,28 @@ export default function DictionaryView() {
 
   const pendingImportCount = useMemo(() => parseDictionaryImportText(bulkText).length, [bulkText]);
 
-  const wordsInTarget = (target: AddTarget): string[] => {
-    if (target === "personal") return customDictionary;
-    // A hidden word still belongs to its list, so the server would refuse it too.
-    return (snapshot?.entries ?? [])
-      .filter((entry) => entry.spaceId === target)
-      .map((entry) => entry.word);
-  };
+  const actions = useDictionaryActions({
+    workspaceId,
+    workspaceName,
+    customDictionary,
+    userWords,
+    agentName,
+    updateCustomDictionary,
+    movedPersonal,
+    snapshot,
+    listLabel,
+  });
+  const { visiblePersonal } = actions;
 
-  const showActionError = useCallback(
-    (reason: SharedDictionaryActionReason, listName: string): void => {
-      toast({
-        title:
-          reason === "listFull"
-            ? t("dictionary.shared.errors.listFull", { list: listName })
-            : t("dictionary.shared.errors.generic", { list: listName }),
-        variant: "destructive",
-      });
-    },
-    [toast, t]
-  );
-
-  // Resolves true once nothing is left to add, which clears the field.
-  const addWords = async (text: string): Promise<boolean> => {
-    const target = addTarget;
-    const existing = new Set(wordsInTarget(target).map((word) => word.toLowerCase()));
-    const words = parseDictionaryImportText(text).filter((word) => {
-      if (existing.has(word.toLowerCase())) return false;
-      existing.add(word.toLowerCase());
-      return true;
-    });
-    if (words.length === 0) return true;
-    rememberTarget(target);
-    if (target === "personal") {
-      updateCustomDictionary({ add: words });
-      return true;
-    }
-    if (!workspaceId) return false;
-    const result = await addSharedWords(workspaceId, target, words);
-    if (result.failed) {
-      showActionError(result.failed.reason, listLabel(target));
-      return false;
-    }
-    return true;
+  const addWords = (text: string): Promise<boolean> => {
+    rememberTarget(addTarget);
+    return actions.addWords(text, addTarget);
   };
 
   const handleImport = async (): Promise<void> => {
     if (await addWords(bulkText)) {
       setBulkText("");
       setShowBulkImport(false);
-    }
-  };
-
-  const sharedListName = (row: DictionaryRow): string => {
-    const spaceId = snapshot?.entries.find((entry) => entry.cloudId === row.entryId)?.spaceId;
-    return spaceId === undefined ? workspaceName : listLabel(spaceId);
-  };
-
-  const handleEdit = async (row: DictionaryRow, word: string): Promise<string | null> => {
-    if (word === row.word) return null;
-    if (row.kind === "personal") {
-      if (customDictionary.some((other) => other !== row.word && sameWord(other, word))) {
-        return t("dictionary.shared.alreadyIn", { list: t("dictionary.shared.personal") });
-      }
-      updateCustomDictionary({ add: [word], remove: [row.word] });
-      return null;
-    }
-    if (!workspaceId || !row.entryId) return null;
-    try {
-      await editSharedWord(workspaceId, row.entryId, word);
-      return null;
-    } catch (error) {
-      const reason = reasonOf(error);
-      if (reason === "alreadyInList") {
-        return t("dictionary.shared.alreadyIn", { list: sharedListName(row) });
-      }
-      showActionError(reason, sharedListName(row));
-      return null;
-    }
-  };
-
-  const handleHidden = async (row: DictionaryRow, hidden: boolean): Promise<void> => {
-    if (!workspaceId || !row.entryId) return;
-    try {
-      await setSharedWordsHidden(workspaceId, [row.entryId], hidden);
-    } catch (error) {
-      showActionError(reasonOf(error), sharedListName(row));
-    }
-  };
-
-  const handleDeleteForEveryone = async (row: DictionaryRow): Promise<void> => {
-    if (!workspaceId || !row.entryId) return;
-    const listName = sharedListName(row);
-    try {
-      const { undo } = await deleteSharedWords(workspaceId, [row.entryId]);
-      toast({
-        title: t("dictionary.shared.deletedForEveryone", { word: row.word }),
-        actions: [
-          {
-            label: t("dictionary.shared.undo"),
-            onClick: async () => {
-              try {
-                await undo();
-              } catch (error) {
-                showActionError(reasonOf(error), listName);
-              }
-            },
-          },
-        ],
-      });
-    } catch (error) {
-      showActionError(reasonOf(error), listName);
-    }
-  };
-
-  const handleSync = async (): Promise<void> => {
-    setManualSyncing(true);
-    try {
-      await Promise.all([syncService.syncSharedDictionaryNow(), syncService.syncDictionaryNow()]);
-    } finally {
-      setManualSyncing(false);
-    }
-  };
-
-  const handleExport = async (): Promise<void> => {
-    // The export keeps the agent name, as it always has.
-    const words = visiblePersonalWords(customDictionary, movedPersonal, snapshot);
-    const result = await window.electronAPI?.exportDictionary?.(words);
-    if (result?.error) {
-      toast({
-        title: t("dictionary.exportFailed"),
-        description: result.error,
-        variant: "destructive",
-      });
     }
   };
 
@@ -423,7 +291,7 @@ export default function DictionaryView() {
                   {t("dictionary.clearAll")}
                 </button>
                 <button
-                  onClick={() => void handleExport()}
+                  onClick={() => void actions.exportPersonal()}
                   aria-label={t("dictionary.exportDictionary")}
                   className="text-foreground/45 transition-colors hover:text-foreground/60"
                 >
@@ -444,11 +312,11 @@ export default function DictionaryView() {
           <DictionaryWordList
             rows={rows}
             hiddenList={openList === "hidden"}
-            onEdit={handleEdit}
+            onEdit={actions.editRow}
             onDelete={(row) => updateCustomDictionary({ remove: [row.word] })}
-            onHide={(row) => void handleHidden(row, true)}
-            onUnhide={(row) => void handleHidden(row, false)}
-            onDeleteForEveryone={(row) => void handleDeleteForEveryone(row)}
+            onHide={(row) => void actions.setRowsHidden([row], true)}
+            onUnhide={(row) => void actions.setRowsHidden([row], false)}
+            onDeleteForEveryone={(row) => actions.requestDeleteForEveryone([row])}
           />
         )}
       </div>
@@ -461,7 +329,17 @@ export default function DictionaryView() {
         onOpenChange={setConfirmClear}
         title={t("dictionary.clearTitle")}
         description={t("dictionary.clearDescription")}
-        onConfirm={() => updateCustomDictionary({ remove: visiblePersonal })}
+        onConfirm={actions.clearPersonal}
+        variant="destructive"
+      />
+      <ConfirmDialog
+        open={actions.deleteTitle !== null}
+        onOpenChange={(open) => {
+          if (!open) actions.cancelDelete();
+        }}
+        title={actions.deleteTitle ?? ""}
+        confirmText={t("dictionary.shared.actions.deleteForEveryone")}
+        onConfirm={actions.confirmDelete}
         variant="destructive"
       />
 
@@ -491,9 +369,9 @@ export default function DictionaryView() {
               writeStorage(SORT_STORAGE_KEY, next);
             }}
             showSync={isSignedIn}
-            syncing={storeSyncing || manualSyncing}
+            syncing={storeSyncing || actions.syncing}
             lastSyncedAt={lastSyncedAt}
-            onSync={() => void handleSync()}
+            onSync={() => void actions.sync()}
           />
         )}
       </div>
@@ -522,7 +400,7 @@ export default function DictionaryView() {
                   }}
                   onAdd={addWords}
                   isInTarget={(word) =>
-                    wordsInTarget(addTarget).some((existing) => sameWord(existing, word))
+                    actions.wordsInTarget(addTarget).some((existing) => sameWord(existing, word))
                   }
                   onImport={() => setShowBulkImport(true)}
                   inputRef={addInputRef}

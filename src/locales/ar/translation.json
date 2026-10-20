@@ -1376,8 +1376,6 @@
     "clearTitle": "مسح القاموس؟",
     "clearDescription": "سيؤدي هذا إلى إزالة جميع الكلمات من قاموسك المخصص. لا يمكن التراجع عن هذا الإجراء.",
     "addWord": "إضافة كلمة",
-    "addPlaceholder": "أضف كلمات مفصولة بفواصل — OpenWhispr، Supabase، John Snow، ARR",
-    "removeWord": "إزالة {{word}}",
     "clearAll": "مسح الكل",
     "add": "إضافة",
     "importWords": "استيراد كلمات",
@@ -1389,8 +1387,6 @@
     "wordsReady_few": "{{count}} كلمات جاهزة",
     "wordsReady_many": "{{count}} كلمةً جاهزة",
     "wordsReady_other": "{{count}} كلمة جاهزة",
-    "import": "استيراد",
-    "yourDictionary": "قاموسك",
     "exportDictionary": "تصدير القاموس",
     "exportFailed": "فشل التصدير",
     "editWord": "تعديل {{word}}",
@@ -1446,7 +1442,12 @@
         "delete": "حذف",
         "hide": "إخفاء عني",
         "deleteForEveryone": "حذف للجميع",
-        "unhide": "إظهار"
+        "unhide": "إظهار",
+        "shareWord": "مشاركة {{word}}",
+        "deleteWord": "حذف {{word}}",
+        "hideWord": "إخفاء {{word}} عني",
+        "deleteForEveryoneWord": "حذف {{word}} للجميع",
+        "unhideWord": "إظهار {{word}}"
       },
       "attribution": {
         "you": "أنت",
@@ -1481,7 +1482,20 @@
       "errors": {
         "generic": "تعذّر تحديث {{list}}. حاول مرة أخرى.",
         "listFull": "{{list}} ممتلئة"
-      }
+      },
+      "deleteOneTitle": "هل تريد حذف «{{word}}» للجميع في {{list}}؟",
+      "deleteManyTitle_zero": "هل تريد حذف {{count}} كلمة للجميع في {{list}}؟",
+      "deleteManyTitle_one": "هل تريد حذف كلمة واحدة ({{count}}) للجميع في {{list}}؟",
+      "deleteManyTitle_two": "هل تريد حذف كلمتين ({{count}}) للجميع في {{list}}؟",
+      "deleteManyTitle_few": "هل تريد حذف {{count}} كلمات للجميع في {{list}}؟",
+      "deleteManyTitle_many": "هل تريد حذف {{count}} كلمةً للجميع في {{list}}؟",
+      "deleteManyTitle_other": "هل تريد حذف {{count}} كلمة للجميع في {{list}}؟",
+      "deletedManyForEveryone_zero": "تم حذف {{count}} كلمة للجميع",
+      "deletedManyForEveryone_one": "تم حذف كلمة واحدة ({{count}}) للجميع",
+      "deletedManyForEveryone_two": "تم حذف كلمتين ({{count}}) للجميع",
+      "deletedManyForEveryone_few": "تم حذف {{count}} كلمات للجميع",
+      "deletedManyForEveryone_many": "تم حذف {{count}} كلمةً للجميع",
+      "deletedManyForEveryone_other": "تم حذف {{count}} كلمة للجميع"
     }
   },
   "promptStudio": {

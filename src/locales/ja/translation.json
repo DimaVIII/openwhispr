@@ -3407,18 +3407,14 @@
   },
   "dictionary": {
     "addWord": "単語を追加",
-    "removeWord": "{{word}} を削除",
     "clearAll": "すべてクリア",
     "clearTitle": "辞書をクリアしますか？",
     "clearDescription": "カスタム辞書のすべての単語が削除されます。この操作は元に戻せません。",
-    "addPlaceholder": "カンマ区切りで単語を追加 — OpenWhispr、Supabase、ARR など",
     "add": "追加",
     "importWords": "単語をインポート",
     "importPlaceholder": "カンマまたは改行区切りの単語を貼り付け...",
     "separateWithCommas": "1行に1語、またはカンマ区切り",
     "wordsReady_other": "{{count}} 個の単語が準備完了",
-    "import": "インポート",
-    "yourDictionary": "あなたの辞書",
     "promptLimitNotice": "辞書は現在{{chars}}文字です。GroqとWhisperのモデルはその末尾の数百文字しか読み取らないため、リストは短いほうが効果的です。その他のモデルには全リストが送信されます。",
     "exportDictionary": "辞書をエクスポート",
     "exportFailed": "エクスポートに失敗しました",
@@ -3475,7 +3471,12 @@
         "delete": "削除",
         "hide": "自分には非表示",
         "deleteForEveryone": "全員から削除",
-        "unhide": "再表示"
+        "unhide": "再表示",
+        "shareWord": "{{word}} を共有",
+        "deleteWord": "{{word}} を削除",
+        "hideWord": "{{word}} を自分には非表示",
+        "deleteForEveryoneWord": "{{word}} を全員から削除",
+        "unhideWord": "{{word}} を再表示"
       },
       "attribution": {
         "you": "あなた",
@@ -3506,7 +3507,12 @@
       "errors": {
         "generic": "{{list}} を更新できませんでした。もう一度お試しください。",
         "listFull": "{{list}} がいっぱいです"
-      }
+      },
+      "deleteOneTitle": "{{list}} の全員から「{{word}}」を削除しますか？",
+      "deleteManyTitle_one": "{{list}} の全員から {{count}} 個の単語を削除しますか？",
+      "deleteManyTitle_other": "{{list}} の全員から {{count}} 個の単語を削除しますか？",
+      "deletedManyForEveryone_one": "{{count}} 個の単語を全員から削除しました",
+      "deletedManyForEveryone_other": "{{count}} 個の単語を全員から削除しました"
     }
   },
   "referral": {

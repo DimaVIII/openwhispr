@@ -3503,9 +3503,7 @@
   },
   "dictionary": {
     "addWord": "Добавить слово",
-    "removeWord": "Удалить {{word}}",
     "clearAll": "Очистить все",
-    "addPlaceholder": "Добавьте слова через запятую — OpenWhispr, Supabase, John Snow, ARR",
     "clearTitle": "Очистить словарь?",
     "clearDescription": "Все слова будут удалены без возможности восстановления.",
     "add": "Добавить",
@@ -3516,8 +3514,6 @@
     "wordsReady_few": "{{count}} слова готовы",
     "wordsReady_many": "{{count}} слов готово",
     "wordsReady_other": "{{count}} слова готово",
-    "import": "Импортировать",
-    "yourDictionary": "Ваш словарь",
     "promptLimitNotice": "В вашем словаре {{chars}} символов. Модели Groq и Whisper читают только последние несколько сотен символов, поэтому там лучше работает более короткий список. Остальные модели получают список целиком.",
     "exportDictionary": "Экспортировать словарь",
     "exportFailed": "Не удалось экспортировать",
@@ -3573,7 +3569,12 @@
         "delete": "Удалить",
         "hide": "Скрыть для меня",
         "deleteForEveryone": "Удалить для всех",
-        "unhide": "Показать"
+        "unhide": "Показать",
+        "shareWord": "Поделиться: {{word}}",
+        "deleteWord": "Удалить {{word}}",
+        "hideWord": "Скрыть {{word}} для меня",
+        "deleteForEveryoneWord": "Удалить {{word}} для всех",
+        "unhideWord": "Показать {{word}}"
       },
       "attribution": {
         "you": "Вы",
@@ -3606,7 +3607,16 @@
       "errors": {
         "generic": "Не удалось обновить {{list}}. Попробуйте ещё раз.",
         "listFull": "Список {{list}} заполнен"
-      }
+      },
+      "deleteOneTitle": "Удалить «{{word}}» для всех в {{list}}?",
+      "deleteManyTitle_one": "Удалить {{count}} слово для всех в {{list}}?",
+      "deleteManyTitle_few": "Удалить {{count}} слова для всех в {{list}}?",
+      "deleteManyTitle_many": "Удалить {{count}} слов для всех в {{list}}?",
+      "deleteManyTitle_other": "Удалить {{count}} слова для всех в {{list}}?",
+      "deletedManyForEveryone_one": "{{count}} слово удалено для всех",
+      "deletedManyForEveryone_few": "{{count}} слова удалены для всех",
+      "deletedManyForEveryone_many": "{{count}} слов удалено для всех",
+      "deletedManyForEveryone_other": "{{count}} слова удалено для всех"
     }
   },
   "insights": {

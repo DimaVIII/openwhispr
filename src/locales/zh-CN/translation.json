@@ -3479,18 +3479,14 @@
   },
   "dictionary": {
     "addWord": "添加词语",
-    "removeWord": "移除 {{word}}",
     "clearAll": "全部清除",
     "clearTitle": "清空词典？",
     "clearDescription": "这将删除自定义词典中的所有词汇，此操作无法撤销。",
-    "addPlaceholder": "用逗号分隔添加多个词——OpenWhispr、Supabase、ARR",
     "add": "添加",
     "importWords": "导入词语",
     "importPlaceholder": "粘贴以逗号或换行分隔的词语...",
     "separateWithCommas": "每行一个词，或用逗号分隔",
     "wordsReady_other": "{{count}} 个词语就绪",
-    "import": "导入",
-    "yourDictionary": "你的词典",
     "promptLimitNotice": "词典当前共 {{chars}} 个字符。Groq 和 Whisper 模型只会读取其中最后几百个字符，因此列表越短效果越好；其他模型会收到完整列表。",
     "exportDictionary": "导出词典",
     "exportFailed": "导出失败",
@@ -3547,7 +3543,12 @@
         "delete": "删除",
         "hide": "对我隐藏",
         "deleteForEveryone": "为所有人删除",
-        "unhide": "取消隐藏"
+        "unhide": "取消隐藏",
+        "shareWord": "共享 {{word}}",
+        "deleteWord": "删除 {{word}}",
+        "hideWord": "对我隐藏 {{word}}",
+        "deleteForEveryoneWord": "为所有人删除 {{word}}",
+        "unhideWord": "取消隐藏 {{word}}"
       },
       "attribution": {
         "you": "你",
@@ -3578,7 +3579,12 @@
       "errors": {
         "generic": "无法更新 {{list}}，请重试。",
         "listFull": "{{list}} 已满"
-      }
+      },
+      "deleteOneTitle": "要为 {{list}} 中的所有人删除“{{word}}”吗？",
+      "deleteManyTitle_one": "要为 {{list}} 中的所有人删除 {{count}} 个词语吗？",
+      "deleteManyTitle_other": "要为 {{list}} 中的所有人删除 {{count}} 个词语吗？",
+      "deletedManyForEveryone_one": "已为所有人删除 {{count}} 个词语",
+      "deletedManyForEveryone_other": "已为所有人删除 {{count}} 个词语"
     }
   },
   "insights": {

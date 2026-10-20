@@ -21,7 +21,9 @@ interface DictionaryWordListProps {
 }
 
 interface RowAction {
+  // The tooltip stays short; the accessible name says which word it acts on.
   label: string;
+  ariaLabel: string;
   icon: ReactNode;
   onClick: () => void;
   destructive?: boolean;
@@ -32,7 +34,7 @@ function RowActionButton({ action }: { action: RowAction }): ReactElement {
     <Tooltip content={action.label}>
       <button
         type="button"
-        aria-label={action.label}
+        aria-label={action.ariaLabel}
         onClick={action.onClick}
         className={cn(
           "grid size-6 place-items-center rounded-[5px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20",
@@ -106,7 +108,8 @@ function RowEditor({
         dir="auto"
         autoFocus
         value={value}
-        disabled={saving}
+        // readOnly rather than disabled, so a refused save keeps the focus here.
+        readOnly={saving}
         aria-label={t("dictionary.editWord", { word: row.word })}
         aria-invalid={error ? true : undefined}
         onChange={(event) => {
@@ -139,52 +142,72 @@ export function DictionaryWordList({
   const [editingKey, setEditingKey] = useState<string | null>(null);
 
   const actionsFor = (row: DictionaryRow): RowAction[] => {
-    const edit: RowAction = {
-      label: t("dictionary.shared.actions.edit"),
-      icon: <Pencil size={13} />,
-      onClick: () => setEditingKey(row.key),
-    };
+    const action = (
+      labelKey: string,
+      ariaLabelKey: string,
+      icon: ReactNode,
+      onClick: () => void,
+      destructive = false
+    ): RowAction => ({
+      label: t(labelKey),
+      ariaLabel: t(ariaLabelKey, { word: row.word }),
+      icon,
+      onClick,
+      destructive,
+    });
+    const edit = action(
+      "dictionary.shared.actions.edit",
+      "dictionary.editWord",
+      <Pencil size={13} />,
+      () => setEditingKey(row.key)
+    );
     if (hiddenList) {
       return [
-        {
-          label: t("dictionary.shared.actions.unhide"),
-          icon: <Eye size={13} />,
-          onClick: () => onUnhide(row),
-        },
+        action(
+          "dictionary.shared.actions.unhide",
+          "dictionary.shared.actions.unhideWord",
+          <Eye size={13} />,
+          () => onUnhide(row)
+        ),
       ];
     }
     if (row.kind === "personal") {
+      const share = onShare
+        ? [
+            action(
+              "dictionary.shared.actions.share",
+              "dictionary.shared.actions.shareWord",
+              <Users size={13} />,
+              () => onShare(row)
+            ),
+          ]
+        : [];
       return [
-        ...(onShare
-          ? [
-              {
-                label: t("dictionary.shared.actions.share"),
-                icon: <Users size={13} />,
-                onClick: () => onShare(row),
-              },
-            ]
-          : []),
+        ...share,
         edit,
-        {
-          label: t("dictionary.shared.actions.delete"),
-          icon: <Trash2 size={13} />,
-          onClick: () => onDelete(row),
-        },
+        action(
+          "dictionary.shared.actions.delete",
+          "dictionary.shared.actions.deleteWord",
+          <Trash2 size={13} />,
+          () => onDelete(row)
+        ),
       ];
     }
     return [
       edit,
-      {
-        label: t("dictionary.shared.actions.hide"),
-        icon: <EyeOff size={13} />,
-        onClick: () => onHide(row),
-      },
-      {
-        label: t("dictionary.shared.actions.deleteForEveryone"),
-        icon: <Trash2 size={13} />,
-        onClick: () => onDeleteForEveryone(row),
-        destructive: true,
-      },
+      action(
+        "dictionary.shared.actions.hide",
+        "dictionary.shared.actions.hideWord",
+        <EyeOff size={13} />,
+        () => onHide(row)
+      ),
+      action(
+        "dictionary.shared.actions.deleteForEveryone",
+        "dictionary.shared.actions.deleteForEveryoneWord",
+        <Trash2 size={13} />,
+        () => onDeleteForEveryone(row),
+        true
+      ),
     ];
   };
 

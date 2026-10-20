@@ -3832,8 +3832,6 @@
     "clearTitle": "Wörterbuch leeren?",
     "clearDescription": "Dadurch werden alle Wörter aus deinem benutzerdefinierten Wörterbuch entfernt. Diese Aktion kann nicht rückgängig gemacht werden.",
     "addWord": "Wort hinzufügen",
-    "addPlaceholder": "Wörter durch Kommas getrennt hinzufügen – OpenWhispr, Supabase, John Snow, ARR",
-    "removeWord": "{{word}} entfernen",
     "clearAll": "Alle löschen",
     "add": "Hinzufügen",
     "importWords": "Wörter importieren",
@@ -3841,8 +3839,6 @@
     "separateWithCommas": "Ein Wort pro Zeile oder durch Kommas getrennt",
     "wordsReady_one": "{{count}} Wort bereit",
     "wordsReady_other": "{{count}} Wörter bereit",
-    "import": "Importieren",
-    "yourDictionary": "Dein Wörterbuch",
     "promptLimitNotice": "Dein Wörterbuch umfasst {{chars}} Zeichen. Groq- und Whisper-Modelle lesen davon nur die letzten paar hundert Zeichen – eine kürzere Liste funktioniert dort besser. Andere Modelle erhalten die vollständige Liste.",
     "exportDictionary": "Wörterbuch exportieren",
     "exportFailed": "Export fehlgeschlagen",
@@ -3898,7 +3894,12 @@
         "delete": "Löschen",
         "hide": "Für mich ausblenden",
         "deleteForEveryone": "Für alle löschen",
-        "unhide": "Einblenden"
+        "unhide": "Einblenden",
+        "shareWord": "{{word}} teilen",
+        "deleteWord": "{{word}} löschen",
+        "hideWord": "{{word}} für mich ausblenden",
+        "deleteForEveryoneWord": "{{word}} für alle löschen",
+        "unhideWord": "{{word}} einblenden"
       },
       "attribution": {
         "you": "Du",
@@ -3929,7 +3930,12 @@
       "errors": {
         "generic": "{{list}} konnte nicht aktualisiert werden. Versuche es erneut.",
         "listFull": "{{list}} ist voll"
-      }
+      },
+      "deleteOneTitle": "„{{word}}“ für alle in {{list}} löschen?",
+      "deleteManyTitle_one": "{{count}} Wort für alle in {{list}} löschen?",
+      "deleteManyTitle_other": "{{count}} Wörter für alle in {{list}} löschen?",
+      "deletedManyForEveryone_one": "{{count}} Wort für alle gelöscht",
+      "deletedManyForEveryone_other": "{{count}} Wörter für alle gelöscht"
     }
   },
   "support": {
