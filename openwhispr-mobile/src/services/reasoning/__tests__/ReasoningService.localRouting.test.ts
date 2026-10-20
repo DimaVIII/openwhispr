@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 jest.mock('@/lib/inferenceRouting', () => ({ getInferenceSelection: jest.fn(() => undefined) }));
 
 jest.mock('@/lib/apiClient', () => ({
@@ -12,6 +13,7 @@ jest.mock('@/lib/apiClient', () => ({
 }));
 
 jest.mock('@/lib/localReasoning', () => ({
+  fitsLocalCleanupOutput: jest.fn(),
   fitsLocalReasoningBudget: jest.fn(),
   getLocalReasoningReadiness: jest.fn(),
   getLocalReasoningUnavailableMessage: () => 'Local unavailable',
@@ -36,6 +38,7 @@ jest.mock('@/services/reasoning/LocalReasoningService', () => ({
 import { ReasoningService } from '../ReasoningService';
 import { api } from '@/lib/apiClient';
 import {
+  fitsLocalCleanupOutput,
   fitsLocalReasoningBudget,
   getLocalReasoningReadiness,
   isLocalReasoningRequired,
@@ -46,6 +49,7 @@ const mockPost = api.post as jest.Mock;
 const mockIsLocalRequired = isLocalReasoningRequired as jest.Mock;
 const mockGetReadiness = getLocalReasoningReadiness as jest.Mock;
 const mockFitsBudget = fitsLocalReasoningBudget as jest.Mock;
+const mockFitsCleanupOutput = fitsLocalCleanupOutput as jest.Mock;
 const mockLocalProcessText = LocalReasoningService.processText as jest.Mock;
 
 beforeEach(() => {
@@ -57,6 +61,7 @@ beforeEach(() => {
     tokenCounting: true,
   });
   mockFitsBudget.mockResolvedValue(true);
+  mockFitsCleanupOutput.mockResolvedValue(true);
   mockLocalProcessText.mockResolvedValue({ text: 'local result', model: 'apple-fm' });
 });
 
@@ -171,4 +176,83 @@ it('fails On-Device note chat rather than falling back to Cloud when the device 
     }),
   ).rejects.toThrow();
   expect(mockPost).not.toHaveBeenCalled();
+});
+
+describe('On-Device cleanup output cap', () => {
+  const localCleanup = {
+    text: 'a dictation of about two thousand words',
+    inferenceScope: 'cleanup' as const,
+    inferenceRoute: { mode: 'local' as const, scope: 'cleanup' as const },
+  };
+
+  // The transcript fits the context, but its cleaned copy is as long and Apple Intelligence
+  // would cut it off at the output cap without an error.
+  it('refuses a cleanup whose reply would run past the output cap', async () => {
+    mockFitsCleanupOutput.mockResolvedValue(false);
+
+    await expect(ReasoningService.processText(localCleanup)).rejects.toMatchObject({
+      code: 'LOCAL_CONTEXT_LIMIT',
+    });
+
+    expect(mockFitsCleanupOutput).toHaveBeenCalledWith(localCleanup.text);
+    expect(mockLocalProcessText).not.toHaveBeenCalled();
+    expect(mockPost).not.toHaveBeenCalled();
+  });
+
+  it('cleans on the device when the reply fits', async () => {
+    await expect(ReasoningService.processText(localCleanup)).resolves.toEqual({
+      text: 'local result',
+      model: 'apple-fm',
+    });
+  });
+
+  it('goes to Cloud instead when the caller allowed it', async () => {
+    mockFitsCleanupOutput.mockResolvedValue(false);
+
+    await expect(
+      ReasoningService.processText({
+        text: 'long private note',
+        systemPrompt: 'clean this',
+        inferenceScope: 'cleanup',
+        routing: { isPrivateNote: true, allowCloudFallback: true },
+      }),
+    ).resolves.toEqual({ text: 'cloud result', model: 'cloud-model' });
+
+    expect(mockLocalProcessText).not.toHaveBeenCalled();
+  });
+
+  it('leaves notes, whose reply is shorter than what they read, to the context check', async () => {
+    mockFitsCleanupOutput.mockResolvedValue(false);
+
+    await ReasoningService.processText({
+      text: 'long private note',
+      systemPrompt: 'summarize this',
+      inferenceScope: 'notes',
+      routing: { isPrivateNote: true },
+    });
+
+    expect(mockFitsCleanupOutput).not.toHaveBeenCalled();
+    expect(mockLocalProcessText).toHaveBeenCalledTimes(1);
+  });
+});
+
+it('keeps Android cleanup on its local model without applying the Apple output cap', async () => {
+  const original = Platform.OS;
+  Platform.OS = 'android';
+  mockFitsCleanupOutput.mockResolvedValue(false);
+  try {
+    await expect(
+      ReasoningService.processText({
+        text: 'Local Android transcript',
+        systemPrompt: 'Clean the transcript',
+        inferenceScope: 'cleanup',
+        inferenceRoute: { mode: 'local', scope: 'cleanup' },
+      }),
+    ).resolves.toMatchObject({ text: 'local result' });
+    expect(mockFitsCleanupOutput).not.toHaveBeenCalled();
+    expect(mockLocalProcessText).toHaveBeenCalledTimes(1);
+    expect(mockPost).not.toHaveBeenCalled();
+  } finally {
+    Platform.OS = original;
+  }
 });

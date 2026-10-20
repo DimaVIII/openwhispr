@@ -38,9 +38,7 @@ export type FailedTranscriptInput = {
   provider: TranscriptionProvider;
   inferenceRoute?: Transcript['inferenceRoute'];
   cleanupRoute?: Transcript['cleanupRoute'];
-  agentRoute?: Transcript['agentRoute'];
   cleanupUnavailable?: string;
-  agentUnavailable?: string;
   requestContext?: Transcript['requestContext'];
   keyboardTone?: KeyboardTone;
   jobId?: string;
@@ -309,9 +307,7 @@ export const useTranscriptStore = create<TranscriptState>((set, get) => {
           provider: transcript.provider,
           inferenceRoute: transcript.inferenceRoute,
           cleanupRoute: transcript.cleanupRoute,
-          agentRoute: transcript.agentRoute,
           cleanupUnavailable: transcript.cleanupUnavailable,
-          agentUnavailable: transcript.agentUnavailable,
           status: 'failed',
           errorMessage: transcript.errorMessage,
           requestContext: transcript.requestContext,
@@ -406,20 +402,10 @@ export const useTranscriptStore = create<TranscriptState>((set, get) => {
             (provider !== 'byok'
               ? { mode: provider === 'local' ? 'local' : 'openwhispr', scope: 'cleanup' }
               : undefined),
-          agentRoute:
-            textRoutes.agentRoute ??
-            (provider !== 'byok'
-              ? { mode: provider === 'local' ? 'local' : 'openwhispr', scope: 'agent' }
-              : undefined),
           cleanupUnavailable:
             textRoutes.cleanupUnavailable ??
             (provider === 'byok' && !textRoutes.cleanupRoute
               ? 'The original cleanup route is unavailable. Your raw transcript is saved.'
-              : undefined),
-          agentUnavailable:
-            textRoutes.agentUnavailable ??
-            (provider === 'byok' && !textRoutes.agentRoute
-              ? 'The original agent route is unavailable. Your raw transcript is saved.'
               : undefined),
           language: getPreferredTranscriptionLanguage(),
           fileName,
@@ -437,9 +423,7 @@ export const useTranscriptStore = create<TranscriptState>((set, get) => {
           provider: processed.transcription.provider,
           inferenceRoute: processed.transcription.inferenceRoute,
           cleanupRoute: processed.transcription.cleanupRoute,
-          agentRoute: processed.transcription.agentRoute,
           cleanupUnavailable: processed.transcription.cleanupUnavailable,
-          agentUnavailable: processed.transcription.agentUnavailable,
           cleanupWarning: processed.transcription.cleanupWarning,
           // Retry succeeded: the row is completed and no longer retryable.
           audioUrl: undefined,
@@ -478,9 +462,7 @@ export const useTranscriptStore = create<TranscriptState>((set, get) => {
                 provider,
                 inferenceRoute,
                 cleanupRoute: textRoutes.cleanupRoute,
-                agentRoute: textRoutes.agentRoute,
                 cleanupUnavailable: textRoutes.cleanupUnavailable,
-                agentUnavailable: textRoutes.agentUnavailable,
               }),
           status: 'failed',
           errorMessage: toFriendlyTranscriptionErrorMessage(error),

@@ -54,6 +54,9 @@ export async function chooseOnboardingMode(
     pinnedInference: config?.pinnedInference,
   };
   // The dictation route moves with the mode, so a replayed pick also leaves a Providers route.
+  // Choosing Local in setup also keeps uploads and cleanup on this iPhone; choosing Cloud releases
+  // them. The other workflows follow the picked mode until a Dictation change in AI Models holds
+  // them where they ran.
   const next = dictationModeConfig(config, mode);
   if (Platform.OS === 'android') {
     const saved = config?.inference?.cleanup;

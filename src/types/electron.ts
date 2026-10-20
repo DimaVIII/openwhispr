@@ -1650,8 +1650,9 @@ declare global {
       ) => Promise<{
         success: boolean;
         transcription?: TranscriptionItem;
+        warning?: string;
         error?: string;
-        code?: TranscriptionErrorCode;
+        code?: string;
         messageKey?: string;
       }>;
       updateTranscriptionText: (
@@ -2061,9 +2062,9 @@ declare global {
       onGpuFallbackNotification: (callback: () => void) => () => void;
       onWhisperGpuStatusChanged: (callback: () => void) => () => void;
 
-      // One-time "GPU pack needs re-downloading" notice from the legacy-layout migration
-      getGpuPackMigrationNotice: () => Promise<{ packs: string[] } | null>;
-      dismissGpuPackMigrationNotice: () => Promise<{ success: boolean }>;
+      // One-time "GPU pack needs re-downloading" notice, taken by the window that shows it
+      takeGpuPackMigrationNotice: () => Promise<{ packs: string[] } | null>;
+      onGpuPackMigrationNoticeReady: (callback: () => void) => () => void;
 
       // Parakeet operations (NVIDIA via sherpa-onnx)
       transcribeLocalParakeet: (
@@ -3116,7 +3117,6 @@ declare global {
           systemPrompt?: string;
           tools?: Array<{ name: string; description: string; parameters: Record<string, unknown> }>;
           screenContext?: { data: string; mediaType: string };
-          noteChat?: boolean;
         }
       ) => void;
       cancelAgentStream?: (requestId: string) => void;
@@ -3272,6 +3272,7 @@ declare global {
         sessionId: string;
         autoEndEligible: boolean;
         aecEnabled?: boolean;
+        speakerIndexBase?: number;
       }) => Promise<
         {
           success: boolean;
@@ -3280,6 +3281,7 @@ declare global {
           systemAudioMode?: SystemAudioMode;
           systemAudioStrategy?: SystemAudioStrategy;
           oneOnOneAttendee?: { displayName: string; email: string | null } | null;
+          speakerIndexBase?: number;
         } & PolicyFailureMetadata
       >;
       meetingTranscriptionSend?: (buffer: ArrayBuffer, source: "mic" | "system") => void;

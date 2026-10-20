@@ -188,7 +188,7 @@ export default function NoteEditorScreen() {
   const autoLearnEnabled = useConfigStore((s) => s.config?.autoLearnCorrections ?? true);
   const notesMode = useConfigStore((s) => s.config?.inference?.notes?.mode);
   const notesProviderId = useConfigStore((s) => s.config?.inference?.notes?.providerId);
-  const chatMode = useConfigStore((s) => s.config?.inference?.agent?.mode);
+  const chatMode = useConfigStore((s) => s.config?.inference?.noteChat?.mode);
   const chatEnabled = useConfigStore((s) => (s.config ? isNoteChatEnabled(s.config) : true));
   // Consent belongs to this editor, account, note and processing selection. Native alerts,
   // model readiness and the paywall may finish after any of those have changed.

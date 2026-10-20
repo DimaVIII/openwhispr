@@ -22,16 +22,18 @@ export interface UserConfig {
   androidStyleTones?: Partial<Record<AndroidStyleContext, KeyboardTone>>;
   inference?: Partial<Record<InferenceScope, InferenceSelection>>;
   rememberedInference?: Partial<Record<InferenceScope, Record<string, InferenceSelection>>>;
-  // Workflows held on the previous mode when dictation moved to Bring Your Own Key,
-  // as opposed to ones the user chose; only these are released when dictation leaves it.
+  // Workflows set automatically, by Local Mode holding them on this iPhone or a dictation change
+  // keeping them where they ran, as opposed to ones the user chose on their own page; a dictation
+  // change keeps these and only onboarding releases them.
   pinnedInference?: MobileInferenceScope[];
-  // Set while Private mode is on after being turned on from Bring Your Own Key, so turning it
-  // off goes back to the last provider rather than to Cloud, with the workflows it held
-  // (pinnedInference) held on the same selections again.
+  // Android Local Mode returns to the previous provider and its automatic workflow selections.
   privateModeReturn?: { pinned: Partial<Record<MobileInferenceScope, InferenceSelection>> };
   // Set once a config follows Local Mode's OpenWhispr Cloud defaults for uploads and cleanup. New
   // installs start with it; older configs get it from localModeUpgradeConfig at launch.
   localModeUpgraded?: boolean;
+  // Set once note chat has its own selection, copied from the voice assistant's it used to share.
+  // New installs start with it; older configs get it from noteChatSplitConfig at launch.
+  noteChatSplit?: boolean;
   defaultMode: ProcessingMode;
   cleanupEnabled?: boolean;
   autoGenerateNoteTitle?: boolean;
@@ -53,9 +55,9 @@ export interface UserConfig {
   // Apple Foundation Models local generation for notes. Default on; users can
   // disable it from AI Models.
   appleLocalIntelligenceEnabled?: boolean;
-  // Dictation agent (cloud-only, default on)
+  // Voice assistant: the keyboard's compose wand (Cloud and Bring Your Own Key, default on)
   dictationAgentEnabled?: boolean;
-  // Note chat, which once shared dictationAgentEnabled's switch and follows it until set.
+  // Note chat, which once shared dictationAgentEnabled's switch (saved apart by noteChatSplitConfig).
   noteChatEnabled?: boolean;
   dictationAgentName?: string;
   dictationAgentShareContext?: boolean;
@@ -76,7 +78,14 @@ export interface TextInferenceSnapshot {
   agentUnavailable?: string;
 }
 
-export interface Transcript extends TextInferenceSnapshot {
+// Dictation and uploads only take the cleanup route; the voice assistant's route belongs to the
+// keyboard's wand jobs.
+export type CleanupInferenceSnapshot = Pick<
+  TextInferenceSnapshot,
+  'cleanupRoute' | 'cleanupUnavailable'
+>;
+
+export interface Transcript extends CleanupInferenceSnapshot {
   cleanupWarning?: string;
   inferenceRoute?: Extract<InferenceRoute, { mode: 'providers' }>;
   id: string;
@@ -117,12 +126,11 @@ export interface ReasoningRequest {
   // tone; the API appends a matching instruction in cleanup mode.
   tone?: KeyboardTone;
   // User's custom cleanup prompt, sent as a TEMPLATE: the API substitutes
-  // {{agentName}} and still appends language, dictionary and tone. Goes out
-  // with promptMode "cleanup", which pins cleanup semantics and disables the
-  // server's agent-name detection — cleanupTranscript gates it on its own
-  // detection. Ignored when systemPrompt (a raw action-mode override) is set.
+  // {{agentName}} and still appends language, dictionary and tone. Ignored when
+  // systemPrompt is set.
   customPrompt?: string;
-  // When set, the backend enters Action Mode (dictation agent).
+  // Fills {{agentName}} in the cleanup prompt, which keeps the assistant's name
+  // as dictated words.
   agentName?: string;
   routing?: ReasoningRoutingOptions;
 }
@@ -164,6 +172,7 @@ export interface LocalReasoningReadiness {
 export type LocalReasoningErrorCode =
   | 'APPLE_LLM_GUARDRAIL'
   | 'APPLE_LLM_CONTEXT_LIMIT'
+  | 'APPLE_LLM_OUTPUT_LIMIT'
   | 'APPLE_LLM_RATE_LIMITED'
   | 'APPLE_LLM_UNAVAILABLE'
   | 'APPLE_LLM_FAILED'
@@ -185,7 +194,7 @@ export interface StructuredMeetingNotes {
   followUps: string[];
 }
 
-export interface TranscriptionRequest extends TextInferenceSnapshot {
+export interface TranscriptionRequest extends CleanupInferenceSnapshot {
   inferenceRoute?: Extract<InferenceRoute, { mode: 'providers' }>;
   audioUri: string;
   provider: TranscriptionProvider;
@@ -201,7 +210,7 @@ export interface TranscriptionRequest extends TextInferenceSnapshot {
   timeoutSeconds?: number;
 }
 
-export interface TranscriptionResponse extends TextInferenceSnapshot {
+export interface TranscriptionResponse extends CleanupInferenceSnapshot {
   cleanupWarning?: string;
   inferenceRoute?: Extract<InferenceRoute, { mode: 'providers' }>;
   text: string;

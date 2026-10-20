@@ -2,6 +2,14 @@
 
 This is a requirements audit against the 15 October 2026 goal brief, including the Android-only correction. It is not a completion certificate. The [implementation plan](premium-experience-plan.md) preserves the chronological checkpoints; [acceptance](acceptance.md) distinguishes baseline checks from later builds. A checked implementation item does not establish physical-device or provider acceptance.
 
+## 20 October — source integration before the replacement candidate
+
+Code16 (`e3eeeb9b-0ca3-4181-b11c-274f6f4de3b5`, source `295ac4c7258a3824fdfeb2df612dd8cf596bda69`) was submitted, then canceled when the PR was found to conflict with newer main. EAS confirms CANCELED with no artifact; nothing was uploaded to Play. The mergeability check should have preceded that submission. Do not resume or rebuild that source.
+
+Integrated main `5b0576a8b56d98b0988c24f1c1ded31e8d41f783`, preserving Android's explicit Local Mode boundary and return-to-provider behavior while retaining the incoming iOS workflow changes, separate Note Chat settings and keyboard-only voice-assistant activation. Regression checks caught and fixed Apple-only download guidance/output limits on Android, lost provider return state, and the note-chat migration of that return state. Android uses downloaded text models; no Apple capability is introduced.
+
+The integrated source passes **307 suites / 3,617 tests**, TypeScript, integration-file formatting and scoped ESLint (zero errors; one existing upstream `no-void` warning). Source tests do not establish installed behavior. Check the pushed PR head's mergeability and CI before submitting one replacement billing candidate. The installed development app remains v67, Play remains code12, preview protection is restored, and physical-phone acceptance remains unavailable. Retain the owned checkout for this active goal and preserve unrelated root `app.json`.
+
 ## 20 October — consolidated billing-candidate preflight
 
 The installed development runtime remains v67/source `ce8f0ccbfaf565c06f65b2f85c71df9cebc944a2`; no model/prompt change was promoted. A host-only comparison using all39 observed dictionary words rejected the zero-penalty alternative: grammar and paragraph limitations remain. Physical-phone speech/performance acceptance is unavailable; Josh confirmed no phone is available yet.
