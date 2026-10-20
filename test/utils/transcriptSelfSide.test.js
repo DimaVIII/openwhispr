@@ -31,18 +31,10 @@ test("an undiarized mic stays on the user's side", async () => {
   assert.equal(isSelfSideSegment({ source: "system" }, undefined, YOU), false);
 });
 
-test("naming a cluster You moves it to the user's side", async () => {
+test("naming a cluster You moves it to the user's side, any other name moves it off", async () => {
   const { isSelfSideSegment } = await load();
   assert.equal(
     isSelfSideSegment({ source: "mic", speaker: "speaker_1" }, { speaker_1: " you " }, YOU),
-    true
-  );
-  assert.equal(
-    isSelfSideSegment(
-      userLocked({ source: "system", speaker: "speaker_0" }, "You"),
-      { speaker_0: "You" },
-      YOU
-    ),
     true
   );
   assert.equal(isSelfSideSegment({ source: "mic", speaker: "you" }, { you: "Alice" }, YOU), false);

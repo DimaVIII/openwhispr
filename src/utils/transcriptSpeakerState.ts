@@ -225,7 +225,7 @@ export const resolveSegmentSpeakerName = (
 // language alongside the current one.
 export const isYouSpeakerName = (name: string, youLabel: string): boolean => {
   const normalized = name.trim().toLowerCase();
-  return normalized === "you" || normalized === youLabel.trim().toLowerCase();
+  return normalized === "you" || normalized === youLabel.toLowerCase();
 };
 
 // Which side of the transcript a bubble sits on follows the name its chip shows,
