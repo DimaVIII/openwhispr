@@ -65,18 +65,15 @@ const EXPECTED_SHARED_FIELD_DIRECTIONS = {
   "src/components/ForgotPasswordView.tsx": ["ltr"],
   "src/components/InviteTeammateDialog.tsx": ["ltr"],
   "src/components/LeaderboardSection.tsx": ["ltr"],
-  "src/components/OpenAICompatiblePanel.tsx": ["ltr"],
-  "src/components/SelfHostedPanel.tsx": ["ltr", "ltr"],
   "src/components/SettingsPage.tsx": ["ltr", "ltr", "ltr", "ltr", "ltr", "ltr"],
   "src/components/SnippetsView.tsx": ["auto", "auto", "auto", "auto"],
-  "src/components/TranscriptionModelPicker.tsx": ["ltr", "ltr", "ltr"],
   "src/components/dictionary/DictionaryAddField.tsx": ["auto"],
   "src/components/dictionary/DictionaryToolbar.tsx": ["auto"],
   "src/components/dictionary/DictionaryWordList.tsx": ["auto"],
   "src/components/notes/ActionManagerDialog.tsx": ["auto", "auto", "auto"],
   "src/components/notes/DeleteSpaceDialog.tsx": ["auto"],
+  "src/components/notes/FolderNotesPopover.tsx": ["auto"],
   "src/components/notes/UploadAudioView.tsx": ["auto"],
-  "src/components/onboarding/ProviderSetupStep.tsx": ["ltr", "ltr", "ltr", "ltr", "ltr", "ltr"],
   "src/components/settings/DictationAgentSettings.tsx": ["auto"],
   "src/components/settings/EnterpriseCheckoutDialog.tsx": ["inherit"],
   "src/components/settings/ProfileSection.tsx": ["auto", "ltr", "ltr", "ltr"],
@@ -85,6 +82,7 @@ const EXPECTED_SHARED_FIELD_DIRECTIONS = {
   "src/components/ui/ApiKeyInput.tsx": ["ltr"],
   "src/components/ui/CustomModelInput.tsx": ["ltr"],
   "src/components/ui/PromptStudio.tsx": ["auto", "auto"],
+  "src/components/ui/ProviderCheckField.tsx": ["ltr"],
   "src/components/ui/SearchableModelList.tsx": ["ltr"],
 };
 
@@ -106,6 +104,7 @@ const EXPECTED_NATIVE_FIELD_DIRECTIONS = {
   "src/components/notes/AddNotesToFolderDialog.tsx": ["auto"],
   "src/components/notes/MeetingTranscriptChat.tsx": ["ltr", "auto"],
   "src/components/notes/NoteEditor.tsx": ["auto", "auto"],
+  "src/components/notes/NoteEventPicker.tsx": ["auto"],
   "src/components/notes/NoteParticipants.tsx": ["auto"],
   "src/components/notes/NotesOnboarding.tsx": ["auto", "auto", "auto"],
   "src/components/notes/ShareNoteDialog.tsx": ["auto"],
@@ -172,8 +171,8 @@ test("representative prose, identity, secret, and rich-editor surfaces keep thei
     /<Input\s+dir="ltr"\s+type="password"/
   );
   assert.match(
-    source("src/components/onboarding/ProviderSetupStep.tsx"),
-    /<Input\s+dir="ltr"\s+type="password"/
+    source("src/components/ui/ProviderCheckField.tsx"),
+    /<Input\s+dir="ltr"\s+\{\.\.\.inputProps\}/
   );
   assert.match(
     source("src/components/dictionary/DictionaryAddField.tsx"),
