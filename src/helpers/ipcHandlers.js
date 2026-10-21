@@ -1149,8 +1149,13 @@ class IPCHandlers {
     const googleEmails = new Set(
       this.databaseManager.getGoogleAccounts().map((a) => a.email.toLowerCase())
     );
+    // Rooms aren't speakers; notes linked before rooms were left out may hold them.
     return participants.filter(
-      (p) => p && p.self !== true && !googleEmails.has((p.email || "").toLowerCase())
+      (p) =>
+        p &&
+        p.self !== true &&
+        p.resource !== true &&
+        !googleEmails.has((p.email || "").toLowerCase())
     );
   }
 

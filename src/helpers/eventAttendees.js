@@ -3,8 +3,19 @@
 // require(esm) with module-syntax detection.
 
 /**
- * An event's attendees JSON for the note it creates, each attendee tagged with
- * the event (`addedByEvent`) so removing the event later takes them off again.
+ * Whether an event's attendee belongs on a note made from it: rooms and other
+ * resources are booked rather than invited, and a guest who declined isn't
+ * coming. Notes created before this rule may still hold rooms, so speaker
+ * counts skip `resource` attendees on their own.
+ */
+export function isEventGuest(attendee) {
+  return attendee.resource !== true && attendee.responseStatus !== "declined";
+}
+
+/**
+ * An event's attendees JSON for the note it creates. Each guest is tagged with
+ * the event (`addedByEvent`) so removing the event later takes them off again,
+ * except the user (`self`), who recorded the note whichever event it links.
  */
 export function tagEventAttendeesJson(attendeesJson, eventId) {
   if (!attendeesJson || !eventId) return attendeesJson || null;
@@ -12,9 +23,13 @@ export function tagEventAttendeesJson(attendeesJson, eventId) {
     const attendees = JSON.parse(attendeesJson);
     if (!Array.isArray(attendees)) return attendeesJson;
     return JSON.stringify(
-      attendees.map((attendee) =>
-        attendee && typeof attendee === "object" ? { ...attendee, addedByEvent: eventId } : attendee
-      )
+      attendees
+        .filter((attendee) => !attendee || typeof attendee !== "object" || isEventGuest(attendee))
+        .map((attendee) =>
+          attendee && typeof attendee === "object" && attendee.self !== true
+            ? { ...attendee, addedByEvent: eventId }
+            : attendee
+        )
     );
   } catch {
     return attendeesJson;

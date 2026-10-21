@@ -203,6 +203,38 @@ test("on a teammate's note a newly added user is an ordinary attendee", async (t
   ]);
 });
 
+test("on the user's own note, linking and removing leaves earlier rows as they were and keeps the user", async (t) => {
+  const namelessDana = { ...dana, displayName: null };
+  const room = {
+    email: "room@x.com",
+    displayName: "Room 4",
+    responseStatus: null,
+    self: false,
+    resource: true,
+  };
+  const { act, calls } = await mount(
+    t,
+    { participants: [namelessDana] },
+    { events: [{ ...STANDUP, attendees: JSON.stringify([me, dana, room]) }] }
+  );
+
+  await act(() => buttonWith("notes.eventLink.selectEvent").click());
+  await act(() => buttonWith("Team Standup").click());
+  await act(() => buttonWith("Team Standup").click());
+  await act(() => buttonWith("notes.eventLink.removeEvent").click());
+
+  assert.deepEqual(
+    savedParticipants(calls.updateNote[0]),
+    [namelessDana, me],
+    "the room stays out and Dana's row isn't filled in from the event"
+  );
+  assert.deepEqual(
+    savedParticipants(calls.updateNote[1]),
+    [namelessDana, me],
+    "removing the event takes off nothing it didn't add, and the user recorded the note"
+  );
+});
+
 test("removing an event you just linked takes off its guests and keeps everyone else", async (t) => {
   const { act, calls } = await mount(t, { participants: [frank] });
 

@@ -1,3 +1,4 @@
+import { isEventGuest } from "../helpers/eventAttendees";
 import type { CalendarAttendee } from "../types/calendar";
 import type { NoteAttendee } from "../types/connectors";
 
@@ -22,36 +23,30 @@ export function parseNoteParticipants(raw: string | null | undefined): CalendarA
 
 /**
  * The note's attendees plus a linked event's guests: existing people stay
- * first, guests are matched by email, and a guest fills in a missing name or
- * the user's own `self` flag rather than adding a duplicate. Guests this adds
- * are tagged with the event, so removing it takes exactly them off again.
+ * first and as they are, guests are matched by email, and rooms and declined
+ * guests are left out. Guests this adds are tagged with the event, so removing
+ * it takes exactly them off again; the user (`self`, only ever passed on their
+ * own note) is not, since they recorded the note whichever event it links.
  */
 export function mergeEventAttendees(
   current: CalendarAttendee[],
   incoming: CalendarAttendee[],
   eventId: string
 ): CalendarAttendee[] {
-  const merged = current.map((attendee) => ({ ...attendee }));
+  const merged = [...current];
   const byEmail = new Map(
     merged.map((attendee) => [attendee.email.toLowerCase().trim(), attendee])
   );
   for (const guest of incoming) {
-    if (!isAttendee(guest)) continue;
+    if (!isAttendee(guest) || !isEventGuest(guest)) continue;
     const email = guest.email.toLowerCase().trim();
-    if (!email) continue;
-    const existing = byEmail.get(email);
-    if (existing) {
-      if (!existing.displayName && guest.displayName) existing.displayName = guest.displayName;
-      if (guest.self) existing.self = true;
-      continue;
-    }
+    if (!email || byEmail.has(email)) continue;
     const added: CalendarAttendee = {
       email,
       displayName: guest.displayName || null,
       responseStatus: guest.responseStatus ?? null,
       self: Boolean(guest.self),
-      ...(guest.resource ? { resource: true } : {}),
-      addedByEvent: eventId,
+      ...(guest.self ? {} : { addedByEvent: eventId }),
     };
     merged.push(added);
     byEmail.set(email, added);
