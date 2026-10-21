@@ -178,6 +178,45 @@ test("stock Detailed Notes stays beside a customized AI Summary", (t) => {
   }
 });
 
+test("a flat stock AI Summary moves to sections and retires stock Detailed Notes", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+  const summary = builtins.BUILTIN_ACTIONS.find((a) => a.translationKey === GENERATE_NOTES_KEY);
+  db.db
+    .prepare("UPDATE actions SET prompt = ?, sections = NULL WHERE translation_key = ?")
+    .run(summary.previousPrompts.at(-1), GENERATE_NOTES_KEY);
+  const legacy = seedDetailed(db, { prompt: detailed.previousPrompts.at(-1), sections: null });
+  db.db.close();
+  for (let run = 0; run < 2; run++) {
+    reopen((next) => {
+      assert.equal(next.db.prepare("SELECT * FROM actions WHERE id = ?").get(legacy.id), undefined);
+      const row = next.getActions().find((r) => r.translation_key === GENERATE_NOTES_KEY);
+      assert.equal(row.prompt, summary.prompt);
+      assert.deepEqual(row.sections, summary.sections);
+    });
+  }
+});
+
+test("a second Detailed Notes without a client ID beside a customized AI Summary still opens", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+  db.db
+    .prepare(
+      "UPDATE actions SET prompt = 'My summary rules.', sections = NULL WHERE translation_key = ?"
+    )
+    .run(GENERATE_NOTES_KEY);
+  seedDetailed(db, { translation_key: GENERATE_NOTES_KEY });
+  seedDetailed(db, { client_id: null, prompt: detailed.previousPrompts.at(-1), sections: null });
+  db.db.close();
+  for (let run = 0; run < 2; run++) {
+    reopen((next) => {
+      const rows = next.getActions();
+      assert.equal(rows.filter((row) => row.translation_key === DETAILED_NOTES_KEY).length, 2);
+      assert.equal(new Set(rows.map((row) => row.client_id)).size, rows.length);
+    });
+  }
+});
+
 for (const customized of [false, true]) {
   for (const identity of ["downgraded", "no client ID"]) {
     test(`${identity} ${customized ? "edited" : "stock"} Detailed Notes avoids default ID collisions`, (t) => {

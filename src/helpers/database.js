@@ -748,7 +748,7 @@ class DatabaseManager {
           .all(LEGACY_DETAILED_NOTES.translationKey);
         const deleteLegacy = this.db.prepare("DELETE FROM actions WHERE id = ?");
         const settleLegacy = this.db.prepare(
-          "UPDATE actions SET client_id = COALESCE(client_id, ?), sort_order = ?, prompt = ?, sections = ? WHERE id = ?"
+          "UPDATE OR IGNORE actions SET client_id = COALESCE(client_id, ?), sort_order = ?, prompt = ?, sections = ? WHERE id = ?"
         );
         for (const row of legacyRows) {
           const stockContent = hasStockContent(row, LEGACY_DETAILED_NOTES);
