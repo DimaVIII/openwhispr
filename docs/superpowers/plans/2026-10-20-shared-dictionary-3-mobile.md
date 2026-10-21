@@ -93,7 +93,7 @@ Behaviour:
 - **Entries:**
   - With no cursor, page the snapshot and **replace** the stored entries with it; otherwise page the delta.
   - A 410 `SHARED_DICTIONARY_CURSOR_EXPIRED` resets both cursors and re-runs as a snapshot.
-  - After the last page (`hasMore: false`), store the response's `server_time` as the cursor (API ruling 8).
+  - After a complete pass, store the **first** page's `server_time` as the cursor (API ruling 8, desktop ruling 9). A tombstone written while a multi-page snapshot was paging is then re-read by the next delta, instead of being skipped forever.
   - Every delta, for entries and hides, starts from `since = storedCursor − 10 s` with no `since_id`, re-applying rows idempotently, because shared lists have many writers that can commit out of `updated_at` order (API ruling 5).
   - When the last page's `scopes` contain a list the stored state didn't have (a restored space, or the member re-added), reset both cursors and pull again from a snapshot, since a delta never resends rows pruned earlier.
   - Cursors live in `sync_state` keys `shared_dictionary.last_sync_at` / `.last_sync_id`, using `notesRepository.getSyncState/setSyncState`.
@@ -130,7 +130,7 @@ Behaviour:
   - `src/lib/snippets.ts:70` (`getDictionaryHintWords`), `src/lib/dictationHints.ts:19` (`buildDictationHints`)
   - `src/lib/transcriptionPromptCap.ts` (add `formatDictionaryPrompt`)
   - `src/services/transcription/TranscriptionService.ts`. Every string prompt is built with `formatDictionaryPrompt(buildDictationHintTiers(ctx), limit)`:
-    - cloud `transcribeWithApi` (L513, `parameters.prompt`): `limit = WHISPER_PROMPT_CHARS`
+    - cloud `transcribeWithApi` (L513, `parameters.prompt`): `limit = GROQ_PROMPT_CHARS` (890), because the OpenWhispr Cloud Groq provider keeps the head 896 characters, so a shared-first prompt must stay within it. The personal tier is never cut: the shared fill uses `max(890, personal-tier length)`, as on desktop.
     - local `transcribeLocally` (L854, `prompt`): `limit = WHISPER_PROMPT_CHARS`
     - BYOK (L993–994): `limit = dictionaryPromptLimit(route)`, replacing `trimDictionaryPrompt`
     - the fused-cleanup `extraParameters.customDictionary` (L901) stays an array and uses the flat ranked `buildDictationHints`
@@ -147,6 +147,12 @@ export function getDictionaryHintTiers(customDictionary: string[], snippets: Sni
 // transcriptionPromptCap.ts
 export function formatDictionaryPrompt(tiers: string[][], maxChars: number): string;   // same algorithm as desktop Part 2 Task 3
 ```
+- Security (same as desktop Part 2, Task 4 rulings): shared words are teammate-controlled.
+  - `load()` drops non-term-like shared words: after trim, 1–64 characters, and at most 6 whitespace-separated tokens. Rejected characters: control characters, Unicode format characters (except ZWNJ/ZWJ U+200C/U+200D, which ordinary Persian, Urdu and Indic words need), line or paragraph separators, `<>{}[]`, backtick and `|`. Share the predicate as `isTermLikeSharedWord`, ported from desktop `src/utils/sharedDictionaryHints.ts`.
+  - LLM-bound consumers include at most 200 shared words (space before workspace): `cleanupTranscript.ts:117`, the fused-cleanup `customDictionary`, `AgentComposerService.resolveCustomDictionary` and the note action runs.
+  - Tests:
+    - `a newline/65-char/<tag> shared word never reaches hints`
+    - `cleanup gets at most 200 shared words`
 - `load()` computes the hints from the stored state: live entries not in `hiddenIds`, split by `spaceId` in scopes vs null. Paused or null state gives empty hints. `summary.count` is the number of applying words, or `null` when 0.
 - New `buildDictationHintTiers(includeSnippetTriggers): string[][]`, with `buildDictationHints(includeSnippetTriggers)` = its `.flat()`. Array consumers (`cleanupTranscript.ts:117`, fused cleanup L901) keep `buildDictationHints`. String-prompt consumers use the tiers (above).
 
