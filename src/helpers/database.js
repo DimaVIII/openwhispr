@@ -720,20 +720,37 @@ class DatabaseManager {
           )
           .run(...builtinKeys);
 
+        const hasStockContent = (row, action) => {
+          if (row.sections === null) return action.previousPrompts.includes(row.prompt);
+          if (row.prompt !== action.prompt) return false;
+          try {
+            return isDeepStrictEqual(JSON.parse(row.sections), action.sections);
+          } catch {
+            // Unrecognized data may be a customization; keep it.
+            return false;
+          }
+        };
+        // A customized AI Summary isn't the detailed template, so Detailed Notes stays.
+        const summaryRow = this.db
+          .prepare(
+            "SELECT prompt, sections FROM actions WHERE is_builtin = 1 AND translation_key = ?"
+          )
+          .get(GENERATE_NOTES_KEY);
+        const summaryIsStock =
+          !summaryRow ||
+          hasStockContent(
+            summaryRow,
+            BUILTIN_ACTIONS.find((action) => action.translationKey === GENERATE_NOTES_KEY)
+          );
+
         const legacy = LEGACY_DETAILED_NOTES;
         const legacyRows = this.db
           .prepare("SELECT * FROM actions WHERE is_builtin = 1 AND translation_key = ?")
           .all(legacy.translationKey);
         for (const row of legacyRows) {
-          let stockContent = row.sections === null && legacy.previousPrompts.includes(row.prompt);
-          if (row.prompt === legacy.prompt && row.sections !== null) {
-            try {
-              stockContent = isDeepStrictEqual(JSON.parse(row.sections), legacy.sections);
-            } catch {
-              // Unrecognized data may be a customization; keep it.
-            }
-          }
+          const stockContent = hasStockContent(row, legacy);
           if (
+            summaryIsStock &&
             stockContent &&
             row.name === legacy.name &&
             row.description === legacy.description &&
@@ -741,11 +758,19 @@ class DatabaseManager {
           ) {
             this.db.prepare("DELETE FROM actions WHERE id = ?").run(row.id);
           } else {
+            // A previous flat default still moves to sections, keeping the user's name.
+            const upgradesPrompt = stockContent && row.sections === null;
             this.db
               .prepare(
-                "UPDATE actions SET client_id = COALESCE(client_id, ?), sort_order = ? WHERE id = ?"
+                "UPDATE actions SET client_id = COALESCE(client_id, ?), sort_order = ?, prompt = ?, sections = ? WHERE id = ?"
               )
-              .run(legacy.translationKey, legacy.sortOrder, row.id);
+              .run(
+                legacy.translationKey,
+                legacy.sortOrder,
+                upgradesPrompt ? legacy.prompt : row.prompt,
+                upgradesPrompt ? JSON.stringify(legacy.sections) : row.sections,
+                row.id
+              );
           }
         }
 

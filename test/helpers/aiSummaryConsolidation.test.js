@@ -138,6 +138,47 @@ for (const [label, changes] of [
   });
 }
 
+test("a renamed flat Detailed Notes default moves to sections and keeps its name", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+  const legacy = seedDetailed(db, {
+    name: "Team notes",
+    prompt: detailed.previousPrompts.at(-1),
+    sections: null,
+  });
+  db.db.close();
+  for (let run = 0; run < 2; run++) {
+    reopen((next) => {
+      const row = next.db.prepare("SELECT * FROM actions WHERE id = ?").get(legacy.id);
+      assert.equal(row.name, "Team notes");
+      assert.equal(row.prompt, detailed.prompt);
+      assert.deepEqual(JSON.parse(row.sections), detailed.sections);
+    });
+  }
+});
+
+test("stock Detailed Notes stays beside a customized AI Summary", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+  db.db
+    .prepare(
+      "UPDATE actions SET prompt = 'My summary rules.', sections = NULL WHERE translation_key = ?"
+    )
+    .run(GENERATE_NOTES_KEY);
+  const legacy = seedDetailed(db);
+  db.db.close();
+  for (let run = 0; run < 2; run++) {
+    reopen((next) => {
+      assert.deepEqual(
+        next.db.prepare("SELECT * FROM actions WHERE id = ?").get(legacy.id),
+        legacy
+      );
+      const summary = next.getActions().find((row) => row.translation_key === GENERATE_NOTES_KEY);
+      assert.equal(summary.prompt, "My summary rules.");
+    });
+  }
+});
+
 for (const customized of [false, true]) {
   for (const identity of ["downgraded", "no client ID"]) {
     test(`${identity} ${customized ? "edited" : "stock"} Detailed Notes avoids default ID collisions`, (t) => {
