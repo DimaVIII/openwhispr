@@ -946,10 +946,18 @@ class ReasoningService extends BaseReasoningService {
       ...(reasoningEffort && provider === "gemini"
         ? { google: { thinkingConfig: { thinkingLevel: reasoningEffort, includeThoughts: false } } }
         : {}),
+      // store: false makes the SDK resend each tool step's reasoning inline
+      // (encrypted) rather than by id: a Zero Data Retention org keeps nothing
+      // to look an id up in, so the step after a tool call would 404.
       // The SDK sends a Responses effort only for model ids it knows as reasoning
       // models; forceReasoning covers newer OpenAI ids such as gpt-6-astra.
-      ...(reasoningEffort && provider === "openai"
-        ? { openai: { reasoningEffort, forceReasoning: true } }
+      ...(provider === "openai"
+        ? {
+            openai: {
+              store: false,
+              ...(reasoningEffort ? { reasoningEffort, forceReasoning: true } : {}),
+            },
+          }
         : {}),
       ...(reasoningEffort && provider === "custom" ? { openai: { reasoningEffort } } : {}),
     };
