@@ -5,11 +5,14 @@
 /**
  * Whether an event's attendee belongs on a note made from it: rooms and other
  * resources are booked rather than invited, and a guest who declined isn't
- * coming. Notes created before this rule may still hold rooms, so speaker
- * counts skip `resource` attendees on their own.
+ * coming. The user (`self`) stays whatever they answered, since they are the
+ * one recording. Notes created before this rule may still hold rooms, so
+ * speaker counts skip `resource` attendees on their own.
  */
 export function isEventGuest(attendee) {
-  return attendee.resource !== true && attendee.responseStatus !== "declined";
+  return (
+    attendee.resource !== true && (attendee.self === true || attendee.responseStatus !== "declined")
+  );
 }
 
 /**

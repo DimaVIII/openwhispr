@@ -385,7 +385,7 @@ test("_syncCalendar trusts self as the user only on the account's primary calend
   );
 });
 
-async function syncGoogleResponse(calendar, attendees) {
+async function syncGoogleRow(calendar, attendees) {
   const rows = [];
   const GoogleCalendarManager = loadManagerModule();
   const manager = new GoogleCalendarManager(
@@ -412,7 +412,11 @@ async function syncGoogleResponse(calendar, attendees) {
     ],
   });
   await manager._syncCalendar(calendar);
-  return rows[0].self_response_status;
+  return rows[0];
+}
+
+async function syncGoogleResponse(calendar, attendees) {
+  return (await syncGoogleRow(calendar, attendees)).self_response_status;
 }
 
 test("Google RSVP on a shared calendar uses the connected account's attendee", async () => {
@@ -432,6 +436,29 @@ test("Google RSVP on a shared calendar uses the connected account's attendee", a
       { email: "me@example.com", responseStatus: "unrecognized" },
     ]),
     "unknown"
+  );
+});
+
+test("a stored attendee is self only when it is the user, on shared calendars too", async () => {
+  const shared = { id: "colleague@example.com", account_email: "me@example.com" };
+  const colleague = { email: "colleague@example.com", self: true };
+  const flags = async (calendar, attendees) =>
+    JSON.parse((await syncGoogleRow(calendar, attendees)).attendees).map((a) => [a.email, a.self]);
+
+  assert.deepEqual(await flags(shared, [colleague, { email: "ME@example.com" }]), [
+    ["colleague@example.com", false],
+    ["ME@example.com", true],
+  ]);
+  assert.deepEqual(
+    await flags({ id: "me@example.com", account_email: "me@example.com" }, [
+      { email: "alias@example.com", self: true },
+      { email: "dana@example.com" },
+    ]),
+    [
+      ["alias@example.com", true],
+      ["dana@example.com", false],
+    ],
+    "on the user's own calendar Google's flag still marks them, under an alias too"
   );
 });
 

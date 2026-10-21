@@ -282,7 +282,9 @@ class GoogleCalendarManager {
                 email: a.email,
                 displayName: a.displayName || null,
                 responseStatus: a.responseStatus || null,
-                self: a.self || false,
+                // Stored self means the user, as on Microsoft and Apple; on a
+                // shared calendar Google's flag marks the calendar's owner.
+                self: selfIsUser ? a.self === true : a.email?.toLowerCase() === ownEmail,
                 ...(a.resource ? { resource: true } : {}),
               }))
             )

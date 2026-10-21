@@ -16,7 +16,7 @@ test("tagEventAttendeesJson tags every guest with the event that added them, but
   );
 });
 
-test("tagEventAttendeesJson leaves rooms and declined guests off the note", () => {
+test("tagEventAttendeesJson leaves rooms and declined guests off the note, never the user", () => {
   const dana = { email: "dana@x.com", displayName: "Dana", responseStatus: null, self: false };
   const attendees = [
     dana,
@@ -27,10 +27,13 @@ test("tagEventAttendeesJson leaves rooms and declined guests off the note", () =
       resource: true,
     },
     { email: "kim@x.com", displayName: "Kim", responseStatus: "declined", self: false },
+    // The user records the note even when their RSVP says no.
+    { email: "me@x.com", displayName: "Me", responseStatus: "declined", self: true },
   ];
 
   assert.deepEqual(JSON.parse(tagEventAttendeesJson(JSON.stringify(attendees), "evt-1")), [
     { ...dana, addedByEvent: "evt-1" },
+    attendees[3],
   ]);
 });
 
