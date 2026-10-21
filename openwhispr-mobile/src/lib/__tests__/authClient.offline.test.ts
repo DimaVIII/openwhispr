@@ -24,7 +24,8 @@ jest.mock('expo/fetch', () => ({ fetch: jest.fn() }));
 jest.mock('../apiClient', () => ({ getClientVersionHeader: () => 'test' }));
 
 import { Platform } from 'react-native';
-import { getSession } from '../authClient';
+import { getSession, deleteAccount, initAuthenticatedUser, checkUserExists } from '../authClient';
+import { fetch } from 'expo/fetch';
 
 const originalPlatform = Platform.OS;
 const user = {
@@ -52,6 +53,24 @@ beforeEach(() => {
   mockGetSession.mockRejectedValue(new TypeError('Network request failed'));
 });
 afterAll(() => Object.defineProperty(Platform, 'OS', { value: originalPlatform }));
+
+it.each(['android', 'ios'] as const)(
+  'uses only explicit cookies for direct auth requests on %s',
+  async (platform) => {
+    Object.defineProperty(Platform, 'OS', { value: platform, configurable: true });
+    const mockFetch = fetch as jest.Mock;
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ exists: true }) });
+    await deleteAccount();
+    await initAuthenticatedUser({ ...user, name: 'Synthetic' });
+    await expect(checkUserExists(user.email)).resolves.toBe('signin');
+
+    for (const [, init] of mockFetch.mock.calls) {
+      expect(init.credentials).toBe(platform === 'android' ? 'omit' : undefined);
+    }
+    expect(mockFetch.mock.calls[0][1].headers.Cookie).toBe(mockGetCookie());
+    expect(mockFetch.mock.calls[2][1].headers.Cookie).toBeUndefined();
+  },
+);
 
 it.each(['better-auth', 'openwhispr'])(
   'restores a matching unexpired %s session during an outage',

@@ -4,7 +4,7 @@ import { expoClient, storageAdapter } from '@better-auth/expo/client';
 import * as Application from 'expo-application';
 import Constants from 'expo-constants';
 import * as SecureStore from 'expo-secure-store';
-import { fetch } from 'expo/fetch';
+import { sessionFetch as fetch } from './sessionFetch';
 import { Platform } from 'react-native';
 import { getClientVersionHeader } from './apiClient';
 
