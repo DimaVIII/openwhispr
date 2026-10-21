@@ -1,5 +1,11 @@
 # Android development acceptance — 15 October 2026
 
+## 21 October — current Play baseline and subsequent source repair
+
+Play-installed code19 (`8f32830b30c3de171135394d67fd36252ee58bd6`) passes the original fresh-sign-in and synthetic Moonshine final-word regressions. Two Free-account identities and their local activity counters stay separate across sign-out/sign-in; expired-purchase Restore preserves Free access and the existing billing rows. Earlier code17 zero-charge purchase/active Restore/cancellation/expiry evidence remains build-specific. Paid-account switching, pending/declined recovery, active-Pro process death and provider webhooks are not closed by these passes.
+
+The profile Sign In dead end was reproduced on code19. Source now navigates signed-out Android users directly to auth, preserving iOS's root-gated flow and normal account sign-out. Two Android regressions fail before and pass after; this source repair is not installed yet. See the [readiness audit](premium-review-readiness.md#21-october--code19-installed-evidence-and-profile-navigation-repair). Preview protection is restored; the app is signed out after the reproduction. No physical phone is available, so physical speech and phone-performance acceptance remain open. The following sections preserve historical baseline evidence rather than current-state claims.
+
 ## 20 October — source integration before the replacement candidate
 
 Code16 (`e3eeeb9b-0ca3-4181-b11c-274f6f4de3b5`, source `295ac4c7258a3824fdfeb2df612dd8cf596bda69`) was submitted, then canceled when the PR was found to conflict with newer main. EAS confirms CANCELED with no artifact; nothing was uploaded to Play. The mergeability check should have preceded that submission. Do not resume or rebuild that source.
