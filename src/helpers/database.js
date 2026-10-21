@@ -5180,9 +5180,11 @@ class DatabaseManager {
     }
   }
 
-  // Every stored event on the user's selected calendars that a note can link
+  // The stored events on the user's selected calendars that a note can link
   // to (not cancelled or declined), with its calendar's colour for the picker.
-  getLinkableCalendarEvents() {
+  // `endsAfter` (ISO) leaves out old rows kept only because a note links them,
+  // which would otherwise grow with every linked note.
+  getLinkableCalendarEvents({ endsAfter = null } = {}) {
     try {
       if (!this.db) throw new Error("Database not initialized");
       const colors = new Map(
@@ -5200,10 +5202,11 @@ class DatabaseManager {
       return this.db
         .prepare(
           dedupedEventsQuery(
-            `status IN ('confirmed', 'tentative') AND ${SELECTED_CALENDAR_EVENT_FILTER}`
+            `status IN ('confirmed', 'tentative') AND ${SELECTED_CALENDAR_EVENT_FILTER}
+             AND (? IS NULL OR datetime(end_time) > datetime(?))`
           )
         )
-        .all()
+        .all(endsAfter, endsAfter)
         .filter((event) => event.self_response_status !== "declined")
         .map((row) => {
           const event = stripDedupeColumn(row);
@@ -5416,6 +5419,8 @@ class DatabaseManager {
   // match, or both apps record into one note. Ownership follows ownsNote() in
   // spacePermissions.ts, plus Personal rows synced before owners were recorded.
   getOwnNoteByCalendarEventId(eventId, { throwOnError = false } = {}) {
+    // An unlinked note stores "", which must never match.
+    if (!eventId) return null;
     try {
       if (!this.db) throw new Error("Database not initialized");
       const accountScope = this._accountScopeCondition("notes");

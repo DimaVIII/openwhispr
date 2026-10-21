@@ -401,6 +401,31 @@ test("notification Start saves directly in selected folder and duplicate clicks 
   assert.equal(c.db.getNotes().length, 1);
 });
 
+test("notification Start's new note tags the event's attendees", async (t) => {
+  const c = ownedNotification(t);
+  if (!c) return;
+  const dana = { email: "dana@x.com", displayName: "Dana", self: false };
+  c.db.upsertCalendarEvents([
+    {
+      id: "event",
+      calendar_id: "test-calendar",
+      provider: "google",
+      summary: "Weekly",
+      start_time: "2026-07-22T10:00:00Z",
+      end_time: "2026-07-22T11:00:00Z",
+      is_all_day: false,
+      status: "confirmed",
+      attendees: JSON.stringify([dana]),
+    },
+  ]);
+
+  assert.equal((await c.respond()).success, true);
+
+  const note = c.db.getNote(c.meetingNavigations[0].noteId);
+  assert.equal(note.calendar_event_id, "event");
+  assert.deepEqual(JSON.parse(note.participants), [{ ...dana, addedByEvent: "event" }]);
+});
+
 test("a linked root note requires current acknowledgment and is never moved or copied", async (t) => {
   const c = ownedNotification(t);
   if (!c) return;

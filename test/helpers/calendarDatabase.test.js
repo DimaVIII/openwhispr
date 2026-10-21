@@ -558,6 +558,29 @@ test("linkable events include all-day rows and recent past events", (t) => {
   db.db.close();
 });
 
+test("linkable events leave out old rows kept only for the notes that link them", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+  insertCalendar(db, "google", "google-calendar");
+  const at = (daysAgo) => new Date(Date.now() - daysAgo * 86_400_000).toISOString();
+  db.upsertCalendarEvents([
+    restEvent("google", "google-calendar", "recent", { start_time: at(2), end_time: at(1.9) }),
+    restEvent("google", "google-calendar", "old-linked", {
+      start_time: at(30),
+      end_time: at(29.9),
+    }),
+  ]);
+  const note = db.saveNote("Old meeting", "", "meeting").note;
+  db.updateNote(note.id, { calendar_event_id: "old-linked" });
+
+  assert.deepEqual(
+    db.getLinkableCalendarEvents({ endsAfter: at(4) }).map((event) => event.id),
+    ["recent"]
+  );
+  assert.equal(db.getCalendarEventById("old-linked")?.id, "old-linked", "the row itself stays");
+  db.db.close();
+});
+
 test("web_link round-trips through upsertCalendarEvents", (t) => {
   const db = createDb(t);
   if (!db) return;
