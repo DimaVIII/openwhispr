@@ -27,7 +27,7 @@ const completed = {
   response: { usage: { input_tokens: 1, output_tokens: 1 } },
 };
 
-// Like OpenAI: encrypted reasoning only comes back when the request asks for it.
+// Conservative legacy fixture: encrypted reasoning only comes back when requested.
 function toolCallResponse(body) {
   const wantsEncrypted = (body.include || []).includes("reasoning.encrypted_content");
   const reasoning = {
