@@ -540,6 +540,8 @@ export const BUILTIN_ACTIONS = [
       GENERATE_NOTES_PROMPT_1_10_2,
       GENERATE_NOTES_PROMPT_1_10_3,
     ],
+    // Unchanged, so a description the user edited survives the move to sections.
+    previousDescriptions: ["Clean up, structure, and enhance your notes"],
     icon: "sparkles",
     sortOrder: 0,
   },

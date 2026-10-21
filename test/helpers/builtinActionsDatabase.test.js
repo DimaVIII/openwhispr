@@ -318,6 +318,22 @@ test("TL;DR stock prompt upgrades without replacing an edited description", (t) 
   });
 });
 
+test("AI Summary stock prompt upgrades without replacing an edited description", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+  const summary = BUILTIN_ACTIONS.find((a) => a.translationKey === GENERATE_NOTES_KEY);
+  const [row] = builtinRows(db, GENERATE_NOTES_KEY);
+  db.db
+    .prepare("UPDATE actions SET prompt = ?, sections = NULL, description = ? WHERE id = ?")
+    .run(summary.previousPrompts.at(-1), "My description", row.id);
+  db.db.close();
+  relaunch((upgraded) => {
+    const action = upgraded.getAction(row.id);
+    assert.deepEqual(action.sections, summary.sections);
+    assert.equal(action.description, "My description");
+  });
+});
+
 test("TL;DR upgrades its stock icon and leaves custom icons alone", (t) => {
   const db = createDb(t);
   if (!db) return;
