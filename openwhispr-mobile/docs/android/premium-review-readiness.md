@@ -2,6 +2,16 @@
 
 This is a requirements audit against the 15 October 2026 goal brief, including the Android-only correction. It is not a completion certificate. The [implementation plan](premium-experience-plan.md) preserves the chronological checkpoints; [acceptance](acceptance.md) distinguishes baseline checks from later builds. A checked implementation item does not establish physical-device or provider acceptance.
 
+## 21 October — session isolation and Moonshine finalization candidate
+
+Play-installed production package `com.gizmolabs.openwhispr` is version1.2.4/code18 from `30ac168362392a50d9e5beb7d118fbe3f0f6bd80`. Its signed bundle is validated and its owned-host Moonshine download/inference checks exposed a final-word defect. [The native regression checkpoint](moonshine-runtime-research.md#final-word-regression-and-installed-distribution--2026-10-21) records the test-first repair: both models now retain the original unpadded clip's ending in the isolated native test APK. The native coexistence test and all16 native unit tests pass; the full mobile suite passes307 suites/3,673 tests. The installed Play app still needs the consolidated candidate retest.
+
+The preceding session-isolation change (`238a7523f23d0981a35b88c547439a8807bda7cc`) prevents Android's shared native cookie jar from replacing explicit current-account cookies. Corrected loopback replay uses actual client request options and OkHttp4.12.0, verified in code18's DEX: current-account, signed-out and account-switch cases fail before and pass after the source fix. The earlier4.9.2 replay was a dependency-version mistake, not the packaged transport. Neither replay proves recovery of the installed sign-in200 → usage401 failure; that remains a required candidate test. iOS transport options are unchanged.
+
+Expired-purchase Restore on code18 returned no active purchase and left the synthetic account Free without a duplicate provider identity. Earlier code17 zero-charge purchase, active Restore, cancellation and expiry have separate receipts; remaining pending/declined/retry/account-switch/active-Pro restart and webhook cases remain open. The bounded exact-preview access window was closed after billing checks. No preview exception was opened for the audio tests.
+
+All eight goal workstreams remain active. No phone is available for spoken bubble/meetings or physical performance acceptance. Grammar/paragraph quality, wider TalkBack/RTL, remaining sign-in/BYOK and live multi-account analytics remain incomplete. Preserve the retained source checkout, unrelated root `app.json`, and original/preserved/recovery AVDs. The previous candidate submission was stopped before submission to batch the final-word repair with session isolation; do not restart that old-head script. Check the final pushed head's CI and mergeability before submitting one replacement candidate. No product merge, public release or production deployment is authorized by this checkpoint.
+
 ## 20 October — source integration before the replacement candidate
 
 Code16 (`e3eeeb9b-0ca3-4181-b11c-274f6f4de3b5`, source `295ac4c7258a3824fdfeb2df612dd8cf596bda69`) was submitted, then canceled when the PR was found to conflict with newer main. EAS confirms CANCELED with no artifact; nothing was uploaded to Play. The mergeability check should have preceded that submission. Do not resume or rebuild that source.

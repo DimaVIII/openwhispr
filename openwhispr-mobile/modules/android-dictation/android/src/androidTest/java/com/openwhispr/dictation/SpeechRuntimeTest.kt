@@ -21,6 +21,34 @@ class SpeechRuntimeTest {
   private val context = InstrumentationRegistry.getInstrumentation().targetContext
   private val fixtures get() = File(context.filesDir, "fixtures")
 
+  @Test fun tinyPreservesFinalWordsWithoutTrailingSilence() {
+    assertFinalWords("moonshine-tiny")
+  }
+
+  @Test fun smallPreservesFinalWordsWithoutTrailingSilence() {
+    assertFinalWords("moonshine-small")
+  }
+
+  private fun assertFinalWords(model: String) {
+    // Synthetic 4.51675s fixture: "The quick brown fox jumps over the lazy dog.
+    // Please send the meeting notes tomorrow." Do not pad its ending with silence.
+    val audio = File(fixtures, "sample.wav")
+    val hash = java.security.MessageDigest.getInstance("SHA-256")
+      .digest(audio.readBytes()).joinToString("") { "%02x".format(it) }
+    assertEquals("Use the unpadded synthetic regression fixture",
+      "a4d2467bf3207a02ecdb6e2d6968022c95ef415f95c0ed638fed63f437c411c7", hash)
+    val engine = MoonshineEngine(context)
+    try {
+      val result = Result()
+      engine.transcribe(audio, File(fixtures, model), model, result)
+      val output = result.await()
+      val text = (output["text"] as String).lowercase().replace(Regex("[^a-z ]"), "").trim()
+      Log.i("OWSpeechTest", "$model finalWords=$text")
+      assertTrue("$model lost the final words: $text", text.endsWith("meeting notes tomorrow"))
+      assertEquals(4.51675, (output["duration"] as Number).toDouble(), 0.00001)
+    } finally { engine.close() }
+  }
+
   private class Result : Promise {
     val done = CountDownLatch(1)
     var value: Any? = null

@@ -57,6 +57,10 @@ class MoonshineEngine(private val context: Context) {
             val bytes = ByteArray(count * 2)
             wav.readFully(bytes)
             val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+            // Keep the final block pending for stop() to decode with a completed VAD segment.
+            // Moonshine 0.1.5 otherwise marks cached partial text complete when no audio remains,
+            // skipping the streaming encoder's final lookahead frames. Earlier blocks still stream.
+            if (remaining == count.toLong()) transcriber.setUpdateInterval(Double.POSITIVE_INFINITY)
             transcriber.addAudio(FloatArray(count) { buffer.short.toFloat() / 32768f }, 16000)
             remaining -= count
           }

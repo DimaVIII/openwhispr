@@ -1,6 +1,18 @@
 # Moonshine Android integration evidence — 2026-10-15
 
-The initial research and temporary native build below led to the integration and verified emulator inference recorded under Implementation checkpoint and Emulator evidence. Early statements of unverified inference describe that initial research stage. Parakeet remains the default and Qwen remains the cleanup baseline; physical-phone and installed download acceptance are still open. Hosted distribution is verified in the 2026-10-20 checkpoint below.
+The initial research and temporary native build below led to the integration and verified emulator inference recorded under Implementation checkpoint and Emulator evidence. Early statements of unverified inference describe that initial research stage. Parakeet remains the default and Qwen remains the cleanup baseline. The dated checkpoints distinguish hosted distribution, installed downloads and native test evidence from physical-phone acceptance.
+
+## Final-word regression and installed distribution — 2026-10-21
+
+Play-installed code18 (`30ac168362392a50d9e5beb7d118fbe3f0f6bd80`) downloaded Tiny from the owned Blob host; Small reached Ready after canceling and retrying its download. Both ran speech and Qwen cleanup in the built-in test. This verifies fresh/retried delivery and inference, not byte-range resume, restart recovery or corrupt-file repair. No physical phone was used.
+
+The original synthetic 4.51675-second clip reproduced the historical tail errors: Tiny returned “to my email” and Small “to my” instead of “tomorrow”. Adding two seconds of silence corrected Tiny, motivating a native investigation. The pinned Java binding runs intermediate updates from `addAudio()` and a forced update from `stop()`. In the pinned native `transcribe_stream`, a stopped stream with no new audio only marks its cached transcript complete; it does not flush the final streaming encoder frames. An intermediate update consuming the final block can therefore leave unfinished text at stop.
+
+`MoonshineEngine` now defers the intermediate update for the final PCM block by setting the Java update interval to positive infinity immediately before adding that block. `stop()` then consumes it as a completed segment. Earlier blocks still stream, memory remains bounded to one-second input blocks, no silence is appended, and reported duration is unchanged. A fresh transcriber per recording resets the interval along with the existing line state.
+
+Two real Android regression tests, one per model, failed before this change with the exact installed errors and passed afterward with “meeting notes tomorrow”. They enforce the unpadded fixture's SHA-256 (`a4d2467bf3207a02ecdb6e2d6968022c95ef415f95c0ed638fed63f437c411c7`) and 4.51675-second duration. The Parakeet → Tiny → Small → Tiny coexistence test also passes with `expectedWords=fox,dog,meeting,notes,tomorrow`; all 16 native unit tests pass. All 16 native model files matched the published manifest. Evidence is retained as `v131-native-red-test.log`, `v131-native-green-test.log`, `v131-native-transcripts.log` and `v131-native-model-verification.json` in the research folder below.
+
+This corrects the adapter's finalization for the reproduced sample; it does not establish general recognition quality or phone performance. The fix is tested in the isolated `com.openwhispr.dictation.test` APK, not yet in a signed Play candidate. Code18 remains unchanged, and its UI selection was restored to Parakeet. Long recordings, physical spoken input, broader accuracy and the remaining download-recovery cases stay open.
 
 ## Production distribution checkpoint — 2026-10-20
 
