@@ -15,6 +15,20 @@ const SYNC_LOOKAHEAD_MS = 33 * 24 * 60 * 60 * 1000;
 const SYNC_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 const GOOGLE_RESPONSE_STATUSES = new Set(["accepted", "declined", "tentative", "needsAction"]);
 
+// The browser opens an event link under its default Google account, so with
+// several signed in it finds no such event; authuser picks the calendar's own.
+function eventWebLink(htmlLink, accountEmail) {
+  if (!htmlLink) return null;
+  if (!accountEmail) return htmlLink;
+  try {
+    const url = new URL(htmlLink);
+    url.searchParams.set("authuser", accountEmail);
+    return url.toString();
+  } catch {
+    return htmlLink;
+  }
+}
+
 class GoogleCalendarManager {
   constructor(databaseManager, windowManager, reminderScheduler) {
     this.databaseManager = databaseManager;
@@ -260,7 +274,7 @@ class GoogleCalendarManager {
         hangout_link: item.hangoutLink || extractMeetingUrl([item.location, item.description]),
         conference_data: item.conferenceData ? JSON.stringify(item.conferenceData) : null,
         organizer_email: item.organizer?.email || null,
-        web_link: item.htmlLink || null,
+        web_link: eventWebLink(item.htmlLink, accountEmail),
         attendees_count: item.attendees?.length || 0,
         attendees: item.attendees
           ? JSON.stringify(

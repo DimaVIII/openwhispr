@@ -96,7 +96,11 @@ test("_syncCalendar fetches all pages when nextPageToken is returned", async () 
   assert.equal(upsertedEvents[0].id, "event-1");
   assert.equal(upsertedEvents[0].availability_status, "free");
   assert.equal(upsertedEvents[0].self_response_status, "declined");
-  assert.equal(upsertedEvents[0].web_link, "https://www.google.com/calendar/event?eid=abc");
+  assert.equal(
+    upsertedEvents[0].web_link,
+    "https://www.google.com/calendar/event?eid=abc&authuser=test%40example.com",
+    "the link opens under the calendar's own account, not the browser's default one"
+  );
   assert.equal(upsertedEvents[1].web_link, null);
   assert.equal(upsertedEvents[1].id, "event-2");
   assert.equal(savedSyncToken, "sync-token-final", "should save nextSyncToken from final page");
