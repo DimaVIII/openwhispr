@@ -63,7 +63,7 @@ function answerResponse() {
   ]);
 }
 
-async function runZeroRetentionToolLoop(t) {
+test("OpenAI reasoning model: the step after a tool call works without stored items", async (t) => {
   installBrowserGlobals(t, {
     window: { electronAPI: { getOpenAIKey: async () => "test-key" } },
   });
@@ -112,11 +112,6 @@ async function runZeroRetentionToolLoop(t) {
   );
   const chunks = [];
   for await (const chunk of stream) chunks.push(chunk);
-  return { chunks, bodies };
-}
-
-test("OpenAI reasoning model: the step after a tool call works without stored items", async (t) => {
-  const { chunks, bodies } = await runZeroRetentionToolLoop(t);
 
   assert.equal(bodies.length, 2);
   for (const body of bodies) assert.equal(body.store, false);
