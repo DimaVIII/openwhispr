@@ -115,6 +115,7 @@ async function mount(t, props, { events = [STANDUP] } = {}) {
           linkedEventId: null,
           linkedEvent: null,
           canEdit: true,
+          ownedByUser: true,
           ...props,
           ...overrides,
         })
@@ -153,6 +154,53 @@ test("an editor links an event and its guests merge in one write", async (t) => 
   );
   assert.equal(attendeeInput(), true, "back on the attendees view");
   assert.equal(bodyText().includes("Team Standup"), true);
+});
+
+// This user's copy of the event marks them `self`.
+const me = { email: "me@x.com", displayName: "Me", responseStatus: "accepted", self: true };
+const owner = { email: "owner@x.com", displayName: "Owner", responseStatus: null, self: true };
+const STANDUP_WITH_ME = { ...STANDUP, attendees: JSON.stringify([owner, me, dana]) };
+
+test("linking on the user's own note marks them from their calendar", async (t) => {
+  const { act, calls } = await mount(t, { participants: [] }, { events: [STANDUP_WITH_ME] });
+
+  await act(() => buttonWith("notes.eventLink.selectEvent").click());
+  await act(() => buttonWith("Team Standup").click());
+
+  assert.equal(savedParticipants(calls.updateNote[0]).find((p) => p.email === me.email).self, true);
+});
+
+test("linking on a teammate's note never marks the user as the one who recorded it", async (t) => {
+  const { act, calls } = await mount(
+    t,
+    { participants: [owner, { ...me, self: false }], ownedByUser: false },
+    { events: [{ ...STANDUP_WITH_ME, attendees: JSON.stringify([me, dana]) }] }
+  );
+
+  await act(() => buttonWith("notes.eventLink.selectEvent").click());
+  await act(() => buttonWith("Team Standup").click());
+
+  assert.deepEqual(
+    savedParticipants(calls.updateNote[0]),
+    [owner, { ...me, self: false }, { ...dana, addedByEvent: "evt-standup" }],
+    "the owner stays the only self, whether this user was on the note already or not"
+  );
+});
+
+test("on a teammate's note a newly added user is an ordinary attendee", async (t) => {
+  const { act, calls } = await mount(
+    t,
+    { participants: [owner], ownedByUser: false },
+    { events: [{ ...STANDUP_WITH_ME, attendees: JSON.stringify([me]) }] }
+  );
+
+  await act(() => buttonWith("notes.eventLink.selectEvent").click());
+  await act(() => buttonWith("Team Standup").click());
+
+  assert.deepEqual(savedParticipants(calls.updateNote[0]), [
+    owner,
+    { ...me, self: false, addedByEvent: "evt-standup" },
+  ]);
 });
 
 test("removing an event you just linked takes off its guests and keeps everyone else", async (t) => {

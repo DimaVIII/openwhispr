@@ -13,7 +13,11 @@ import { syncSessionExpectedCountFromParticipants } from "../../stores/meetingRe
 import { useSettingsStore } from "../../stores/settingsStore";
 import { parseAttendees } from "../../utils/calendarAttendees";
 import { formatEventWhen, normalizeDbDate } from "../../utils/dateFormatting";
-import { mergeEventAttendees, removeEventAttendees } from "../../utils/noteAttendees";
+import {
+  attendeesForUser,
+  mergeEventAttendees,
+  removeEventAttendees,
+} from "../../utils/noteAttendees";
 
 const MAX_STACKED_AVATARS = 2;
 
@@ -33,6 +37,8 @@ interface NoteParticipantsProps {
   linkedEvent: CalendarEvent | null | undefined;
   /** Viewers see the linked event and can join it, but not change it. */
   canEdit: boolean;
+  /** Whether the note is the user's own, so their calendar's `self` flag may mark them on it. */
+  ownedByUser: boolean;
 }
 
 const EVENT_ACTION_CLASS =
@@ -47,6 +53,7 @@ export default function NoteParticipants({
   linkedEventId,
   linkedEvent,
   canEdit,
+  ownedByUser,
 }: NoteParticipantsProps) {
   const { t } = useTranslation();
   const locale = useUiLocale();
@@ -77,6 +84,8 @@ export default function NoteParticipants({
   useEffect(() => {
     viewRef.current = view;
   }, [view]);
+
+  const noteDay = useMemo(() => normalizeDbDate(noteCreatedAt), [noteCreatedAt]);
 
   // Edit rights can resolve after the dropdown opened (a shared note's role
   // loads from the network); a viewer never keeps the event list.
@@ -128,12 +137,15 @@ export default function NoteParticipants({
       const kept = localLinkedId
         ? removeEventAttendees(localParticipants, localLinkedId)
         : localParticipants;
-      const merged = mergeEventAttendees(kept, parseAttendees(event), event.id);
+      // The guests come from this user's copy of the event, whose `self` is
+      // them; on someone else's note `self` stays with whoever recorded it.
+      const guests = attendeesForUser(parseAttendees(event), ownedByUser);
+      const merged = mergeEventAttendees(kept, guests, event.id);
       setLocalParticipants(merged);
       setLocalLinkedId(event.id);
       saveParticipants(merged, { calendar_event_id: event.id });
     },
-    [localLinkedId, localParticipants, saveParticipants]
+    [localLinkedId, localParticipants, ownedByUser, saveParticipants]
   );
 
   const unlinkEvent = useCallback(() => {
@@ -279,7 +291,7 @@ export default function NoteParticipants({
             events={events}
             loadFailed={eventsFailed}
             calendarConnected={calendarConnected}
-            noteDay={normalizeDbDate(noteCreatedAt)}
+            noteDay={noteDay}
             linkedEventId={localLinkedId}
             onSelect={linkEvent}
             onRemove={unlinkEvent}

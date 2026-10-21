@@ -890,6 +890,7 @@ test("the note header hands its event link to the dropdown, changeable only by e
     });
     const viewer = findElementOfType(latest(), NoteParticipants).props;
     assert.equal(viewer.canEdit, false, "a viewer of a shared note can't change the link");
+    assert.equal(viewer.ownedByUser, false, "someone else's note");
     assert.equal(viewer.linkedEventId, "evt-1");
     assert.equal(viewer.linkedEvent, linkedEvent);
     assert.equal(viewer.noteCreatedAt, NOTE.created_at);
@@ -897,6 +898,7 @@ test("the note header hands its event link to the dropdown, changeable only by e
     await render(undefined, { note: { ...NOTE, calendar_event_id: "" } });
     const owner = findElementOfType(latest(), NoteParticipants).props;
     assert.equal(owner.canEdit, true, "the user's own note is editable");
+    assert.equal(owner.ownedByUser, true);
     assert.equal(owner.linkedEventId, null, "an unlinked note's blank id reaches it as no link");
   } finally {
     await unmount();

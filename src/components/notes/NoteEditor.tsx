@@ -1039,6 +1039,7 @@ export default function NoteEditor({
               linkedEventId={note.calendar_event_id || null}
               linkedEvent={linkedEvent}
               canEdit={canEditNote}
+              ownedByUser={ownedByUser}
             />
             {isTeamNote && space && (
               <>
