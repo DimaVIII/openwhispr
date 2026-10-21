@@ -237,7 +237,7 @@
     "meetingInterrupted": "Reunión interrumpida",
     "billingChecking": "Comprobando tu compra…",
     "billingPaymentPending": "Tu pago anterior sigue sin resolverse. Comprueba su estado en Google Play y actualiza el acceso cuando se complete. Si se canceló, contacta con soporte antes de iniciar otra compra.",
-    "billingAccessPending": "Tu compra se ha completado. Estamos verificando el acceso con el servidor. Pulsa Actualizar acceso para reintentar.",
+    "billingAccessPending": "El acceso de Google Play aún no se ha confirmado. Pulsa Actualizar acceso para comprobarlo de nuevo.",
     "billingAppStore": "Gestiona esta suscripción desde tu cuenta de Apple en un dispositivo Apple.",
     "billingWorkspace": "Tu espacio de trabajo proporciona acceso. Contacta con su administrador para cambiar el plan.",
     "newAction": "Nuevo",

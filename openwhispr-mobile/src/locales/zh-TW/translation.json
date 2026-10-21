@@ -237,7 +237,7 @@
     "meetingInterrupted": "會議已中斷",
     "billingChecking": "正在驗證購買…",
     "billingPaymentPending": "您先前的付款狀態尚未確定。請在 Google Play 中查看，付款完成後重新整理存取權限。如果已取消，請在再次購買前聯絡支援。",
-    "billingAccessPending": "購買已完成。我們正在向伺服器驗證存取權限。使用「重新整理存取權限」重試。",
+    "billingAccessPending": "尚未確認 Google Play 存取權限。請使用「重新整理存取權限」再次檢查。",
     "billingAppStore": "請在 Apple 裝置上透過你的 Apple 帳號管理此訂閱。",
     "billingWorkspace": "你的工作區提供存取權限。如需變更方案，請聯絡管理員。",
     "newAction": "新增",

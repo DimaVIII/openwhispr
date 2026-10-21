@@ -237,7 +237,7 @@
     "meetingInterrupted": "会議が中断されました",
     "billingChecking": "購入を確認中…",
     "billingPaymentPending": "前回のお支払いの状態がまだ確定していません。Google Playで確認し、完了後にアクセスを更新してください。キャンセル済みの場合は、再購入する前にサポートへお問い合わせください。",
-    "billingAccessPending": "購入が完了しました。サーバーでアクセス権を確認しています。「アクセス権を更新」で再試行できます。",
+    "billingAccessPending": "Google Play のアクセス権はまだ確認されていません。「アクセス権を更新」で再確認してください。",
     "billingAppStore": "Apple デバイスの Apple アカウントでこのサブスクリプションを管理してください。",
     "billingWorkspace": "ワークスペースからアクセス権が提供されています。プランの変更は管理者にお問い合わせください。",
     "newAction": "新規",

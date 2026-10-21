@@ -33,13 +33,18 @@ function setStatus(billingId: string, status: BillingStatus): void {
   useAndroidBillingStatus.setState({ accounts });
   // Only public billing UUIDs and state are persisted, never auth tokens or purchase receipts.
   try {
+    const persisted = savedStatus();
     localStorage.setItem(
       STATUS_KEY,
       JSON.stringify(
         Object.fromEntries(
           Object.entries(accounts).map(([id, state]) => [
             id,
-            state === 'checking' ? 'access-pending' : state,
+            state === 'checking'
+              ? persisted[id] === 'payment-pending'
+                ? 'payment-pending'
+                : 'access-pending'
+              : state,
           ]),
         ),
       ),
@@ -94,8 +99,37 @@ function hasBackendPlayAccess(usage: UsageInfo): boolean {
   );
 }
 
+async function freshPlayCustomerInfo(account: BillingAccount): Promise<CustomerInfo> {
+  const info = await withRevenueCatUser(
+    account.billingId,
+    async () => {
+      await Purchases.invalidateCustomerInfoCache();
+      account.check();
+      return Purchases.getCustomerInfo();
+    },
+    account.check,
+  );
+  account.check();
+  return info;
+}
+
+const accessChecks = new Map<string, Promise<UsageInfo>>();
 async function refreshAccountAccess(account: BillingAccount): Promise<UsageInfo> {
   account.check();
+  const key = `${account.owner}:${account.billingId}`;
+  const existing = accessChecks.get(key);
+  if (existing) return existing;
+  const request = performAccessCheck(account).finally(() => accessChecks.delete(key));
+  accessChecks.set(key, request);
+  return request;
+}
+
+async function performAccessCheck(account: BillingAccount): Promise<UsageInfo> {
+  account.check();
+  const pendingStatus =
+    useAndroidBillingStatus.getState().accounts[account.billingId] === 'payment-pending'
+      ? 'payment-pending'
+      : 'access-pending';
   setStatus(account.billingId, 'checking');
   try {
     await reconcileStoreBilling();
@@ -104,10 +138,10 @@ async function refreshAccountAccess(account: BillingAccount): Promise<UsageInfo>
     account.check();
     if (result.status === 'failed') throw result.error;
     if (result.status !== 'loaded') throw new Error('Access could not be refreshed. Try again.');
-    setStatus(account.billingId, hasBackendPlayAccess(result.usage) ? 'idle' : 'access-pending');
+    setStatus(account.billingId, hasBackendPlayAccess(result.usage) ? 'idle' : pendingStatus);
     return result.usage;
   } catch (error) {
-    setStatus(account.billingId, 'access-pending');
+    setStatus(account.billingId, pendingStatus);
     throw error;
   }
 }
@@ -121,18 +155,12 @@ export async function refreshAndroidBillingAccess(): Promise<UsageInfo> {
   const status = useAndroidBillingStatus.getState().accounts[account.billingId];
   // The account load already refreshed access. Only an unresolved purchase needs reconciliation.
   if (status !== 'payment-pending' && status !== 'access-pending') return currentUsage;
-  if (status === 'payment-pending') {
-    const info = await withRevenueCatUser(
-      account.billingId,
-      async () => {
-        await Purchases.invalidateCustomerInfoCache();
-        account.check();
-        return Purchases.getCustomerInfo();
-      },
-      account.check,
-    );
-    account.check();
-    if (!hasPlaySubscription(info)) return useUsageStore.getState().usage!;
+  const info = await freshPlayCustomerInfo(account);
+  if (!hasPlaySubscription(info)) {
+    // Inactive subscriptions resolve stale access checks, but cannot prove that a
+    // pending payment was cancelled. Keep that separate duplicate-purchase guard.
+    if (status === 'access-pending') setStatus(account.billingId, 'idle');
+    return useUsageStore.getState().usage!;
   }
   return refreshAccountAccess(account);
 }
@@ -147,13 +175,24 @@ export async function restoreAndroidPurchases(): Promise<
     return restored;
   });
   account.check();
-  if (!hasPlaySubscription(info))
-    return useAndroidBillingStatus.getState().accounts[account.billingId] === 'payment-pending'
-      ? 'payment-pending'
-      : 'none';
+  if (!hasPlaySubscription(info)) {
+    if (useAndroidBillingStatus.getState().accounts[account.billingId] === 'payment-pending')
+      return 'payment-pending';
+    setStatus(account.billingId, 'idle');
+    return 'none';
+  }
   const usage = await refreshAccountAccess(account);
   account.check();
-  return hasBackendPlayAccess(usage) ? 'restored' : 'pending';
+  if (hasBackendPlayAccess(usage)) return 'restored';
+  if (useAndroidBillingStatus.getState().accounts[account.billingId] === 'payment-pending')
+    return 'payment-pending';
+  // Restore can return an older active snapshot. Recheck it before leaving a
+  // free account blocked from checkout after its subscription has expired.
+  if (!hasPlaySubscription(await freshPlayCustomerInfo(account))) {
+    setStatus(account.billingId, 'idle');
+    return 'none';
+  }
+  return 'pending';
 }
 
 // CustomerInfo is only a signal to retry server verification; it never grants access.

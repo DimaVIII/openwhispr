@@ -77,6 +77,10 @@ beforeEach(() => {
     .mockResolvedValue([{ subscriptionOptions: [selected] }] as never);
   jest.mocked(Purchases.purchaseSubscriptionOption).mockResolvedValue({} as never);
   jest.mocked(Purchases.restorePurchases).mockResolvedValue({} as never);
+  jest
+    .mocked(Purchases.getCustomerInfo)
+    .mockReset()
+    .mockResolvedValue(playInfo as never);
   jest.mocked(reconcileStoreBilling).mockResolvedValue({} as never);
 });
 it('purchases exactly the base plan and offer selected by the remote paywall', async () => {
@@ -136,6 +140,124 @@ it('returns pending when Play has a purchase but the backend has not verified it
   jest.mocked(Purchases.restorePurchases).mockResolvedValue(playInfo as never);
   await expect(restoreAndroidPurchases()).resolves.toBe('pending');
   expect(useAndroidBillingStatus.getState().accounts['billing-a']).toBe('access-pending');
+});
+it('clears stale access pending on an inactive Restore so checkout is available again', async () => {
+  useAndroidBillingStatus.setState({ accounts: { 'billing-a': 'access-pending' } });
+  await expect(restoreAndroidPurchases()).resolves.toBe('none');
+  expect(useAndroidBillingStatus.getState().accounts['billing-a']).toBe('idle');
+  await expect(androidPurchaseController.onPurchase(params)).resolves.toEqual({
+    type: 'purchased',
+  });
+});
+it('rechecks stale active Restore data when the server finds no Play access', async () => {
+  jest.mocked(Purchases.restorePurchases).mockResolvedValue(playInfo as never);
+  jest.mocked(Purchases.getCustomerInfo).mockResolvedValue({
+    subscriptionsByProductIdentifier: { pro: { store: 'PLAY_STORE', isActive: false } },
+  } as never);
+  await expect(restoreAndroidPurchases()).resolves.toBe('none');
+  expect(Purchases.invalidateCustomerInfoCache).toHaveBeenCalledTimes(1);
+  expect(useAndroidBillingStatus.getState().accounts['billing-a']).toBe('idle');
+  expect(mockUsage.isSubscribed).toBe(false);
+});
+it('keeps Restore retryable when a fresh store check fails after server reconciliation', async () => {
+  jest.mocked(Purchases.restorePurchases).mockResolvedValue(playInfo as never);
+  jest.mocked(Purchases.getCustomerInfo).mockRejectedValueOnce(new Error('offline'));
+  await expect(restoreAndroidPurchases()).rejects.toThrow('offline');
+  expect(useAndroidBillingStatus.getState().accounts['billing-a']).toBe('access-pending');
+});
+it('Refresh clears expired access pending using fresh store data and permits checkout', async () => {
+  useAndroidBillingStatus.setState({ accounts: { 'billing-a': 'access-pending' } });
+  jest.mocked(Purchases.getCustomerInfo).mockResolvedValue({
+    subscriptionsByProductIdentifier: { pro: { store: 'PLAY_STORE', isActive: false } },
+  } as never);
+  await expect(refreshAndroidBillingAccess()).resolves.toMatchObject({ isSubscribed: false });
+  expect(Purchases.invalidateCustomerInfoCache).toHaveBeenCalledTimes(1);
+  expect(useAndroidBillingStatus.getState().accounts['billing-a']).toBe('idle');
+  await expect(androidPurchaseController.onPurchase(params)).resolves.toEqual({
+    type: 'purchased',
+  });
+});
+it('does not clear access pending when its fresh store check fails', async () => {
+  useAndroidBillingStatus.setState({ accounts: { 'billing-a': 'access-pending' } });
+  jest.mocked(Purchases.getCustomerInfo).mockRejectedValueOnce(new Error('offline'));
+  await expect(refreshAndroidBillingAccess()).rejects.toThrow('offline');
+  expect(useAndroidBillingStatus.getState().accounts['billing-a']).toBe('access-pending');
+});
+it('does not clear a pending payment based on an expired previous subscription during Restore', async () => {
+  useAndroidBillingStatus.setState({ accounts: { 'billing-a': 'payment-pending' } });
+  jest.mocked(Purchases.restorePurchases).mockResolvedValue(playInfo as never);
+  jest.mocked(Purchases.getCustomerInfo).mockResolvedValue({
+    subscriptionsByProductIdentifier: { pro: { store: 'PLAY_STORE', isActive: false } },
+  } as never);
+  await expect(restoreAndroidPurchases()).resolves.toBe('payment-pending');
+  expect(useAndroidBillingStatus.getState().accounts['billing-a']).toBe('payment-pending');
+  expect(await androidPurchaseController.onPurchase(params)).toMatchObject({ type: 'failed' });
+  expect(Purchases.purchaseSubscriptionOption).not.toHaveBeenCalled();
+});
+it('preserves the payment guard when access checks overlap before server verification', async () => {
+  useAndroidBillingStatus.setState({ accounts: { 'billing-a': 'payment-pending' } });
+  await Promise.all([refreshAndroidBillingAccess(), refreshAndroidBillingAccess()]);
+  expect(useAndroidBillingStatus.getState().accounts['billing-a']).toBe('payment-pending');
+  jest.mocked(Purchases.getCustomerInfo).mockResolvedValue({} as never);
+  await refreshAndroidBillingAccess();
+  expect(await androidPurchaseController.onPurchase(params)).toMatchObject({ type: 'failed' });
+  expect(Purchases.purchaseSubscriptionOption).not.toHaveBeenCalled();
+});
+it('persists an unresolved payment while checking so a restart cannot turn it into stale access', async () => {
+  const originalStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  const stored = new Map<string, string>();
+  const storage: Storage = {
+    get length() {
+      return stored.size;
+    },
+    clear: () => stored.clear(),
+    getItem: (key) => stored.get(key) ?? null,
+    key: (index) => [...stored.keys()][index] ?? null,
+    removeItem: (key) => {
+      stored.delete(key);
+    },
+    setItem: (key, value) => {
+      stored.set(key, value);
+    },
+  };
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: storage });
+  try {
+    jest.mocked(Purchases.purchaseSubscriptionOption).mockRejectedValueOnce({ code: 'pending' });
+    await androidPurchaseController.onPurchase(params);
+    jest.mocked(reconcileStoreBilling).mockImplementationOnce(async () => {
+      expect(useAndroidBillingStatus.getState().accounts['billing-a']).toBe('checking');
+      expect(JSON.parse(storage.getItem('android-billing-status-v1')!)['billing-a']).toBe(
+        'payment-pending',
+      );
+      return mockUsage as never;
+    });
+    await refreshAndroidBillingAccess();
+  } finally {
+    if (originalStorage) Object.defineProperty(globalThis, 'localStorage', originalStorage);
+    else Reflect.deleteProperty(globalThis, 'localStorage');
+  }
+});
+it('does not apply an inactive store response after the account changes', async () => {
+  useAndroidBillingStatus.setState({ accounts: { 'billing-a': 'access-pending' } });
+  jest.mocked(Purchases.getCustomerInfo).mockImplementationOnce(async () => {
+    mockOwner = 'account:b';
+    return { subscriptionsByProductIdentifier: {} } as never;
+  });
+  await expect(refreshAndroidBillingAccess()).rejects.toThrow('account changed');
+  expect(useAndroidBillingStatus.getState().accounts['billing-a']).toBe('access-pending');
+  expect(useAndroidBillingStatus.getState().accounts['billing-b']).toBeUndefined();
+});
+it('reports restored access from the server without relying on a second store response', async () => {
+  jest.mocked(Purchases.restorePurchases).mockResolvedValue(playInfo as never);
+  jest.mocked(reconcileStoreBilling).mockImplementationOnce(async () => {
+    mockUsage.isSubscribed = true;
+    mockUsage.entitlementSources.provider = true;
+    mockUsage.entitlementSources.providerStore = 'play_store';
+    return mockUsage as never;
+  });
+  await expect(restoreAndroidPurchases()).resolves.toBe('restored');
+  expect(useAndroidBillingStatus.getState().accounts['billing-a']).toBe('idle');
+  expect(Purchases.getCustomerInfo).not.toHaveBeenCalled();
 });
 it('Refresh access retries reconciliation and clears pending only after server verification', async () => {
   useAndroidBillingStatus.setState({ accounts: { 'billing-a': 'access-pending' } });

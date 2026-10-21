@@ -237,7 +237,7 @@
     "meetingInterrupted": "会议已中断",
     "billingChecking": "正在验证购买…",
     "billingPaymentPending": "您之前的付款状态尚未确定。请在 Google Play 中查看，付款完成后刷新访问权限。如果已取消，请在再次购买前联系支持。",
-    "billingAccessPending": "购买已完成。我们正在向服务器验证访问权限。使用“刷新访问权限”重试。",
+    "billingAccessPending": "尚未确认 Google Play 访问权限。请使用“刷新访问权限”再次检查。",
     "billingAppStore": "请在 Apple 设备上通过你的 Apple 账户管理此订阅。",
     "billingWorkspace": "你的工作区提供访问权限。如需更改套餐，请联系管理员。",
     "newAction": "新建",
