@@ -366,3 +366,98 @@ test("assertion requests carry the inference scope being exercised", async (t) =
   await resolved.tokenProvider();
   assert.deepEqual(bodies, [{ inferenceScope: "transcription" }]);
 });
+
+function stalledBodyResponse() {
+  return new Response(new ReadableStream({ start() {} }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+function settles(promise) {
+  const state = { settled: false };
+  promise.then(
+    () => (state.settled = true),
+    () => (state.settled = true)
+  );
+  return state;
+}
+
+const flush = () => new Promise((resolve) => setImmediate(resolve));
+
+test("a config body that stalls after headers times out and frees the shared request", async (t) => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "openwhispr-enterprise-stall-"));
+  t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }));
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let configCalls = 0;
+  const manager = createEnterpriseIdentityManager({
+    cachePath: path.join(tempDir, "cache.json"),
+    getApiUrl: () => "https://api.example.com",
+    getAppVersion: () => "1.10.0",
+    proxyFetch: async () => {
+      configCalls += 1;
+      return configCalls === 1 ? stalledBodyResponse() : jsonResponse({ data: managedConfig() });
+    },
+    tokenStore: { getState: () => ({ generation: 4, token: "openwhispr-session" }) },
+  });
+
+  const stalled = manager.getConfig(request());
+  const joined = manager.getConfig(request());
+  const state = settles(Promise.all([stalled, joined]));
+  await flush();
+  t.mock.timers.tick(9_999);
+  await flush();
+  assert.equal(state.settled, false);
+  t.mock.timers.tick(1);
+  await flush();
+  assert.equal(state.settled, true);
+  const [left, right] = await Promise.all([stalled, joined]);
+  assert.equal(left.success, false);
+  // A timeout is transient: it must not read as a malformed config or evict the identity.
+  assert.notEqual(left.code, "MANAGED_CONFIG_INVALID");
+  assert.equal(left.enforcementRequired, undefined);
+  assert.equal(right.success, false);
+
+  const retried = await manager.getConfig(request());
+  assert.equal(retried.success, true);
+  assert.equal(configCalls, 2);
+});
+
+test("an Azure token body that stalls after headers times out and frees the shared credential", async (t) => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "openwhispr-enterprise-stall-"));
+  t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }));
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let azureCalls = 0;
+  const manager = createEnterpriseIdentityManager({
+    cachePath: path.join(tempDir, "cache.json"),
+    getApiUrl: () => "https://api.example.com",
+    getAppVersion: () => "1.10.0",
+    proxyFetch: async (url) => {
+      if (url.includes("/enterprise-providers/azure/assertion")) {
+        return jsonResponse({ data: { assertion: "signed" } });
+      }
+      if (url.startsWith("https://login.microsoftonline.com/")) {
+        azureCalls += 1;
+        return azureCalls === 1
+          ? stalledBodyResponse()
+          : jsonResponse({ access_token: "entra", expires_in: 3600 });
+      }
+      return jsonResponse({ data: managedConfig() });
+    },
+    tokenStore: { getState: () => ({ generation: 4, token: "openwhispr-session" }) },
+  });
+  const resolved = await manager.resolveProvider(request());
+
+  const stalled = resolved.tokenProvider();
+  const joined = resolved.tokenProvider();
+  const state = settles(Promise.allSettled([stalled, joined]));
+  await flush();
+  t.mock.timers.tick(10_000);
+  await flush();
+  assert.equal(state.settled, true);
+  await assert.rejects(stalled, { name: "AbortError" });
+  await assert.rejects(joined, { name: "AbortError" });
+
+  assert.equal(await resolved.tokenProvider(), "entra");
+  assert.equal(azureCalls, 2);
+});
