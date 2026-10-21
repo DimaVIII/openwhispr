@@ -412,15 +412,14 @@
         "optional": "可选",
         "modelId": "模型 ID",
         "modelIdPlaceholder": "填写你的模型 ID",
-        "testConnection": "测试连接",
         "proceed": "继续",
         "clinical": "用于临床转录",
         "clientId": "Client ID",
         "clientSecret": "Client secret",
-        "runTest": "运行测试",
         "testing": "测试中…",
         "connected": "已连接",
         "connectionFailed": "无法验证此连接。",
+        "unverified": "无法验证：{{reason}}",
         "errors": {
           "endpointRequired": "测试前请先输入端点 URL。",
           "invalidUrl": "端点必须是有效的 HTTP 或 HTTPS URL。",
@@ -429,6 +428,7 @@
           "apiKeyRequired": "测试前请先添加 API Key。",
           "credentialsRejected": "服务商拒绝了这些凭据。",
           "endpointNotFound": "该端点未提供兼容 OpenAI 的模型列表。",
+          "transcriptionEndpointNotFound": "此地址不接受转录请求。",
           "modelNotFound": "所选模型无法从此服务商获得。",
           "providerStatus": "服务商返回了状态码 {{status}}。",
           "timeout": "连接测试超时。",
@@ -875,8 +875,11 @@
         "apikeyHelp": "从 Google AI Studio 获取的 Vertex AI Express Mode API 密钥。"
       }
     },
+    "modelRetiredTitle": "模型已不可用",
+    "groq": {
+      "modelRetired": "Groq 已停用 {{from}}，已切换至 {{to}}。"
+    },
     "tinfoil": {
-      "modelRetiredTitle": "模型已不可用",
       "modelRetired": "Tinfoil 已停用 {{from}}，已切换至 {{to}}。",
       "refreshingModels": "正在刷新模型…"
     },
@@ -1550,6 +1553,10 @@
         "description": "听写快捷键与激活模式",
         "label": "快捷键"
       },
+      "toneStyle": {
+        "label": "语气与风格",
+        "description": "整理在各个应用里的写法"
+      },
       "speechToText": {
         "description": "听写与笔记录音引擎",
         "label": "语音转文字"
@@ -2103,15 +2110,11 @@
             "step1Desc": "启动 ydotoold 并设置为每次登录时自动运行。",
             "step2Title": "验证是否正在运行"
           },
-          "xclip": {
-            "step1Title": "安装 xclip"
-          },
           "wlCopy": {
             "step1Title": "安装 wl-clipboard",
             "step2Title": "验证安装"
           }
         },
-        "xclipDesc": "KDE Wayland 粘贴用的剪贴板工具（xclip 或 xsel）",
         "nixos": {
           "intro": "您正在使用 NixOS。自动粘贴需要 ydotool 和 /dev/uinput 访问权限，NixOS 通过声明式配置来授予这些权限。",
           "detected": "已检测到",
@@ -2688,8 +2691,6 @@
         "groq_openai_gpt_oss_120b": "OpenAI 开源旗舰，500 T/秒",
         "groq_qwen_qwen3_8_27b": "快速 Qwen 模型，450 T/秒，131K 上下文",
         "groq_openai_gpt_oss_20b": "快速开源模型，1000 T/秒",
-        "groq_compound": "Groq Compound 系统，450 T/秒",
-        "groq_compound_mini": "快速 Compound 系统，3x 更低延迟",
         "openai_gpt_6_astra": "OpenAI 最强大的模型，适用于编码与研究",
         "openai_gpt_5_6_sol": "旗舰 GPT-5.6，适用于复杂编码与研究",
         "openai_gpt_5_6_terra": "均衡的 GPT-5.6，适合日常工作",
@@ -3396,6 +3397,7 @@
       "speakersIdentified": "已识别发言者",
       "typeNamePlaceholder": "输入姓名",
       "knownSpeakers": "已知说话者",
+      "thisIsMe": "这是我",
       "meetingAttendees": "会议参与者",
       "assignName": "分配姓名",
       "isThisPerson": "这是{{name}}吗？",
@@ -4922,6 +4924,91 @@
     "details": {
       "provider": "服务商",
       "requestId": "请求 ID"
+    }
+  },
+  "toneStyle": {
+    "title": "语气与风格",
+    "description": "为不同的应用设置你的语气和风格。",
+    "turnOnAndSetUp": "开启并设置",
+    "categories": {
+      "personal": {
+        "title": "私人消息",
+        "inline": "私人消息",
+        "question": "{{category}}\n你会怎么写？"
+      },
+      "work": {
+        "title": "工作消息",
+        "inline": "工作消息",
+        "question": "{{category}}\n你会怎么写？"
+      },
+      "email": {
+        "title": "电子邮件",
+        "inline": "电子邮件",
+        "question": "{{category}}\n你会怎么写？"
+      },
+      "other": {
+        "title": "其他应用",
+        "inline": "其他应用里的文字",
+        "question": "{{category}}\n你会怎么写？"
+      }
+    },
+    "tones": {
+      "formal": "正式",
+      "casual": "随意",
+      "very_casual": "非常随意",
+      "excited": "热情！"
+    },
+    "samples": {
+      "personal": {
+        "formal": "你好，今晚有空吗？我想我们可以在六点左右一起喝杯咖啡。请告诉我。",
+        "casual": "今晚有空吗？想六点左右去喝个咖啡，告诉我一声",
+        "very_casual": "今晚有空不 6点喝咖啡？回我"
+      },
+      "work": {
+        "sender": "吉米",
+        "time": "18:20",
+        "formal": "你好，能否在通话前把演示文稿发给我？第 3 页的数据似乎已经过时了。不着急。",
+        "casual": "能在通话前把演示文稿发我吗？第 3 页的数据好像旧了，不急。",
+        "excited": "嗨！能在通话前把演示文稿发我吗？第 3 页的数据应该是旧的，不着急！"
+      },
+      "email": {
+        "to": "收件人：莎拉",
+        "formal": "莎拉，您好：\n\n感谢您今天抽出时间。我会在周四前发送更新后的方案。在此之前如有任何需要，请随时告诉我。\n\n此致\n敬礼",
+        "casual": "莎拉，你好：\n\n今天谢谢啦。周四前我把更新后的方案发你，之前有什么需要跟我说。\n\n谢谢",
+        "excited": "莎拉，你好：\n\n非常感谢你今天抽空！周四前我会把更新后的方案发给你。之前有任何需要都可以告诉我！\n\n谢谢"
+      },
+      "other": {
+        "formal": "通话记录：他们很喜欢定价页面，希望缩短新手引导流程。下周跟进。",
+        "casual": "通话记录：定价页反馈不错，想要更短的引导。下周跟进",
+        "excited": "通话记录：他们超喜欢定价页面！想要更短的引导。下周跟进！"
+      }
+    },
+    "setup": {
+      "introTitle": "让 OpenWhispr\n照你说话的方式写",
+      "introDescription": "为不同的应用设置你的语气和风格。",
+      "personalize": "开始个性化",
+      "cleanupOffTitle": "让 OpenWhispr\n学会你的风格",
+      "cleanupOffDescription": "开启文本整理，然后为不同的应用设置你的语气和风格。",
+      "stepDescription": "选出最像你的示例。",
+      "progress": "第 {{current}} 步，共 {{total}} 步",
+      "finish": "完成"
+    },
+    "banner": {
+      "title": "教 OpenWhispr 学会你的写法",
+      "description": "为工作、朋友以及两者之间的一切设置你偏好的语气。",
+      "start": "立即开始",
+      "cleanupOffTitle": "让 OpenWhispr 学会你的风格",
+      "cleanupOffDescription": "开启文本整理，为消息、邮件和其他地方选一种语气。",
+      "notNow": "暂不",
+      "decoration": "你的文字应该听起来就像你。无论你写什么，写给谁。"
+    },
+    "settings": {
+      "saveChanges": "保存更改",
+      "saved": "语气与风格已保存",
+      "cleanupOff": "文本整理已关闭，因此这些语气不会应用到你的听写中。助手和聊天仍会使用它们。",
+      "turnOnCleanup": "开启文本整理",
+      "enabled": "启用语气与声音",
+      "enabledDescription": "文本整理、助手和聊天会为每类应用使用你的语气。关闭时使用标准语气。"
     }
   },
   "productHelp": {

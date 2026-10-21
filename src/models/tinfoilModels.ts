@@ -12,7 +12,7 @@ import {
 } from "./tinfoilModelCache";
 import { INFERENCE_SCOPES, usesCloudModelCatalog } from "../config/inferenceScopes";
 import { getSettings, setStringSetting } from "../stores/settingsStore";
-import { recordTinfoilModelSwitch } from "../stores/tinfoilModelSwitchStore";
+import { recordRetiredModelSwitch } from "../stores/retiredModelSwitchStore";
 
 /** A chat model as reported by Tinfoil's /v1/models, narrowed by the main process. */
 export interface TinfoilCatalogModel {
@@ -78,7 +78,8 @@ function reconcileSelectedModels(
     // Several scopes can share a retired model; say so once.
     if (announced.has(selected)) continue;
     announced.add(selected);
-    recordTinfoilModelSwitch({
+    recordRetiredModelSwitch({
+      provider: "tinfoil",
       from: previous.find((m) => m.id === selected)?.name ?? selected,
       to: replacement.name,
     });

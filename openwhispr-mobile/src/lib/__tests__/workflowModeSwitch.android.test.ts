@@ -87,6 +87,7 @@ describe('Android Local Mode switch', () => {
       defaultMode: 'private',
       inference: { dictation: { mode: 'local' } },
     });
+    expect(alert).not.toHaveBeenCalled();
   });
 
   it('opens the model list instead of turning on when no model is downloaded', async () => {

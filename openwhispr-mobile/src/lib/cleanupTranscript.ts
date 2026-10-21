@@ -16,6 +16,7 @@ import {
   getLocalReasoningReadiness,
   getLocalReasoningUnavailableMessage,
   LocalReasoningError,
+  UNSUPPORTED_LANGUAGE_MESSAGE,
 } from './localReasoning';
 import { withRetry, createApiRetryStrategy } from './retry';
 
@@ -95,6 +96,7 @@ function cleanupFailureReason(error: unknown): string {
   if (Platform.OS === 'ios' && error instanceof LocalReasoningError) {
     if (error.code === 'APPLE_LLM_CANCELLED') return 'Apple Intelligence took too long.';
     if (error.code === 'APPLE_LLM_RATE_LIMITED') return 'Apple Intelligence was busy.';
+    if (error.code === 'APPLE_LLM_UNSUPPORTED_LANGUAGE') return UNSUPPORTED_LANGUAGE_MESSAGE;
     if (error.code === 'LOCAL_CONTEXT_LIMIT' || error.code === 'APPLE_LLM_CONTEXT_LIMIT') {
       return TOO_LONG_FOR_ON_DEVICE;
     }

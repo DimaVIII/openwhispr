@@ -1,12 +1,12 @@
 import { Platform } from 'react-native';
-import { AppleLLM } from '@/lib/appleLLM';
+import { AppleLLM, type AppleLLMAvailability } from '@/lib/appleLLM';
 import type {
   LocalReasoningErrorCode,
   LocalReasoningReadiness,
+  ProcessingMode,
   ReasoningRoutingOptions,
   UserConfig,
 } from '@/types';
-import type { ProcessingMode } from '@/types';
 
 export const LOCAL_CONTEXT_FALLBACK_SIZE = 4096;
 export const LOCAL_OUTPUT_TOKEN_RESERVE = 900;
@@ -19,6 +19,11 @@ export const LOCAL_TOKEN_CHAR_RATIO = 3.5;
 // might not fit would come back cut short. The margin covers the punctuation and capitals cleanup
 // adds.
 export const LOCAL_CLEANUP_MAX_TRANSCRIPT_TOKENS = Math.floor(LOCAL_OUTPUT_TOKEN_RESERVE * 0.8);
+
+const LANGUAGE_SETTINGS = 'Settings → General → Language & Region';
+
+// A generation refused for its language: the text's, which can be in any language, or the iPhone's.
+export const UNSUPPORTED_LANGUAGE_MESSAGE = `Apple Intelligence doesn't support this language. If it's your iPhone's, choose another in ${LANGUAGE_SETTINGS}.`;
 
 let cachedReadiness: Promise<LocalReasoningReadiness> | null = null;
 
@@ -61,6 +66,8 @@ export async function getLocalReasoningReadiness(options?: {
   cachedReadiness = (async () => {
     try {
       const availability = await AppleLLM.getAvailability();
+      const languageReadiness = languageReadinessFor(availability);
+      if (languageReadiness) return languageReadiness;
       switch (availability.status) {
         case 'available':
           return {
@@ -99,14 +106,31 @@ export async function getLocalReasoningReadiness(options?: {
   return cachedReadiness;
 }
 
-export function isLocalReasoningRequired(options: ReasoningRoutingOptions = {}): boolean {
-  if (options.isPrivateNote) return true;
-  if (getActiveMode() === 'private') return true;
-  return !getAuthUser();
+// iOS has no availability reason for a language Apple Intelligence doesn't support; it reports
+// Apple Intelligence as off. So the language explains only that. A model still downloading means
+// Apple Intelligence is on, an ineligible iPhone stays one, and Apple Intelligence that runs is
+// never stopped.
+function languageReadinessFor(availability: AppleLLMAvailability): LocalReasoningReadiness | null {
+  if (
+    availability.status !== 'appleIntelligenceNotEnabled' &&
+    availability.status !== 'unavailable'
+  ) {
+    return null;
+  }
+  if (availability.localeSupported !== false) return null;
+  return {
+    status: 'unsupportedLanguage',
+    deviceLanguage: availability.deviceLanguage,
+    tokenCounting: false,
+  };
 }
 
-export function isAppleLocalIntelligenceEnabled(config = getUserConfig()): boolean {
-  return config?.appleLocalIntelligenceEnabled ?? true;
+// A private note, or no account to reach Cloud with, keeps note formatting on this iPhone. Local
+// Mode doesn't: note formatting follows its own selection, and notes made there are private.
+export function isLocalReasoningRequired(options: ReasoningRoutingOptions = {}): boolean {
+  if (options.isPrivateNote) return true;
+  if (Platform.OS === 'android' && getActiveMode() === 'private') return true;
+  return !getAuthUser();
 }
 
 function getActiveMode(): ProcessingMode {
@@ -117,6 +141,10 @@ function getActiveMode(): ProcessingMode {
   } catch {
     return 'cloud';
   }
+}
+
+export function isAppleLocalIntelligenceEnabled(config = getUserConfig()): boolean {
+  return config?.appleLocalIntelligenceEnabled ?? true;
 }
 
 // Lazy require to break a module cycle (localReasoning ← useNotesStore ← … ←
@@ -203,19 +231,28 @@ export async function fitsLocalCleanupOutput(text: string): Promise<boolean> {
   return tokens <= LOCAL_CLEANUP_MAX_TRANSCRIPT_TOKENS;
 }
 
-// This iPhone runs Apple Intelligence, even if it is turned off in Settings or still preparing
-// its model. Disabled in AI Models or unavailable says nothing about the device either way.
+// This iPhone runs Apple Intelligence, even if it is turned off in Settings, still preparing its
+// model, or kept off by its language. Disabled in AI Models or unavailable says nothing about the
+// device either way.
 export function canRunLocalReasoning(readiness?: LocalReasoningReadiness | null): boolean {
   return (
     readiness?.status === 'ready' ||
     readiness?.status === 'appleIntelligenceOff' ||
-    readiness?.status === 'modelNotReady'
+    readiness?.status === 'modelNotReady' ||
+    readiness?.status === 'unsupportedLanguage'
   );
 }
 
 // Unlike Apple Intelligence being off or still downloading, nothing in Settings fixes these.
 export function isLocalReasoningUnsupported(readiness?: LocalReasoningReadiness | null): boolean {
   return readiness?.status === 'unsupportedDevice' || readiness?.status === 'unsupportedOS';
+}
+
+// What keeps Apple Intelligence off when the language does, in one sentence.
+export function getLocalReasoningLanguageNote(readiness: LocalReasoningReadiness): string {
+  return readiness.deviceLanguage
+    ? `Apple Intelligence doesn't support ${readiness.deviceLanguage}, your iPhone's language.`
+    : "Apple Intelligence doesn't support your iPhone's language.";
 }
 
 export function getLocalReasoningUnavailableMessage(readiness?: LocalReasoningReadiness): string {
@@ -228,10 +265,14 @@ export function getLocalReasoningUnavailableMessage(readiness?: LocalReasoningRe
       return 'On-Device AI needs iOS 26 or later on an iPhone with Apple Intelligence.';
     case 'disabled':
       return 'Local Apple Intelligence is turned off in AI Models.';
+    // Apple Intelligence also needs Siri set to the iPhone's language, and iOS then offers only a
+    // Siri page; the app can't read Siri's language to tell.
     case 'appleIntelligenceOff':
-      return "Apple Intelligence is turned off, so this can't run on-device. Turn it on in Settings → Apple Intelligence & Siri.";
+      return "Apple Intelligence is turned off, so this can't run on-device. Turn it on in Settings → Apple Intelligence & Siri. If that page shows only Siri, set Siri to the same language as your iPhone.";
     case 'modelNotReady':
       return 'Apple Intelligence is still downloading its model. Check Settings → Apple Intelligence & Siri, and keep your iPhone on Wi-Fi and charging.';
+    case 'unsupportedLanguage':
+      return `${getLocalReasoningLanguageNote(readiness)} Choose a supported one in ${LANGUAGE_SETTINGS}.`;
     case 'unavailable':
     default:
       return 'Local Apple Intelligence is unavailable on this device.';
@@ -250,6 +291,8 @@ export function toLocalReasoningError(error: unknown): LocalReasoningError {
   }
 
   switch (code) {
+    case 'APPLE_LLM_UNSUPPORTED_LANGUAGE':
+      return new LocalReasoningError(code, UNSUPPORTED_LANGUAGE_MESSAGE);
     case 'LOCAL_CONTEXT_LIMIT':
     case 'LOCAL_REASONING_FAILED':
     case 'APPLE_LLM_GUARDRAIL':

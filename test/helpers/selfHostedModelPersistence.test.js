@@ -20,7 +20,7 @@ test("cloud model reconciliation respects each scope's active mode", async (t) =
     storage.clear();
     storage.setItem("_llmScopeKeysMigrated", "1");
     if (skipStartupMigration) {
-      storage.setItem("_retiredGroqModelsMigrated", "1");
+      storage.setItem("_retiredGroqModelsMigrated2", "1");
       storage.setItem("_retiredTinfoilModelsMigrated2", "1");
     }
     for (const { storeKeys } of scopes) {
@@ -40,10 +40,10 @@ test("cloud model reconciliation respects each scope's active mode", async (t) =
   }
 
   async function tinfoilNoticeCount() {
-    const { consumeTinfoilModelSwitches } = await vite.ssrLoadModule(
-      "/stores/tinfoilModelSwitchStore.ts"
+    const { consumeRetiredModelSwitches } = await vite.ssrLoadModule(
+      "/stores/retiredModelSwitchStore.ts"
     );
-    return consumeTinfoilModelSwitches().length;
+    return consumeRetiredModelSwitches().length;
   }
 
   for (const mode of MODES) {

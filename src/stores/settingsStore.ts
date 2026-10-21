@@ -14,9 +14,13 @@ import type {
 } from "../types/electron";
 import type { CalendarAccount, MicrosoftCalendarAccount } from "../types/calendar";
 import { normalizeEmailDraftTarget, type EmailDraftTargetSetting } from "../utils/emailDraftTarget";
+import { normalizeToneStyles, type ToneStyles } from "../config/toneStyle";
 import { PROMPT_KIND_LIST, type PromptKind } from "../config/prompts/registry";
 import { sweepRetiredPromptOverrides } from "../config/retiredPrompts";
-import { sweepRetiredCloudModelSelections } from "../config/retiredCloudModels";
+import {
+  sweepRetiredCloudModelSelections,
+  type RetiredModelProvider,
+} from "../config/retiredCloudModels";
 import {
   deriveReasoningMode,
   buildReasoningScopePatches,
@@ -35,9 +39,10 @@ import { adjustBedrockModelForRegion } from "../utils/bedrockRegions";
 import modelRegistryData from "../models/modelRegistryData.json";
 import { pickDefaultModelId } from "../models/providerDefaultModel";
 // Both are leaves: tinfoilModelCache imports only a type from ModelRegistry and
-// the switch store only zustand, so neither reopens the ModelRegistry cycle.
+// the switch store only zustand and a type, so neither reopens the ModelRegistry
+// cycle.
 import { readCachedTinfoilModels } from "../models/tinfoilModelCache";
-import { recordTinfoilModelSwitch } from "./tinfoilModelSwitchStore";
+import { recordRetiredModelSwitch } from "./retiredModelSwitchStore";
 import { MEETING_STREAMING_PROVIDER_IDS } from "../helpers/meetingTranscriptionRouting";
 import { STREAMING_ONLY_PROVIDERS } from "../helpers/transcriptionRoute";
 import {
@@ -275,6 +280,7 @@ const BOOLEAN_SETTINGS = new Set([
   "assemblyAiStreaming",
   "autoGenerateNoteTitle",
   "useCleanupModel",
+  "toneStyleEnabled",
   "useDictationAgent",
   "keepLocalModelLoaded",
   "voiceAgentScreenContext",
@@ -834,14 +840,15 @@ if (Object.keys(healedMeetingFollowModes).length > 0) {
   );
 }
 
-// Resolved offline, so a retired model's name survives only in the user's own
-// catalog cache and a replacement's only if we seed it. The raw-id fallback is
-// what the live-catalog reconcile shows too.
-function tinfoilModelName(modelId: string): string {
+// Resolved offline, so a retired model's name survives only in Tinfoil's
+// catalog cache, and a replacement's only if the registry lists it. The raw-id
+// fallback is what the live-catalog reconcile shows too.
+function sweptModelName(providerId: RetiredModelProvider, modelId: string): string {
+  const cached = providerId === "tinfoil" ? readCachedTinfoilModels().models : [];
   const named =
-    readCachedTinfoilModels().models.find((model) => model.id === modelId) ??
+    cached.find((model) => model.id === modelId) ??
     modelRegistryData.cloudProviders
-      .find((provider) => provider.id === "tinfoil")
+      .find((provider) => provider.id === providerId)
       ?.models.find((model) => model.id === modelId);
   return named?.name ?? modelId;
 }
@@ -866,17 +873,23 @@ function migrateRetiredCloudModels() {
 
   logger.info(
     "Repointed retired cloud model selections",
-    { scopes: swept.map(({ storeKey }) => storeKey) },
+    { swept: swept.map(({ storeKey, from, to }) => ({ storeKey, from, to })) },
     "settings"
   );
 
-  // Tinfoil is the one provider that tells the user their model was switched
-  // out, and getting here first means reconcileSelectedModels no longer will.
+  // Tell the user their model was switched out; for Tinfoil, getting here
+  // first means reconcileSelectedModels no longer will. Several scopes can
+  // share a retired model, so say so once per model.
   const announced = new Set<string>();
   for (const { provider, from, to } of swept) {
-    if (provider !== "tinfoil" || announced.has(from)) continue;
-    announced.add(from);
-    recordTinfoilModelSwitch({ from: tinfoilModelName(from), to: tinfoilModelName(to) });
+    const key = `${provider}:${from}`;
+    if (announced.has(key)) continue;
+    announced.add(key);
+    recordRetiredModelSwitch({
+      provider,
+      from: sweptModelName(provider, from),
+      to: sweptModelName(provider, to),
+    });
   }
 }
 
@@ -1003,6 +1016,8 @@ export interface SettingsState
   // dedicated model used only when a screenshot is attached.
   voiceAgentScreenContext: boolean;
   emailDraftTarget: EmailDraftTargetSetting;
+  toneStyleEnabled: boolean;
+  toneStyles: ToneStyles;
   useDictationAgentVisionModel: boolean;
   dictationAgentVisionMode: InferenceMode;
   dictationAgentVisionProvider: string;
@@ -1034,6 +1049,8 @@ export interface SettingsState
   setDictationAgentCustomApiKey: (key: string) => void;
 
   setVoiceAgentScreenContext: (value: boolean) => void;
+  setToneStyleEnabled: (value: boolean) => void;
+  setToneStyles: (styles: ToneStyles) => void;
   setEmailDraftTarget: (value: EmailDraftTargetSetting) => void;
   setUseDictationAgentVisionModel: (value: boolean) => void;
   setDictationAgentVisionProvider: (value: string) => void;
@@ -1954,6 +1971,8 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
 
   voiceAgentScreenContext: readBoolean("voiceAgentScreenContext", false),
   emailDraftTarget: normalizeEmailDraftTarget(readString("emailDraftTarget", "auto")),
+  toneStyleEnabled: readBoolean("toneStyleEnabled", false),
+  toneStyles: normalizeToneStyles(readString("toneStyles", "")),
   useDictationAgentVisionModel: readBoolean("useDictationAgentVisionModel", false),
   // Cloud already vision-routes screenshot commands, so the override is BYOK-only.
   dictationAgentVisionMode: "providers" as InferenceMode,
@@ -1999,6 +2018,11 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
 
   setVoiceAgentScreenContext: createBooleanSetter("voiceAgentScreenContext"),
   setEmailDraftTarget: createStringSetter("emailDraftTarget"),
+  setToneStyleEnabled: createBooleanSetter("toneStyleEnabled"),
+  setToneStyles: (styles) => {
+    if (isBrowser) localStorage.setItem("toneStyles", JSON.stringify(styles));
+    useSettingsStore.setState({ toneStyles: styles });
+  },
   setUseDictationAgentVisionModel: createBooleanSetter("useDictationAgentVisionModel"),
   setDictationAgentVisionProvider: createStringSetter("dictationAgentVisionProvider"),
   setDictationAgentVisionModel: createStringSetter("dictationAgentVisionModel"),
@@ -3810,6 +3834,8 @@ export async function initializeSettings(): Promise<void> {
       }
     } else if (key === "emailDraftTarget") {
       value = normalizeEmailDraftTarget(newValue);
+    } else if (key === "toneStyles") {
+      value = normalizeToneStyles(newValue);
     } else {
       value = newValue;
     }

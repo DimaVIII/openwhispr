@@ -87,14 +87,6 @@
         {
           "id": "openai/gpt-oss-20b",
           "name": "GPT-OSS 20B"
-        },
-        {
-          "id": "groq/compound",
-          "name": "Compound"
-        },
-        {
-          "id": "groq/compound-mini",
-          "name": "Compound Mini"
         }
       ]
     }

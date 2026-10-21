@@ -562,7 +562,12 @@ export default function NoteEditorScreen() {
     }),
     [contentIsTranscript, hasEnhancedTab, transcriptPending, usesSegmentTranscript],
   );
-  const requiresCloudConfirmation = note?.isPrivate === 1 || activeMode === 'private';
+  // A private note asks before any AI leaves this iPhone. Local Mode asks too for note chat; note
+  // formatting follows its own selection there.
+  const formattingRequiresCloudConfirmation =
+    note?.isPrivate === 1 || (Platform.OS === 'android' && activeMode === 'private');
+  const chatRequiresCloudConfirmation =
+    formattingRequiresCloudConfirmation || activeMode === 'private';
 
   const handleKeepMine = useCallback(() => {
     safeHaptics('selection');
@@ -1000,7 +1005,7 @@ export default function NoteEditorScreen() {
       }
 
       const localRequired = providerNotes
-        ? requiresCloudConfirmation
+        ? formattingRequiresCloudConfirmation
         : isLocalReasoningRequired(routing);
 
       if (localRequired) {
@@ -1043,7 +1048,7 @@ export default function NoteEditorScreen() {
         }).catch(() => {});
       };
 
-      if (requiresCloudConfirmation) {
+      if (formattingRequiresCloudConfirmation) {
         confirmCloudOnce(
           copyRef.current(
             'editorFeedback.cloudActionBody',
@@ -1068,7 +1073,7 @@ export default function NoteEditorScreen() {
       notesProviderId,
       providerNotes,
       registerSuperwallGate,
-      requiresCloudConfirmation,
+      formattingRequiresCloudConfirmation,
       runSelectedAction,
       user,
     ],
@@ -1226,7 +1231,7 @@ export default function NoteEditorScreen() {
         }).catch(() => {});
       };
 
-      if (requiresCloudConfirmation && chatMode !== 'local') {
+      if (chatRequiresCloudConfirmation && chatMode !== 'local') {
         confirmCloudOnce(
           copyRef.current(
             'editorFeedback.cloudChatBody',
@@ -1247,9 +1252,9 @@ export default function NoteEditorScreen() {
     [
       captureAIContext,
       chatMode,
+      chatRequiresCloudConfirmation,
       cloudChat,
       registerSuperwallGate,
-      requiresCloudConfirmation,
       startChatRequest,
       user,
     ],

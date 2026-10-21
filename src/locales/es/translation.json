@@ -412,15 +412,14 @@
         "optional": "Opcional",
         "modelId": "ID del modelo",
         "modelIdPlaceholder": "Escribe el ID de tu modelo",
-        "testConnection": "Probar conexión",
         "proceed": "Continuar",
         "clinical": "PARA TRANSCRIPCIÓN CLÍNICA",
         "clientId": "Client ID",
         "clientSecret": "Client secret",
-        "runTest": "Ejecutar prueba",
         "testing": "Probando…",
         "connected": "Conectado",
         "connectionFailed": "No se pudo verificar la conexión.",
+        "unverified": "No se pudo verificar: {{reason}}",
         "errors": {
           "endpointRequired": "Introduce la URL del endpoint antes de probar.",
           "invalidUrl": "El endpoint debe ser una URL HTTP o HTTPS válida.",
@@ -429,6 +428,7 @@
           "apiKeyRequired": "Añade una clave API antes de probar.",
           "credentialsRejected": "El proveedor rechazó estas credenciales.",
           "endpointNotFound": "El endpoint no expone una lista de modelos compatible con OpenAI.",
+          "transcriptionEndpointNotFound": "Esta dirección no acepta transcripciones.",
           "modelNotFound": "El modelo seleccionado no está disponible en este proveedor.",
           "providerStatus": "El proveedor devolvió el estado {{status}}.",
           "timeout": "La prueba de conexión agotó el tiempo de espera.",
@@ -875,8 +875,11 @@
         "apikeyHelp": "Clave API de Vertex AI Express Mode obtenida en Google AI Studio."
       }
     },
+    "modelRetiredTitle": "Modelo ya no disponible",
+    "groq": {
+      "modelRetired": "Groq retiró {{from}}. Se cambió a {{to}}."
+    },
     "tinfoil": {
-      "modelRetiredTitle": "Modelo ya no disponible",
       "modelRetired": "Tinfoil retiró {{from}}. Se cambió a {{to}}.",
       "refreshingModels": "Actualizando modelos…"
     },
@@ -1602,6 +1605,10 @@
         "description": "Atajo de dictado y activación",
         "label": "Atajos"
       },
+      "toneStyle": {
+        "label": "Tono y estilo",
+        "description": "Cómo escribe la corrección en cada app"
+      },
       "speechToText": {
         "description": "Motores para dictado y grabación de notas",
         "label": "Conversión de voz a texto"
@@ -2155,15 +2162,11 @@
             "step1Desc": "Inicia ydotoold y habilítalo para que se ejecute en cada inicio de sesión.",
             "step2Title": "Verificar que está en ejecución"
           },
-          "xclip": {
-            "step1Title": "Instalar xclip"
-          },
           "wlCopy": {
             "step1Title": "Instalar wl-clipboard",
             "step2Title": "Verificar la instalación"
           }
         },
-        "xclipDesc": "Herramienta de portapapeles para pegado en KDE Wayland (xclip o xsel)",
         "nixos": {
           "intro": "Estás en NixOS. El pegado automático necesita ydotool y acceso a /dev/uinput, que NixOS concede de forma declarativa.",
           "detected": "Detectado",
@@ -2740,8 +2743,6 @@
         "groq_openai_gpt_oss_120b": "Modelo insignia de código abierto de OpenAI, 500 T/seg",
         "groq_qwen_qwen3_8_27b": "Modelo Qwen rápido, 450 T/seg, contexto de 131K",
         "groq_openai_gpt_oss_20b": "Modelo de código abierto rápido, 1000 T/seg",
-        "groq_compound": "Sistema compound de Groq, 450 T/seg",
-        "groq_compound_mini": "Sistema compound rápido, 3x menor latencia",
         "openai_gpt_6_astra": "El modelo más capaz de OpenAI para programación e investigación",
         "openai_gpt_5_6_sol": "GPT-5.6 insignia para programación e investigación complejas",
         "openai_gpt_5_6_terra": "GPT-5.6 equilibrado para el trabajo diario",
@@ -3448,6 +3449,7 @@
       "speakersIdentified": "Participantes identificados",
       "typeNamePlaceholder": "Escribe un nombre",
       "knownSpeakers": "Hablantes conocidos",
+      "thisIsMe": "Soy yo",
       "meetingAttendees": "Asistentes de la reunión",
       "assignName": "Asignar nombre",
       "isThisPerson": "¿Es {{name}}?",
@@ -4922,6 +4924,91 @@
     "details": {
       "provider": "Proveedor",
       "requestId": "ID de solicitud"
+    }
+  },
+  "toneStyle": {
+    "title": "Tono y estilo",
+    "description": "Define tu tono y estilo en distintas apps.",
+    "turnOnAndSetUp": "Activar y configurar",
+    "categories": {
+      "personal": {
+        "title": "Mensajes personales",
+        "inline": "tus mensajes personales",
+        "question": "¿Cómo escribes\n{{category}}?"
+      },
+      "work": {
+        "title": "Mensajes de trabajo",
+        "inline": "tus mensajes de trabajo",
+        "question": "¿Cómo escribes\n{{category}}?"
+      },
+      "email": {
+        "title": "Correos",
+        "inline": "tus correos",
+        "question": "¿Cómo escribes\n{{category}}?"
+      },
+      "other": {
+        "title": "Otras apps",
+        "inline": "en otras apps",
+        "question": "¿Cómo escribes\n{{category}}?"
+      }
+    },
+    "tones": {
+      "formal": "Formal",
+      "casual": "Casual",
+      "very_casual": "Muy casual",
+      "excited": "¡Entusiasta!"
+    },
+    "samples": {
+      "personal": {
+        "formal": "Hola, ¿estás disponible esta tarde? Había pensado que podríamos tomar un café sobre las 6. Avísame.",
+        "casual": "Hola, ¿estás libre esta tarde? Pensaba en un café sobre las 6, avísame",
+        "very_casual": "ey estas libre esta tarde? cafe sobre las 6? avisa"
+      },
+      "work": {
+        "sender": "Jimmy",
+        "time": "18:20",
+        "formal": "Hola, ¿podrías enviarme la presentación antes de la llamada? Las cifras de la diapositiva 3 parecen desactualizadas. Sin prisa.",
+        "casual": "Hola, ¿me pasas la presentación antes de la llamada? Creo que las cifras de la diapo 3 están viejas, sin prisa.",
+        "excited": "¡Hola! ¿Me pasas la presentación antes de la llamada? ¡Seguro que las cifras de la diapo 3 están viejas, sin prisa!"
+      },
+      "email": {
+        "to": "Para Sarah",
+        "formal": "Hola, Sarah:\n\nGracias por tu tiempo hoy. Te enviaré la propuesta actualizada antes del jueves. Por favor, avísame si necesitas algo antes.\n\nUn cordial saludo",
+        "casual": "Hola, Sarah:\n\nGracias por lo de hoy. Te mando la propuesta actualizada el jueves, avísame si necesitas algo antes.\n\nGracias",
+        "excited": "Hola, Sarah:\n\n¡Muchas gracias por tu tiempo hoy! Te mando la propuesta actualizada antes del jueves. ¡Avísame si necesitas algo antes!\n\nGracias"
+      },
+      "other": {
+        "formal": "Notas de la llamada: les gustó la página de precios y quieren un onboarding más corto. Hacer seguimiento la próxima semana.",
+        "casual": "Notas de la llamada: les gustó la página de precios, quieren el onboarding más corto. Seguimiento la próxima semana",
+        "excited": "Notas de la llamada: ¡les encantó la página de precios! Quieren el onboarding más corto. ¡Seguimiento la próxima semana!"
+      }
+    },
+    "setup": {
+      "introTitle": "Haz que OpenWhispr\nescriba como hablas",
+      "introDescription": "Define tu tono y estilo en distintas apps.",
+      "personalize": "Personalizar",
+      "cleanupOffTitle": "Enséñale a OpenWhispr\ntu estilo",
+      "cleanupOffDescription": "Activa la corrección de texto y define tu tono y estilo en distintas apps.",
+      "stepDescription": "Elige el ejemplo que más se parece a ti.",
+      "progress": "Paso {{current}} de {{total}}",
+      "finish": "Terminar"
+    },
+    "banner": {
+      "title": "Enséñale a OpenWhispr cómo escribes",
+      "description": "Elige tu tono preferido para el trabajo, los amigos y todo lo que hay en medio.",
+      "start": "Empezar",
+      "cleanupOffTitle": "Enséñale a OpenWhispr tu estilo",
+      "cleanupOffDescription": "Activa la corrección de texto y elige un tono para mensajes, correos y más.",
+      "notNow": "Ahora no",
+      "decoration": "Tus palabras deberían sonar como tú. Escribas lo que escribas, sea para quien sea."
+    },
+    "settings": {
+      "saveChanges": "Guardar cambios",
+      "saved": "Tono y estilo guardados",
+      "cleanupOff": "La corrección de texto está desactivada, así que estos tonos no se aplican a tu dictado. El asistente y los chats sí los usan.",
+      "turnOnCleanup": "Activar corrección de texto",
+      "enabled": "Tonos y voces activados",
+      "enabledDescription": "La corrección de texto, el asistente y los chats usan tu tono para cada tipo de app. Si está desactivado, usan el tono estándar."
     }
   },
   "productHelp": {

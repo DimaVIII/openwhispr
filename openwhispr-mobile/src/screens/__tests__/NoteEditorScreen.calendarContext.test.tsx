@@ -732,6 +732,8 @@ describe('NoteEditorScreen generated meeting context', () => {
 
   it('offers enable local AI alongside cloud once when local intelligence is disabled', async () => {
     mockProcessingModeState.activeMode = 'private';
+    mockNote = note({ isPrivate: 1 });
+    mockNotesState.notes = [mockNote];
     mockConfigState.config.appleLocalIntelligenceEnabled = false;
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
 
@@ -1130,6 +1132,8 @@ describe('NoteEditorScreen On-Device and provider routes', () => {
 
   it('names the provider when it offers to send a private note there once', async () => {
     mockProcessingModeState.activeMode = 'private';
+    mockNote = note({ isPrivate: 1 });
+    mockNotesState.notes = [mockNote];
     mockAppleAvailability = 'deviceNotEligible';
     mockConfigState.config.inference = {
       notes: {
@@ -1154,6 +1158,8 @@ describe('NoteEditorScreen On-Device and provider routes', () => {
 
   it('still offers to enable local AI when the fallback is a provider', async () => {
     mockProcessingModeState.activeMode = 'private';
+    mockNote = note({ isPrivate: 1 });
+    mockNotesState.notes = [mockNote];
     mockConfigState.config.appleLocalIntelligenceEnabled = false;
     mockConfigState.config.inference = {
       notes: {
@@ -1170,6 +1176,26 @@ describe('NoteEditorScreen On-Device and provider routes', () => {
     await waitFor(() => expect(alertSpy).toHaveBeenCalledTimes(1));
     const labels = (alertSpy.mock.calls[0][2] ?? []).map((button: { text: string }) => button.text);
     expect(labels).toEqual(['Cancel', 'Enable Local AI', 'Use Groq Once']);
+  });
+
+  // Note formatting follows its own selection in Local Mode; only a private note stays here.
+  it('sends a shared note to the provider saved for note formatting in Local Mode', async () => {
+    mockProcessingModeState.activeMode = 'private';
+    mockAppleAvailability = 'deviceNotEligible';
+    mockConfigState.config.inference = {
+      notes: {
+        mode: 'providers',
+        providerId: 'groq',
+        modelId: 'llama',
+        credentialRef: 'provider.groq',
+      },
+    };
+    const { getByTestId } = render(<NoteEditorScreen />);
+    await act(async () => {
+      fireEvent.press(getByTestId('run-action-1'));
+    });
+    await waitFor(() => expect(ReasoningService.processText).toHaveBeenCalledTimes(1));
+    expect(alertSpy).not.toHaveBeenCalled();
   });
 
   it('lets a signed-out user chat with a note when chat is On-Device', async () => {

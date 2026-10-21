@@ -36,22 +36,26 @@ export const LOCAL_MODE_DICTATION_NOTES = {
   on:
     Platform.OS === 'android'
       ? 'Local Mode keeps dictation on this phone. Turn it off in Models & processing to use Cloud, or choose Bring Your Own Key.'
-      : `Local Mode is on: dictation stays on this ${deviceLabel} and notes ask before leaving it. Choose OpenWhispr Cloud or Bring Your Own Key to turn it off.`,
-  off: `On-Device turns on Local Mode: dictation stays on this ${deviceLabel} and notes ask before leaving it.`,
+      : `Local Mode is on: dictation stays on this ${deviceLabel}, notes you make stay private, and note chat asks before leaving it. Choose OpenWhispr Cloud or Bring Your Own Key to turn it off.`,
+  off:
+    Platform.OS === 'android'
+      ? 'On-Device turns on Local Mode: dictation stays on this phone and notes ask before leaving it.'
+      : 'On-Device turns on Local Mode: dictation stays on this iPhone, notes you make stay private, and note chat asks before leaving it.',
 };
 
-// What Local Mode means for note formatting, note chat and the voice assistant.
+// What Local Mode means for note chat.
 export const ON_DEVICE_MODE_NOTES: Partial<Record<MobileInferenceScope, string>> = {
   ...(Platform.OS === 'android'
     ? {
         upload: 'Local Mode keeps uploads on this phone.',
+        notes:
+          'Local Mode formats notes on this phone and asks before sending one to your choice here.',
+        agent: 'In Local Mode the voice assistant is off.',
         cleanup:
           'In Local Mode, cleanup runs on this phone, or sends only the transcript text to your provider with Bring Your Own Key. OpenWhispr Cloud cleanup is skipped until Local Mode is off.',
       }
     : {}),
-  notes: `Local Mode formats notes on this ${deviceLabel} and asks before sending one to your choice here.`,
   noteChat: `In Local Mode note chat asks before sending a note off this ${deviceLabel}.`,
-  agent: 'In Local Mode the voice assistant is off.',
 };
 
 export const PRIVATE_MODE_LOCKED_REASON =
@@ -139,14 +143,29 @@ export function workflowSwitchedOff(
   return false;
 }
 
+// The voice assistant runs on its own selection in every mode. It can run on a provider, or on
+// OpenWhispr Cloud for a signed-in account, which an anonymous session can't use for it; it has no
+// on-device version, and unset under Bring Your Own Key it is skipped.
+export function voiceAssistantCanRun(
+  config: UserConfig | null,
+  activeMode: ProcessingMode,
+  cloudAccess: CloudAccess,
+): boolean {
+  if (!config || workflowSwitchedOff(config, 'agent')) return false;
+  if (Platform.OS === 'android' && activeMode === 'private') return false;
+  const selection = workflowSelection(config, 'agent', activeMode, cloudAccess);
+  if (selection.mode === 'providers') return !!selection.providerId;
+  return selection.mode === 'openwhispr' && cloudAccess === 'account';
+}
+
 export function parseWorkflow(value: unknown): MobileInferenceScope | null {
   return WORKFLOWS.find((scope) => scope === value) ?? null;
 }
 
-// What a workflow with no saved selection runs. Local Mode keeps dictation and note formatting on
-// this iPhone, and uses OpenWhispr Cloud for uploads and cleanup when the account can, else this
-// iPhone. Note chat uses OpenWhispr Cloud when unset in every mode, and Bring Your Own Key
-// dictation waits for a provider before cleanup or the agent.
+// What a workflow with no saved selection runs. Local Mode keeps dictation on this iPhone, and uses
+// OpenWhispr Cloud for uploads and cleanup when the account can, else this iPhone. Note formatting,
+// note chat and the voice assistant use OpenWhispr Cloud when unset in Cloud and Local Mode, and
+// Bring Your Own Key dictation waits for a provider before cleanup or the voice assistant.
 export function unsetSelection(
   scope: MobileInferenceScope,
   activeMode: ProcessingMode,
@@ -174,8 +193,7 @@ export function workflowSummary(
   } = {},
 ): string {
   if (workflowSwitchedOff(config, scope)) return 'Off';
-  // Local Mode turns the voice assistant off.
-  if (activeMode === 'private' && scope === 'agent') return 'Off';
+  if (Platform.OS === 'android' && activeMode === 'private' && scope === 'agent') return 'Off';
   if (scope === 'cleanup') {
     if (cleanupRunsOnDevice(config, activeMode, cloudAccess) && onDeviceUnavailable)
       return `Skipped · ${onDeviceUnavailable}`;
@@ -188,16 +206,16 @@ export function workflowSummary(
       !['local', 'providers'].includes(config?.inference?.cleanup?.mode ?? '')
     )
       return 'Skipped';
-    if (scope === 'upload') return MODE_LABELS.local;
+    if (scope === 'upload' || scope === 'notes') return MODE_LABELS.local;
   }
-  // Local Mode runs dictation, note formatting and provider note chat on this phone first, whatever
-  // is saved; note chat set to OpenWhispr, or not set, goes straight to Cloud. Uploads and cleanup
-  // run what is saved for them.
+  // Local Mode runs dictation and provider note chat on this phone first, whatever is saved; note
+  // chat set to OpenWhispr, or not set, goes straight to Cloud. The other workflows run what is
+  // saved for them.
   if (activeMode === 'private' && scope === 'noteChat' && selection.mode === 'openwhispr')
     return MODE_LABELS.openwhispr;
   if (selection.mode === 'local' && isLocalModelKey(selection.modelId))
     return LOCAL_MODEL_TITLES[selection.modelId];
-  if (activeMode === 'private' && scope !== 'upload' && scope !== 'cleanup')
+  if (activeMode === 'private' && (scope === 'dictation' || scope === 'noteChat'))
     return MODE_LABELS.local;
   if (selection.mode !== 'providers') return MODE_LABELS[selection.mode];
   if (!selection.providerId) return 'Not set';

@@ -45,8 +45,8 @@ import {
   CLOUD_CLEANUP_NEEDS_ACCOUNT_NOTE,
   LOCAL_MODE_DICTATION_NOTES,
   ON_DEVICE_MODE_NOTES,
-  PRIVATE_MODE_LOCKED_REASON,
   ON_DEVICE_CLEANUP_UNSUPPORTED_NOTE,
+  PRIVATE_MODE_LOCKED_REASON,
   UNSET_PROVIDER_NOTES,
   WORKFLOW_LABELS,
   WORKFLOWS,
@@ -60,13 +60,10 @@ import { isLocalModelKey } from '@/lib/localModelCatalog';
 import { getDictationAgentName } from '@/lib/dictationAgent';
 import { safeHaptics } from '@/lib/utils';
 import { SystemIcon, type LucideIconName } from '@/components/ui/SystemIcon';
-import {
-  leavingLocalModeWithLocalReasoning,
-  type ModeSwitchResult,
-  switchWorkflowMode,
-} from '@/lib/workflowModeSwitch';
+import { type ModeSwitchResult, switchWorkflowMode } from '@/lib/workflowModeSwitch';
 import { getPrivateModeReadiness } from '@/lib/privateMode';
 import {
+  getLocalReasoningLanguageNote,
   getLocalReasoningReadiness,
   getLocalReasoningUnavailableMessage,
   isLocalReasoningUnsupported,
@@ -119,7 +116,7 @@ function joinNames(names: string[]): string {
 }
 
 // A workflow that can be turned off: its switch sits above Mode, with the workflow's own
-// settings row under it while it is on. A disabled switch shows why in its description.
+// settings row under it while it is on.
 function WorkflowSwitchCard({
   title,
   label,
@@ -214,13 +211,14 @@ function NoteChatSettings({ enabled }: { enabled: boolean }): React.JSX.Element 
   );
 }
 
-// Local Mode turns the voice assistant off.
 function VoiceAssistantSettings({ enabled }: { enabled: boolean }): React.JSX.Element {
   const updateConfig = useConfigStore((state) => state.updateConfig);
   const agentName = useConfigStore((state) =>
     state.config ? getDictationAgentName(state.config) : undefined,
   );
-  const privateMode = useProcessingModeStore((state) => state.activeMode === 'private');
+  const privateMode = useProcessingModeStore(
+    (state) => Platform.OS === 'android' && state.activeMode === 'private',
+  );
   return (
     <WorkflowSwitchCard
       title="Enable Voice Assistant"
@@ -374,11 +372,13 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
     ? getLocalReasoningUnavailableMessage(appleIntelligence ?? undefined)
     : null;
   const onDeviceStatus =
-    appleIntelligence && appleIntelligence.status !== 'ready'
-      ? Platform.OS === 'android'
+    Platform.OS === 'android'
+      ? appleIntelligence && appleIntelligence.status !== 'ready'
         ? getLocalReasoningUnavailableMessage(appleIntelligence)
-        : APPLE_INTELLIGENCE_STATUSES[appleIntelligence.status]
-      : undefined;
+        : undefined
+      : appleIntelligence?.status === 'unsupportedLanguage'
+        ? getLocalReasoningLanguageNote(appleIntelligence)
+        : appleIntelligence && APPLE_INTELLIGENCE_STATUSES[appleIntelligence.status];
   // Nothing is shown as picked when the On-Device text workflow can never run on this iPhone.
   const pickedMode =
     !speechScope && onDeviceUnsupported && selection.mode === 'local' ? null : selection.mode;
@@ -427,9 +427,10 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
   const keyOwner =
     provider?.id === 'custom' ? 'this server' : providerDisplayName(provider?.id ?? '');
   const workflowOff = workflowSwitchedOff(config, scope);
-  // A switched-off workflow uses no key, nor does the voice assistant in Local Mode.
+  // A switched-off workflow uses no key.
   const usesKey = (workflow: MobileInferenceScope): boolean =>
-    !workflowSwitchedOff(config, workflow) && !(activeMode === 'private' && workflow === 'agent');
+    !workflowSwitchedOff(config, workflow) &&
+    !(Platform.OS === 'android' && activeMode === 'private' && workflow === 'agent');
   const sharedWith = WORKFLOWS.filter((other) => {
     const saved = config?.inference?.[other];
     return (
@@ -682,20 +683,8 @@ function WorkflowSettings({ scope }: { scope: MobileInferenceScope }): React.JSX
     try {
       const saved = await prepareSelection();
       if (!saved) return;
-      const localReasoningReady = await leavingLocalModeWithLocalReasoning(
-        scope,
-        activeMode,
-        saved.mode,
-      );
       await updateConfig(
-        workflowSaveConfig(
-          useConfigStore.getState().config,
-          scope,
-          saved,
-          activeMode,
-          cloudAccess,
-          localReasoningReady,
-        ),
+        workflowSaveConfig(useConfigStore.getState().config, scope, saved, activeMode, cloudAccess),
       );
       if (useConfigStore.getState().error) {
         showError('Unable to save your selection. Please try again.');

@@ -3,9 +3,11 @@ import type { ReasoningConfig } from "../services/BaseReasoningService";
 import type { PermissionGuideState, PermissionGuideAction } from "./permissionGuide";
 import type { TinfoilCatalogModel } from "../models/tinfoilModels";
 import type { UsageResponse } from "../lib/usageStore";
+import type { DictationTone, ToneAppCategory } from "../config/toneStyle";
 import type { OrgPolicy } from "./policy";
 import type { TechnicalErrorDetailsData } from "../components/ui/useToast";
 import type { ProviderSettingsTarget } from "../utils/describeProviderError";
+import type { RemovedTranscriptSegment } from "../utils/diarizationCompletion";
 import type {
   ManagedEnterpriseConfig,
   ManagedEnterpriseRequestContext,
@@ -100,6 +102,8 @@ export interface DictationRealtimeSessionOptions {
     agentName?: string;
     customDictionary?: string[];
     customPrompt?: string;
+    tone?: DictationTone;
+    appCategory?: ToneAppCategory;
     language?: string;
     locale?: string;
   };
@@ -1359,7 +1363,14 @@ declare global {
         clientSecret?: string;
         environment?: string;
         tenant?: string;
-      }) => Promise<{ success: boolean; error?: string; errorCode?: string; status?: number }>;
+      }) => Promise<{
+        success: boolean;
+        error?: string;
+        errorCode?: string;
+        status?: number;
+        /** The provider gave no verdict (busy, down, unreachable); the setup may be used. */
+        unverified?: boolean;
+      }>;
       pasteText: (
         text: string,
         options?: {
@@ -1440,6 +1451,7 @@ declare global {
       showDictationPanel: () => Promise<void>;
       openSettingsSection?: (section: ProviderSettingsTarget) => Promise<{ success: boolean }>;
       captureDictationTarget?: () => Promise<{ success: boolean; pid: number | null }>;
+      captureDictationAppCategory?: () => Promise<ToneAppCategory>;
       onToggleDictation: (callback: () => void) => () => void;
       onToggleVoiceAgent?: (callback: () => void) => () => void;
       onToggleTranslation?: (callback: () => void) => () => void;
@@ -2337,8 +2349,6 @@ declare global {
         isWlroots: boolean;
         isCosmic: boolean;
         requiresWlCopy: boolean;
-        hasXclip: boolean;
-        hasXsel: boolean;
       }>;
 
       // Globe key listener for hotkey capture (macOS only)
@@ -2666,6 +2676,8 @@ declare global {
           promptMode?: "cleanup" | "agent";
           purpose?: CloudReasonPurpose;
           screenContext?: ScreenContextImage;
+          tone?: DictationTone;
+          appCategory?: ToneAppCategory;
           language?: string;
           locale?: string;
           streamingFallbackReason?: string;
@@ -3387,6 +3399,7 @@ declare global {
             speakerLockSource?: "user" | "diarization" | "suggestion";
           }>;
           speakerEmbeddings?: Record<string, number[]> | null;
+          removedSegments?: RemovedTranscriptSegment[];
         }) => void
       ) => () => void;
 
