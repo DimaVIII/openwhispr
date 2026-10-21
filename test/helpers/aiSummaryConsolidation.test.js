@@ -8,7 +8,6 @@ const { GENERATE_NOTES_KEY, DETAILED_NOTES_KEY } = builtins;
 const detailed = builtins.LEGACY_DETAILED_NOTES;
 
 function seedDetailed(db, changes = {}) {
-  db.db.prepare("DELETE FROM actions WHERE translation_key = ?").run(DETAILED_NOTES_KEY);
   const row = {
     name: detailed.name,
     description: detailed.description,

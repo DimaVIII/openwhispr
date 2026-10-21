@@ -747,6 +747,10 @@ class DatabaseManager {
         const legacyRows = this.db
           .prepare("SELECT * FROM actions WHERE is_builtin = 1 AND translation_key = ?")
           .all(legacy.translationKey);
+        const deleteLegacy = this.db.prepare("DELETE FROM actions WHERE id = ?");
+        const settleLegacy = this.db.prepare(
+          "UPDATE actions SET client_id = COALESCE(client_id, ?), sort_order = ?, prompt = ?, sections = ? WHERE id = ?"
+        );
         for (const row of legacyRows) {
           const stockContent = hasStockContent(row, legacy);
           if (
@@ -756,21 +760,17 @@ class DatabaseManager {
             row.description === legacy.description &&
             row.icon === legacy.icon
           ) {
-            this.db.prepare("DELETE FROM actions WHERE id = ?").run(row.id);
+            deleteLegacy.run(row.id);
           } else {
             // A previous flat default still moves to sections, keeping the user's name.
             const upgradesPrompt = stockContent && row.sections === null;
-            this.db
-              .prepare(
-                "UPDATE actions SET client_id = COALESCE(client_id, ?), sort_order = ?, prompt = ?, sections = ? WHERE id = ?"
-              )
-              .run(
-                legacy.translationKey,
-                legacy.sortOrder,
-                upgradesPrompt ? legacy.prompt : row.prompt,
-                upgradesPrompt ? JSON.stringify(legacy.sections) : row.sections,
-                row.id
-              );
+            settleLegacy.run(
+              legacy.translationKey,
+              legacy.sortOrder,
+              upgradesPrompt ? legacy.prompt : row.prompt,
+              upgradesPrompt ? JSON.stringify(legacy.sections) : row.sections,
+              row.id
+            );
           }
         }
 

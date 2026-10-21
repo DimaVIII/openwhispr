@@ -29,12 +29,12 @@ test("the probe sends the AI Summary prompt exactly as the note store assembles 
   const { BUILTIN_ACTIONS, GENERATE_NOTES_KEY } =
     await import("../../src/helpers/builtinActions.js");
   const { compileTemplatePrompt } = await import("../../src/helpers/templatePrompts.js");
-  const detailed = BUILTIN_ACTIONS.find((action) => action.translationKey === GENERATE_NOTES_KEY);
+  const summary = BUILTIN_ACTIONS.find((action) => action.translationKey === GENERATE_NOTES_KEY);
   // The row the database seeds from the built-in, as the note store reads it.
   const row = {
-    prompt: detailed.prompt,
-    sections: detailed.sections,
-    translation_key: detailed.translationKey,
+    prompt: summary.prompt,
+    sections: summary.sections,
+    translation_key: summary.translationKey,
   };
 
   assert.equal(buildNoteProbeSystemPrompt(), compileTemplatePrompt(row, { isMeetingNote: true }));

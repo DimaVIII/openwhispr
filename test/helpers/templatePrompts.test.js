@@ -14,7 +14,7 @@ const seededRow = (builtin) => ({
   translation_key: builtin.translationKey,
 });
 
-test("Detailed Notes compiled from its sections is the prompt it replaced, but for its closing rule", async () => {
+test("AI Summary compiled from its sections is the Detailed Notes prompt it replaced, but for its closing rule", async () => {
   const {
     BUILTIN_ACTIONS,
     LEGACY_DETAILED_NOTES,
@@ -24,7 +24,7 @@ test("Detailed Notes compiled from its sections is the prompt it replaced, but f
     NOTE_INPUT_PREAMBLE,
     compileTemplatePrompt,
   } = await load();
-  const detailed = BUILTIN_ACTIONS.find((action) => action.translationKey === GENERATE_NOTES_KEY);
+  const summary = BUILTIN_ACTIONS.find((action) => action.translationKey === GENERATE_NOTES_KEY);
   const flat = LEGACY_DETAILED_NOTES.previousPrompts.at(-1);
   // The closing rule is its last paragraph: a note with nothing to summarize now
   // answers with a marker instead of a sentence that was saved as its summary.
@@ -34,7 +34,7 @@ test("Detailed Notes compiled from its sections is the prompt it replaced, but f
     [true, MEETING_INPUT_PREAMBLE],
     [false, NOTE_INPUT_PREAMBLE],
   ]) {
-    const compiled = compileTemplatePrompt(seededRow(detailed), { isMeetingNote }).slice(
+    const compiled = compileTemplatePrompt(seededRow(summary), { isMeetingNote }).slice(
       (SOURCE_FIDELITY_RULE + "\n\n").length
     );
     assert.ok(compiled.startsWith(preamble + body), "everything before the rule is unchanged");
