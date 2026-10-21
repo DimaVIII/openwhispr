@@ -412,15 +412,14 @@
         "optional": "可选",
         "modelId": "模型 ID",
         "modelIdPlaceholder": "填写你的模型 ID",
-        "testConnection": "测试连接",
         "proceed": "继续",
         "clinical": "用于临床转录",
         "clientId": "Client ID",
         "clientSecret": "Client secret",
-        "runTest": "运行测试",
         "testing": "测试中…",
         "connected": "已连接",
         "connectionFailed": "无法验证此连接。",
+        "unverified": "无法验证：{{reason}}",
         "errors": {
           "endpointRequired": "测试前请先输入端点 URL。",
           "invalidUrl": "端点必须是有效的 HTTP 或 HTTPS URL。",
@@ -429,6 +428,7 @@
           "apiKeyRequired": "测试前请先添加 API Key。",
           "credentialsRejected": "服务商拒绝了这些凭据。",
           "endpointNotFound": "该端点未提供兼容 OpenAI 的模型列表。",
+          "transcriptionEndpointNotFound": "此地址不接受转录请求。",
           "modelNotFound": "所选模型无法从此服务商获得。",
           "providerStatus": "服务商返回了状态码 {{status}}。",
           "timeout": "连接测试超时。",
@@ -2110,15 +2110,11 @@
             "step1Desc": "启动 ydotoold 并设置为每次登录时自动运行。",
             "step2Title": "验证是否正在运行"
           },
-          "xclip": {
-            "step1Title": "安装 xclip"
-          },
           "wlCopy": {
             "step1Title": "安装 wl-clipboard",
             "step2Title": "验证安装"
           }
         },
-        "xclipDesc": "KDE Wayland 粘贴用的剪贴板工具（xclip 或 xsel）",
         "nixos": {
           "intro": "您正在使用 NixOS。自动粘贴需要 ydotool 和 /dev/uinput 访问权限，NixOS 通过声明式配置来授予这些权限。",
           "detected": "已检测到",

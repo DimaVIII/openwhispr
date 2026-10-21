@@ -412,15 +412,14 @@
         "optional": "Optional",
         "modelId": "Modell-ID",
         "modelIdPlaceholder": "Modell-ID eingeben",
-        "testConnection": "Verbindung testen",
         "proceed": "Fortfahren",
         "clinical": "FÜR KLINISCHE TRANSKRIPTION",
         "clientId": "Client ID",
         "clientSecret": "Client Secret",
-        "runTest": "Test starten",
         "testing": "Test läuft…",
         "connected": "Verbunden",
         "connectionFailed": "Die Verbindung konnte nicht überprüft werden.",
+        "unverified": "Konnte nicht überprüft werden: {{reason}}",
         "errors": {
           "endpointRequired": "Gib vor dem Test eine Endpoint-URL ein.",
           "invalidUrl": "Der Endpoint muss eine gültige HTTP- oder HTTPS-URL sein.",
@@ -429,6 +428,7 @@
           "apiKeyRequired": "Füge vor dem Test einen API-Schlüssel hinzu.",
           "credentialsRejected": "Der Anbieter hat diese Zugangsdaten abgelehnt.",
           "endpointNotFound": "Der Endpoint stellt keine OpenAI-kompatible Modellliste bereit.",
+          "transcriptionEndpointNotFound": "Unter dieser Adresse werden keine Transkriptionen angenommen.",
           "modelNotFound": "Das ausgewählte Modell ist bei diesem Anbieter nicht verfügbar.",
           "providerStatus": "Der Anbieter hat den Status {{status}} zurückgegeben.",
           "timeout": "Der Verbindungstest hat das Zeitlimit überschritten.",
@@ -2404,15 +2404,11 @@
             "step1Desc": "Starten Sie ydotoold und aktivieren Sie es für jeden Anmeldevorgang.",
             "step2Title": "Prüfen, ob er läuft"
           },
-          "xclip": {
-            "step1Title": "xclip installieren"
-          },
           "wlCopy": {
             "step1Title": "wl-clipboard installieren",
             "step2Title": "Installation überprüfen"
           }
         },
-        "xclipDesc": "Zwischenablage-Tool für KDE-Wayland-Einfügen (xclip oder xsel)",
         "nixos": {
           "intro": "Sie verwenden NixOS. Für das automatische Einfügen werden ydotool und Zugriff auf /dev/uinput benötigt, was NixOS deklarativ gewährt.",
           "detected": "Erkannt",

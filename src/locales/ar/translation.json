@@ -2801,15 +2801,14 @@
         "optional": "اختياري",
         "modelId": "معرف النموذج",
         "modelIdPlaceholder": "اكتب معرف النموذج الخاص بك",
-        "testConnection": "اختبار الاتصال",
         "proceed": "متابعة",
         "clinical": "للتفريغ السريري",
         "clientId": "معرف العميل (Client ID)",
         "clientSecret": "سر العميل (Client Secret)",
-        "runTest": "إجراء الاختبار",
         "testing": "جاري الاختبار...",
         "connected": "متصل",
         "connectionFailed": "تعذر التحقق من الاتصال.",
+        "unverified": "تعذر التحقق: {{reason}}",
         "errors": {
           "endpointRequired": "أدخل عنوان URL لنقطة النهاية قبل الاختبار.",
           "invalidUrl": "يجب أن تكون نقطة النهاية عنوان URL صالحًا لـ HTTP أو HTTPS.",
@@ -2818,6 +2817,7 @@
           "apiKeyRequired": "أضف مفتاح API قبل الاختبار.",
           "credentialsRejected": "رفض المزود بيانات الاعتماد هذه.",
           "endpointNotFound": "لا توفر نقطة النهاية قائمة نماذج متوافقة مع OpenAI.",
+          "transcriptionEndpointNotFound": "لا يستقبل هذا العنوان طلبات التفريغ الصوتي.",
           "modelNotFound": "النموذج المحدد غير متوفر من هذا المزود.",
           "providerStatus": "أعاد المزود رمز الحالة {{status}}.",
           "timeout": "انتهت مهلة اختبار الاتصال.",
@@ -3750,15 +3750,11 @@
             "step1Desc": "ابدأ ydotoold وقم بتمكينه ليعمل في كل عملية تسجيل دخول.",
             "step2Title": "التحقق من أنه قيد التشغيل"
           },
-          "xclip": {
-            "step1Title": "تثبيت xclip"
-          },
           "wlCopy": {
             "step1Title": "تثبيت wl-clipboard",
             "step2Title": "التحقق من التثبيت"
           }
         },
-        "xclipDesc": "أداة الحافظة للصق في KDE Wayland (xclip أو xsel)",
         "nixos": {
           "intro": "أنت تستخدم NixOS. يتطلب اللصق التلقائي الوصول إلى ydotool و /dev/uinput، والذي يمنحه NixOS بشكل تصريحي.",
           "detected": "تم الكشف عنه",

@@ -238,7 +238,9 @@ const CONNECTION_TEST_MAX_OUTPUT_TOKENS = 16;
 const CLOUD_CHUNK_SEGMENT_SECONDS = 240;
 
 const { createAbortError } = require("./abortError");
-const { testProviderConnection } = require("./providerConnectionTest");
+const { describeCortiTokenFailure, testProviderConnection } = require("./providerConnectionTest");
+const { createConnectionCheckCache } = require("./connectionCheckCache");
+const { PAID_KEY_CHECKS_FILE, createPaidKeyCheck } = require("./paidKeyCheck");
 const { createUploadCancelRegistry } = require("./uploadCancelRegistry");
 const { applyOpenWhisprOriginHeader } = require("./sessionHeaders");
 const {
@@ -1630,7 +1632,12 @@ class IPCHandlers {
       return true;
     });
 
-    ipcMain.handle("test-provider-connection", async (_event, config) => {
+    // Every panel showing the same credentials and model shares one answer.
+    const cachedConnectionCheck = createConnectionCheckCache();
+    const runPaidKeyCheck = createPaidKeyCheck(() =>
+      path.join(app.getPath("userData"), PAID_KEY_CHECKS_FILE)
+    );
+    const checkProviderConnection = async (config) => {
       if (config?.provider === "corti" && config?.scope === "transcription") {
         try {
           const clientId = String(config.clientId || "").trim();
@@ -1650,35 +1657,14 @@ class IPCHandlers {
           }
           return { success: true };
         } catch (error) {
-          // errorCode is the machine-readable field the renderer maps to i18n;
-          // the English string stays for logs/back-compat. Only a response
-          // Corti actually sent counts as a rejection (getCortiToken prefixes
-          // those); a fetch that never reached it is a network problem, and
-          // reporting it as "credentials rejected" sends the user to re-type a
-          // key that was never the issue.
-          if (error?.name === "AbortError") {
-            return {
-              success: false,
-              errorCode: "timeout",
-              error: "The connection test timed out.",
-            };
-          }
-          if (!/^(Corti authentication failed|Invalid Corti)/.test(error?.message || "")) {
-            return {
-              success: false,
-              errorCode: "network",
-              error: "The provider could not be reached.",
-            };
-          }
-          return {
-            success: false,
-            errorCode: "credentialsRejected",
-            error: "Corti rejected these credentials.",
-          };
+          return describeCortiTokenFailure(error);
         }
       }
-      return testProviderConnection(config);
-    });
+      return testProviderConnection(config, fetch, runPaidKeyCheck);
+    };
+    ipcMain.handle("test-provider-connection", (_event, config) =>
+      cachedConnectionCheck(config, () => checkProviderConnection(config))
+    );
 
     ipcMain.handle("window-minimize", () => {
       if (this.windowManager.controlPanelWindow) {
@@ -4393,6 +4379,7 @@ class IPCHandlers {
           "globe-preference-state.json",
           ".system-audio-permission",
           "account-scope-binding.json",
+          PAID_KEY_CHECKS_FILE,
         ]) {
           fs.rmSync(path.join(app.getPath("userData"), fileName), { force: true });
         }
@@ -11113,23 +11100,7 @@ class IPCHandlers {
 
     ipcMain.handle("get-ydotool-status", () => {
       const { getYdotoolStatus } = require("./ensureYdotool");
-      const { getLinuxSessionInfo } = require("./linuxSession");
-      const { execFileSync } = require("child_process");
-      const status = getYdotoolStatus();
-      const { isKde } = getLinuxSessionInfo();
-      let hasXclip = false;
-      let hasXsel = false;
-      if (isKde) {
-        try {
-          execFileSync("which", ["xclip"], { timeout: 1000 });
-          hasXclip = true;
-        } catch {}
-        try {
-          execFileSync("which", ["xsel"], { timeout: 1000 });
-          hasXsel = true;
-        } catch {}
-      }
-      return { ...status, hasXclip, hasXsel };
+      return getYdotoolStatus();
     });
 
     ipcMain.handle("get-debug-state", async () => {

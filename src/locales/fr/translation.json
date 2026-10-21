@@ -412,15 +412,14 @@
         "optional": "Facultatif",
         "modelId": "ID du modèle",
         "modelIdPlaceholder": "Saisissez l’ID de votre modèle",
-        "testConnection": "Tester la connexion",
         "proceed": "Continuer",
         "clinical": "POUR LA TRANSCRIPTION CLINIQUE",
         "clientId": "Client ID",
         "clientSecret": "Client secret",
-        "runTest": "Lancer le test",
         "testing": "Test en cours…",
         "connected": "Connecté",
         "connectionFailed": "La connexion n’a pas pu être vérifiée.",
+        "unverified": "Vérification impossible : {{reason}}",
         "errors": {
           "endpointRequired": "Saisissez l’URL de l’endpoint avant de lancer le test.",
           "invalidUrl": "L’endpoint doit être une URL HTTP ou HTTPS valide.",
@@ -429,6 +428,7 @@
           "apiKeyRequired": "Ajoutez une clé API avant de lancer le test.",
           "credentialsRejected": "Le fournisseur a rejeté ces identifiants.",
           "endpointNotFound": "L’endpoint n’expose pas de liste de modèles compatible OpenAI.",
+          "transcriptionEndpointNotFound": "Cette adresse n’accepte pas de transcriptions.",
           "modelNotFound": "Le modèle sélectionné n’est pas disponible auprès de ce fournisseur.",
           "providerStatus": "Le fournisseur a renvoyé le statut {{status}}.",
           "timeout": "Le test de connexion a expiré.",
@@ -2404,15 +2404,11 @@
             "step1Desc": "Démarrez ydotoold et activez-le pour qu'il se lance à chaque connexion.",
             "step2Title": "Vérifier qu'il est en cours d'exécution"
           },
-          "xclip": {
-            "step1Title": "Installer xclip"
-          },
           "wlCopy": {
             "step1Title": "Installer wl-clipboard",
             "step2Title": "Vérifier l'installation"
           }
         },
-        "xclipDesc": "Outil de presse-papiers pour le collage KDE Wayland (xclip ou xsel)",
         "nixos": {
           "intro": "Vous êtes sur NixOS. Le collage automatique nécessite ydotool et l'accès à /dev/uinput, que NixOS accorde de façon déclarative.",
           "detected": "Détecté",
