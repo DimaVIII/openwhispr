@@ -412,15 +412,14 @@
         "optional": "Facoltativo",
         "modelId": "ID modello",
         "modelIdPlaceholder": "Scrivi l’ID del tuo modello",
-        "testConnection": "Prova la connessione",
         "proceed": "Procedi",
         "clinical": "PER LA TRASCRIZIONE CLINICA",
         "clientId": "Client ID",
         "clientSecret": "Client secret",
-        "runTest": "Esegui test",
         "testing": "Test in corso…",
         "connected": "Connesso",
         "connectionFailed": "Non è stato possibile verificare la connessione.",
+        "unverified": "Impossibile verificare: {{reason}}",
         "errors": {
           "endpointRequired": "Inserisci l’URL dell’endpoint prima di eseguire il test.",
           "invalidUrl": "L’endpoint deve essere un URL HTTP o HTTPS valido.",
@@ -429,6 +428,7 @@
           "apiKeyRequired": "Aggiungi una chiave API prima di eseguire il test.",
           "credentialsRejected": "Il provider ha rifiutato queste credenziali.",
           "endpointNotFound": "L’endpoint non espone un elenco di modelli compatibile con OpenAI.",
+          "transcriptionEndpointNotFound": "Questo indirizzo non accetta trascrizioni.",
           "modelNotFound": "Il modello selezionato non è disponibile presso questo provider.",
           "providerStatus": "Il provider ha restituito lo stato {{status}}.",
           "timeout": "Il test di connessione è scaduto.",
@@ -2110,15 +2110,11 @@
             "step1Desc": "Avvia ydotoold e abilitalo per l'esecuzione a ogni accesso.",
             "step2Title": "Verifica che sia in esecuzione"
           },
-          "xclip": {
-            "step1Title": "Installa xclip"
-          },
           "wlCopy": {
             "step1Title": "Installa wl-clipboard",
             "step2Title": "Verifica l'installazione"
           }
         },
-        "xclipDesc": "Strumento appunti per incollare in KDE Wayland (xclip o xsel)",
         "nixos": {
           "intro": "Stai usando NixOS. L'incolla automatico richiede ydotool e l'accesso a /dev/uinput, che NixOS gestisce in modo dichiarativo.",
           "detected": "Rilevato",
@@ -2680,6 +2676,9 @@
         "openai_gpt_4_1_nano": "GPT-4.1 con la latenza più bassa",
         "anthropic_claude_fable_5_1": "Il modello più capace di Anthropic, classe Mythos",
         "anthropic_claude_fable_5": "Precedente modello di punta di classe Mythos",
+        "anthropic_claude_opus_5_5": "Ultimo modello Opus per il ragionamento complesso, contesto da 1M",
+        "anthropic_claude_sonnet_5_5": "Ultimo Sonnet: veloce e capace per il lavoro quotidiano, contesto da 1M",
+        "anthropic_claude_haiku_5_5": "Il modello Claude più veloce ed economico, contesto da 1M",
         "anthropic_claude_sonnet_5": "Modello assistente veloce e capace a costo inferiore",
         "anthropic_claude_sonnet_4_6": "Prestazioni bilanciate",
         "anthropic_claude_sonnet_4_5": "Generazione Sonnet precedente",
@@ -2700,7 +2699,7 @@
         "openai_gpt_5_6_terra": "GPT-5.6 bilanciato per il lavoro quotidiano",
         "openai_gpt_5_6_luna": "Il GPT-5.6 più veloce ed economico",
         "openai_gpt_5_5": "Modello frontier per ragionamento complesso",
-        "anthropic_claude_opus_5": "Il modello Opus più capace, contesto da 1M",
+        "anthropic_claude_opus_5": "Precedente modello di punta Opus, contesto da 1M",
         "anthropic_claude_opus_4_8": "Potente modello Opus orientato a onestà e affidabilità",
         "anthropic_claude_opus_4_7": "Modello Opus potente",
         "anthropic_claude_opus_4_6": "Generazione Opus precedente, contesto da 1M",

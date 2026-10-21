@@ -412,15 +412,14 @@
         "optional": "任意",
         "modelId": "モデル ID",
         "modelIdPlaceholder": "モデル ID を入力",
-        "testConnection": "接続をテスト",
         "proceed": "次へ進む",
         "clinical": "臨床文字起こし向け",
         "clientId": "Client ID",
         "clientSecret": "Client secret",
-        "runTest": "テストを実行",
         "testing": "テスト中…",
         "connected": "接続済み",
         "connectionFailed": "接続を確認できませんでした。",
+        "unverified": "確認できませんでした：{{reason}}",
         "errors": {
           "endpointRequired": "テストの前にエンドポイント URL を入力してください。",
           "invalidUrl": "エンドポイントは有効な HTTP または HTTPS の URL である必要があります。",
@@ -429,6 +428,7 @@
           "apiKeyRequired": "テストの前に API キーを追加してください。",
           "credentialsRejected": "プロバイダーがこの認証情報を拒否しました。",
           "endpointNotFound": "このエンドポイントは OpenAI 互換のモデル一覧を公開していません。",
+          "transcriptionEndpointNotFound": "このアドレスでは文字起こしを受け付けていません。",
           "modelNotFound": "選択したモデルはこのプロバイダーでは利用できません。",
           "providerStatus": "プロバイダーがステータス {{status}} を返しました。",
           "timeout": "接続テストがタイムアウトしました。",
@@ -2110,15 +2110,11 @@
             "step1Desc": "ydotoold を起動し、毎回のログイン時に実行されるよう有効化します。",
             "step2Title": "実行中か確認"
           },
-          "xclip": {
-            "step1Title": "xclipをインストール"
-          },
           "wlCopy": {
             "step1Title": "wl-clipboard をインストール",
             "step2Title": "インストールの確認"
           }
         },
-        "xclipDesc": "KDE Waylandの貼り付け用クリップボードツール（xclipまたはxsel）",
         "nixos": {
           "intro": "NixOSをお使いです。自動貼り付けにはydotoolと/dev/uinputへのアクセスが必要で、NixOSでは宣言的に設定できます。",
           "detected": "検出済み",
@@ -2680,6 +2676,9 @@
         "openai_gpt_4_1_nano": "最低レイテンシーの GPT-4.1",
         "anthropic_claude_fable_5_1": "Anthropic の最も高性能なモデル、Mythos クラス",
         "anthropic_claude_fable_5": "前世代の Mythos クラスのフラッグシップ",
+        "anthropic_claude_opus_5_5": "複雑な推論向けの最新 Opus モデル、100 万トークンコンテキスト",
+        "anthropic_claude_sonnet_5_5": "最新の Sonnet：日常業務向けの高速かつ高性能なモデル、100 万トークンコンテキスト",
+        "anthropic_claude_haiku_5_5": "最速かつ最も低コストな Claude モデル、100 万トークンコンテキスト",
         "anthropic_claude_sonnet_5": "低コストで高速かつ高性能なアシスタントモデル",
         "anthropic_claude_sonnet_4_6": "バランスの取れた性能",
         "anthropic_claude_sonnet_4_5": "前世代の Sonnet モデル",
@@ -2700,7 +2699,7 @@
         "openai_gpt_5_6_terra": "日常業務向けのバランス型 GPT-5.6",
         "openai_gpt_5_6_luna": "最速かつ最も低コストの GPT-5.6",
         "openai_gpt_5_5": "複雑な推論のためのフロンティアモデル",
-        "anthropic_claude_opus_5": "最も高性能な Opus モデル、100 万トークンコンテキスト",
+        "anthropic_claude_opus_5": "前世代の Opus フラッグシップ、100 万トークンコンテキスト",
         "anthropic_claude_opus_4_8": "誠実さと信頼性を重視した強力な Opus モデル",
         "anthropic_claude_opus_4_7": "高性能な Opus モデル",
         "anthropic_claude_opus_4_6": "前世代の Opus、100 万トークンコンテキスト",

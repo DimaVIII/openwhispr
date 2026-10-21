@@ -109,15 +109,13 @@ async function detectServerType(base: string): Promise<void> {
     return;
   }
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
     const res = await fetch(buildApiUrl(base, "/models"), {
       method: "GET",
       signal: controller.signal,
     });
-    clearTimeout(timeoutId);
-
     if (!res.ok) {
       probedBases.add(base);
       return;
@@ -138,6 +136,8 @@ async function detectServerType(base: string): Promise<void> {
     probedBases.add(base);
   } catch {
     probedBases.add(base);
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
@@ -245,6 +245,7 @@ export const openaiProvider: InferenceProvider = {
         const controller = new AbortController();
         const timeoutSeconds = getLlmRequestTimeoutSeconds({ scope: config.inferenceScope });
         const timeoutId = setTimeout(() => controller.abort(), timeoutSeconds * 1000);
+        let readingBody = false;
         try {
           const requestedMaxTokens =
             config.maxTokens ||
@@ -339,11 +340,13 @@ export const openaiProvider: InferenceProvider = {
           }
 
           rememberPreference(openAiBase, type);
-          return res.json();
+          readingBody = true;
+          return await res.json();
         } catch (error) {
           if ((error as Error).name === "AbortError") {
             throw llmRequestTimeoutError(timeoutSeconds);
           }
+          if (readingBody) throw error;
           lastError = error as Error;
           if (retryStrategy.shouldRetry(lastError)) {
             lastRetryableError = lastError;

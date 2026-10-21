@@ -412,15 +412,14 @@
         "optional": "Необязательно",
         "modelId": "ID модели",
         "modelIdPlaceholder": "Укажите ID своей модели",
-        "testConnection": "Проверить подключение",
         "proceed": "Продолжить",
         "clinical": "ДЛЯ КЛИНИЧЕСКОЙ РАСШИФРОВКИ",
         "clientId": "Client ID",
         "clientSecret": "Client secret",
-        "runTest": "Запустить тест",
         "testing": "Проверка…",
         "connected": "Подключено",
         "connectionFailed": "Не удалось проверить подключение.",
+        "unverified": "Не удалось проверить: {{reason}}",
         "errors": {
           "endpointRequired": "Перед тестом введите URL endpoint.",
           "invalidUrl": "Endpoint должен быть корректным HTTP- или HTTPS-URL.",
@@ -429,6 +428,7 @@
           "apiKeyRequired": "Перед тестом добавьте API-ключ.",
           "credentialsRejected": "Провайдер отклонил эти учётные данные.",
           "endpointNotFound": "Endpoint не предоставляет список моделей, совместимый с OpenAI.",
+          "transcriptionEndpointNotFound": "По этому адресу не принимаются запросы на транскрипцию.",
           "modelNotFound": "Выбранная модель недоступна у этого провайдера.",
           "providerStatus": "Провайдер вернул статус {{status}}.",
           "timeout": "Время ожидания проверки подключения истекло.",
@@ -2114,15 +2114,11 @@
             "step1Desc": "Запустите ydotoold и включите его автозапуск при каждом входе.",
             "step2Title": "Проверить, что он работает"
           },
-          "xclip": {
-            "step1Title": "Установить xclip"
-          },
           "wlCopy": {
             "step1Title": "Установить wl-clipboard",
             "step2Title": "Проверить установку"
           }
         },
-        "xclipDesc": "Инструмент буфера обмена для вставки в KDE Wayland (xclip или xsel)",
         "nixos": {
           "intro": "Вы используете NixOS. Для автоматической вставки требуются ydotool и доступ к /dev/uinput — NixOS предоставляет это декларативно.",
           "detected": "Обнаружено",
@@ -2696,6 +2692,9 @@
         "openai_gpt_4_1_nano": "Минимальная задержка GPT-4.1",
         "anthropic_claude_fable_5_1": "Самая мощная модель Anthropic, класс Mythos",
         "anthropic_claude_fable_5": "Предыдущая флагманская модель класса Mythos",
+        "anthropic_claude_opus_5_5": "Новейшая модель Opus для сложных рассуждений, контекст 1M",
+        "anthropic_claude_sonnet_5_5": "Новейший Sonnet: быстрый и мощный для повседневной работы, контекст 1M",
+        "anthropic_claude_haiku_5_5": "Самая быстрая и недорогая модель Claude, контекст 1M",
         "anthropic_claude_sonnet_5": "Быстрая и мощная модель-помощник по низкой цене",
         "anthropic_claude_sonnet_4_6": "Сбалансированная производительность",
         "anthropic_claude_sonnet_4_5": "Предыдущее поколение Sonnet",
@@ -2716,7 +2715,7 @@
         "openai_gpt_5_6_terra": "Сбалансированная GPT-5.6 для повседневной работы",
         "openai_gpt_5_6_luna": "Самая быстрая и недорогая GPT-5.6",
         "openai_gpt_5_5": "Фронтирная модель для сложного рассуждения",
-        "anthropic_claude_opus_5": "Самая мощная модель Opus, контекст 1M",
+        "anthropic_claude_opus_5": "Предыдущая флагманская модель Opus, контекст 1M",
         "anthropic_claude_opus_4_8": "Мощная модель Opus с упором на честность и надёжность",
         "anthropic_claude_opus_4_7": "Мощная модель Opus",
         "anthropic_claude_opus_4_6": "Предыдущее поколение Opus, контекст 1M",

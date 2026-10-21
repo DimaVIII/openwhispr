@@ -412,15 +412,14 @@
         "optional": "選填",
         "modelId": "模型 ID",
         "modelIdPlaceholder": "填寫你的模型 ID",
-        "testConnection": "測試連線",
         "proceed": "繼續",
         "clinical": "用於臨床逐字稿",
         "clientId": "Client ID",
         "clientSecret": "Client secret",
-        "runTest": "執行測試",
         "testing": "測試中…",
         "connected": "已連接",
         "connectionFailed": "無法驗證這個連線。",
+        "unverified": "無法驗證：{{reason}}",
         "errors": {
           "endpointRequired": "測試前請先輸入端點 URL。",
           "invalidUrl": "端點必須是有效的 HTTP 或 HTTPS URL。",
@@ -429,6 +428,7 @@
           "apiKeyRequired": "測試前請先新增 API Key。",
           "credentialsRejected": "服務商拒絕了這些憑證。",
           "endpointNotFound": "這個端點未提供相容 OpenAI 的模型清單。",
+          "transcriptionEndpointNotFound": "此位址不接受轉錄請求。",
           "modelNotFound": "所選模型無法從此服務商取得。",
           "providerStatus": "服務商回傳了狀態碼 {{status}}。",
           "timeout": "連線測試逾時。",
@@ -2110,15 +2110,11 @@
             "step1Desc": "啟動 ydotoold 並設定為每次登入時自動執行。",
             "step2Title": "驗證是否正在執行"
           },
-          "xclip": {
-            "step1Title": "安裝 xclip"
-          },
           "wlCopy": {
             "step1Title": "安裝 wl-clipboard",
             "step2Title": "驗證安裝"
           }
         },
-        "xclipDesc": "KDE Wayland 貼上用的剪貼簿工具（xclip 或 xsel）",
         "nixos": {
           "intro": "你正在使用 NixOS。自動貼上需要 ydotool 及 /dev/uinput 存取權限，NixOS 以宣告式方式授予這些權限。",
           "detected": "已偵測",
@@ -2680,6 +2676,9 @@
         "openai_gpt_4_1_nano": "最低延遲的 GPT-4.1",
         "anthropic_claude_fable_5_1": "Anthropic 最強大的模型，Mythos 級",
         "anthropic_claude_fable_5": "上一代 Mythos 級旗艦模型",
+        "anthropic_claude_opus_5_5": "最新 Opus 模型，適合複雜推理，1M 上下文",
+        "anthropic_claude_sonnet_5_5": "最新 Sonnet：快速強大，適合日常工作，1M 上下文",
+        "anthropic_claude_haiku_5_5": "速度最快、成本最低的 Claude 模型，1M 上下文",
         "anthropic_claude_sonnet_5": "快速且強大的助理模型，成本更低",
         "anthropic_claude_sonnet_4_6": "均衡表現",
         "anthropic_claude_sonnet_4_5": "上一代 Sonnet 模型",
@@ -2700,7 +2699,7 @@
         "openai_gpt_5_6_terra": "均衡的 GPT-5.6，適合日常工作",
         "openai_gpt_5_6_luna": "速度最快、成本最低的 GPT-5.6",
         "openai_gpt_5_5": "複雜推理前沿模型",
-        "anthropic_claude_opus_5": "最強大的 Opus 模型，1M 上下文",
+        "anthropic_claude_opus_5": "上一代 Opus 旗艦模型，1M 上下文",
         "anthropic_claude_opus_4_8": "強大的 Opus 模型，注重誠實與可靠",
         "anthropic_claude_opus_4_7": "強大的 Opus 模型",
         "anthropic_claude_opus_4_6": "上一代 Opus 模型，1M 上下文",

@@ -412,15 +412,14 @@
         "optional": "Optional",
         "modelId": "Model ID",
         "modelIdPlaceholder": "Write your model ID",
-        "testConnection": "Test Connection",
         "proceed": "Proceed",
         "clinical": "FOR CLINICAL TRANSCRIPTION",
         "clientId": "Client ID",
         "clientSecret": "Client secret",
-        "runTest": "Run Test",
         "testing": "Testing…",
         "connected": "Connected",
         "connectionFailed": "The connection could not be verified.",
+        "unverified": "Couldn't verify: {{reason}}",
         "errors": {
           "endpointRequired": "Enter an endpoint URL before testing.",
           "invalidUrl": "The endpoint must be a valid HTTP or HTTPS URL.",
@@ -429,6 +428,7 @@
           "apiKeyRequired": "Add an API key before testing.",
           "credentialsRejected": "The provider rejected these credentials.",
           "endpointNotFound": "The endpoint does not expose an OpenAI-compatible model list.",
+          "transcriptionEndpointNotFound": "Nothing takes transcriptions at this address.",
           "modelNotFound": "The selected model is not available from this provider.",
           "providerStatus": "The provider returned status {{status}}.",
           "timeout": "The connection test timed out.",
@@ -2404,15 +2404,11 @@
             "step1Desc": "Start ydotoold and enable it so it runs on every login.",
             "step2Title": "Verify it's running"
           },
-          "xclip": {
-            "step1Title": "Install xclip"
-          },
           "wlCopy": {
             "step1Title": "Install wl-clipboard",
             "step2Title": "Verify installation"
           }
         },
-        "xclipDesc": "Clipboard tool for KDE Wayland paste (xclip or xsel)",
         "nixos": {
           "intro": "You're on NixOS. Auto-paste needs ydotool and /dev/uinput access, which NixOS grants declaratively.",
           "detected": "Detected",
@@ -2778,6 +2774,9 @@
         "openai_gpt_4_1_nano": "Lowest latency GPT-4.1",
         "anthropic_claude_fable_5_1": "Anthropic's most capable model, Mythos-class",
         "anthropic_claude_fable_5": "Previous Mythos-class flagship",
+        "anthropic_claude_opus_5_5": "Latest Opus model for complex reasoning, 1M context",
+        "anthropic_claude_sonnet_5_5": "Latest Sonnet: fast and capable for everyday work, 1M context",
+        "anthropic_claude_haiku_5_5": "Fastest, lowest-cost Claude model, 1M context",
         "anthropic_claude_sonnet_5": "Fast, capable assistant model at lower cost",
         "anthropic_claude_sonnet_4_6": "Balanced performance",
         "anthropic_claude_sonnet_4_5": "Previous Sonnet generation",
@@ -2798,7 +2797,7 @@
         "openai_gpt_5_6_terra": "Balanced GPT-5.6 for everyday work",
         "openai_gpt_5_6_luna": "Fastest, lowest-cost GPT-5.6",
         "openai_gpt_5_5": "Frontier model for complex reasoning",
-        "anthropic_claude_opus_5": "Most capable Opus model, 1M context",
+        "anthropic_claude_opus_5": "Previous Opus flagship, 1M context",
         "anthropic_claude_opus_4_8": "Powerful Opus model tuned for honesty and reliability",
         "anthropic_claude_opus_4_7": "Powerful Opus model",
         "anthropic_claude_opus_4_6": "Previous Opus generation, 1M context",
