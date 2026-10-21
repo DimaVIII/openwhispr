@@ -57,7 +57,7 @@
       },
       "appSpeakerLabels": {
         "title": "Name speakers from Zoom",
-        "description": "Labels voices with the participant names and active speaker shown in the Zoom desktop app. Uses the Accessibility permission and works with Identify and label speakers on."
+        "description": "Labels voices with the participant names and active speaker shown in the Zoom desktop app. Uses the Accessibility permission and works with Identify and label speakers on. Keep Zoom in Speaker view: Gallery view doesn't show who's talking."
       }
     }
   },

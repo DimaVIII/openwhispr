@@ -57,7 +57,7 @@
       },
       "appSpeakerLabels": {
         "title": "Nomina i partecipanti da Zoom",
-        "description": "Etichetta le voci con i nomi dei partecipanti e chi sta parlando nell'app desktop di Zoom. Usa il permesso Accessibilità e funziona con \"Identifica ed etichetta i partecipanti\" attivo."
+        "description": "Etichetta le voci con i nomi dei partecipanti e chi sta parlando nell'app desktop di Zoom. Usa il permesso Accessibilità e funziona con \"Identifica ed etichetta i partecipanti\" attivo. Tieni Zoom nella vista relatore: la vista galleria non mostra chi sta parlando."
       }
     }
   },

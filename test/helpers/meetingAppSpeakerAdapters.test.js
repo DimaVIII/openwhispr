@@ -9,6 +9,8 @@ const {
 } = require("../../src/helpers/meetingAppSpeakerAdapters");
 
 const ZOOM_SPEAKER_VIEW = require("./fixtures/zoom-7.2-speaker-view.json");
+// One live session, Priya on the Mac and Omar on a phone.
+const ZOOM_TWO_PERSON = require("./fixtures/zoom-7.2-two-person.json");
 
 // Synthetic trees for layouts not dumped yet, shaped like Zoom 7.2's (tiles are
 // AXTabGroups; see the fixture).
@@ -173,6 +175,30 @@ test("real Zoom 7.2 speaker view: the large tile speaks, the home window is igno
     { id: "omar haddad", name: "Omar Haddad", isSelf: false },
     { id: "priya shah", name: "Priya Shah", isSelf: true },
   ]);
+});
+
+test("real Zoom 7.2 two-person session: only speaker views name a speaker", () => {
+  const speaker = (snapshot) => {
+    const state = interpretMeetingAppSnapshot(snapshot);
+    return [state.strategy, state.speakingIds];
+  };
+
+  assert.deepEqual(speaker(ZOOM_TWO_PERSON.speakerViewTalking), ["speaker-view", ["omar haddad"]]);
+  // Sharing: the floating video window in active-speaker mode is a speaker view.
+  assert.deepEqual(speaker(ZOOM_TWO_PERSON.sharingFloatingActiveSpeaker), [
+    "speaker-view",
+    ["omar haddad"],
+  ]);
+  // Gallery labels are identical whether Omar talks or not, and so are the
+  // floating window's two tiles: nothing to read a speaker from.
+  assert.deepEqual(ZOOM_TWO_PERSON.galleryTalking.windows, ZOOM_TWO_PERSON.gallerySilent.windows);
+  assert.deepEqual(speaker(ZOOM_TWO_PERSON.galleryTalking), ["none", []]);
+  assert.deepEqual(speaker(ZOOM_TWO_PERSON.sharingFloatingGallery), ["none", []]);
+
+  assert.deepEqual(
+    interpretMeetingAppSnapshot(ZOOM_TWO_PERSON.galleryTalking).participants.map(({ id }) => id),
+    ["priya shah", "omar haddad"]
+  );
 });
 
 test("the home window's profile button marks the user's tile", () => {

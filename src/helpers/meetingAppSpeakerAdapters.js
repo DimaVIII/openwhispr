@@ -3,10 +3,12 @@
 // app's tree into a roster plus the participants it shows as speaking;
 // meetingSpeakerFusion.js matches those against the voices in the audio.
 //
-// Tile and speaker-view rules are checked against a `--dump` of Zoom 7.2.2 in
-// speaker view (test/helpers/fixtures/zoom-7.2-speaker-view.json). Its tiles
-// never said "Talking"; the tile-status and "Talking:" rules are still
-// provisional until gallery view and screen sharing are dumped too. Meeting
+// Tile and speaker-view rules are checked against `--dump`s of Zoom 7.2.2
+// (test/helpers/fixtures/zoom-7.2-*.json). Only speaker view, and the floating
+// video window's active-speaker mode while sharing, show who talks: gallery
+// labels are identical whether anyone talks or not, and no tile ever said
+// "Talking". The tile-status and "Talking:" rules stay provisional; the
+// "Talking:" header is expected only for people watching someone else share. Meeting
 // apps restyle their UI without notice, which is why the rules live here
 // beside their tests rather than in the native helper.
 

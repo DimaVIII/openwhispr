@@ -1,0 +1,263 @@
+{
+  "speakerViewTalking": {
+    "type": "snapshot",
+    "at": 1792510975547,
+    "bundleId": "us.zoom.xos",
+    "windows": [
+      {
+        "title": "Zoom Meeting",
+        "frame": [61, 242, 1095, 730],
+        "nodes": [
+          {
+            "depth": 1,
+            "role": "AXTabGroup",
+            "description": "Omar Haddad, Computer audio unmuted",
+            "frame": [104, 404, 1009, 568]
+          },
+          {
+            "depth": 1,
+            "role": "AXTabGroup",
+            "description": "Priya Shah, Computer audio unmuted, Video on",
+            "frame": [529, 300, 160, 90]
+          },
+          {
+            "depth": 2,
+            "role": "AXButton",
+            "description": "Omar Haddad",
+            "frame": [109, 941, 100, 26]
+          },
+          {
+            "depth": 2,
+            "role": "AXButton",
+            "description": "Priya Shah",
+            "frame": [531, 370, 68, 18]
+          }
+        ]
+      }
+    ]
+  },
+  "galleryTalking": {
+    "type": "snapshot",
+    "at": 1792511098762,
+    "bundleId": "us.zoom.xos",
+    "windows": [
+      {
+        "title": "Zoom Meeting",
+        "frame": [61, 242, 1095, 730],
+        "nodes": [
+          {
+            "depth": 1,
+            "role": "AXTabGroup",
+            "description": "Priya Shah, Computer audio unmuted, Video on",
+            "help": "Press Control+Command+Arrow key to move order",
+            "frame": [611, 455, 528, 297]
+          },
+          {
+            "depth": 1,
+            "role": "AXTabGroup",
+            "description": "Omar Haddad, Computer audio unmuted, Video on",
+            "help": "Press Control+Command+Arrow key to move order",
+            "frame": [77, 455, 528, 297]
+          },
+          {
+            "depth": 2,
+            "role": "AXButton",
+            "description": "Priya Shah",
+            "frame": [616, 721, 76, 26]
+          },
+          {
+            "depth": 2,
+            "role": "AXButton",
+            "description": "Omar Haddad",
+            "frame": [82, 721, 84, 26]
+          }
+        ]
+      }
+    ]
+  },
+  "gallerySilent": {
+    "type": "snapshot",
+    "at": 1792511142742,
+    "bundleId": "us.zoom.xos",
+    "windows": [
+      {
+        "title": "Zoom Meeting",
+        "frame": [61, 242, 1095, 730],
+        "nodes": [
+          {
+            "depth": 1,
+            "role": "AXTabGroup",
+            "description": "Priya Shah, Computer audio unmuted, Video on",
+            "help": "Press Control+Command+Arrow key to move order",
+            "frame": [611, 455, 528, 297]
+          },
+          {
+            "depth": 1,
+            "role": "AXTabGroup",
+            "description": "Omar Haddad, Computer audio unmuted, Video on",
+            "help": "Press Control+Command+Arrow key to move order",
+            "frame": [77, 455, 528, 297]
+          },
+          {
+            "depth": 2,
+            "role": "AXButton",
+            "description": "Priya Shah",
+            "frame": [616, 721, 76, 26]
+          },
+          {
+            "depth": 2,
+            "role": "AXButton",
+            "description": "Omar Haddad",
+            "frame": [82, 721, 84, 26]
+          }
+        ]
+      }
+    ]
+  },
+  "sharingFloatingGallery": {
+    "type": "snapshot",
+    "at": 1792511207374,
+    "bundleId": "us.zoom.xos",
+    "windows": [
+      {
+        "title": "zoom share statusbar window",
+        "frame": [733, 39, 334, 22],
+        "nodes": [
+          {
+            "depth": 1,
+            "role": "AXButton",
+            "description": "Stop share",
+            "frame": [969, 38, 99, 24]
+          },
+          {
+            "depth": 1,
+            "role": "AXButton",
+            "description": "Move to bottom",
+            "frame": [732, 38, 24, 24]
+          },
+          {
+            "depth": 1,
+            "role": "AXImage",
+            "description": "You are using enhanced encryption",
+            "help": "You are using enhanced encryption",
+            "frame": [945, 41, 18, 18]
+          }
+        ]
+      },
+      {
+        "title": "zoom annotation entrypoint",
+        "frame": [10, 1103, 56, 56],
+        "nodes": [
+          {
+            "depth": 1,
+            "role": "AXButton",
+            "description": "Annotate, current location: left-bottom corner, press arrow keys to change location",
+            "frame": [13, 1106, 50, 50]
+          }
+        ]
+      },
+      {
+        "title": "Annotation - Zoom",
+        "frame": [0, 0, 1800, 1169],
+        "nodes": []
+      },
+      {
+        "title": "zoom floating video window",
+        "frame": [1518, 50, 252, 318],
+        "nodes": [
+          {
+            "depth": 1,
+            "role": "AXTabGroup",
+            "description": "Priya Shah, Computer audio unmuted, Video on",
+            "frame": [1524, 86, 240, 135]
+          },
+          {
+            "depth": 1,
+            "role": "AXTabGroup",
+            "description": "Omar Haddad, Computer audio unmuted, Video on",
+            "frame": [1524, 227, 240, 135]
+          },
+          {
+            "depth": 2,
+            "role": "AXButton",
+            "description": "Priya Shah",
+            "frame": [1529, 190, 76, 26]
+          },
+          {
+            "depth": 2,
+            "role": "AXButton",
+            "description": "Omar Haddad",
+            "frame": [1529, 331, 84, 26]
+          }
+        ]
+      }
+    ]
+  },
+  "sharingFloatingActiveSpeaker": {
+    "type": "snapshot",
+    "at": 1792511287887,
+    "bundleId": "us.zoom.xos",
+    "windows": [
+      {
+        "title": "zoom share statusbar window",
+        "frame": [733, 39, 334, 22],
+        "nodes": [
+          {
+            "depth": 1,
+            "role": "AXButton",
+            "description": "Stop share",
+            "frame": [969, 38, 99, 24]
+          },
+          {
+            "depth": 1,
+            "role": "AXButton",
+            "description": "Move to bottom",
+            "frame": [732, 38, 24, 24]
+          },
+          {
+            "depth": 1,
+            "role": "AXImage",
+            "description": "You are using enhanced encryption",
+            "help": "You are using enhanced encryption",
+            "frame": [945, 41, 18, 18]
+          }
+        ]
+      },
+      {
+        "title": "zoom annotation entrypoint",
+        "frame": [10, 1103, 56, 56],
+        "nodes": [
+          {
+            "depth": 1,
+            "role": "AXButton",
+            "description": "Annotate, current location: left-bottom corner, press arrow keys to change location",
+            "frame": [13, 1106, 50, 50]
+          }
+        ]
+      },
+      {
+        "title": "Annotation - Zoom",
+        "frame": [0, 0, 1800, 1169],
+        "nodes": []
+      },
+      {
+        "title": "zoom floating video window",
+        "frame": [1518, 50, 252, 177],
+        "nodes": [
+          {
+            "depth": 1,
+            "role": "AXTabGroup",
+            "description": "Omar Haddad, Computer audio unmuted, Video on",
+            "frame": [1524, 86, 240, 135]
+          },
+          {
+            "depth": 2,
+            "role": "AXButton",
+            "description": "Omar Haddad",
+            "frame": [1529, 190, 84, 26]
+          }
+        ]
+      }
+    ]
+  }
+}

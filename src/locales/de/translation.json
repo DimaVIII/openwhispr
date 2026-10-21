@@ -57,7 +57,7 @@
       },
       "appSpeakerLabels": {
         "title": "Sprecher aus Zoom benennen",
-        "description": "Beschriftet Stimmen mit den Teilnehmernamen und dem aktiven Sprecher aus der Zoom-Desktop-App. Nutzt die Bedienungshilfen-Berechtigung und funktioniert mit „Sprecher erkennen und beschriften“."
+        "description": "Beschriftet Stimmen mit den Teilnehmernamen und dem aktiven Sprecher aus der Zoom-Desktop-App. Nutzt die Bedienungshilfen-Berechtigung und funktioniert mit „Sprecher erkennen und beschriften“. Lass Zoom in der Sprecheransicht: Die Galerieansicht zeigt nicht, wer spricht."
       }
     }
   },

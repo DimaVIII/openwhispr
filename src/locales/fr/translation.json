@@ -57,7 +57,7 @@
       },
       "appSpeakerLabels": {
         "title": "Nommer les intervenants depuis Zoom",
-        "description": "Étiquette les voix avec les noms des participants et l'intervenant actif affichés dans l'app Zoom pour ordinateur. Utilise l'autorisation Accessibilité et fonctionne avec « Identifier et étiqueter les intervenants » activé."
+        "description": "Étiquette les voix avec les noms des participants et l'intervenant actif affichés dans l'app Zoom pour ordinateur. Utilise l'autorisation Accessibilité et fonctionne avec « Identifier et étiqueter les intervenants » activé. Gardez Zoom en mode intervenant : le mode galerie n'indique pas qui parle."
       }
     }
   },
