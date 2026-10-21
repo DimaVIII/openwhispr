@@ -11,7 +11,7 @@ const {
 const path = require("path");
 const fs = require("fs");
 const { randomUUID } = require("crypto");
-const { isDeepStrictEqual } = require("node:util");
+const { isDeepStrictEqual } = require("util");
 const noteUndo = require("./noteUndo");
 const debugLogger = require("./debugLogger");
 const { buildNoteSearchQuery } = require("./noteSearch");
@@ -743,32 +743,31 @@ class DatabaseManager {
             BUILTIN_ACTIONS.find((action) => action.translationKey === GENERATE_NOTES_KEY)
           );
 
-        const legacy = LEGACY_DETAILED_NOTES;
         const legacyRows = this.db
           .prepare("SELECT * FROM actions WHERE is_builtin = 1 AND translation_key = ?")
-          .all(legacy.translationKey);
+          .all(LEGACY_DETAILED_NOTES.translationKey);
         const deleteLegacy = this.db.prepare("DELETE FROM actions WHERE id = ?");
         const settleLegacy = this.db.prepare(
           "UPDATE actions SET client_id = COALESCE(client_id, ?), sort_order = ?, prompt = ?, sections = ? WHERE id = ?"
         );
         for (const row of legacyRows) {
-          const stockContent = hasStockContent(row, legacy);
+          const stockContent = hasStockContent(row, LEGACY_DETAILED_NOTES);
           if (
             summaryIsStock &&
             stockContent &&
-            row.name === legacy.name &&
-            row.description === legacy.description &&
-            row.icon === legacy.icon
+            row.name === LEGACY_DETAILED_NOTES.name &&
+            row.description === LEGACY_DETAILED_NOTES.description &&
+            row.icon === LEGACY_DETAILED_NOTES.icon
           ) {
             deleteLegacy.run(row.id);
           } else {
             // A previous flat default still moves to sections, keeping the user's name.
             const upgradesPrompt = stockContent && row.sections === null;
             settleLegacy.run(
-              legacy.translationKey,
-              legacy.sortOrder,
-              upgradesPrompt ? legacy.prompt : row.prompt,
-              upgradesPrompt ? JSON.stringify(legacy.sections) : row.sections,
+              LEGACY_DETAILED_NOTES.translationKey,
+              LEGACY_DETAILED_NOTES.sortOrder,
+              upgradesPrompt ? LEGACY_DETAILED_NOTES.prompt : row.prompt,
+              upgradesPrompt ? JSON.stringify(LEGACY_DETAILED_NOTES.sections) : row.sections,
               row.id
             );
           }
