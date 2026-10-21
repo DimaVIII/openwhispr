@@ -136,8 +136,8 @@ test("marks the linked event and offers removal first", async (t) => {
 
   const rows = rowTexts(host).filter((text) => text !== "");
   assert.equal(rows[0], "notes.eventLink.removeEvent");
-  assert.equal(rowWith(host, "Team Standup").getAttribute("aria-pressed"), "true");
-  assert.equal(rowWith(host, "Focus").getAttribute("aria-pressed"), "false");
+  assert.equal(rowWith(host, "Team Standup").getAttribute("aria-current"), "true");
+  assert.equal(rowWith(host, "Focus").hasAttribute("aria-current"), false);
   assert.equal(!!rowWith(host, "Team Standup").querySelector("svg[aria-hidden='true']"), true);
   assert.equal(rowWith(host, "Focus").querySelectorAll("svg").length, 0);
 
@@ -173,6 +173,65 @@ test("shows the right empty state", async (t) => {
   const { act, host } = await mount(t, { events: EVENTS });
   await act(() => type(host, "zzz"));
   assert.equal(message(host), "notes.eventLink.noResults");
+});
+
+test("shows a loading state until the events arrive", async (t) => {
+  const { host } = await mount(t, { events: null });
+
+  assert.equal(host.querySelector("[role='status']")?.textContent.trim(), "common.loading");
+  assert.equal(host.querySelector("p"), null, "no empty-state message while loading");
+
+  for (const props of [{ loadFailed: true }, { calendarConnected: false }]) {
+    const other = await mount(t, { events: null, ...props });
+    assert.equal(other.host.querySelector("[role='status']"), null);
+    other.host.remove();
+  }
+});
+
+test("the search box has an accessible name", async (t) => {
+  const { host } = await mount(t, { events: EVENTS });
+
+  assert.equal(searchInput(host).getAttribute("aria-label"), "notes.eventLink.searchPlaceholder");
+});
+
+const press = (target, key) =>
+  target.dispatchEvent(new happyWindow.KeyboardEvent("keydown", { key, bubbles: true }));
+
+test("Enter in a search picks the first match, and does nothing without one", async (t) => {
+  const { act, host, calls } = await mount(t, { events: EVENTS });
+
+  await act(() => press(searchInput(host), "Enter"));
+  assert.deepEqual(calls.select, [], "an empty search box never links the day's first event");
+
+  await act(() => type(host, "zzz"));
+  await act(() => press(searchInput(host), "Enter"));
+  assert.deepEqual(calls.select, []);
+
+  await act(() => type(host, "stand"));
+  await act(() => press(searchInput(host), "Enter"));
+  assert.deepEqual(
+    calls.select.map((selected) => selected.id),
+    ["standup"]
+  );
+});
+
+test("arrow keys move between the search box and the rows", async (t) => {
+  const { act, host } = await mount(t, { events: EVENTS, linkedEventId: "standup" });
+  const focused = () => happyWindow.document.activeElement?.textContent?.trim() ?? "";
+  searchInput(host).focus();
+
+  await act(() => press(happyWindow.document.activeElement, "ArrowDown"));
+  assert.equal(focused(), "notes.eventLink.removeEvent");
+  await act(() => press(happyWindow.document.activeElement, "ArrowDown"));
+  assert.match(focused(), /^Focus/);
+  await act(() => press(happyWindow.document.activeElement, "ArrowDown"));
+  await act(() => press(happyWindow.document.activeElement, "ArrowDown"));
+  assert.match(focused(), /^Team Standup/, "stops at the last row");
+
+  for (let i = 0; i < 4; i += 1) {
+    await act(() => press(happyWindow.document.activeElement, "ArrowUp"));
+  }
+  assert.equal(happyWindow.document.activeElement === searchInput(host), true, "stops at the box");
 });
 
 test("titles keep their own direction", async (t) => {

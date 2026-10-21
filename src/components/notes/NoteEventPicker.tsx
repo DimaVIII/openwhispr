@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Check, ChevronLeft, Unlink } from "../icons";
+import { Check, ChevronLeft, Loader2, Unlink } from "../icons";
 import { CALENDAR_LOOKBACK_DAYS } from "../../helpers/calendarCacheWindow";
 import { useUiLocale } from "../../hooks/useUiLocale";
 import { formatEventWhen } from "../../utils/dateFormatting";
@@ -53,6 +53,7 @@ export default function NoteEventPicker({
   const { t } = useTranslation();
   const locale = useUiLocale();
   const [query, setQuery] = useState("");
+  const pickerRef = useRef<HTMLDivElement>(null);
   const searching = query.trim().length > 0;
 
   const rows = useMemo(() => {
@@ -77,9 +78,30 @@ export default function NoteEventPicker({
       };
     }
   }
+  const loading = calendarConnected && !loadFailed && events === null;
+
+  // Arrow keys walk the search box and the rows; Enter in a search picks the first match.
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.nativeEvent.isComposing) return;
+    if (event.key === "Enter" && event.target instanceof HTMLInputElement) {
+      if (!searching || rows.length === 0) return;
+      event.preventDefault();
+      onSelect(rows[0]);
+      return;
+    }
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    const items = Array.from(
+      pickerRef.current?.querySelectorAll<HTMLElement>("input, [data-event-row]") ?? []
+    );
+    const index = items.indexOf(document.activeElement as HTMLElement);
+    if (index === -1) return;
+    event.preventDefault();
+    const next = event.key === "ArrowDown" ? index + 1 : index - 1;
+    items[Math.max(0, Math.min(items.length - 1, next))].focus();
+  };
 
   return (
-    <>
+    <div ref={pickerRef} onKeyDown={handleKeyDown}>
       <div className="flex items-center gap-1 p-2 border-b border-border/70">
         <button
           type="button"
@@ -94,6 +116,7 @@ export default function NoteEventPicker({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={t("notes.eventLink.searchPlaceholder")}
+          aria-label={t("notes.eventLink.searchPlaceholder")}
           className="w-full px-1 py-1.5 rounded-md bg-transparent text-xs text-foreground placeholder:text-foreground/45 outline-none border-none appearance-none"
           autoFocus
         />
@@ -101,7 +124,7 @@ export default function NoteEventPicker({
 
       <div className="max-h-64 overflow-y-auto p-1">
         {linkedEventId && (
-          <button type="button" onClick={onRemove} className={ROW_CLASS}>
+          <button type="button" onClick={onRemove} data-event-row className={ROW_CLASS}>
             <Unlink size={14} className="shrink-0 text-foreground/50" />
             <span>{t("notes.eventLink.removeEvent")}</span>
           </button>
@@ -112,7 +135,8 @@ export default function NoteEventPicker({
             key={event.id}
             type="button"
             onClick={() => onSelect(event)}
-            aria-pressed={event.id === linkedEventId}
+            aria-current={event.id === linkedEventId || undefined}
+            data-event-row
             className={ROW_CLASS}
           >
             <EventDot color={event.calendar_color} />
@@ -130,6 +154,16 @@ export default function NoteEventPicker({
           </button>
         ))}
 
+        {loading && (
+          <div
+            role="status"
+            className="flex items-center justify-center gap-1.5 px-3 py-4 text-[11px] text-foreground/45"
+          >
+            <Loader2 size={12} className="animate-spin" aria-hidden="true" />
+            {t("common.loading")}
+          </div>
+        )}
+
         {emptyState && (
           <div className="px-3 py-4 text-center text-[11px] text-foreground/45">
             <p>{emptyState.message}</p>
@@ -137,6 +171,6 @@ export default function NoteEventPicker({
           </div>
         )}
       </div>
-    </>
+    </div>
   );
 }
