@@ -53,6 +53,7 @@ import {
   observeAndroidPurchaseUpdates,
 } from '../billing';
 import { reconcileStoreBilling } from '@/lib/billingReconciliation';
+import { useUsageStore } from '@/store/useUsageStore';
 const selected = { productId: 'pro', storeProductId: 'pro:annual', id: 'annual:trial' };
 const params = {
   platform: 'android' as const,
@@ -325,6 +326,39 @@ it('does not create a second purchase while payment is pending', async () => {
   expect(await androidPurchaseController.onPurchase(params)).toMatchObject({ type: 'failed' });
   expect(Purchases.purchaseSubscriptionOption).not.toHaveBeenCalled();
 });
+it.each([
+  ['access-pending', true, 'play_store', false, [], 'idle'],
+  ['access-pending', false, null, true, [], 'access-pending'],
+  ['access-pending', false, null, false, ['workspace'], 'access-pending'],
+  ['payment-pending', true, 'play_store', false, [], 'payment-pending'],
+] as const)(
+  'reconciles a later usage grant for %s with provider %s, store %s, personal %s and workspaces %j',
+  (status, provider, providerStore, personal, workspaceIds, expected) => {
+    const stop = observeAndroidPurchaseUpdates();
+    const previous = { ...useUsageStore.getState(), usage: { ...mockUsage } };
+    useAndroidBillingStatus.setState({
+      accounts: { 'billing-a': status, 'billing-b': 'access-pending' },
+    });
+    mockUsage.isSubscribed = true;
+    mockUsage.entitlementSources = {
+      provider,
+      providerStore,
+      personal,
+      workspaceIds: [...workspaceIds],
+    };
+    const listener = jest.mocked(useUsageStore.subscribe).mock.calls.at(-1)![0];
+    const cached = useUsageStore.getState();
+    listener(cached, cached);
+    expect(useAndroidBillingStatus.getState().accounts['billing-a']).toBe(status);
+    listener(useUsageStore.getState(), previous as ReturnType<typeof useUsageStore.getState>);
+    expect(useAndroidBillingStatus.getState().accounts).toEqual({
+      'billing-a': expected,
+      'billing-b': 'access-pending',
+    });
+    expect(Purchases.purchaseSubscriptionOption).not.toHaveBeenCalled();
+    stop();
+  },
+);
 it('refreshes stale store data without treating missing entitlement as cancelled payment', async () => {
   useAndroidBillingStatus.setState({ accounts: { 'billing-a': 'payment-pending' } });
   jest.mocked(Purchases.getCustomerInfo).mockResolvedValue({} as never);

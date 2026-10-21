@@ -251,6 +251,17 @@ export function observeAndroidPurchaseUpdates(): () => void {
     if (state === 'active') retry();
   });
   const unsubscribe = useUsageStore.subscribe((state, previous) => {
+    const usage = state.usage;
+    // Usage can receive server-verified access after the purchase retry has ended.
+    // Resolve that access wait without dismissing a separate pending payment.
+    if (
+      usage?.billingUserId &&
+      usage !== previous.usage &&
+      hasBackendPlayAccess(usage) &&
+      useAndroidBillingStatus.getState().accounts[usage.billingUserId] === 'access-pending'
+    ) {
+      setStatus(usage.billingUserId, 'idle');
+    }
     if (state.usage?.billingUserId !== previous.usage?.billingUserId) retry();
   });
   retry();
