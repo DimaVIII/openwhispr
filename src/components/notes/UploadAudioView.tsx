@@ -730,9 +730,7 @@ export default function UploadAudioView({ onNoteCreated, onOpenSettings }: Uploa
         diarization,
         currentFile.durationSeconds,
         { requestId, timestamps: true }
-      ).finally(() => {
-        if (activeRequestIdRef.current === requestId) activeRequestIdRef.current = null;
-      });
+      );
 
       if (runId !== runIdRef.current) return;
 
@@ -804,6 +802,8 @@ export default function UploadAudioView({ onNoteCreated, onOpenSettings }: Uploa
         );
       }
       setState("error");
+    } finally {
+      if (activeRequestIdRef.current === requestId) activeRequestIdRef.current = null;
     }
   };
 

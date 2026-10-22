@@ -255,3 +255,56 @@ test("activation storage failure cannot prevent clearing the local bearer", asyn
     fakeThis.metaActivation = manager;
   }
 });
+
+test("signed-out transitions restore guest meeting detection without granting a replacement bearer guest permissions", async (t) => {
+  const { createAudioFeaturePolicy } = require("../../src/helpers/audioFeaturePolicy");
+  const originalManager = fakeThis.windowManager;
+  const originalEngine = fakeThis.meetingDetectionEngine;
+  const originalPolicy = fakeThis._audioFeaturePolicy;
+  const originalAccount = databaseManager.activeAccountId;
+  const originalTokenState = tokenState;
+  t.after(() => {
+    fakeThis.windowManager = originalManager;
+    fakeThis.meetingDetectionEngine = originalEngine;
+    fakeThis._audioFeaturePolicy = originalPolicy;
+    databaseManager.activeAccountId = originalAccount;
+    tokenState = originalTokenState;
+  });
+  const applied = [];
+  fakeThis.windowManager = { notificationPrefs: {}, retireMeetingNotificationScope() {} };
+  fakeThis.meetingDetectionEngine = { setPreferences: (prefs) => applied.push(prefs) };
+  fakeThis._audioFeaturePolicy = createAudioFeaturePolicy({
+    getPolicy: async () => ({ success: false }),
+  });
+  fakeThis._audioFeaturePolicy.update({
+    success: true,
+    managed: true,
+    policy: { features: { meetingRecordingEnabled: false } },
+  });
+  await handlers.get("sync-notification-preferences")(
+    {},
+    {
+      notificationsEnabled: true,
+      notifyMeetingDetection: true,
+      meetingProcessDetection: true,
+    }
+  );
+  assert.deepEqual(applied.at(-1), { audioDetection: false, processDetection: false });
+
+  tokenState = { token: null, generation: 40 };
+  handleAuthTokenChange(tokenState);
+  assert.equal(fakeThis._audioFeaturePolicy.failure("meeting"), null);
+  assert.deepEqual(applied.at(-1), { audioDetection: true, processDetection: true });
+
+  tokenState = { token: "replacement-bearer", generation: 41 };
+  handleAuthTokenChange(tokenState);
+  assert.equal(fakeThis._audioFeaturePolicy.failure("meeting").code, "POLICY_UNRESOLVABLE");
+  await setScope(null, 41);
+  assert.equal(fakeThis._audioFeaturePolicy.failure("meeting").code, "POLICY_UNRESOLVABLE");
+
+  tokenState = { token: null, generation: 42 };
+  databaseManager.activeAccountId = "departing-account";
+  await setScope(null, 42);
+  assert.equal(fakeThis._audioFeaturePolicy.failure("meeting"), null);
+  assert.deepEqual(applied.at(-1), { audioDetection: true, processDetection: true });
+});

@@ -1922,6 +1922,7 @@ declare global {
           model?: string;
           language?: string;
           requestId?: string;
+          purpose?: "dictation" | "upload";
           [key: string]: unknown;
         }
       ) => Promise<{ success: boolean; text?: string; error?: string; code?: string }>;
@@ -2793,7 +2794,7 @@ declare global {
       // Cloud audio file transcription
       transcribeAudioFileCloud?: (
         filePath: string,
-        options?: { requestId?: string }
+        options?: { requestId?: string; purpose?: "dictation" | "upload" }
       ) => Promise<
         {
           success: boolean;
@@ -2814,6 +2815,7 @@ declare global {
       transcribeAudioFileByok?: (options: {
         filePath: string;
         requestId?: string;
+        purpose?: "dictation" | "upload";
         apiKey: string;
         baseUrl: string;
         model: string;
