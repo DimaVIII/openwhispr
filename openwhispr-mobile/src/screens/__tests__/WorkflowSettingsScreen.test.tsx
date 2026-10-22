@@ -1138,7 +1138,7 @@ it('explains what Local Mode means for note chat', () => {
   mockScope = 'noteChat';
   render(<WorkflowSettingsScreen />);
   expect(
-    screen.getByText('In Local Mode note chat asks before sending a note off this iPhone.'),
+    screen.getByText('In Local Mode chat asks before sending notes off this iPhone.'),
   ).toBeTruthy();
 });
 

@@ -16,6 +16,8 @@ interface ChatComposerProps {
   onSend: () => void;
   onMicPress: () => void;
   onStop: () => void;
+  /** Focuses the input when it mounts, e.g. on returning from the voice panel. */
+  autoFocus?: boolean;
 }
 
 export function ChatComposer({
@@ -27,6 +29,7 @@ export function ChatComposer({
   onSend,
   onMicPress,
   onStop,
+  autoFocus = false,
 }: ChatComposerProps): React.JSX.Element {
   const hasText = value.trim().length > 0;
 
@@ -42,6 +45,7 @@ export function ChatComposer({
         placeholder={placeholder}
         placeholderTextColor={iosColor('tertiaryLabel')}
         editable={!busy && !disabled}
+        autoFocus={autoFocus}
         multiline
         className="max-h-[120px] min-h-[40px] flex-1 py-2 text-[16px] leading-[22px] text-label"
       />

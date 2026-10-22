@@ -11,7 +11,7 @@ export const WORKFLOW_LABELS: Record<MobileInferenceScope, string> = {
   upload: 'Uploads',
   cleanup: 'Text Cleanup',
   notes: 'Note Formatting & Titles',
-  noteChat: 'Note Chat',
+  noteChat: 'Chat',
   agent: 'Voice Assistant',
 };
 
@@ -36,7 +36,7 @@ export const LOCAL_MODE_DICTATION_NOTES = {
 
 // What Local Mode means for note chat.
 export const ON_DEVICE_MODE_NOTES: Partial<Record<MobileInferenceScope, string>> = {
-  noteChat: 'In Local Mode note chat asks before sending a note off this iPhone.',
+  noteChat: 'In Local Mode chat asks before sending notes off this iPhone.',
 };
 
 // Outside Cloud dictation, cleaning with OpenWhispr Cloud is a separate Cloud pass, which needs a
