@@ -1128,6 +1128,9 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
   private var appliedBottomRowLayout: BottomRowLayout?
   /// What the return key last drew, so a keystroke that doesn't change it skips the redraw.
   private var appliedReturnKeyState: ReturnKeyState?
+  /// The field the keyboard last typed into, and the last one seen reporting text.
+  private var typedDocument: UUID?
+  private var reportingDocument: UUID?
   private var dictationLinkHosting: UIHostingController<DictationLinkView>?
   // Detected once at setup (the host is fixed for the extension's lifetime).
   // Avoids calling the heavy private-API host detection on every button refresh.
@@ -1219,7 +1222,11 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
   // A card action (regenerate or follow-up) is generating with the previous
   // versions retained underneath: an error/app-death/cancel restores the card
   // (existing versions stay insertable) instead of dropping to idle, per the plan.
-  private var isAgentActionInFlight = false
+  // The keyboard keeps the card's extra height until the action ends, so it doesn't
+  // shrink and grow again under the host app.
+  private var isAgentActionInFlight = false {
+    didSet { if isViewLoaded { view.setNeedsLayout() } }
+  }
   // Set while a regenerate is generating: the session/recording-job is unchanged
   // so the pre-action result is still readable. Any result adopted (poll OR the
   // Darwin agent_ready path) must be newer than this action timestamp. nil for
@@ -1277,7 +1284,8 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
 
   private func applyKeyboardHeight() {
     // The keys keep their height at the bottom; the card above them takes the extra.
-    let keyboardHeight = metrics.keyboardHeight + (isAgentReviewShown ? Metrics.agentReviewExtraHeight : 0)
+    let showsCardHeight = isAgentReviewShown || isAgentActionInFlight
+    let keyboardHeight = metrics.keyboardHeight + (showsCardHeight ? Metrics.agentReviewExtraHeight : 0)
 
     if let keyboardHeightConstraint {
       keyboardHeightConstraint.constant = keyboardHeight
@@ -1292,6 +1300,7 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
 
   override func textDidChange(_ textInput: UITextInput?) {
     super.textDidChange(textInput)
+    noteFieldReport()
     syncShiftWithContextIfNeeded()
     refreshFieldAwareKeys()
     _ = consumePendingTranscriptIfAvailable(trigger: "textDidChange")
@@ -1301,6 +1310,7 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
   // textDidChange when the keyboard opens: shift and the return key follow the field here.
   override func viewWillAppear(_ animated: Bool) {
     super.viewWillAppear(animated)
+    noteFieldReport()
     syncShiftWithContextIfNeeded()
     refreshFieldAwareKeys()
   }
@@ -1373,7 +1383,7 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
 
     let insertion = layoutMode == .letters && isShiftEnabled ? output.uppercased() : output
     let text = smartQuoteSubstitution(for: insertion) ?? insertion
-    textDocumentProxy.insertText(text)
+    typeText(text)
     if layoutMode != .letters {
       // Apple's apostrophe returns to letters at once ("rock 'n' roll", "'90s").
       if output == "'" { returnToLetters() } else { typedOnSymbolPage = true }
@@ -1479,7 +1489,7 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
   @objc private func handleSpaceTapped() {
     playKeyClick()
     if !applyDoubleSpacePeriod() {
-      textDocumentProxy.insertText(" ")
+      typeText(" ")
     }
     if layoutMode != .letters && typedOnSymbolPage { returnToLetters() }
     syncShiftWithContextIfNeeded()
@@ -1499,7 +1509,7 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
   @objc private func handleShortcutTapped(_ sender: KeyButton) {
     guard let output = sender.output else { return }
     playKeyClick()
-    textDocumentProxy.insertText(output)
+    typeText(output)
     syncShiftWithContextIfNeeded()
     refreshAfterEdit()
   }
@@ -1524,7 +1534,7 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
     guard prior.isLetter || prior.isNumber else { return false }
 
     textDocumentProxy.deleteBackward()
-    textDocumentProxy.insertText(". ")
+    typeText(". ")
     return true
   }
 
@@ -1564,7 +1574,7 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
     // Greyed: Apple's does nothing. Asked fresh, as hasText may have changed since the redraw.
     guard !isReturnKeyDisabled else { return }
     playKeyClick()
-    textDocumentProxy.insertText("\n")
+    typeText("\n")
     syncShiftWithContextIfNeeded()
     refreshAfterEdit()
   }
@@ -2387,7 +2397,30 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
   }
 
   private func refreshAfterEdit() {
+    noteFieldReport()
     refreshReturnKey()
+  }
+
+  private func typeText(_ text: String) {
+    textDocumentProxy.insertText(text)
+    typedDocument = textDocumentProxy.documentIdentifier
+  }
+
+  private func noteFieldReport() {
+    let proxy = textDocumentProxy
+    if proxy.hasText || proxy.documentContextBeforeInput?.isEmpty == false
+      || proxy.documentContextAfterInput?.isEmpty == false
+    {
+      reportingDocument = proxy.documentIdentifier
+    }
+  }
+
+  /// The field holds text it doesn't report: the keyboard typed into it and the host has
+  /// reported no text in it since. Some hosts never report it, so shift and the return key
+  /// can't go by it there.
+  private var fieldHidesItsText: Bool {
+    let document = textDocumentProxy.documentIdentifier
+    return typedDocument == document && reportingDocument != document
   }
 
   private static let toneMenuItems: [(value: String, title: String)] = [
@@ -2771,7 +2804,8 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
   }
 
   private var isReturnKeyDisabled: Bool {
-    textDocumentProxy.enablesReturnKeyAutomatically == true && !textDocumentProxy.hasText
+    // A field that hides its text can't show it's empty, so its return key stays usable.
+    textDocumentProxy.enablesReturnKeyAutomatically == true && !textDocumentProxy.hasText && !fieldHidesItsText
   }
 
   private func refreshReturnKey() {
@@ -3104,6 +3138,14 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
 
   private func syncShiftWithContextIfNeeded() {
     guard layoutMode == .letters && !isCapsLocked else { return }
+    // A field with text that reports none around the cursor hides it: leave shift as it is
+    // rather than capitalising mid-word.
+    let proxy = textDocumentProxy
+    if proxy.documentContextBeforeInput == nil && proxy.documentContextAfterInput == nil
+      && (proxy.hasText || fieldHidesItsText)
+    {
+      return
+    }
 
     let shouldEnableShift = shouldAutoCapitalize()
     if shouldEnableShift != isShiftEnabled {
@@ -3837,7 +3879,7 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
       && !text.hasPrefix(".")
 
     let insertion = needsLeadingSpace ? " \(text)" : text
-    textDocumentProxy.insertText(insertion)
+    typeText(insertion)
     // Shift follows the text (it was synced before the text arrived).
     syncShiftWithContextIfNeeded()
     refreshAfterEdit()

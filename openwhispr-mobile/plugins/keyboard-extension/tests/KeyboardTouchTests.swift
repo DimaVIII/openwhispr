@@ -118,6 +118,19 @@ private extension KeyboardViewController {
     isAgentReviewShown = shown
     applyKeyboardHeight()
   }
+  func touchTestShowAgentResult() {
+    showAgentReviewCard(AgentResult(versions: ["Hi"], activeIndex: 0, sessionId: "s", jobId: "j", updatedAtMs: nil))
+  }
+  func touchTestRegenerate() { enterAgentRegenerating(minUpdatedAtMs: 0) }
+  func touchTestAgentError() { handleAgentError(detail: nil) }
+  func touchTestEndCardAction() {
+    stopWaitingForAgentResult()
+    isAgentGenerating = false
+    isAgentActionInFlight = false
+  }
+  func touchTestDismissCard() { hideAgentReviewCard() }
+  func touchTestTextDidChange() { textDidChange(nil) }
+  func touchTestInsertTranscript(_ text: String) { insertSmartText(text) }
   func touchTestTapLetter(_ index: Int) { handleCharacterKeyTapped(characterButtons[index]) }
   func touchTestTapReturn() { handleReturnTapped() }
   func touchTestTapDelete() { handleBackspaceTapped() }
@@ -473,6 +486,21 @@ private enum KeyboardTouchTests {
     proxy.hasText = true
     controller.touchTestTapReturn()
     checks.check("return types a newline once the field has text", proxy.inserted == ["\n"])
+    // Emptied again by the user: greyed again.
+    proxy.hasText = false
+    proxy.documentContextBeforeInput = ""
+    controller.touchTestTextDidChange()
+    controller.touchTestTapReturn()
+    checks.check("return greys again once the field is empty", proxy.inserted == ["\n"])
+
+    // A host that never reports its text: once something was typed, return still works.
+    let hidden = emptySearchField(.default)
+    TestEnvironment.proxy = hidden
+    let hiddenKeyboard = KeyboardViewController.makeLaidOutKeyboard(width: 402)
+    hiddenKeyboard.touchTestTapLetter(0)
+    hiddenKeyboard.touchTestTextDidChange()
+    hiddenKeyboard.touchTestTapReturn()
+    checks.check("field that hides its text: return types a newline", hidden.inserted == ["Q", "\n"])
 
     // Twitter: @ and # in place of return on letters; Apple's usual row on 123 and #+=.
     let twitter = TestTextProxy()
@@ -522,13 +550,25 @@ private enum KeyboardTouchTests {
     checks.check("needsInputModeSwitchKey turning true rebuilds with the globe key", settling.touchTestBuiltWithGlobe)
     TestEnvironment.globe = false
 
-    // Keys are first built against the screen's width; their reach follows the real one.
-    let narrow = KeyboardViewController.makeLaidOutKeyboard(width: 402)
+    // The same on an iPad, where the globe key doesn't change the metrics.
+    TestEnvironment.tablet = true
+    let settlingTablet = KeyboardViewController.makeLaidOutKeyboard(width: 1024)
+    TestEnvironment.globe = true
+    layout(settlingTablet, width: 1024, height: settlingTablet.view.bounds.height)
+    checks.check("iPad: needsInputModeSwitchKey turning true rebuilds with the globe key", settlingTablet.touchTestBuiltWithGlobe)
+    TestEnvironment.globe = false
+    TestEnvironment.tablet = false
+
+    // Keys are first built against the screen's width; their reach follows the real one. In
+    // landscape the metrics don't change with the width, so nothing rebuilds the keys.
+    TestEnvironment.landscape = true
+    let narrow = KeyboardViewController.makeLaidOutKeyboard(width: 812)
     let keyWidth = narrow.touchTestLetters[0].bounds.width
     checks.check(
       "touch reach follows the laid-out key width (\(narrow.touchTestLetters[0].hitTestOutsets.left) vs \(keyWidth))",
       abs(narrow.touchTestLetters[0].hitTestOutsets.left - keyWidth) < 0.5
     )
+    TestEnvironment.landscape = false
 
     // A view shorter than the keyboard keeps the toolbar on screen.
     let short = KeyboardViewController.makeLaidOutKeyboard(width: 402, height: 200)
@@ -545,6 +585,25 @@ private enum KeyboardTouchTests {
     )
     card.touchTestShowReviewCard(false)
     checks.check("review card gone: Apple's height again", card.touchTestHeightConstant == keyboardHeight)
+
+    // A regenerate keeps the card's height while it writes, through an error and back.
+    let cardHeight = keyboardHeight + card.touchTestReviewExtraHeight
+    // Only a layout the keyboard asked for, as iOS runs it.
+    func height() -> CGFloat? {
+      card.view.layoutIfNeeded()
+      return card.touchTestHeightConstant
+    }
+    card.touchTestShowAgentResult()
+    card.touchTestRegenerate()
+    checks.check("regenerating: the card's height stays", height() == cardHeight)
+    card.touchTestAgentError()
+    checks.check("regenerate failed: card back at its height", height() == cardHeight)
+    card.touchTestRegenerate()
+    card.touchTestEndCardAction()
+    checks.check("action over without the card: Apple's height again", height() == keyboardHeight)
+    card.touchTestShowAgentResult()
+    card.touchTestDismissCard()
+    checks.check("card dismissed: Apple's height again", height() == keyboardHeight)
 
     // A docked iPad keyboard keeps the height it had before the rebuild.
     TestEnvironment.tablet = true
@@ -567,6 +626,22 @@ private enum KeyboardTouchTests {
     checks.check("empty sentence field starts in shift", keyboard.touchTestShift)
     keyboard.touchTestTapLetter(0)
     checks.check("shift ends after a letter without document context", !keyboard.touchTestShift && silent.inserted == ["Q"])
+    // Nor does anything else turn it back on mid-word there.
+    keyboard.touchTestTextDidChange()
+    checks.check("no document context: textDidChange leaves shift off", !keyboard.touchTestShift)
+    keyboard.touchTestTapDelete()
+    checks.check("no document context: delete leaves shift off", !keyboard.touchTestShift)
+    keyboard.touchTestInsertTranscript("hello")
+    checks.check("no document context: a transcript leaves shift off", !keyboard.touchTestShift)
+
+    // A field that reports it has text, but none around the cursor.
+    let opaque = TestTextProxy()
+    opaque.hasText = true
+    TestEnvironment.proxy = opaque
+    let opaqueKeyboard = KeyboardViewController.makeLaidOutKeyboard(width: 402)
+    opaqueKeyboard.touchTestTapLetter(0)
+    opaqueKeyboard.touchTestTapDelete()
+    checks.check("text not reported around the cursor: delete leaves shift off", !opaqueKeyboard.touchTestShift)
 
     // All capitals keeps shift on.
     let capitals = TestTextProxy()
