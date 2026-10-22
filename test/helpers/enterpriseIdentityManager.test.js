@@ -480,6 +480,74 @@ for (const status of [401, 403]) {
   });
 }
 
+test("a stalled 401 assertion body preserves authorization errors and evicts the cached config", async (t) => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "openwhispr-enterprise-stall-"));
+  t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }));
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const cachePath = path.join(tempDir, "cache.json");
+  const enforcedConfig = managedConfig();
+  enforcedConfig.providers[0].mode = "managed_required";
+  enforcedConfig.providers[0].allowManualSetup = false;
+  const snapshots = [];
+  let configCalls = 0;
+  let assertionCalls = 0;
+  const manager = createEnterpriseIdentityManager({
+    cachePath,
+    getApiUrl: () => "https://api.example.com",
+    getAppVersion: () => "1.10.0",
+    proxyFetch: async (url) => {
+      if (url.includes("/enterprise-providers/azure/assertion")) {
+        assertionCalls += 1;
+        return assertionCalls === 1
+          ? stalledBodyResponse(401)
+          : jsonResponse({ data: { assertion: "signed" } });
+      }
+      if (url.startsWith("https://login.microsoftonline.com/")) {
+        return jsonResponse({ access_token: "entra", expires_in: 3600 });
+      }
+      configCalls += 1;
+      return jsonResponse({ data: enforcedConfig });
+    },
+    tokenStore: { getState: () => ({ generation: 4, token: "openwhispr-session" }) },
+    broadcast: (snapshot) => snapshots.push(snapshot),
+  });
+  const resolved = await manager.resolveProvider(request());
+
+  const stalled = resolved.tokenProvider();
+  const joined = resolved.tokenProvider();
+  const state = settles(Promise.allSettled([stalled, joined]));
+  await flush();
+  t.mock.timers.tick(9_999);
+  await flush();
+  assert.equal(state.settled, false);
+  t.mock.timers.tick(1);
+  await flush();
+  assert.equal(state.settled, true);
+  for (const pending of [stalled, joined]) {
+    await assert.rejects(pending, {
+      code: "AUTH_EXPIRED",
+      status: 401,
+      enforcementRequired: true,
+      enforcedScopes: Object.keys(enforcedConfig.providers[0].config.scopeDefaults),
+    });
+  }
+  assert.deepEqual(JSON.parse(fs.readFileSync(cachePath, "utf8")).entries, []);
+  assert.equal(snapshots.length, 2);
+  assert.equal(snapshots[1].config, null);
+  assert.equal(snapshots[1].code, "AUTH_EXPIRED");
+  assert.equal(snapshots[1].enforcementRequired, true);
+  assert.deepEqual(
+    snapshots[1].enforcedScopes,
+    Object.keys(enforcedConfig.providers[0].config.scopeDefaults)
+  );
+  assert.equal(assertionCalls, 1);
+
+  const retried = await manager.resolveProvider(request());
+  assert.equal(await retried.tokenProvider(), "entra");
+  assert.equal(configCalls, 2);
+  assert.equal(assertionCalls, 2);
+});
+
 test("an Azure token body that stalls after headers times out and frees the shared credential", async (t) => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "openwhispr-enterprise-stall-"));
   t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }));

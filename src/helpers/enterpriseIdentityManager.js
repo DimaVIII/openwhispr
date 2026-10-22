@@ -388,6 +388,7 @@ function createEnterpriseIdentityManager({
     const url = `${identity.apiUrl}/api/workspaces/${encodeURIComponent(
       identity.workspaceId
     )}/enterprise-providers/${provider}/assertion`;
+    let responseError;
     const body = await fetchWithTimeout(
       url,
       {
@@ -398,28 +399,32 @@ function createEnterpriseIdentityManager({
       async (response) => {
         assertIdentityCurrent(identity);
         if (!response.ok) {
-          const detail = await readError(
-            response,
-            `Managed identity API error: ${response.status}`
+          responseError = Object.assign(
+            new Error(`Managed identity API error: ${response.status}`),
+            {
+              code: response.status === 401 ? "AUTH_EXPIRED" : "IDENTITY_EXCHANGE_FAILED",
+              status: response.status,
+            }
           );
-          const error = new Error(detail.message);
-          error.code =
-            detail.code || (response.status === 401 ? "AUTH_EXPIRED" : "IDENTITY_EXCHANGE_FAILED");
-          error.status = response.status;
-          if (isAuthorizationError(error)) {
-            const prior =
-              configs.get(identity.cacheKey)?.config || cachedConfig(cachePath, identity);
-            error.enforcementRequired =
-              error.code === "ENTERPRISE_REQUIRED" ? false : requiresEnforcedManagedAccess(prior);
-            error.enforcedScopes =
-              error.code === "ENTERPRISE_REQUIRED" ? [] : managedScopesForConfig(prior).enforced;
-            evictIdentity(identity, error.code, error.enforcementRequired, error.enforcedScopes);
-          }
-          throw error;
+          const detail = await readError(response, responseError.message);
+          responseError.message = detail.message;
+          responseError.code = detail.code || responseError.code;
+          throw responseError;
         }
         return response.json();
       }
-    );
+    ).catch((cause) => {
+      const error = responseError || cause;
+      if (isAuthorizationError(error)) {
+        const prior = configs.get(identity.cacheKey)?.config || cachedConfig(cachePath, identity);
+        error.enforcementRequired =
+          error.code === "ENTERPRISE_REQUIRED" ? false : requiresEnforcedManagedAccess(prior);
+        error.enforcedScopes =
+          error.code === "ENTERPRISE_REQUIRED" ? [] : managedScopesForConfig(prior).enforced;
+        evictIdentity(identity, error.code, error.enforcementRequired, error.enforcedScopes);
+      }
+      throw error;
+    });
     if (typeof body?.data?.assertion !== "string") {
       throw Object.assign(new Error("Managed identity assertion is malformed"), {
         code: "IDENTITY_EXCHANGE_FAILED",
