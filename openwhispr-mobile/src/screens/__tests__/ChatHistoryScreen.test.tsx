@@ -9,8 +9,18 @@ jest.mock('expo-router', () => ({
 }));
 jest.mock('@/data', () => ({ chatRepository: {} }));
 jest.mock('@/lib/chat/runChatTurn', () => ({ runChatTurn: jest.fn() }));
+const mockSwipeDeletes: ((restoreRow: () => void) => void)[] = [];
 jest.mock('@/components/ui/SwipeableCard', () => ({
-  SwipeableCard: ({ children }: { children: React.ReactNode }) => children,
+  SwipeableCard: ({
+    children,
+    onDelete,
+  }: {
+    children: React.ReactNode;
+    onDelete: (restoreRow: () => void) => void;
+  }) => {
+    mockSwipeDeletes.push(onDelete);
+    return children;
+  },
 }));
 jest.mock('@/components/ui/Text', () => ({ Text: require('react-native').Text }));
 jest.mock('@/components/ui/GlassBackButton', () => ({ GlassBackButton: () => null }));
@@ -23,6 +33,7 @@ const mockDeleteConversation = jest.fn();
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockSwipeDeletes.length = 0;
   useChatStore.setState({
     conversations: [
       { id: 'c1', title: 'Pricing decisions', preview: 'We kept $12.', createdAt: 1, updatedAt: 1 },
@@ -51,6 +62,20 @@ describe('ChatHistoryScreen', () => {
     const buttons = alert.mock.calls[0][2] as AlertButton[];
     buttons.find((button) => button.text === 'Delete')?.onPress?.();
     expect(mockDeleteConversation).toHaveBeenCalledWith('c1');
+    alert.mockRestore();
+  });
+
+  it('slides a swiped row back when its delete is cancelled', () => {
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    render(<ChatHistoryScreen />);
+    const restoreRow = jest.fn();
+
+    mockSwipeDeletes[mockSwipeDeletes.length - 1](restoreRow);
+    const buttons = alert.mock.calls[0][2] as AlertButton[];
+    buttons.find((button) => button.text === 'Cancel')?.onPress?.();
+
+    expect(restoreRow).toHaveBeenCalledTimes(1);
+    expect(mockDeleteConversation).not.toHaveBeenCalled();
     alert.mockRestore();
   });
 });

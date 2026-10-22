@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
 import { Alert, ScrollView, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Text } from '@/components/ui/Text';
@@ -13,13 +13,9 @@ import { useChatStore } from '@/store/useChatStore';
 
 export function ChatHistoryScreen(): React.JSX.Element {
   const conversations = useChatStore((s) => s.conversations);
-  // SwipeableCard slides a row away before asking, so a cancelled delete remounts the rows at rest.
-  const [rowsVersion, setRowsVersion] = useState(0);
 
-  const restoreRows = (): void => setRowsVersion((version) => version + 1);
-
-  // A screen reader deletes without swiping, so nothing needs restoring, and a remount would move
-  // its focus.
+  // A swipe slides the row away before asking, so cancelling slides it back; a screen reader
+  // deletes without swiping, so there is nothing to restore.
   const confirmDelete = (conversationId: string, onCancel?: () => void): void => {
     safeHaptics('warning');
     Alert.alert(
@@ -57,8 +53,8 @@ export function ChatHistoryScreen(): React.JSX.Element {
         >
           {conversations.map((conversation) => (
             <SwipeableCard
-              key={`${conversation.id}:${rowsVersion}`}
-              onDelete={() => confirmDelete(conversation.id, restoreRows)}
+              key={conversation.id}
+              onDelete={(restoreRow) => confirmDelete(conversation.id, restoreRow)}
             >
               <ChatConversationRow
                 conversation={conversation}
