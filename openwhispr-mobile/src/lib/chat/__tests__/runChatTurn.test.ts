@@ -288,6 +288,19 @@ describe('runChatTurn', () => {
     expect(result.sources.map((source) => source.noteId)).toEqual([3, 4, 5, 6]);
   });
 
+  it('reads no transcript past the matches it sends', async () => {
+    const meetings = [2, 3, 4, 5, 6, 7].map((id) => makeNote({ id, title: `Pricing sync ${id}` }));
+    const getNoteTranscript = jest.fn((_noteId: number) => 'We agreed on pricing.');
+
+    const result = await runChatTurn(
+      makeInput(),
+      makeDeps({ getCandidateNotes: candidatesFrom(meetings), getNoteTranscript }),
+    );
+
+    expect(result.sources.map((source) => source.noteId)).toEqual([2, 3, 4, 5]);
+    expect(getNoteTranscript.mock.calls.map(([id]) => id)).toEqual([2, 3, 4, 5]);
+  });
+
   it('passes over empty recent notes when filling', async () => {
     const failed = makeNote({ id: 8, title: 'Failed recording' });
     const recent = [

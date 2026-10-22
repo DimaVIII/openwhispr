@@ -271,8 +271,12 @@ export async function runChatTurn(
     return transcript.trim() !== '';
   };
   // The repository ranks by matched terms across the title, the text, the summary and the
-  // transcript, so its order stands.
-  const notes = allowed(matches.notes).filter(hasContent).slice(0, MAX_MATCHED_NOTES);
+  // transcript, so its order stands. It stops at the notes it sends, so no spare transcript is read.
+  const notes: Note[] = [];
+  for (const note of allowed(matches.notes)) {
+    if (notes.length >= MAX_MATCHED_NOTES) break;
+    if (hasContent(note)) notes.push(note);
+  }
   if (notes.length < MIN_CHAT_NOTES) {
     const matchedIds = new Set(notes.map((note) => note.id));
     const recent = allowed(
