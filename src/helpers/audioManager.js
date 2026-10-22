@@ -4058,7 +4058,12 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
         if (!proxyText?.trim()) {
           throw new Error(`No text transcribed - ${proxySpec.displayName} response was empty`);
         }
-        if (sendsDictionaryBias && this.isDictionaryEcho(result.text)) {
+        // Keyterms carry up to MAX_SHARED_KEYTERMS shared words, not only the
+        // Whisper window's, so a whole-text echo is checked against what was sent.
+        const echoDictionary = proxyPayload.keyterms
+          ? [proxyPayload.keyterms.join(", "), this.getPersonalDictionaryPrompt(apiSettings)]
+          : [];
+        if (sendsDictionaryBias && this.isDictionaryEcho(result.text, ...echoDictionary)) {
           throw dictionaryEchoError();
         }
         timings.transcriptionProcessingDurationMs = Math.round(performance.now() - apiCallStart);

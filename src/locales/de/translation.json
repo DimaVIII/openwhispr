@@ -4036,7 +4036,19 @@
       "notUsedTooltip": "Beim Diktieren werden geteilte Wörter mit mehr als 64 Zeichen oder 6 Wörtern ausgelassen, ebenso solche mit Kommas, Satzzeichen, Zeichen wie < > { } [ ] ` | oder unsichtbaren Zeichen",
       "badgeMore": "{{list}} +{{extra}}",
       "skipped_one": "{{count}} Wort wurde ausgelassen: {{words}}",
-      "skipped_other": "{{count}} Wörter wurden ausgelassen: {{words}}"
+      "skipped_other": "{{count}} Wörter wurden ausgelassen: {{words}}",
+      "partial": {
+        "add_one": "{{applied}} von {{total}} Wörtern zu {{list}} hinzugefügt. {{count}} wurde nicht hinzugefügt.",
+        "add_other": "{{applied}} von {{total}} Wörtern zu {{list}} hinzugefügt. {{count}} wurden nicht hinzugefügt.",
+        "hide_one": "{{applied}} von {{total}} Wörtern für dich ausgeblendet. {{count}} wurde nicht ausgeblendet.",
+        "hide_other": "{{applied}} von {{total}} Wörtern für dich ausgeblendet. {{count}} wurden nicht ausgeblendet.",
+        "unhide_one": "{{applied}} von {{total}} Wörtern wieder eingeblendet. {{count}} ist noch ausgeblendet.",
+        "unhide_other": "{{applied}} von {{total}} Wörtern wieder eingeblendet. {{count}} sind noch ausgeblendet.",
+        "delete_one": "{{applied}} von {{total}} Wörtern für alle gelöscht. {{count}} wurde nicht gelöscht.",
+        "delete_other": "{{applied}} von {{total}} Wörtern für alle gelöscht. {{count}} wurden nicht gelöscht."
+      },
+      "hiddenWord": "„{{word}}“ für dich ausgeblendet",
+      "stillIn": "„{{word}}“ ist noch in {{list}}"
     }
   },
   "support": {

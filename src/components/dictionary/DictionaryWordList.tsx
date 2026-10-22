@@ -65,6 +65,15 @@ interface DictionaryWordListProps {
   getScrollElement?: () => HTMLElement | null;
 }
 
+// The row an action was taken on. Once it leaves the list (or its editor
+// closes), focus lands nearby rather than on the page, so ⌘A keeps working.
+interface PendingFocus {
+  key: string;
+  index: number;
+  // A personal rename gets a new key; focus follows the new spelling.
+  renamedTo?: string;
+}
+
 interface RowAction {
   // The tooltip stays short; the accessible name says which word it acts on.
   label: string;
@@ -227,6 +236,8 @@ export function DictionaryWordList({
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  const rowElements = useRef(new Map<string, HTMLLIElement>());
+  const pendingFocus = useRef<PendingFocus | null>(null);
   const [scrollMargin, setScrollMargin] = useState(0);
   const virtualized = rows.length > VIRTUALIZE_AFTER_ROWS && getScrollElement !== undefined;
 
@@ -279,6 +290,40 @@ export function DictionaryWordList({
     return () => observer.disconnect();
   }, [virtualized, getScrollElement, measureScrollMargin]);
 
+  // Hide and delete finish after a round trip, so this waits for the row to
+  // go. Focus the user moved elsewhere meanwhile stays where they put it.
+  useLayoutEffect(() => {
+    const pending = pendingFocus.current;
+    if (!pending || editingKey === pending.key) return;
+    const active = document.activeElement;
+    const focusLost = !active || !document.body.contains(active);
+    const focusRow = (row: DictionaryRow | undefined): void => {
+      const element = row ? rowElements.current.get(row.key) : undefined;
+      (element?.querySelector("button") ?? listRef.current)?.focus();
+    };
+    const index = rows.findIndex((row) => row.key === pending.key);
+    if (index >= 0) {
+      if (!focusLost) return;
+      // A closed editor leaves the row in place; a rename's row leaves once the
+      // dictionary saves, so focus keeps following it until then.
+      focusRow(rows[index]);
+      if (pending.renamedTo === undefined) pendingFocus.current = null;
+      return;
+    }
+    pendingFocus.current = null;
+    if (!focusLost) return;
+    const renamed = rows.find((row) => row.word === pending.renamedTo);
+    focusRow(renamed ?? rows[Math.min(pending.index, rows.length - 1)]);
+  }, [rows, editingKey]);
+
+  const focusNearAfter = (row: DictionaryRow, renamedTo?: string): void => {
+    pendingFocus.current = {
+      key: row.key,
+      index: rows.findIndex((candidate) => candidate.key === row.key),
+      renamedTo,
+    };
+  };
+
   // Only while the list itself has focus: the add field and the row editor keep
   // ⌘A for their text. preventDefault also keeps Edit → Select All from
   // selecting the page's text, in the Hidden list too, which has no selection.
@@ -325,7 +370,10 @@ export function DictionaryWordList({
           "dictionary.shared.actions.unhide",
           "dictionary.shared.actions.unhideWord",
           <Eye size={13} />,
-          () => onUnhide(row)
+          () => {
+            focusNearAfter(row);
+            onUnhide(row);
+          }
         ),
       ];
     }
@@ -347,7 +395,10 @@ export function DictionaryWordList({
           "dictionary.shared.actions.delete",
           "dictionary.shared.actions.deleteWord",
           <Trash2 size={13} />,
-          () => onDelete(row)
+          () => {
+            focusNearAfter(row);
+            onDelete(row);
+          }
         ),
       ];
     }
@@ -357,13 +408,19 @@ export function DictionaryWordList({
         "dictionary.shared.actions.hide",
         "dictionary.shared.actions.hideWord",
         <EyeOff size={13} />,
-        () => onHide(row)
+        () => {
+          focusNearAfter(row);
+          onHide(row);
+        }
       ),
       action(
         "dictionary.shared.actions.deleteForEveryone",
         "dictionary.shared.actions.deleteForEveryoneWord",
         <Trash2 size={13} />,
-        () => onDeleteForEveryone(row),
+        () => {
+          focusNearAfter(row);
+          onDeleteForEveryone(row);
+        },
         true
       ),
     ];
@@ -377,6 +434,10 @@ export function DictionaryWordList({
     return (
       <li
         key={row.key}
+        ref={(element) => {
+          if (element) rowElements.current.set(row.key, element);
+          else rowElements.current.delete(row.key);
+        }}
         data-word={row.word}
         aria-setsize={virtualized ? rows.length : undefined}
         aria-posinset={virtualized ? index + 1 : undefined}
@@ -415,7 +476,10 @@ export function DictionaryWordList({
             onCancel={() => setEditingKey(null)}
             onCommit={async (word) => {
               const failure = await onEdit(row, word);
-              if (!failure) setEditingKey(null);
+              if (!failure) {
+                focusNearAfter(row, row.kind === "personal" ? word : undefined);
+                setEditingKey(null);
+              }
               return failure;
             }}
           />

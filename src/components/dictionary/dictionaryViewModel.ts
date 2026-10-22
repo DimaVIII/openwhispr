@@ -83,14 +83,17 @@ const wordKey = dictionaryWordKey;
 
 export function resolveSharedAccessState(input: {
   status: SharedDictionaryStatus;
+  // False in a build without an account backend too, where no one can sign in.
+  signedIn: boolean;
   workspace: Workspace | null;
   // The server's flag. It is set on every answer for a workspace without the
   // plan, so it only means "paused" when there are words to pause.
   serverPaused: boolean | null;
   hasWords: boolean;
 }): SharedAccessState {
-  const { status, workspace, serverPaused, hasWords } = input;
-  if (status === "unavailable") return "unavailable";
+  const { status, signedIn, workspace, serverPaused, hasWords } = input;
+  // Signed out there is no workspace to share with, so nothing to offer either.
+  if (status === "unavailable" || !signedIn) return "unavailable";
   if (!workspace) return "noWorkspace";
   // Neither can be fixed from a plan, so they come before the plan checks.
   if (status === "ssoRequired") return "ssoRequired";
@@ -142,6 +145,33 @@ export function visiblePersonalWords(
     const key = wordKey(word);
     return !(moved.has(key) && sharedWords.has(key));
   });
+}
+
+// The personal words Personal lists. While shared words don't apply (locked or
+// paused), moved words keep applying at personal priority, so they show again;
+// clear-all, export and the add field's "Already in" act on the same words.
+export function shownPersonalWords(
+  personal: string[],
+  movedPersonal: string[],
+  snapshot: Snapshot,
+  access: SharedAccessState
+): string[] {
+  if (access !== "available") return personal;
+  return visiblePersonalWords(personal, movedPersonal, snapshot);
+}
+
+// The lists whose copy of a word All words shows, while shared words apply.
+export function listsShowingWord(
+  word: string,
+  snapshot: Snapshot,
+  access: SharedAccessState
+): Array<string | null> {
+  if (access !== "available") return [];
+  const key = wordKey(word);
+  const lists = visibleSharedEntries(snapshot)
+    .filter((entry) => wordKey(entry.word) === key)
+    .map((entry) => entry.spaceId);
+  return [...new Set(lists)];
 }
 
 // The workspace list's name; without a workspace name it reads as the locked panel does.
@@ -213,6 +243,9 @@ function personalRow(word: string, addedIndex: number): DictionaryRow {
   };
 }
 
+const personalWordsShown = (input: RowsInput): string[] =>
+  shownPersonalWords(input.personal, input.movedPersonal, input.snapshot, input.access);
+
 function personalRows(input: RowsInput): DictionaryRow[] {
   const order = new Map(input.personal.map((word, index) => [word, index]));
   return personalWordsShown(input).map((word) => personalRow(word, order.get(word) ?? 0));
@@ -229,13 +262,6 @@ function spaceEntriesFirst(
 }
 
 // Each word once, in the priority dictation uses: personal, then space, then workspace.
-// While shared words don't apply (locked or paused), moved personal words keep
-// applying at personal priority, so Personal and All words show them again.
-function personalWordsShown(input: RowsInput): string[] {
-  if (input.access !== "available") return input.personal;
-  return visiblePersonalWords(input.personal, input.movedPersonal, input.snapshot);
-}
-
 function allWordsRows(input: RowsInput): DictionaryRow[] {
   const seen = new Set<string>();
   const rows: DictionaryRow[] = [];

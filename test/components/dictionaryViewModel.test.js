@@ -5,9 +5,11 @@ const {
   buildPicker,
   defaultAddTarget,
   filterRows,
+  listsShowingWord,
   resolveSharedAccessState,
   rowsForList,
   shareTargetsFor,
+  shownPersonalWords,
   visiblePersonalWords,
 } = require("../../src/components/dictionary/dictionaryViewModel.ts");
 
@@ -73,6 +75,7 @@ const words = (rows) => rows.map((row) => row.word);
 test("resolveSharedAccessState: status, workspace, plan and the server's paused flag", () => {
   const base = {
     status: "ready",
+    signedIn: true,
     workspace: workspace({ role: "owner" }),
     serverPaused: null,
     hasWords: false,
@@ -83,10 +86,21 @@ test("resolveSharedAccessState: status, workspace, plan and the server's paused 
   assert.equal(resolveSharedAccessState({ ...base, serverPaused: false }), "available");
 });
 
+test("signed out (or in a build without accounts) there is nothing shared to offer", () => {
+  const input = { status: "ready", signedIn: false, serverPaused: null, hasWords: false };
+  assert.equal(resolveSharedAccessState({ ...input, workspace: null }), "unavailable");
+  assert.equal(resolveSharedAccessState({ ...input, workspace: workspace() }), "unavailable");
+  // Signed in without a workspace keeps the Business upsell.
+  assert.equal(
+    resolveSharedAccessState({ ...input, signedIn: true, workspace: null }),
+    "noWorkspace"
+  );
+});
+
 test("SSO and lost access lock the shared lists ahead of any plan state", () => {
   const free = workspace({ plan: "free", role: "owner" });
   for (const status of ["ssoRequired", "noAccess"]) {
-    const input = { status, serverPaused: true, hasWords: true };
+    const input = { status, signedIn: true, serverPaused: true, hasWords: true };
     assert.equal(resolveSharedAccessState({ ...input, workspace: workspace() }), status);
     assert.equal(resolveSharedAccessState({ ...input, workspace: free }), status);
     assert.equal(resolveSharedAccessState({ ...input, workspace: null }), "noWorkspace");
@@ -95,7 +109,7 @@ test("SSO and lost access lock the shared lists ahead of any plan state", () => 
 
 test("paused workspace with words is paused, without words is an upgrade state", () => {
   const lapsed = (role) => workspace({ plan: "free", role });
-  const input = { status: "ready", serverPaused: true };
+  const input = { status: "ready", signedIn: true, serverPaused: true };
   assert.equal(
     resolveSharedAccessState({ ...input, workspace: lapsed("owner"), hasWords: true }),
     "paused"
@@ -113,13 +127,18 @@ test("paused workspace with words is paused, without words is an upgrade state",
     resolveSharedAccessState({ ...input, workspace: lapsed("member"), hasWords: false }),
     "upgradeMember"
   );
-  const unpaused = { status: "ready", workspace: lapsed("owner"), hasWords: true };
+  const unpaused = {
+    status: "ready",
+    signedIn: true,
+    workspace: lapsed("owner"),
+    hasWords: true,
+  };
   assert.equal(resolveSharedAccessState({ ...unpaused, serverPaused: false }), "upgradeAdmin");
   assert.equal(resolveSharedAccessState({ ...unpaused, serverPaused: null }), "upgradeAdmin");
 });
 
 test("upgrade state depends on whether the role can manage the workspace", () => {
-  const input = { status: "ready", serverPaused: null, hasWords: false };
+  const input = { status: "ready", signedIn: true, serverPaused: null, hasWords: false };
   const free = (role) => workspace({ plan: "free", role });
   assert.equal(resolveSharedAccessState({ ...input, workspace: free("owner") }), "upgradeAdmin");
   assert.equal(resolveSharedAccessState({ ...input, workspace: free("admin") }), "upgradeAdmin");
@@ -562,10 +581,38 @@ test("available: a moved word with a live shared copy leaves Personal and All wo
   assert.deepEqual(words(rowsForList("personal", rowInput(base))), ["OpenWhispr"]);
 });
 
-test("visiblePersonalWords is what clear-all and export act on", () => {
+test("shownPersonalWords is what Personal lists and clear-all and export act on", () => {
   const snap = snapshot([entry("e1", "Qdrant", null)]);
-  const acted = visiblePersonalWords(["OpenWhispr", "Qdrant"], ["Qdrant"], snap);
-  assert.deepEqual(acted, ["OpenWhispr"]);
+  const personal = ["OpenWhispr", "Qdrant"];
+  assert.deepEqual(shownPersonalWords(personal, ["Qdrant"], snap, "available"), ["OpenWhispr"]);
+  // A moved word applies at personal priority while shared words don't.
+  for (const access of ["paused", "ssoRequired", "upgradeMember", "unavailable"]) {
+    assert.deepEqual(shownPersonalWords(personal, ["Qdrant"], snap, access), personal, access);
+    assert.deepEqual(
+      words(
+        rowsForList(
+          "personal",
+          rowInput({ personal, movedPersonal: ["Qdrant"], snapshot: snap, access })
+        )
+      ),
+      shownPersonalWords(personal, ["Qdrant"], snap, access),
+      access
+    );
+  }
+});
+
+test("listsShowingWord names the lists of a word's visible copies, while shared words apply", () => {
+  const snap = {
+    ...snapshot([
+      entry("e1", "Qdrant", null),
+      entry("e2", "qdrant", ENGINEERING),
+      entry("e3", "Qdrant", SALES),
+    ]),
+    hiddenIds: ["e3"],
+  };
+  assert.deepEqual(listsShowingWord("QDRANT", snap, "available"), [null, ENGINEERING]);
+  assert.deepEqual(listsShowingWord("Kubernetes", snap, "available"), []);
+  assert.deepEqual(listsShowingWord("Qdrant", snap, "paused"), []);
 });
 
 test("All words groups spellings dictation treats as one word, Unicode forms included", () => {

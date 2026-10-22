@@ -3698,7 +3698,23 @@
       "badgeMore": "{{list}} +{{extra}}",
       "skipped_one": "{{count}} parola è stata esclusa: {{words}}",
       "skipped_many": "{{count}} di parole sono state escluse: {{words}}",
-      "skipped_other": "{{count}} parole sono state escluse: {{words}}"
+      "skipped_other": "{{count}} parole sono state escluse: {{words}}",
+      "partial": {
+        "add_one": "Aggiunte {{applied}} parole su {{total}} a {{list}}. {{count}} non è stata aggiunta.",
+        "add_many": "Aggiunte {{applied}} parole su {{total}} a {{list}}. {{count}} non sono state aggiunte.",
+        "add_other": "Aggiunte {{applied}} parole su {{total}} a {{list}}. {{count}} non sono state aggiunte.",
+        "hide_one": "Nascoste per te {{applied}} parole su {{total}}. {{count}} non è stata nascosta.",
+        "hide_many": "Nascoste per te {{applied}} parole su {{total}}. {{count}} non sono state nascoste.",
+        "hide_other": "Nascoste per te {{applied}} parole su {{total}}. {{count}} non sono state nascoste.",
+        "unhide_one": "Mostrate di nuovo {{applied}} parole su {{total}}. {{count}} è ancora nascosta.",
+        "unhide_many": "Mostrate di nuovo {{applied}} parole su {{total}}. {{count}} sono ancora nascoste.",
+        "unhide_other": "Mostrate di nuovo {{applied}} parole su {{total}}. {{count}} sono ancora nascoste.",
+        "delete_one": "Eliminate per tutti {{applied}} parole su {{total}}. {{count}} non è stata eliminata.",
+        "delete_many": "Eliminate per tutti {{applied}} parole su {{total}}. {{count}} non sono state eliminate.",
+        "delete_other": "Eliminate per tutti {{applied}} parole su {{total}}. {{count}} non sono state eliminate."
+      },
+      "hiddenWord": "«{{word}}» nascosta per te",
+      "stillIn": "«{{word}}» è ancora in {{list}}"
     }
   },
   "insights": {

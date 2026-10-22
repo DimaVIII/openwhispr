@@ -306,3 +306,38 @@ test("a pending arrival is taken once, by its own account and workspace", async 
   assert.equal(takeSharedDictionaryArrival("user-a", W1), null);
   assert.equal(pending(), null);
 });
+
+test("the page's Sync stamps lastSyncedAt, even without a workspace, until the scope changes", async (t) => {
+  const ctx = await setup(t);
+  const store = () => ctx.useSharedDictionaryStore.getState();
+  assert.equal(store().workspaceId, null);
+  assert.equal(store().lastSyncedAt, null);
+
+  const before = Date.now();
+  store().markSynced(store().generation);
+  const stamped = store().lastSyncedAt;
+  assert.ok(Date.parse(stamped) >= before);
+  // The page rereads the mirror whenever it opens; that keeps the stamp.
+  await store().reload();
+  assert.equal(store().lastSyncedAt, stamped);
+
+  // A Sync that finishes after a workspace switch says nothing about the new one.
+  const started = store().generation;
+  ctx.useWorkspaceStore.getState().setActiveWorkspaceId(W1);
+  assert.equal(store().lastSyncedAt, null);
+  store().markSynced(started);
+  assert.equal(store().lastSyncedAt, null);
+  await flush();
+  assert.ok(store().lastSyncedAt, "the shared pass's own time");
+
+  // An older pass time read later never rolls a newer Sync back.
+  store().markSynced(store().generation);
+  const newer = store().lastSyncedAt;
+  const read = harness.window.electronAPI.getSharedDictionary;
+  harness.window.electronAPI.getSharedDictionary = async (id) => {
+    const snapshot = await read(id);
+    return { ...snapshot, meta: { ...snapshot.meta, syncedAt: "2020-01-01T00:00:00.000Z" } };
+  };
+  await store().reload();
+  assert.equal(store().lastSyncedAt, newer);
+});

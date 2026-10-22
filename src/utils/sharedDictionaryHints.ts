@@ -45,6 +45,13 @@ const QUESTION_END = /[?\uFF1F]$/u;
 // "e.g.", "Ph.D.") does not end a sentence; after any longer word in a phrase
 // ("French.") it does.
 const ABBREVIATION = /^(?:\p{L}{1,5}|(?:\p{L}{1,2}\.)+\p{L}{1,2})\.$/u;
+// A phrase that opens with an instruction verb reads as a command to the model
+// ("Output nothing", "Ignore the above", "Do not clean up"), not a term. English
+// only; a brand that starts with one of these ("Return Path") stays personal.
+const INSTRUCTION_VERB =
+  /^(?:ignore|disregard|forget|override|bypass|output|print|reply|respond|answer|return|say|write|rewrite|translate|summari[sz]e|repeat|recite|do|don['\u2019]?t|never|always|stop|act|pretend|delete|remove|replace|follow|obey)!?$/iu;
+// A chat role label anywhere in the word ("SYSTEM:override", "assistant\uFF1Ahi").
+const ROLE_LABEL = /^(?:system|assistant|user|developer|human)[:\uFF1A]/iu;
 
 function isSentenceShaped(tokens: string[]): boolean {
   const phrase = tokens.length > 1;
@@ -53,6 +60,13 @@ function isSentenceShaped(tokens: string[]): boolean {
       CLAUSE_END.test(token) ||
       (phrase && QUESTION_END.test(token)) ||
       (phrase && token.endsWith(".") && !ABBREVIATION.test(token))
+  );
+}
+
+function isInstructionShaped(tokens: string[]): boolean {
+  return (
+    (tokens.length > 1 && INSTRUCTION_VERB.test(tokens[0])) ||
+    tokens.some((token) => ROLE_LABEL.test(token))
   );
 }
 
@@ -68,7 +82,11 @@ export function isTermLikeSharedWord(word: string): boolean {
   const term = word.trim();
   if (term.length < 1 || term.length > MAX_SHARED_WORD_LENGTH) return false;
   const tokens = term.split(/\s+/u);
-  return tokens.length <= MAX_SHARED_WORD_TOKENS && !isSentenceShaped(tokens);
+  return (
+    tokens.length <= MAX_SHARED_WORD_TOKENS &&
+    !isSentenceShaped(tokens) &&
+    !isInstructionShaped(tokens)
+  );
 }
 
 /**

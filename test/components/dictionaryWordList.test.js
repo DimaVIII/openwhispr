@@ -66,10 +66,13 @@ async function renderList(t, props) {
     onUnhide() {},
     getScrollElement: () => scroller,
   };
-  await React.act(async () =>
-    root.render(createElement(module.DictionaryWordList, { ...base, ...props }))
-  );
-  return { container, scroller, VIRTUALIZE_AFTER_ROWS: module.VIRTUALIZE_AFTER_ROWS };
+  let current = { ...base, ...props };
+  const render = (next = {}) => {
+    current = { ...current, ...next };
+    return React.act(async () => root.render(createElement(module.DictionaryWordList, current)));
+  };
+  await render();
+  return { container, scroller, render, VIRTUALIZE_AFTER_ROWS: module.VIRTUALIZE_AFTER_ROWS };
 }
 
 const renderedWords = (container) =>
@@ -187,4 +190,122 @@ test("⌘A in the Hidden list, which has no selection, doesn't select the page's
   const list = container.querySelector("ul");
   const onList = await keyDown(list);
   assert.equal(onList.defaultPrevented, true);
+});
+
+const sharedRow = (index) => ({
+  ...personalRow(index),
+  key: `shared:e-${index}`,
+  kind: "shared",
+  entryId: `e-${index}`,
+  entryIds: [`e-${index}`],
+});
+
+const rowNode = (container, word) =>
+  findElement(
+    container,
+    (node) => node.tagName === "LI" && node.getAttribute("data-word") === word
+  );
+
+const actionButton = (container, word, key) =>
+  findElement(
+    rowNode(container, word),
+    (node) => node.getAttribute?.("aria-label") === `${key}{"word":"${word}"}`
+  );
+
+// A click focuses the button it lands on, which this DOM leaves to the test.
+const press = (button) =>
+  React.act(async () => {
+    button.focus();
+    button.dispatchEvent({ type: "click", bubbles: true });
+  });
+
+const focusedRow = (container) => {
+  for (let node = container.ownerDocument.activeElement; node; node = node.parentNode) {
+    if (node.tagName === "LI") return node.getAttribute("data-word");
+  }
+  return null;
+};
+
+test("after a delete, focus moves to the next row, else the previous, else the list", async (t) => {
+  const rows = [personalRow(0), personalRow(1), personalRow(2)];
+  const { container, render } = await renderList(t, { rows });
+  const deleteWord = "dictionary.shared.actions.deleteWord";
+
+  await press(actionButton(container, "word-1", deleteWord));
+  await render({ rows: [rows[0], rows[2]] });
+  assert.equal(focusedRow(container), "word-2");
+
+  await press(actionButton(container, "word-2", deleteWord));
+  await render({ rows: [rows[0]] });
+  assert.equal(focusedRow(container), "word-0");
+
+  await press(actionButton(container, "word-0", deleteWord));
+  await render({ rows: [] });
+  assert.equal(container.ownerDocument.activeElement, container.querySelector("ul"));
+});
+
+test("Hide waits for the row to leave, and focus the user moved stays put", async (t) => {
+  const rows = [sharedRow(0), sharedRow(1)];
+  const { container, render } = await renderList(t, { rows });
+  const hideWord = "dictionary.shared.actions.hideWord";
+
+  const hide = actionButton(container, "word-0", hideWord);
+  await press(hide);
+  // The round trip hasn't finished: the row and its focused button are still there.
+  await render({ rows: [...rows] });
+  assert.equal(container.ownerDocument.activeElement, hide);
+  await render({ rows: [rows[1]] });
+  assert.equal(focusedRow(container), "word-1");
+
+  // Unhide in the Hidden list works the same way.
+  await render({ rows, hiddenList: true });
+  await press(actionButton(container, "word-0", "dictionary.shared.actions.unhideWord"));
+  const elsewhere = container.ownerDocument.createElement("input");
+  container.appendChild(elsewhere);
+  elsewhere.focus();
+  await render({ rows: [rows[1]] });
+  assert.equal(container.ownerDocument.activeElement, elsewhere);
+});
+
+test("a committed edit leaves focus on the row, following a renamed personal word", async (t) => {
+  const type = (input, value) =>
+    React.act(async () => {
+      input.type ??= "text";
+      input.value = value;
+      input.dispatchEvent({ type: "input", bubbles: true });
+    });
+  const enter = (input) =>
+    React.act(async () =>
+      input.dispatchEvent({
+        type: "keydown",
+        key: "Enter",
+        bubbles: true,
+        preventDefault() {},
+        stopPropagation() {},
+      })
+    );
+  const editWord = "dictionary.editWord";
+
+  const shared = [sharedRow(0), sharedRow(1)];
+  const { container, render } = await renderList(t, { rows: shared });
+  await press(actionButton(container, "word-1", editWord));
+  const editor = findElement(container, (node) => node.tagName === "INPUT");
+  assert.equal(container.ownerDocument.activeElement, editor);
+  await type(editor, "word-1b");
+  await enter(editor);
+  assert.equal(
+    findElement(container, (node) => node.tagName === "INPUT"),
+    null
+  );
+  assert.equal(focusedRow(container), "word-1");
+
+  const personal = [personalRow(0), personalRow(1)];
+  await render({ rows: personal });
+  await press(actionButton(container, "word-0", editWord));
+  const renameEditor = findElement(container, (node) => node.tagName === "INPUT");
+  await type(renameEditor, "word-9");
+  await enter(renameEditor);
+  const renamed = { ...personalRow(9), addedIndex: 0 };
+  await render({ rows: [personal[1], renamed] });
+  assert.equal(focusedRow(container), "word-9");
 });

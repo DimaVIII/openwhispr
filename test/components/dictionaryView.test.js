@@ -24,7 +24,10 @@ const MOCKS = {
     }
   `,
   "/hooks/useAuth": `
-    export function useAuth() { return { isSignedIn: true, user: { id: "u-me" } }; }
+    export function useAuth() {
+      const isSignedIn = globalThis.__signedIn ?? true;
+      return { isSignedIn, user: isSignedIn ? { id: "u-me" } : null };
+    }
   `,
   "/utils/agentName": `
     export const getAgentName = () => "Whispr";
@@ -38,8 +41,11 @@ const MOCKS = {
       constructor(reason) {
         super(reason);
         this.reason = reason;
+        this.appliedCount = 0;
       }
     }
+    // For results that fail part-way: build one, set appliedCount (and undo), throw it.
+    globalThis.__ActionError = SharedDictionaryActionError;
     // A result of "throw:<reason>" makes the call fail with that reason; a
     // function result is called with the arguments and gives the result.
     const record = (name) => async (...args) => {
@@ -195,6 +201,8 @@ function setState(t, { initialStorage = {}, shared = {}, settings = {} } = {}) {
     reload: async () => {
       calls.push(["reload"]);
     },
+    generation: 0,
+    markSynced: (generation) => calls.push(["markSynced", generation]),
     ...shared,
   };
   t.after(() => {
@@ -206,6 +214,8 @@ function setState(t, { initialStorage = {}, shared = {}, settings = {} } = {}) {
       "__workspace",
       "__shared",
       "__tabs",
+      "__signedIn",
+      "__ActionError",
     ]) {
       delete globalThis[key];
     }
@@ -1143,7 +1153,12 @@ for (const status of ["ssoRequired", "noAccess"]) {
 test("a failure that retrying can't fix names its cause instead of asking to try again", async (t) => {
   const { container } = await renderView(t);
   await openList(container, "workspace");
-  globalThis.__results.addSharedWords = { failed: { words: ["Foo"], reason: "planRequired" } };
+  globalThis.__results.addSharedWords = {
+    added: [],
+    alreadyPresent: [],
+    rejected: [],
+    failed: { words: ["Foo"], reason: "planRequired" },
+  };
   await type(addInput(container), "Foo");
   await pressEnter(addInput(container));
   const list = 'dictionary.shared.everyoneAt{\\"workspace\\":\\"Acme\\"}';
@@ -1548,4 +1563,243 @@ test("a bulk import or Hide for me in flight ignores a second click", async (t) 
   assert.equal(calls.filter(([name]) => name === "setSharedWordsHidden").length, 1);
   await React.act(async () => hiding.resolve());
   assert.equal(toolbar(container), null);
+});
+
+const partialError = (reason, appliedCount, undo) => {
+  const error = new globalThis.__ActionError(reason);
+  error.appliedCount = appliedCount;
+  error.undo = undo;
+  return error;
+};
+
+test("paused: Clear all, Export and Already in act on the moved words Personal shows again", async (t) => {
+  const snapshot = {
+    ...PAUSED,
+    entries: [...PAUSED.entries, entry("e-supabase", "Supabase", null)],
+  };
+  const { container, calls, exported } = await renderView(t, {
+    shared: { snapshot, movedPersonal: ["Supabase"] },
+  });
+  await openList(container, "personal");
+  assert.ok(rowFor(container, "Supabase"), "the moved word applies at personal priority");
+
+  await type(addInput(container), "supabase");
+  assert.ok(
+    container.textContent.includes(
+      'dictionary.shared.alreadyIn{"list":"dictionary.shared.personal"}'
+    )
+  );
+
+  await click(byAttribute(container, "aria-label", "dictionary.clearAll"));
+  await click(
+    byAttribute(byAttribute(container, "data-dialog", "dictionary.clearTitle"), "data-confirm")
+  );
+  assert.deepEqual(
+    calls.find(([name]) => name === "updateCustomDictionary"),
+    ["updateCustomDictionary", { remove: ["OpenWhispr", "Supabase"] }]
+  );
+
+  await click(byAttribute(container, "aria-label", "dictionary.exportDictionary"));
+  assert.deepEqual(exported, [["OpenWhispr", "Supabase", "Whispr"]]);
+});
+
+test("signed out, the page is Personal alone with no Business upsell", async (t) => {
+  globalThis.__signedIn = false;
+  const { container, rerender } = await renderView(t);
+  globalThis.__workspace = null;
+  await rerender();
+  assert.equal(pickerEntry(container, "all"), null);
+  assert.ok(!container.textContent.includes("dictionary.shared.group"));
+  assert.ok(!container.textContent.includes("dictionary.shared.locked"));
+  assert.ok(rowFor(container, "OpenWhispr"));
+  assert.ok(byAttribute(container, "aria-label", "dictionary.clearAll"));
+});
+
+test("signed in without a workspace, the Shared lists keep the Business upsell", async (t) => {
+  const { container, rerender } = await renderView(t, { shared: { snapshot: null } });
+  globalThis.__workspace = null;
+  await rerender();
+  assert.ok(container.textContent.includes("dictionary.shared.group"));
+  await openList(container, "allShared");
+  assert.ok(container.textContent.includes("dictionary.shared.locked.noWorkspace"));
+});
+
+test("a Delete for everyone that stops part-way counts what went and keeps Undo for it", async (t) => {
+  const { container } = await renderView(t);
+  const undo = async () => {};
+  globalThis.__results.deleteSharedWords = () => {
+    throw partialError("network", 1, undo);
+  };
+  await openList(container, `space:${ENGINEERING}`);
+  await click(checkboxFor(container, "Qdrant"));
+  await click(checkboxFor(container, "sherpa-onnx"));
+  await click(barButton(container, "dictionary.shared.actions.deleteForEveryone"));
+  await click(byAttribute(container, "data-confirm"));
+  const toast = globalThis.__toasts.at(-1);
+  assert.equal(
+    toast.title,
+    'dictionary.shared.partial.delete{"applied":1,"total":2,"count":1,"list":"Engineering"}'
+  );
+  assert.equal(toast.description, "dictionary.shared.share.reasons.network");
+  assert.equal(toast.variant, "destructive");
+  assert.equal(toast.actions[0].label, "dictionary.shared.undo");
+  assert.equal(toast.duration, 6000);
+});
+
+test("Delete for everyone's Undo stays up as long as the app's other Undo toasts", async (t) => {
+  const { container } = await renderView(t);
+  await openList(container, `space:${ENGINEERING}`);
+  await click(buttonsIn(rowFor(container, "Qdrant"))[3]);
+  await click(byAttribute(container, "data-confirm"));
+  assert.equal(globalThis.__toasts.at(-1).duration, 6000);
+});
+
+test("a Hide for me that stops part-way counts what went and keeps the rest selected", async (t) => {
+  const { container } = await renderView(t);
+  globalThis.__results.setSharedWordsHidden = () => {
+    throw partialError("network", 1);
+  };
+  await openList(container, `space:${ENGINEERING}`);
+  await click(checkboxFor(container, "Qdrant"));
+  await click(checkboxFor(container, "sherpa-onnx"));
+  await click(barButton(container, "dictionary.shared.actions.hide"));
+  const toast = globalThis.__toasts.at(-1);
+  assert.equal(
+    toast.title,
+    'dictionary.shared.partial.hide{"applied":1,"total":2,"count":1,"list":"Engineering"}'
+  );
+  assert.equal(toast.description, "dictionary.shared.share.reasons.network");
+  assert.ok(toolbar(container), "the selection stays for another try");
+
+  // Nothing applied still reads as the plain failure.
+  globalThis.__results.setSharedWordsHidden = "throw:network";
+  await click(barButton(container, "dictionary.shared.actions.hide"));
+  assert.deepEqual(globalThis.__toasts.at(-1), {
+    title: 'dictionary.shared.errors.generic{"list":"Engineering"}',
+    description: undefined,
+    variant: "destructive",
+    duration: undefined,
+    actions: undefined,
+  });
+});
+
+test("an add that stops part-way counts what went in and names what was left out", async (t) => {
+  const { container } = await renderView(t);
+  globalThis.__results.addSharedWords = {
+    added: ["Helm"],
+    alreadyPresent: [],
+    rejected: [],
+    failed: { words: ["Argo"], reason: "listFull" },
+  };
+  await openList(container, "workspace");
+  await type(addInput(container), "Helm, Argo, a<b");
+  await pressEnter(addInput(container));
+  const list = 'dictionary.shared.everyoneAt{\\"workspace\\":\\"Acme\\"}';
+  const [skipped, partial] = globalThis.__toasts.slice(-2);
+  assert.equal(skipped.title, 'dictionary.shared.skipped{"count":1,"words":"a<b"}');
+  assert.equal(skipped.variant, "default");
+  assert.equal(
+    partial.title,
+    `dictionary.shared.partial.add{"applied":1,"total":2,"count":1,"list":"${list}"}`
+  );
+  assert.equal(partial.description, `dictionary.shared.errors.listFull{"list":"${list}"}`);
+  assert.equal(addInput(container).value, "Helm, Argo, a<b", "the field keeps the words to retry");
+});
+
+test("Sync records when it finished, and a failed one doesn't", async (t) => {
+  const { container, calls } = await renderView(t);
+  const syncButton = () => byAttribute(container, "aria-label", "dictionary.shared.toolbar.sync");
+  await click(syncButton());
+  assert.deepEqual(
+    calls.filter(([name]) => name === "markSynced"),
+    [["markSynced", 0]]
+  );
+
+  globalThis.__results.syncShared = "reject";
+  await click(syncButton());
+  assert.equal(calls.filter(([name]) => name === "markSynced").length, 1);
+});
+
+test("deleting or renaming a personal word a list also has says the list still has it", async (t) => {
+  const { container, calls } = await renderView(t, {
+    settings: { customDictionary: ["OpenWhispr", "Qdrant", "Whispr"] },
+  });
+  const action = (word, key) =>
+    byAttribute(rowFor(container, word), "aria-label", named(key, word));
+  const stillIn = 'dictionary.shared.stillIn{"word":"Qdrant","list":"Engineering"}';
+
+  await click(action("Qdrant", "dictionary.shared.actions.deleteWord"));
+  assert.deepEqual(calls.filter(([name]) => name === "updateCustomDictionary").at(-1), [
+    "updateCustomDictionary",
+    { remove: ["Qdrant"] },
+  ]);
+  assert.equal(globalThis.__toasts.at(-1).title, stillIn);
+
+  const toasts = globalThis.__toasts.length;
+  await click(action("OpenWhispr", "dictionary.shared.actions.deleteWord"));
+  assert.equal(globalThis.__toasts.length, toasts, "no shared copy, no toast");
+
+  const rename = async (word) => {
+    await click(action("Qdrant", "dictionary.editWord"));
+    const editor = findElement(rowFor(container, "Qdrant"), (node) => node.tagName === "INPUT");
+    await type(editor, word);
+    await pressEnter(editor);
+  };
+  await rename("Qdrant DB");
+  assert.equal(globalThis.__toasts.at(-1).title, stillIn);
+  assert.equal(globalThis.__toasts.length, toasts + 1);
+  // A change of case keeps the personal word in front of the shared copy.
+  await rename("QDRANT");
+  assert.equal(globalThis.__toasts.length, toasts + 1);
+});
+
+test("paused, deleting a personal word a list has adds no toast: the list doesn't apply", async (t) => {
+  const { container } = await renderView(t, {
+    settings: { customDictionary: ["OpenWhispr", "Qdrant", "Whispr"] },
+    shared: { snapshot: PAUSED },
+  });
+  await click(
+    byAttribute(
+      rowFor(container, "Qdrant"),
+      "aria-label",
+      named("dictionary.shared.actions.deleteWord", "Qdrant")
+    )
+  );
+  assert.deepEqual(globalThis.__toasts, []);
+});
+
+test("Hide for me on a row says so, and its Undo unhides the word", async (t) => {
+  const { container, calls } = await renderView(t);
+  await openList(container, `space:${ENGINEERING}`);
+  await click(
+    byAttribute(
+      rowFor(container, "Qdrant"),
+      "aria-label",
+      named("dictionary.shared.actions.hideWord", "Qdrant")
+    )
+  );
+  const toast = globalThis.__toasts.at(-1);
+  assert.equal(toast.title, 'dictionary.shared.hiddenWord{"word":"Qdrant"}');
+  assert.equal(toast.duration, 6000);
+  assert.equal(toast.actions[0].label, "dictionary.shared.undo");
+  await React.act(async () => toast.actions[0].onClick());
+  assert.deepEqual(calls.filter(([name]) => name === "setSharedWordsHidden").at(-1), [
+    "setSharedWordsHidden",
+    "ws",
+    ["e-qdrant"],
+    false,
+  ]);
+
+  // A hide that failed has nothing to undo.
+  globalThis.__results.setSharedWordsHidden = "throw:network";
+  const count = globalThis.__toasts.length;
+  await click(
+    byAttribute(
+      rowFor(container, "Qdrant"),
+      "aria-label",
+      named("dictionary.shared.actions.hideWord", "Qdrant")
+    )
+  );
+  assert.equal(globalThis.__toasts.length, count + 1);
+  assert.equal(globalThis.__toasts.at(-1).variant, "destructive");
 });

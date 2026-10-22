@@ -4049,7 +4049,23 @@
       "badgeMore": "{{list}} +{{extra}}",
       "skipped_one": "{{count}} mot a été ignoré : {{words}}",
       "skipped_many": "{{count}} de mots ont été ignorés : {{words}}",
-      "skipped_other": "{{count}} mots ont été ignorés : {{words}}"
+      "skipped_other": "{{count}} mots ont été ignorés : {{words}}",
+      "partial": {
+        "add_one": "{{applied}} mots sur {{total}} ajoutés à {{list}}. {{count}} n'a pas été ajouté.",
+        "add_many": "{{applied}} mots sur {{total}} ajoutés à {{list}}. {{count}} n'ont pas été ajoutés.",
+        "add_other": "{{applied}} mots sur {{total}} ajoutés à {{list}}. {{count}} n'ont pas été ajoutés.",
+        "hide_one": "{{applied}} mots sur {{total}} masqués pour vous. {{count}} n'a pas été masqué.",
+        "hide_many": "{{applied}} mots sur {{total}} masqués pour vous. {{count}} n'ont pas été masqués.",
+        "hide_other": "{{applied}} mots sur {{total}} masqués pour vous. {{count}} n'ont pas été masqués.",
+        "unhide_one": "{{applied}} mots sur {{total}} réaffichés. {{count}} est toujours masqué.",
+        "unhide_many": "{{applied}} mots sur {{total}} réaffichés. {{count}} sont toujours masqués.",
+        "unhide_other": "{{applied}} mots sur {{total}} réaffichés. {{count}} sont toujours masqués.",
+        "delete_one": "{{applied}} mots sur {{total}} supprimés pour tous. {{count}} n'a pas été supprimé.",
+        "delete_many": "{{applied}} mots sur {{total}} supprimés pour tous. {{count}} n'ont pas été supprimés.",
+        "delete_other": "{{applied}} mots sur {{total}} supprimés pour tous. {{count}} n'ont pas été supprimés."
+      },
+      "hiddenWord": "« {{word}} » masqué pour vous",
+      "stillIn": "« {{word}} » est toujours dans {{list}}"
     }
   },
   "support": {

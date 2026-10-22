@@ -3613,7 +3613,19 @@
       "notUsedTooltip": "64 文字または 6 語を超える共有単語や、カンマ・文末の句読点・< > { } [ ] ` | などの記号・不可視文字を含む共有単語は音声入力で使われません",
       "badgeMore": "{{list}} +{{extra}}",
       "skipped_one": "{{count}} 個の単語を除外しました：{{words}}",
-      "skipped_other": "{{count}} 個の単語を除外しました：{{words}}"
+      "skipped_other": "{{count}} 個の単語を除外しました：{{words}}",
+      "partial": {
+        "add_one": "{{total}} 個中 {{applied}} 個の単語を {{list}} に追加しました。{{count}} 個は追加されませんでした。",
+        "add_other": "{{total}} 個中 {{applied}} 個の単語を {{list}} に追加しました。{{count}} 個は追加されませんでした。",
+        "hide_one": "{{total}} 個中 {{applied}} 個の単語を自分だけ非表示にしました。{{count}} 個は非表示になりませんでした。",
+        "hide_other": "{{total}} 個中 {{applied}} 個の単語を自分だけ非表示にしました。{{count}} 個は非表示になりませんでした。",
+        "unhide_one": "{{total}} 個中 {{applied}} 個の単語を再表示しました。{{count}} 個はまだ非表示です。",
+        "unhide_other": "{{total}} 個中 {{applied}} 個の単語を再表示しました。{{count}} 個はまだ非表示です。",
+        "delete_one": "{{total}} 個中 {{applied}} 個の単語を全員から削除しました。{{count}} 個は削除されませんでした。",
+        "delete_other": "{{total}} 個中 {{applied}} 個の単語を全員から削除しました。{{count}} 個は削除されませんでした。"
+      },
+      "hiddenWord": "「{{word}}」を自分だけ非表示にしました",
+      "stillIn": "「{{word}}」はまだ {{list}} にあります"
     }
   },
   "referral": {

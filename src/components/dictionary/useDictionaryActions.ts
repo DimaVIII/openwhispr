@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useToast } from "../ui/useToast";
+import { useToast, type ToastActionConfig } from "../ui/useToast";
 import {
   SharedDictionaryActionError,
   addSharedWords,
@@ -19,7 +19,12 @@ import { isTermLikeSharedWord } from "../../utils/sharedDictionaryHints";
 import { dictionaryWordKey } from "../../utils/snippets";
 import type { SharedDictionarySnapshot } from "../../types/sharedDictionary";
 import type { AddTarget } from "./DictionaryAddField";
-import { visiblePersonalWords, type DictionaryRow } from "./dictionaryViewModel";
+import {
+  listsShowingWord,
+  shownPersonalWords,
+  type DictionaryRow,
+  type SharedAccessState,
+} from "./dictionaryViewModel";
 
 interface DictionaryActionsInput {
   workspaceId: string | null;
@@ -31,6 +36,7 @@ interface DictionaryActionsInput {
   updateCustomDictionary: (changes: { add?: string[]; remove?: string[] }) => void;
   movedPersonal: string[];
   snapshot: SharedDictionarySnapshot | null;
+  access: SharedAccessState;
   listLabel: (target: AddTarget) => string;
 }
 
@@ -57,6 +63,8 @@ interface ShareFailure {
   target?: ShareTarget;
 }
 
+type PartialKind = "add" | "hide" | "unhide" | "delete";
+
 export interface DictionaryActions {
   // Personal words the member can see; clear-all removes exactly these.
   visiblePersonal: string[];
@@ -72,6 +80,8 @@ export interface DictionaryActions {
   editRow: (row: DictionaryRow, word: string) => Promise<EditFailure | null>;
   // Resolves true once every row changed.
   setRowsHidden: (rows: DictionaryRow[], hidden: boolean) => Promise<boolean>;
+  // Hides one row's word, with an Undo toast.
+  hideRow: (row: DictionaryRow) => Promise<void>;
   // Delete for everyone always asks first; the dialog reads `deleteTitle`.
   // onDeleted runs once the confirmed delete fully succeeded.
   requestDeleteForEveryone: (rows: DictionaryRow[], onDeleted?: () => void) => void;
@@ -90,11 +100,16 @@ export interface DictionaryActions {
 
 // How many left-out words a toast names before it only counts the rest.
 const SKIPPED_NAMES_SHOWN = 3;
+// As long as the app's other Undo toasts stay up.
+const UNDO_TOAST_MS = 6000;
 
 const sameWord = (left: string, right: string): boolean =>
   dictionaryWordKey(left) === dictionaryWordKey(right);
 const reasonOf = (error: unknown): SharedDictionaryActionReason =>
   error instanceof SharedDictionaryActionError ? error.reason : "network";
+// How many entries a batched delete or hide changed before it failed.
+const appliedCountOf = (error: unknown): number =>
+  error instanceof SharedDictionaryActionError ? error.appliedCount : 0;
 
 export function useDictionaryActions({
   workspaceId,
@@ -105,6 +120,7 @@ export function useDictionaryActions({
   updateCustomDictionary,
   movedPersonal,
   snapshot,
+  access,
   listLabel,
 }: DictionaryActionsInput): DictionaryActions {
   const { t, i18n } = useTranslation();
@@ -120,11 +136,11 @@ export function useDictionaryActions({
     );
   }, [workspaceId]);
 
-  // Ruling 4: clear-all and export leave out words moved into a team list,
-  // which stay under the shared copy as the member's fallback.
+  // Ruling 4: while shared words apply, clear-all and export leave out words
+  // moved into a team list, which stay under the shared copy as the member's fallback.
   const visiblePersonal = useMemo(
-    () => visiblePersonalWords(userWords, movedPersonal, snapshot),
-    [userWords, movedPersonal, snapshot]
+    () => shownPersonalWords(userWords, movedPersonal, snapshot, access),
+    [userWords, movedPersonal, snapshot, access]
   );
 
   // Re-adding a moved word makes it personal again in SQLite; the stored list
@@ -213,6 +229,61 @@ export function useDictionaryActions({
     });
   };
 
+  // A selection in All shared can span lists; name each of them once.
+  const listNames = (names: string[]): string =>
+    new Intl.ListFormat(i18n.language, { type: "conjunction" }).format([...new Set(names)]);
+
+  const failureLine = (
+    reason: SharedDictionaryActionReason,
+    targetNames: string,
+    target?: ShareTarget
+  ): string => {
+    if (reason === "listFull") {
+      return target === undefined
+        ? t("dictionary.shared.share.reasons.aListFull")
+        : t("dictionary.shared.errors.listFull", { list: listLabel(target) });
+    }
+    if (reason === "network") return t("dictionary.shared.share.reasons.network");
+    return errorTitle(reason, targetNames);
+  };
+
+  // A batch that stopped part-way says how much went through; one that changed
+  // nothing reads as the plain failure.
+  const reportPartial = (
+    kind: PartialKind,
+    applied: number,
+    notApplied: number,
+    failure: { reason: SharedDictionaryActionReason; listName: string; target?: ShareTarget },
+    actions?: ToastActionConfig[]
+  ): void => {
+    toast({
+      title:
+        applied === 0
+          ? errorTitle(failure.reason, failure.listName)
+          : t(`dictionary.shared.partial.${kind}`, {
+              applied,
+              total: applied + notApplied,
+              count: notApplied,
+              list: failure.listName,
+            }),
+      description:
+        applied === 0 ? undefined : failureLine(failure.reason, failure.listName, failure.target),
+      variant: "destructive",
+      duration: actions ? UNDO_TOAST_MS : undefined,
+      actions,
+    });
+  };
+
+  // All words shows the shared copy in the personal word's place, which would
+  // otherwise look like the delete or rename didn't happen.
+  const reportStillShared = (word: string): void => {
+    const lists = listsShowingWord(word, snapshot, access);
+    if (lists.length === 0) return;
+    toast({
+      title: t("dictionary.shared.stillIn", { word, list: listNames(lists.map(listLabel)) }),
+    });
+  };
+
   const addWords = async (text: string, target: AddTarget): Promise<boolean> => {
     const existing = new Set(wordsInTarget(target).map(dictionaryWordKey));
     const words = parseDictionaryImportText(text).filter((word) => {
@@ -234,7 +305,12 @@ export function useDictionaryActions({
     }
     const result = await addSharedWords(workspaceId, target, shareable);
     if (result.failed) {
-      showActionError(result.failed.reason, listLabel(target));
+      reportSkipped(skipped, result.added.length === 0);
+      reportPartial("add", result.added.length, result.failed.words.length, {
+        reason: result.failed.reason,
+        listName: listLabel(target),
+        target,
+      });
       return false;
     }
     // The rest went in, so the field clears; the toast names what was left out.
@@ -255,6 +331,8 @@ export function useDictionaryActions({
         };
       }
       updateCustomDictionary({ add: [word], remove: [row.word] });
+      // A change of case keeps the personal word in front of the shared copy.
+      if (!sameWord(word, row.word)) reportStillShared(row.word);
       return null;
     }
     if (!workspaceId || row.entryIds.length === 0) return null;
@@ -277,10 +355,6 @@ export function useDictionaryActions({
     return failure;
   };
 
-  // A selection in All shared can span lists; name each of them once.
-  const listNames = (names: string[]): string =>
-    new Intl.ListFormat(i18n.language, { type: "conjunction" }).format([...new Set(names)]);
-
   const entryIdsOf = (rows: DictionaryRow[]): string[] => rows.flatMap((row) => row.entryIds);
 
   const setEntriesHidden = async (
@@ -293,7 +367,11 @@ export function useDictionaryActions({
       await setSharedWordsHidden(workspaceId, entryIds, hidden);
       return true;
     } catch (error) {
-      showActionError(reasonOf(error), listName());
+      const applied = appliedCountOf(error);
+      reportPartial(hidden ? "hide" : "unhide", applied, new Set(entryIds).size - applied, {
+        reason: reasonOf(error),
+        listName: listName(),
+      });
       return false;
     }
   };
@@ -303,6 +381,22 @@ export function useDictionaryActions({
     return setEntriesHidden(entryIdsOf(shared), hidden, () =>
       listNames(shared.flatMap(rowListNames))
     );
+  };
+
+  const hideRow = async (row: DictionaryRow): Promise<void> => {
+    if (!(await setRowsHidden([row], true))) return;
+    toast({
+      title: t("dictionary.shared.hiddenWord", { word: row.word }),
+      duration: UNDO_TOAST_MS,
+      actions: [
+        {
+          label: t("dictionary.shared.undo"),
+          onClick: async () => {
+            await setRowsHidden([row], false);
+          },
+        },
+      ],
+    });
   };
 
   const unhideInTarget = (target: AddTarget, word: string): Promise<boolean> =>
@@ -318,16 +412,6 @@ export function useDictionaryActions({
       listName: listNames(shared.flatMap(rowListNames)),
       onDeleted,
     });
-  };
-
-  const shareFailureLine = ({ reason, target }: ShareFailure, targetNames: string): string => {
-    if (reason === "listFull") {
-      return target === undefined
-        ? t("dictionary.shared.share.reasons.aListFull")
-        : t("dictionary.shared.errors.listFull", { list: listLabel(target) });
-    }
-    if (reason === "network") return t("dictionary.shared.share.reasons.network");
-    return errorTitle(reason, targetNames);
   };
 
   const shareWords = async (words: string[], targets: ShareTarget[]): Promise<boolean> => {
@@ -362,7 +446,7 @@ export function useDictionaryActions({
         title:
           failed.reason === "network"
             ? t("dictionary.shared.errors.generic", { list: targetNames })
-            : shareFailureLine(failed, targetNames),
+            : failureLine(failed.reason, targetNames, failed.target),
         variant: "destructive",
       });
       return false;
@@ -374,7 +458,7 @@ export function useDictionaryActions({
         total: moved + failed.count,
         count: failed.count,
       }),
-      description: shareFailureLine(failed, targetNames),
+      description: failureLine(failed.reason, targetNames, failed.target),
       variant: "destructive",
     });
     return false;
@@ -384,9 +468,13 @@ export function useDictionaryActions({
     if (words.length === 0) return;
     updateCustomDictionary({ remove: words });
     // One word goes as it always has; a bulk delete can be taken back.
-    if (words.length < 2) return;
+    if (words.length < 2) {
+      reportStillShared(words[0]);
+      return;
+    }
     toast({
       title: t("dictionary.shared.deletedPersonalMany", { count: words.length }),
+      duration: UNDO_TOAST_MS,
       actions: [
         {
           label: t("dictionary.shared.undo"),
@@ -425,16 +513,20 @@ export function useDictionaryActions({
           words.length === 1
             ? t("dictionary.shared.deletedForEveryone", { word: words[0] })
             : t("dictionary.shared.deletedManyForEveryone", { count: words.length }),
+        duration: UNDO_TOAST_MS,
         actions: [undoAction(undo, listName)],
       });
     } catch (error) {
       // A batch that failed part-way can still restore what it deleted.
       const partialUndo = error instanceof SharedDictionaryActionError ? error.undo : undefined;
-      toast({
-        title: errorTitle(reasonOf(error), listName),
-        variant: "destructive",
-        actions: partialUndo ? [undoAction(partialUndo, listName)] : undefined,
-      });
+      const applied = appliedCountOf(error);
+      reportPartial(
+        "delete",
+        applied,
+        new Set(entryIds).size - applied,
+        { reason: reasonOf(error), listName },
+        partialUndo ? [undoAction(partialUndo, listName)] : undefined
+      );
     }
   };
 
@@ -462,8 +554,11 @@ export function useDictionaryActions({
 
   const sync = async (): Promise<void> => {
     setSyncing(true);
+    const { generation } = useSharedDictionaryStore.getState();
+    let failed = false;
     // The toolbar fires this without awaiting it, so a failure must not escape.
     const logFailure = (error: unknown): void => {
+      failed = true;
       logger.warn("Dictionary sync failed", { error: (error as Error)?.message }, "dictionary");
     };
     try {
@@ -471,6 +566,7 @@ export function useDictionaryActions({
         syncService.syncSharedDictionaryNow().catch(logFailure),
         syncService.syncDictionaryNow().catch(logFailure),
       ]);
+      if (!failed) useSharedDictionaryStore.getState().markSynced(generation);
     } finally {
       setSyncing(false);
     }
@@ -478,7 +574,7 @@ export function useDictionaryActions({
 
   const exportPersonal = async (): Promise<void> => {
     // The export keeps the agent name, as it always has.
-    const words = visiblePersonalWords(customDictionary, movedPersonal, snapshot);
+    const words = shownPersonalWords(customDictionary, movedPersonal, snapshot, access);
     const result = await window.electronAPI?.exportDictionary?.(words);
     if (result?.error) {
       toast({
@@ -497,6 +593,7 @@ export function useDictionaryActions({
     addWords,
     editRow,
     setRowsHidden,
+    hideRow,
     requestDeleteForEveryone,
     shareWords,
     deletePersonalWords,

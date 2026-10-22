@@ -3750,7 +3750,23 @@
       "badgeMore": "{{list}} +{{extra}}",
       "skipped_one": "Se omitió {{count}} palabra: {{words}}",
       "skipped_many": "Se omitieron {{count}} de palabras: {{words}}",
-      "skipped_other": "Se omitieron {{count}} palabras: {{words}}"
+      "skipped_other": "Se omitieron {{count}} palabras: {{words}}",
+      "partial": {
+        "add_one": "Se añadieron {{applied}} de {{total}} palabras a {{list}}. {{count}} no se añadió.",
+        "add_many": "Se añadieron {{applied}} de {{total}} palabras a {{list}}. {{count}} no se añadieron.",
+        "add_other": "Se añadieron {{applied}} de {{total}} palabras a {{list}}. {{count}} no se añadieron.",
+        "hide_one": "Se ocultaron {{applied}} de {{total}} palabras para ti. {{count}} no se ocultó.",
+        "hide_many": "Se ocultaron {{applied}} de {{total}} palabras para ti. {{count}} no se ocultaron.",
+        "hide_other": "Se ocultaron {{applied}} de {{total}} palabras para ti. {{count}} no se ocultaron.",
+        "unhide_one": "Se mostraron {{applied}} de {{total}} palabras. {{count}} sigue oculta.",
+        "unhide_many": "Se mostraron {{applied}} de {{total}} palabras. {{count}} siguen ocultas.",
+        "unhide_other": "Se mostraron {{applied}} de {{total}} palabras. {{count}} siguen ocultas.",
+        "delete_one": "Se eliminaron {{applied}} de {{total}} palabras para todos. {{count}} no se eliminó.",
+        "delete_many": "Se eliminaron {{applied}} de {{total}} palabras para todos. {{count}} no se eliminaron.",
+        "delete_other": "Se eliminaron {{applied}} de {{total}} palabras para todos. {{count}} no se eliminaron."
+      },
+      "hiddenWord": "«{{word}}» oculta para ti",
+      "stillIn": "«{{word}}» sigue en {{list}}"
     }
   },
   "insights": {

@@ -3735,7 +3735,27 @@
       "skipped_one": "Пропущено {{count}} слово: {{words}}",
       "skipped_few": "Пропущено {{count}} слова: {{words}}",
       "skipped_many": "Пропущено {{count}} слов: {{words}}",
-      "skipped_other": "Пропущено {{count}} слова: {{words}}"
+      "skipped_other": "Пропущено {{count}} слова: {{words}}",
+      "partial": {
+        "add_one": "Добавлено в {{list}}: {{applied}} из {{total}} слов. Не удалось добавить: {{count}}.",
+        "add_few": "Добавлено в {{list}}: {{applied}} из {{total}} слов. Не удалось добавить: {{count}}.",
+        "add_many": "Добавлено в {{list}}: {{applied}} из {{total}} слов. Не удалось добавить: {{count}}.",
+        "add_other": "Добавлено в {{list}}: {{applied}} из {{total}} слов. Не удалось добавить: {{count}}.",
+        "hide_one": "Скрыто для вас: {{applied}} из {{total}} слов. Не удалось скрыть: {{count}}.",
+        "hide_few": "Скрыто для вас: {{applied}} из {{total}} слов. Не удалось скрыть: {{count}}.",
+        "hide_many": "Скрыто для вас: {{applied}} из {{total}} слов. Не удалось скрыть: {{count}}.",
+        "hide_other": "Скрыто для вас: {{applied}} из {{total}} слов. Не удалось скрыть: {{count}}.",
+        "unhide_one": "Снова показано: {{applied}} из {{total}} слов. Всё ещё скрыто: {{count}}.",
+        "unhide_few": "Снова показано: {{applied}} из {{total}} слов. Всё ещё скрыто: {{count}}.",
+        "unhide_many": "Снова показано: {{applied}} из {{total}} слов. Всё ещё скрыто: {{count}}.",
+        "unhide_other": "Снова показано: {{applied}} из {{total}} слов. Всё ещё скрыто: {{count}}.",
+        "delete_one": "Удалено для всех: {{applied}} из {{total}} слов. Не удалось удалить: {{count}}.",
+        "delete_few": "Удалено для всех: {{applied}} из {{total}} слов. Не удалось удалить: {{count}}.",
+        "delete_many": "Удалено для всех: {{applied}} из {{total}} слов. Не удалось удалить: {{count}}.",
+        "delete_other": "Удалено для всех: {{applied}} из {{total}} слов. Не удалось удалить: {{count}}."
+      },
+      "hiddenWord": "«{{word}}» скрыто для вас",
+      "stillIn": "«{{word}}» по-прежнему есть в {{list}}"
     }
   },
   "insights": {

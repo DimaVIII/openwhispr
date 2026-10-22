@@ -137,7 +137,6 @@ test("delta passes overlap the stored cursor by 10 seconds", async (t) => {
   });
   await service.syncSharedDictionaryNow();
   harness.localStorage.setItem(ENTRIES_CURSOR, "2026-10-20T12:00:00.000Z");
-  harness.localStorage.setItem(`${ENTRIES_CURSOR}.id`, "ffffffff-ffff-4fff-8fff-ffffffffffff");
   const before = await db.api.getSharedDictionary(W1);
 
   await service.syncSharedDictionaryNow();
@@ -246,11 +245,99 @@ test("plain 404 marks unavailable without throwing", async (t) => {
   assert.equal(errors.mock.callCount(), 0, "an older API is not an error");
   assert.equal(ctx.db.calls.length, 0);
 
-  // Once the routes exist, the next pass marks them available again.
+  // The rest of the session doesn't ask again.
   ctx.cloud.add(W1, ["Qdrant"]);
   await ctx.service.syncSharedDictionaryNow();
+  assert.equal(ctx.cloud.requestsTo(LIST).length, 1);
+  assert.equal(ctx.useSharedDictionaryStore.getState().status, "unavailable");
+
+  // Once the routes exist, the next session marks them available again.
+  const next = new ctx.SyncService();
+  t.after(() => harness.stopSyncTimers(next));
+  await next.syncSharedDictionaryNow();
   assert.equal(ctx.useSharedDictionaryStore.getState().status, "ready");
   assert.equal(harness.localStorage.getItem("sharedDictionaryCapability"), "true");
+});
+
+test("a 404 is asked again once the account changes", async (t) => {
+  const ctx = await setup(t);
+  ctx.cloud.failNext(LIST, { status: 404 });
+  await ctx.service.syncSharedDictionaryNow();
+  assert.equal(ctx.useSharedDictionaryStore.getState().status, "unavailable");
+
+  harness.window.electronAPI.authGetTokenState = async () => ({
+    token: "token-next",
+    generation: 2,
+  });
+  await harness.establishValidatedAuth("user-next");
+  await ctx.service.syncSharedDictionaryNow();
+
+  assert.equal(ctx.cloud.requestsTo(LIST).length, 2);
+  assert.equal(ctx.useSharedDictionaryStore.getState().status, "ready");
+});
+
+test("a refusal answered after the account changed leaves the old mirror and access alone", async (t) => {
+  const ctx = await setup(t);
+  const { cloud, db, service } = ctx;
+  cloud.add(W1, ["Qdrant"]);
+  await service.syncSharedDictionaryNow();
+
+  cloud.failNext(LIST, { status: 404, code: "SHARED_DICTIONARY_NOT_MEMBER" });
+  cloud.beforeServe = () => {
+    harness.window.electronAPI.authGetTokenState = async () => ({
+      token: "token-next",
+      generation: 2,
+    });
+    cloud.beforeServe = null;
+  };
+  await service.syncSharedDictionaryNow();
+
+  assert.equal(db.callsNamed("clearSharedDictionary").length, 0);
+  assert.ok(db.workspaces.has(W1));
+  assert.ok(harness.localStorage.getItem(ENTRIES_CURSOR));
+  assert.equal(harness.localStorage.getItem("sharedDictionaryAccess"), null);
+  assert.equal(ctx.useSharedDictionaryStore.getState().status, "ready");
+});
+
+test("a workspace without the plan is read until its mirror says paused, then left alone", async (t) => {
+  const ctx = await setup(t);
+  const { cloud, db, service } = ctx;
+  const workspace = {
+    id: W1,
+    name: "Acme",
+    role: "member",
+    plan: "pro",
+    status: "active",
+    stripe_subscription_id: null,
+  };
+  ctx.useWorkspaceStore.setState({ loaded: true, error: false, workspaces: [workspace] });
+  cloud.add(W1, ["Qdrant"]);
+  cloud.workspace(W1).paused = true;
+
+  await service.syncSharedDictionaryNow();
+  assert.equal(cloud.requestsTo(LIST).length, 1);
+  assert.equal(cloud.requestsTo(HIDES).length, 1);
+  assert.deepEqual(ctx.hints(), { space: [], workspace: [] });
+
+  await service.syncSharedDictionaryNow();
+  assert.equal(cloud.requestsTo(LIST).length, 1, "no list request");
+  assert.equal(cloud.requestsTo(HIDES).length, 1, "no hides request");
+  const { snapshot, status } = ctx.useSharedDictionaryStore.getState();
+  assert.equal(status, "ready");
+  assert.equal(snapshot.meta.paused, true, "the page still shows the paused words");
+  assert.deepEqual(
+    snapshot.entries.map((entry) => entry.word),
+    ["Qdrant"]
+  );
+  assert.deepEqual(ctx.hints(), { space: [], workspace: [] });
+
+  // An upgrade the workspace list knows about syncs again.
+  ctx.useWorkspaceStore.setState({ workspaces: [{ ...workspace, plan: "business" }] });
+  cloud.workspace(W1).paused = false;
+  await service.syncSharedDictionaryNow();
+  assert.equal(cloud.requestsTo(LIST).length, 2);
+  assert.deepEqual(ctx.hints().workspace, ["Qdrant"]);
+  assert.equal(db.callsNamed("replaceSharedDictionary").length, 1);
 });
 
 test("arrival event fires once", async (t) => {
@@ -414,6 +501,72 @@ test("a returning scope triggers a fresh snapshot", async (t) => {
   assert.equal(hidesQueries.at(-1).since, undefined, "hides are re-snapshotted too");
   assert.deepEqual(ctx.hints().space, ["Biscuit"]);
   assert.equal(harness.localStorage.getItem(ENTRIES_CURSOR), "2026-10-20T12:30:00.000Z");
+});
+
+test("a list joined between snapshot pages re-runs the snapshot", async (t) => {
+  const ctx = await setup(t);
+  const { cloud, db, service } = ctx;
+  cloud.add(
+    W1,
+    Array.from({ length: 250 }, (_, index) => `Word${index}`),
+    { created_at: "2026-10-20T10:00:00.000Z", updated_at: "2026-10-20T10:00:00.000Z" }
+  );
+  // The member is added to Space B after page 1, whose words predate page 2's cursor.
+  cloud.beforeServe = (request) => {
+    if (request.pathname !== LIST || !request.query.get("cursor")) return;
+    cloud.add(W1, ["Biscuit"], {
+      space_id: SPACE_B,
+      created_at: "2026-10-01T00:00:00.000Z",
+      updated_at: "2026-10-01T00:00:00.000Z",
+    });
+    cloud.workspace(W1).scopes = [WORKSPACE_SCOPE, spaceScope(SPACE_B, "Space B")];
+    cloud.beforeServe = null;
+  };
+
+  await service.syncSharedDictionaryNow();
+
+  const lists = cloud.requestsTo(LIST).map(query);
+  assert.equal(lists.length, 4, "two pages, then two again");
+  assert.equal(lists[2].cursor, undefined, "the re-run starts from the first page");
+  const replaced = db.callsNamed("replaceSharedDictionary");
+  assert.equal(replaced.length, 1, "only the complete snapshot is written");
+  assert.equal(replaced[0].entries.length, 251);
+  assert.deepEqual(ctx.hints().space, ["Biscuit"]);
+  assert.equal(ctx.hints().workspace.length, 250);
+});
+
+test("a list joined during the snapshot's re-run is kept as read and snapshotted next pass", async (t) => {
+  const ctx = await setup(t);
+  const { cloud, db, service } = ctx;
+  cloud.add(
+    W1,
+    Array.from({ length: 250 }, (_, index) => `Word${index}`),
+    { created_at: "2026-10-20T10:00:00.000Z", updated_at: "2026-10-20T10:00:00.000Z" }
+  );
+  let joined = 0;
+  cloud.beforeServe = (request) => {
+    if (request.pathname !== LIST || !request.query.get("cursor")) return;
+    joined += 1;
+    cloud.workspace(W1).scopes = [
+      ...cloud.workspace(W1).scopes,
+      spaceScope(`44444444-4444-4444-8444-00000000000${joined}`),
+    ];
+  };
+
+  await service.syncSharedDictionaryNow();
+
+  assert.equal(cloud.requestsTo(LIST).length, 4, "one re-run, never a loop");
+  const replaced = db.callsNamed("replaceSharedDictionary");
+  assert.equal(replaced.length, 1);
+  assert.equal(replaced[0].meta.scopes.length, 3, "the last page's lists");
+  assert.equal(harness.localStorage.getItem(ENTRIES_CURSOR), null, "no entries cursor");
+
+  cloud.beforeServe = null;
+  await service.syncSharedDictionaryNow();
+  const next = cloud.requestsTo(LIST).slice(4).map(query);
+  assert.equal(next[0].since, undefined, "the next pass snapshots again");
+  assert.equal(db.callsNamed("replaceSharedDictionary").length, 2);
+  assert.ok(harness.localStorage.getItem(ENTRIES_CURSOR), "and stores its cursor");
 });
 
 test("no active workspace clears only the workspaces the member left", async (t) => {

@@ -29,7 +29,11 @@ async function setUp(t) {
     };
     return payloads;
   };
-  const transcribe = async (provider, text) => {
+  const transcribe = async (
+    provider,
+    text,
+    sharedDictionaryHints = { space: ["Qdrant"], workspace: ["Zentrum"] }
+  ) => {
     loaded.setSettings({
       useLocalWhisper: false,
       allowLocalFallback: false,
@@ -37,7 +41,7 @@ async function setUp(t) {
       transcriptionMode: "providers",
       customDictionary: ["Piha", "Biscuit"],
       snippets: [],
-      sharedDictionaryHints: { space: ["Qdrant"], workspace: ["Zentrum"] },
+      sharedDictionaryHints,
     });
     const payloads = respond(provider, text);
     // The real getKeyterms and getWhisperPrompt build what each payload carries.
@@ -94,4 +98,32 @@ test("a recital out of the sent order is left in the transcript", async (t) => {
   assert.equal(tinfoil.result.rawText, SPEECH);
   const tinfoilPersonalFirst = await transcribe("tinfoil", `${SPEECH} ${PERSONAL_FIRST}`);
   assert.equal(tinfoilPersonalFirst.result.rawText, `${SPEECH} ${PERSONAL_FIRST}`);
+});
+
+test("keyterm providers treat a recital of every sent keyterm as an echo", async (t) => {
+  const { transcribe } = await setUp(t);
+  // More shared words than the Whisper window holds, all of them sent as keyterms.
+  const hints = { space: [], workspace: Array.from({ length: 60 }, (_, i) => `Termword${i}`) };
+  const recital = ["Piha", "Biscuit", ...hints.workspace].join(", ");
+
+  for (const provider of ["xai", "gemini"]) {
+    await t.test(provider, async () => {
+      const { payload } = await transcribe(provider, SPEECH, hints);
+      assert.equal(payload.keyterms.length, 62);
+      await assert.rejects(transcribe(provider, recital, hints), /No audio detected/);
+    });
+  }
+});
+
+test("keyterm providers keep the personal-only echo check", async (t) => {
+  const { transcribe } = await setUp(t);
+  const hints = { space: [], workspace: [] };
+
+  for (const provider of ["xai", "gemini"]) {
+    await t.test(provider, async () => {
+      await assert.rejects(transcribe(provider, "Piha, Biscuit.", hints), /No audio detected/);
+      const speech = await transcribe(provider, `${SPEECH} Piha`, hints);
+      assert.equal(speech.result.rawText, `${SPEECH} Piha`);
+    });
+  }
 });

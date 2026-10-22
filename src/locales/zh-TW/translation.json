@@ -3685,7 +3685,19 @@
       "notUsedTooltip": "超過 64 個字元或 6 個詞，或包含逗號、句末標點、< > { } [ ] ` | 等符號或不可見字元的共享詞語不會用於聽寫",
       "badgeMore": "{{list}} +{{extra}}",
       "skipped_one": "已略過 {{count}} 個詞語：{{words}}",
-      "skipped_other": "已略過 {{count}} 個詞語：{{words}}"
+      "skipped_other": "已略過 {{count}} 個詞語：{{words}}",
+      "partial": {
+        "add_one": "已將 {{applied}}/{{total}} 個詞語新增到 {{list}}，{{count}} 個未新增。",
+        "add_other": "已將 {{applied}}/{{total}} 個詞語新增到 {{list}}，{{count}} 個未新增。",
+        "hide_one": "已為你隱藏 {{applied}}/{{total}} 個詞語，{{count}} 個未隱藏。",
+        "hide_other": "已為你隱藏 {{applied}}/{{total}} 個詞語，{{count}} 個未隱藏。",
+        "unhide_one": "已取消隱藏 {{applied}}/{{total}} 個詞語，{{count}} 個仍為隱藏狀態。",
+        "unhide_other": "已取消隱藏 {{applied}}/{{total}} 個詞語，{{count}} 個仍為隱藏狀態。",
+        "delete_one": "已為所有人刪除 {{applied}}/{{total}} 個詞語，{{count}} 個未刪除。",
+        "delete_other": "已為所有人刪除 {{applied}}/{{total}} 個詞語，{{count}} 個未刪除。"
+      },
+      "hiddenWord": "已對你隱藏「{{word}}」",
+      "stillIn": "「{{word}}」仍在 {{list}} 中"
     }
   },
   "insights": {

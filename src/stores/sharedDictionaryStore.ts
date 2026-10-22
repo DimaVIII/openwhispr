@@ -104,6 +104,8 @@ interface SharedDictionaryState {
   status: SharedDictionaryStatus;
   snapshot: SharedDictionarySnapshot | null;
   syncing: boolean;
+  // The later of the shared lists' last pass and the page's last Sync, which
+  // also syncs the personal dictionary (the only work it does without a workspace).
   lastSyncedAt: string | null;
   // Set by the arrival toast's "View words".
   requestedList: ListKey | null;
@@ -120,7 +122,12 @@ interface SharedDictionaryState {
   // `workspaceId` is the workspace the pass ran for; the current one by default.
   setStatus: (status: SharedDictionaryStatus, workspaceId?: string | null) => void;
   setSyncing: (syncing: boolean) => void;
+  // A Sync started under `generation` finished; ignored after an account or workspace change.
+  markSynced: (generation: number) => void;
 }
+
+const laterOf = (left: string | null, right: string | null): string | null =>
+  left === null || (right !== null && Date.parse(right) > Date.parse(left)) ? right : left;
 
 function readAccessMap(): Record<string, AccessStatus> {
   try {
@@ -172,7 +179,7 @@ export const useSharedDictionaryStore = create<SharedDictionaryState>((set, get)
     load: async (workspaceId, generation) => {
       if (!workspaceId) {
         if (!isCurrent(workspaceId, generation)) return;
-        set({ snapshot: null, movedPersonal: [], lastSyncedAt: null });
+        set({ snapshot: null, movedPersonal: [] });
         useSettingsStore.getState().setSharedDictionaryHints(EMPTY_SHARED_HINTS, null);
         return;
       }
@@ -196,7 +203,7 @@ export const useSharedDictionaryStore = create<SharedDictionaryState>((set, get)
       set({
         snapshot,
         movedPersonal: movedPersonal ?? [],
-        lastSyncedAt: snapshot.meta?.syncedAt ?? null,
+        lastSyncedAt: laterOf(get().lastSyncedAt, snapshot.meta?.syncedAt ?? null),
       });
       useSettingsStore
         .getState()
@@ -272,6 +279,10 @@ export const useSharedDictionaryStore = create<SharedDictionaryState>((set, get)
     },
 
     setSyncing: (syncing) => set({ syncing }),
+
+    markSynced: (generation) => {
+      if (get().generation === generation) set({ lastSyncedAt: new Date().toISOString() });
+    },
   };
 });
 

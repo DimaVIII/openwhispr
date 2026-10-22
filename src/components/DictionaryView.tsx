@@ -198,6 +198,7 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
   const workspaceName = workspace?.name ?? "";
   const access = resolveSharedAccessState({
     status,
+    signedIn: isSignedIn,
     workspace,
     serverPaused: snapshot?.meta?.paused ?? null,
     hasWords:
@@ -349,6 +350,7 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
     updateCustomDictionary,
     movedPersonal,
     snapshot,
+    access,
     listLabel,
   });
   const { visiblePersonal } = actions;
@@ -530,8 +532,8 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
             rows={rows}
             hiddenList={openList === "hidden"}
             onEdit={actions.editRow}
-            onDelete={(row) => updateCustomDictionary({ remove: [row.word] })}
-            onHide={(row) => void actions.setRowsHidden([row], true)}
+            onDelete={(row) => actions.deletePersonalWords([row.word])}
+            onHide={(row) => void actions.hideRow(row)}
             onUnhide={(row) => void actions.setRowsHidden([row], false)}
             onDeleteForEveryone={(row) => actions.requestDeleteForEveryone([row])}
             onShare={

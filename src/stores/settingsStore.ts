@@ -34,7 +34,11 @@ import {
   type InferenceScopeStoreKeys,
   usesCloudModelCatalog,
 } from "../config/inferenceScopes";
-import { normalizeChineseScriptPreference } from "../utils/chineseScript";
+import {
+  getChineseScriptPromptBias,
+  normalizeChineseScriptPreference,
+  resolveChineseScriptTarget,
+} from "../utils/chineseScript";
 import { adjustBedrockModelForRegion } from "../utils/bedrockRegions";
 import modelRegistryData from "../models/modelRegistryData.json";
 import { pickDefaultModelId } from "../models/providerDefaultModel";
@@ -64,7 +68,12 @@ import type {
   ThemeSettings,
   ChatAgentSettings,
 } from "../hooks/useSettings";
-import { getDictionaryHintTiers, MAX_SHARED_KEYTERMS, type Snippet } from "../utils/snippets";
+import {
+  getDictionaryHintTiers,
+  getKeytermDictionaryWords,
+  MAX_SHARED_KEYTERMS,
+  type Snippet,
+} from "../utils/snippets";
 import {
   EMPTY_SHARED_HINTS,
   isTermLikeSharedWord,
@@ -284,25 +293,33 @@ interface PromptDictionarySettings {
   customDictionary: string[];
   snippets: Snippet[];
   sharedDictionaryHints: SharedHintWords;
+  preferredLanguage: string;
+  chineseScriptPreference: string;
 }
 
 // The shared words that reach the transcription prompt beside the personal
 // words and snippet triggers. Auto-learn treats these as already applying, so
-// they follow the tightest STT path (the Whisper decoder's window that local
-// engines and OpenWhispr Cloud get, see audioManager's
-// getCustomDictionaryPromptTiers, less the script bias): a team word cut from
-// it is learned into Personal, where it is always sent.
+// they follow the tightest STT paths: the Whisper decoder's window that local
+// engines and OpenWhispr Cloud get, less the script bias (see audioManager's
+// getCustomDictionaryPromptTiers), and the keyterm list, which drops words
+// too long for a keyterm. A team word cut from either is learned into
+// Personal, where it is always sent.
 function sharedWordsReachingPrompt(settings: PromptDictionarySettings): SharedHintWords {
+  const scriptBias = getChineseScriptPromptBias(
+    resolveChineseScriptTarget(settings.preferredLanguage, settings.chineseScriptPreference)
+  );
   const [, space = [], workspace = []] = selectDictionaryPromptTiers(
     getDictionaryHintTiers(settings),
     Infinity,
     {
-      sharedChars: WHISPER_DECODER_PROMPT_CHARS,
+      sharedChars: WHISPER_DECODER_PROMPT_CHARS - (scriptBias ? scriptBias.length + 1 : 0),
       sharedWords: MAX_SHARED_KEYTERMS,
       totalTerms: PROMPT_HEAD_TERMS,
     }
   );
-  return { space, workspace };
+  const keyterms = new Set(getKeytermDictionaryWords(settings));
+  const reaches = (word: string): boolean => keyterms.has(word);
+  return { space: space.filter(reaches), workspace: workspace.filter(reaches) };
 }
 
 // The last list this window sent; every dictionary edit re-derives it, and
@@ -2906,13 +2923,16 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
 }));
 
 // Which shared words reach the prompt also depends on the personal words and
-// snippet triggers ahead of them, so main's copy is re-derived on any of the three.
+// snippet triggers ahead of them and on the script bias beside them, so main's
+// copy is re-derived on any of these.
 if (isBrowser) {
   useSettingsStore.subscribe((state, previous) => {
     if (
       state.sharedDictionaryHints !== previous.sharedDictionaryHints ||
       state.customDictionary !== previous.customDictionary ||
-      state.snippets !== previous.snippets
+      state.snippets !== previous.snippets ||
+      state.preferredLanguage !== previous.preferredLanguage ||
+      state.chineseScriptPreference !== previous.chineseScriptPreference
     ) {
       sendSharedHintsToMain(state);
     }

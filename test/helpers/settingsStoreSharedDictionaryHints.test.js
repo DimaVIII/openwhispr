@@ -308,3 +308,29 @@ test("main gets only the shared words that fit the transcription prompt", async 
   const fewer = sent.at(-1);
   assert.ok(fewer.space.length + fewer.workspace.length < total.length);
 });
+
+test("main's shared words leave room for the script bias and skip words too long for a keyterm", async (t) => {
+  const sent = [];
+  const loaded = await loadStore(t, {
+    cachePrefix: "openwhispr-shared-hints-script-bias-",
+    initialStorage: { activeWorkspaceId: WS_A },
+    electronAPI: {
+      setSharedDictionaryHints: async (hints) => {
+        sent.push(hints);
+      },
+    },
+  });
+  await initialize(loaded);
+  const long = `Supercalifragilistic${"x".repeat(40)}`;
+  const workspace = [long, ...Array.from({ length: 60 }, (_, index) => `Workspaceword${index}`)];
+
+  loaded.useSettingsStore.getState().setSharedDictionaryHints({ space: [], workspace }, WS_A);
+  const plain = sent.at(-1);
+  assert.ok(plain.workspace.length > 0);
+  assert.equal(plain.workspace.includes(long), false, "keyterm providers never get it");
+
+  // As another window's edit lands (the setter would also start a sync).
+  loaded.useSettingsStore.setState({ preferredLanguage: "zh-CN" });
+  const biased = sent.at(-1);
+  assert.ok(biased.workspace.length < plain.workspace.length, "the script bias takes room");
+});

@@ -3685,7 +3685,19 @@
       "notUsedTooltip": "超过 64 个字符或 6 个词，或包含逗号、句末标点、< > { } [ ] ` | 等符号或不可见字符的共享词语不会用于听写",
       "badgeMore": "{{list}} +{{extra}}",
       "skipped_one": "已略过 {{count}} 个词语：{{words}}",
-      "skipped_other": "已略过 {{count}} 个词语：{{words}}"
+      "skipped_other": "已略过 {{count}} 个词语：{{words}}",
+      "partial": {
+        "add_one": "已将 {{applied}}/{{total}} 个词语添加到 {{list}}，{{count}} 个未添加。",
+        "add_other": "已将 {{applied}}/{{total}} 个词语添加到 {{list}}，{{count}} 个未添加。",
+        "hide_one": "已为你隐藏 {{applied}}/{{total}} 个词语，{{count}} 个未隐藏。",
+        "hide_other": "已为你隐藏 {{applied}}/{{total}} 个词语，{{count}} 个未隐藏。",
+        "unhide_one": "已取消隐藏 {{applied}}/{{total}} 个词语，{{count}} 个仍处于隐藏状态。",
+        "unhide_other": "已取消隐藏 {{applied}}/{{total}} 个词语，{{count}} 个仍处于隐藏状态。",
+        "delete_one": "已为所有人删除 {{applied}}/{{total}} 个词语，{{count}} 个未删除。",
+        "delete_other": "已为所有人删除 {{applied}}/{{total}} 个词语，{{count}} 个未删除。"
+      },
+      "hiddenWord": "已为你隐藏「{{word}}」",
+      "stillIn": "「{{word}}」仍在 {{list}} 中"
     }
   },
   "insights": {

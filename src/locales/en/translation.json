@@ -4036,7 +4036,19 @@
       "notUsedTooltip": "Dictation leaves out shared words over 64 characters or 6 words, or with commas, sentence punctuation, symbols like < > { } [ ] ` | or hidden characters",
       "badgeMore": "{{list}} +{{extra}}",
       "skipped_one": "{{count}} word was left out: {{words}}",
-      "skipped_other": "{{count}} words were left out: {{words}}"
+      "skipped_other": "{{count}} words were left out: {{words}}",
+      "partial": {
+        "add_one": "Added {{applied}} of {{total}} words to {{list}}. {{count}} wasn't added.",
+        "add_other": "Added {{applied}} of {{total}} words to {{list}}. {{count}} weren't added.",
+        "hide_one": "Hid {{applied}} of {{total}} words for you. {{count}} wasn't hidden.",
+        "hide_other": "Hid {{applied}} of {{total}} words for you. {{count}} weren't hidden.",
+        "unhide_one": "Unhid {{applied}} of {{total}} words. {{count}} is still hidden.",
+        "unhide_other": "Unhid {{applied}} of {{total}} words. {{count}} are still hidden.",
+        "delete_one": "Deleted {{applied}} of {{total}} words for everyone. {{count}} wasn't deleted.",
+        "delete_other": "Deleted {{applied}} of {{total}} words for everyone. {{count}} weren't deleted."
+      },
+      "hiddenWord": "Hid \"{{word}}\" for you",
+      "stillIn": "\"{{word}}\" is still in {{list}}"
     }
   },
   "support": {

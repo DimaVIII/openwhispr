@@ -3698,7 +3698,23 @@
       "badgeMore": "{{list}} +{{extra}}",
       "skipped_one": "{{count}} palavra ficou de fora: {{words}}",
       "skipped_many": "{{count}} de palavras ficaram de fora: {{words}}",
-      "skipped_other": "{{count}} palavras ficaram de fora: {{words}}"
+      "skipped_other": "{{count}} palavras ficaram de fora: {{words}}",
+      "partial": {
+        "add_one": "{{applied}} de {{total}} palavras adicionadas a {{list}}. {{count}} não foi adicionada.",
+        "add_many": "{{applied}} de {{total}} palavras adicionadas a {{list}}. {{count}} não foram adicionadas.",
+        "add_other": "{{applied}} de {{total}} palavras adicionadas a {{list}}. {{count}} não foram adicionadas.",
+        "hide_one": "{{applied}} de {{total}} palavras ocultadas para você. {{count}} não foi ocultada.",
+        "hide_many": "{{applied}} de {{total}} palavras ocultadas para você. {{count}} não foram ocultadas.",
+        "hide_other": "{{applied}} de {{total}} palavras ocultadas para você. {{count}} não foram ocultadas.",
+        "unhide_one": "{{applied}} de {{total}} palavras reexibidas. {{count}} continua oculta.",
+        "unhide_many": "{{applied}} de {{total}} palavras reexibidas. {{count}} continuam ocultas.",
+        "unhide_other": "{{applied}} de {{total}} palavras reexibidas. {{count}} continuam ocultas.",
+        "delete_one": "{{applied}} de {{total}} palavras excluídas para todos. {{count}} não foi excluída.",
+        "delete_many": "{{applied}} de {{total}} palavras excluídas para todos. {{count}} não foram excluídas.",
+        "delete_other": "{{applied}} de {{total}} palavras excluídas para todos. {{count}} não foram excluídas."
+      },
+      "hiddenWord": "“{{word}}” oculta para você",
+      "stillIn": "“{{word}}” ainda está em {{list}}"
     }
   },
   "insights": {
