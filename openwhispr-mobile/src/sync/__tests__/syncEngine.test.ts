@@ -147,6 +147,7 @@ import { requestSync, subscribeSyncCompletion } from '../syncEngine';
 import { pushPrivateNoteDeletes } from '../privateNoteDeletion';
 import { useSyncStore } from '../useSyncStore';
 import { ApiError } from '@/lib/apiClient';
+import { SyncStalledError } from '../syncContext';
 import { notesRepository } from '@/data';
 import * as Sentry from '@sentry/react-native';
 
@@ -165,7 +166,7 @@ beforeEach(() => {
   mockAuthState.isGuest = false;
   mockConfigState.config = { cloudBackupEnabled: true };
   mockFetchUsage.mockResolvedValue({ isSubscribed: true });
-  mockSyncSpaces.mockResolvedValue({ capable: true, activeSpaces: [] });
+  mockSyncSpaces.mockResolvedValue({ capable: true, activeSpaces: [], workspaces: null });
   mockPullFolders.mockResolvedValue(undefined);
   mockPullFoldersTeam.mockResolvedValue(undefined);
   mockPullNotes.mockResolvedValue(undefined);
@@ -933,7 +934,7 @@ describe('shared dictionary pull', () => {
     requestSync('manual');
     await flush();
 
-    expect(mockPullSharedDictionary).toHaveBeenCalledWith(expect.any(Function));
+    expect(mockPullSharedDictionary).toHaveBeenCalledWith(expect.any(Function), null);
     expect(mockPullDictionary).not.toHaveBeenCalled();
     expect(mockLoadSharedDictionary).toHaveBeenCalled();
     expect(useSyncStore.getState().status).toBe('idle');
@@ -1002,6 +1003,29 @@ describe('shared dictionary pull', () => {
     expect(mockLoadSharedDictionary).not.toHaveBeenCalled();
   });
 
+  it('hands the shared pull the workspaces the spaces pass read', async () => {
+    const workspaces = [{ id: 'ws-1', name: 'Acme' }];
+    mockSyncSpaces.mockResolvedValue({ capable: true, activeSpaces: [], workspaces });
+
+    requestSync('manual');
+    await flush();
+
+    expect(mockPullSharedDictionary).toHaveBeenCalledWith(expect.any(Function), workspaces);
+  });
+
+  it('reports a stalled shared pull to Sentry instead of filing it as offline', async () => {
+    const stalled = new SyncStalledError('Shared dictionary delta stopped advancing');
+    mockPullSharedDictionary.mockRejectedValue(stalled);
+
+    requestSync('manual');
+    await flush();
+
+    expect(Sentry.captureException).toHaveBeenCalledWith(stalled, {
+      tags: { sync: 'shared-dictionary' },
+    });
+    expect(mockPushNotes).toHaveBeenCalled();
+  });
+
   it('a network-level shared pull failure stays out of Sentry', async () => {
     mockPullSharedDictionary.mockRejectedValue(new TypeError('Network request failed'));
 
@@ -1010,5 +1034,33 @@ describe('shared dictionary pull', () => {
 
     expect(Sentry.captureException).not.toHaveBeenCalled();
     expect(mockPushNotes).toHaveBeenCalled();
+  });
+});
+
+describe('personal dictionary pass', () => {
+  it.each([
+    ['a stalled pull', new SyncStalledError('Dictionary updated_at pull stopped advancing')],
+    ['a failed backfill snapshot', new ApiError('boom', 500)],
+  ])('%s is reported and the push still runs', async (_label, error) => {
+    mockPullDictionary.mockRejectedValue(error);
+
+    requestSync('manual');
+    await flush();
+
+    expect(Sentry.captureException).toHaveBeenCalledWith(error, { tags: { sync: 'dictionary' } });
+    expect(mockPushDictionary).toHaveBeenCalled();
+    expect(mockPullSnippets).toHaveBeenCalled();
+  });
+
+  it('a policy block on the pull still stops the run before the push', async () => {
+    mockPullDictionary.mockRejectedValue(
+      new ApiError('blocked', 403, 'POLICY_CLOUD_BACKUP_BLOCKED'),
+    );
+
+    requestSync('manual');
+    await flush();
+
+    expect(mockPushDictionary).not.toHaveBeenCalled();
+    expect(useSyncStore.getState().policyBlocked).toBe(true);
   });
 });

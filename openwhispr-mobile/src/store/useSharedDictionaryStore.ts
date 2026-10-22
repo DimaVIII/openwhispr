@@ -1,5 +1,10 @@
 import { create } from 'zustand';
-import { selectSharedHintWords, type SharedHintWords } from '@/lib/sharedDictionaryHints';
+import {
+  selectHiddenOnlyKeys,
+  selectSharedHintWords,
+  sharedWordKey,
+  type SharedHintWords,
+} from '@/lib/sharedDictionaryHints';
 
 // The sync modules are required where they're used: src/lib/dictationHints.ts
 // imports this store and is imported by every dictation path, so a static
@@ -15,11 +20,19 @@ interface SharedDictionaryStoreState {
   /** The shared words that apply to dictation, by tier. */
   hints: SharedHintWords;
   /**
-   * lower(word) of every live shared entry, hidden or not: a personal word
-   * moved into a shared list leaves the personal list while its shared copy
-   * exists, even when the member hid that copy. Empty while sharing is paused.
+   * sharedWordKey of the shared words that apply (the ones `summary` counts): a
+   * personal word moved into a shared list leaves the personal list only while
+   * its shared copy applies. Hidden, non-term-like or paused copies don't, so
+   * the moved word shows in Personal again, and no moved word is ever hidden
+   * while `summary` is null.
    */
   sharedWordsLower: Set<string>;
+  /**
+   * sharedWordKey of words the member hid with no unhidden copy applying: a
+   * moved personal word (sharedAt set) with one of these keys stays out of
+   * dictation hints (selectHiddenOnlyKeys).
+   */
+  hiddenOnlyKeys: Set<string>;
   /** How many shared words apply, or null when none do. */
   summary: SharedDictionarySummary | null;
   load: () => Promise<void>;
@@ -28,10 +41,11 @@ interface SharedDictionaryStoreState {
 
 const emptyState = (): Pick<
   SharedDictionaryStoreState,
-  'hints' | 'sharedWordsLower' | 'summary'
+  'hints' | 'sharedWordsLower' | 'hiddenOnlyKeys' | 'summary'
 > => ({
   hints: { space: [], workspace: [] },
   sharedWordsLower: new Set(),
+  hiddenOnlyKeys: new Set(),
   summary: null,
 });
 
@@ -56,11 +70,8 @@ export const useSharedDictionaryStore = create<SharedDictionaryStoreState>((set)
     const count = hints.space.length + hints.workspace.length;
     set({
       hints,
-      // While paused the words apply at personal priority, so the Personal
-      // list keeps showing them.
-      sharedWordsLower: state.paused
-        ? new Set()
-        : new Set(Object.values(state.entries).map((entry) => entry.word.trim().toLowerCase())),
+      sharedWordsLower: new Set([...hints.space, ...hints.workspace].map(sharedWordKey)),
+      hiddenOnlyKeys: selectHiddenOnlyKeys(state, hints),
       summary: count > 0 ? { count, workspaceName: state.workspaceName } : null,
     });
   },

@@ -13,7 +13,7 @@ import { useAuthStore } from '../../store/useAuthStore';
 import { getClientVersionHeader } from '../../lib/apiClient';
 import {
   buildDictationHintTiers,
-  buildLlmDictionaryHints,
+  buildLlmDictionary,
   isDictationContext,
 } from '../../lib/dictationHints';
 import {
@@ -915,9 +915,14 @@ export class TranscriptionService {
       extraParameters.cleanupLanguage = cleanupLanguage;
       extraParameters.cleanupLocale = cleanupLanguage;
     }
-    const cleanupHints = buildLlmDictionaryHints(isDictationContext(request.requestContext));
-    if (cleanupHints.length > 0) {
-      extraParameters.customDictionary = JSON.stringify(cleanupHints);
+    // Teammates' words go in their own field, which the API quotes as data; a
+    // personal-only request is what it always was.
+    const cleanupHints = buildLlmDictionary(isDictationContext(request.requestContext));
+    if (cleanupHints.personal.length > 0) {
+      extraParameters.customDictionary = JSON.stringify(cleanupHints.personal);
+    }
+    if (cleanupHints.shared.length > 0) {
+      extraParameters.sharedDictionary = JSON.stringify(cleanupHints.shared);
     }
 
     const runFusedCleanup = (candidate: TranscriptionRequest) =>

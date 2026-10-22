@@ -152,7 +152,7 @@ jest.mock('@/store/useDictionaryStore', () => ({
 
 jest.mock('@/lib/dictationHints', () => ({
   buildEffectiveDictionaryWords: (): string[] => [],
-  buildLlmDictionaryHints: (): string[] => [],
+  buildDictationHintTiers: (): string[][] => [[], [], []],
 }));
 
 jest.mock('@/store/useUsageStore', () => {
@@ -182,6 +182,8 @@ jest.mock('@/services/reasoning/ReasoningService', () => ({
     processText: jest.fn(),
     chatOverNote: jest.fn(),
   },
+  // Off device, so note actions keep the usual dictionary.
+  resolveReasoningPlacement: () => ({ localRequired: false }),
 }));
 
 let mockAppleAvailability = 'available';

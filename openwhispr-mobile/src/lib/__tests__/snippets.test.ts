@@ -1,4 +1,9 @@
-import { expandSnippets, getDictionaryHintTiers, type Snippet } from '../snippets';
+import {
+  expandSnippets,
+  getDictionaryHintTiers,
+  splitLlmDictionary,
+  type Snippet,
+} from '../snippets';
 
 describe('expandSnippets', () => {
   it('replaces a trigger with its replacement', () => {
@@ -100,5 +105,25 @@ describe('getDictionaryHintTiers', () => {
         true,
       ),
     ).toEqual([['OpenWhispr', 'sig'], ['Gizmo'], ['Acme']]);
+  });
+});
+
+describe('splitLlmDictionary', () => {
+  it('keeps every personal word and caps shared ones at 200 words, space first', () => {
+    const workspace = Array.from({ length: 300 }, (_, i) => `w${i}`);
+    const { personal, shared } = splitLlmDictionary([['Piha'], ['Space'], workspace]);
+    expect(personal).toEqual(['Piha']);
+    expect(shared).toEqual(['Space', ...workspace.slice(0, 199)]);
+  });
+
+  it('stops at the first shared word past 2,000 characters', () => {
+    const long = Array.from(
+      { length: 40 },
+      (_, i) => `${String(i).padStart(2, '0')}${'x'.repeat(48)}`,
+    );
+    const { shared } = splitLlmDictionary([[], [], [...long, 'short']]);
+    expect(shared).toEqual(long);
+    expect(shared.join('').length).toBe(2000);
+    expect(splitLlmDictionary([[], [], ['y'.repeat(2001), 'short']]).shared).toEqual([]);
   });
 });

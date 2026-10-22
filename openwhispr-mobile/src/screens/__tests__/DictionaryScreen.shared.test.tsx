@@ -7,6 +7,7 @@ import type { SharedDictionarySummary } from '@/store/useSharedDictionaryStore';
 let mockEntries: DictionaryEntry[] = [];
 let mockSummary: SharedDictionarySummary | null = null;
 let mockSharedWordsLower = new Set<string>();
+let mockHiddenOnlyKeys = new Set<string>();
 
 jest.mock('@/components/ui/Text', () => ({ Text: require('react-native').Text }));
 jest.mock('@/components/ui/SystemIcon', () => ({ SystemIcon: () => null }));
@@ -35,7 +36,11 @@ jest.mock('@/store/useDictionaryStore', () => ({
 }));
 jest.mock('@/store/useSharedDictionaryStore', () => ({
   useSharedDictionaryStore: (selector: (state: unknown) => unknown) =>
-    selector({ summary: mockSummary, sharedWordsLower: mockSharedWordsLower }),
+    selector({
+      summary: mockSummary,
+      sharedWordsLower: mockSharedWordsLower,
+      hiddenOnlyKeys: mockHiddenOnlyKeys,
+    }),
 }));
 
 const entry = (word: string, sharedAt: number | null = null): DictionaryEntry => ({
@@ -49,6 +54,7 @@ beforeEach(() => {
   mockEntries = [entry('Kubernetes')];
   mockSummary = null;
   mockSharedWordsLower = new Set();
+  mockHiddenOnlyKeys = new Set();
 });
 
 it('shows the shared line with count and workspace name', () => {
@@ -106,4 +112,45 @@ it('treats a list of only moved words as the empty state', () => {
   mockSharedWordsLower = new Set(['grafana']);
   render(<DictionaryScreen />);
   expect(screen.getByText('Add your first word')).toBeOnTheScreen();
+});
+
+it('names the moved words in the shared line, so they can be added back', () => {
+  mockEntries = [entry('Kubernetes'), entry('Grafana', 5), entry('Loki', 5)];
+  mockSharedWordsLower = new Set(['grafana', 'loki']);
+  mockSummary = { count: 12, workspaceName: 'Acme' };
+  render(<DictionaryScreen />);
+  expect(
+    screen.getByText(
+      '12 team words from Acme also apply, including Grafana and Loki, moved from your list. Manage them on desktop.',
+    ),
+  ).toBeOnTheScreen();
+});
+
+it('counts the moved words when there are many', () => {
+  mockEntries = ['A1', 'B2', 'C3', 'D4'].map((word) => entry(word, 5));
+  mockSharedWordsLower = new Set(['a1', 'b2', 'c3', 'd4']);
+  mockSummary = { count: 4, workspaceName: 'Acme' };
+  render(<DictionaryScreen />);
+  expect(
+    screen.getByText(
+      '4 team words from Acme also apply, including 4 moved from your list. Manage them on desktop.',
+    ),
+  ).toBeOnTheScreen();
+});
+
+// Its only shared copy is hidden, so it neither applies nor leaves Personal.
+it('shows a moved word whose shared copy the member hid, marked as hidden', () => {
+  mockEntries = [entry('Kubernetes'), entry('Grafana', 5)];
+  mockHiddenOnlyKeys = new Set(['grafana']);
+  render(<DictionaryScreen />);
+  expect(screen.getByText('Grafana')).toBeOnTheScreen();
+  expect(screen.getByText('Manual · today · Hidden for you')).toBeOnTheScreen();
+  expect(screen.getByText('Manual · today')).toBeOnTheScreen();
+});
+
+it('never marks a personal word that was not moved', () => {
+  mockEntries = [entry('Grafana')];
+  mockHiddenOnlyKeys = new Set(['grafana']);
+  render(<DictionaryScreen />);
+  expect(screen.queryByText(/Hidden for you/)).not.toBeOnTheScreen();
 });

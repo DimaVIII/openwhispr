@@ -64,9 +64,18 @@ export async function loadSharedDictionaryState(): Promise<SharedDictionaryState
   return raw ? parseState(raw) : null;
 }
 
+/** Writes the state unless the stored row already holds it; returns whether it changed. */
 export async function saveSharedDictionaryState(
   state: SharedDictionaryState | null,
-): Promise<void> {
-  if (state) notesRepository.setSyncState(SHARED_DICTIONARY_STATE_KEY, JSON.stringify(state));
-  else notesRepository.clearSyncState(SHARED_DICTIONARY_STATE_KEY);
+): Promise<boolean> {
+  const current = notesRepository.getSyncState(SHARED_DICTIONARY_STATE_KEY);
+  if (!state) {
+    if (current === null) return false;
+    notesRepository.clearSyncState(SHARED_DICTIONARY_STATE_KEY);
+    return true;
+  }
+  const raw = JSON.stringify(state);
+  if (raw === current) return false;
+  notesRepository.setSyncState(SHARED_DICTIONARY_STATE_KEY, raw);
+  return true;
 }

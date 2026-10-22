@@ -94,6 +94,17 @@ describe('formatDictionaryPrompt', () => {
   it('returns an empty string for empty tiers', (): void => {
     expect(formatDictionaryPrompt([[], [], []], 900)).toBe('');
   });
+
+  // BYOK sends formatDictionaryPrompt(tiers, dictionaryPromptLimit(route)) as is. Unlike the
+  // trimDictionaryPrompt it replaced, a word ending exactly on the budget is kept, and a first
+  // word longer than the budget sends no prompt rather than a cut-off fragment of it.
+  it('keeps a word that ends exactly on the budget', (): void => {
+    expect(formatDictionaryPrompt([['P1', 'S1', 'W1'], [], []], 6)).toBe('P1, S1');
+  });
+
+  it('sends nothing, not a fragment, when the first word is over the budget', (): void => {
+    expect(formatDictionaryPrompt([['Kubernetes', 'k8s'], [], []], 4)).toBe('');
+  });
 });
 
 describe('promptLimitKeepingPersonal', () => {

@@ -1,4 +1,4 @@
-import { uncheckedSync, type SyncCheckpoint } from './syncContext';
+import { SyncStalledError, uncheckedSync, type SyncCheckpoint } from './syncContext';
 import { notesRepository } from '@/data';
 import {
   fetchSharedDictionary,
@@ -6,10 +6,11 @@ import {
   type RemoteSharedScope,
   type SharedDictionaryPage,
 } from '@/data/remote/sharedDictionaryApi';
-import { fetchMyWorkspaces } from '@/data/remote/workspacesApi';
+import { fetchMyWorkspaces, type RemoteWorkspace } from '@/data/remote/workspacesApi';
 import { ApiError } from '@/lib/apiClient';
 import { resolveActiveWorkspaceId } from '@/lib/activeWorkspace';
-import { useUsageStore } from '@/store/useUsageStore';
+import { getUsageOwnerKey, useUsageStore } from '@/store/useUsageStore';
+import type { UsageInfo } from '@/data/remote/usageApi';
 import {
   SHARED_DICTIONARY_CURSOR_ID_KEY,
   SHARED_DICTIONARY_CURSOR_KEY,
@@ -117,7 +118,8 @@ function isAccessLost(err: unknown): boolean {
 }
 
 // Only an uncoded 404: the API's own 404s carry a code (NOT_MEMBER, handled as
-// lost access) and are real answers from a deployed route.
+// lost access) and are real answers from a deployed route. Coded 400s
+// (SHARED_DICTIONARY_INVALID_REQUEST) are rethrown and reported.
 function isEndpointUnavailable(err: unknown): boolean {
   return (
     err instanceof ApiError &&
@@ -127,20 +129,33 @@ function isEndpointUnavailable(err: unknown): boolean {
 
 type WorkspaceTarget = { id: string; name: string } | null | 'unknown';
 
+// The cached usage only counts when it was loaded for the signed-in account.
+function currentUsage(): UsageInfo | null {
+  const { usage, ownerKey } = useUsageStore.getState();
+  return ownerKey !== null && ownerKey === getUsageOwnerKey() ? usage : null;
+}
+
 // 'unknown' when several workspaces need the entitlement to pick one and the
 // usage can't be read: keep what is stored rather than clear it on a blip.
-async function resolveWorkspace(checkpoint: SyncCheckpoint): Promise<WorkspaceTarget> {
-  checkpoint();
-  const { data: workspaces } = await fetchMyWorkspaces();
-  checkpoint();
+async function resolveWorkspace(
+  checkpoint: SyncCheckpoint,
+  known: RemoteWorkspace[] | null,
+): Promise<WorkspaceTarget> {
+  let workspaces = known;
+  if (!workspaces) {
+    checkpoint();
+    workspaces = (await fetchMyWorkspaces()).data;
+    checkpoint();
+  }
   const ids = workspaces.map((workspace) => workspace.id);
   let entitled: string[] = [];
   if (new Set(ids).size > 1) {
-    let usage = useUsageStore.getState().usage;
+    let usage = currentUsage();
     if (!usage) {
       checkpoint();
-      usage = (await useUsageStore.getState().load()).usage;
+      await useUsageStore.getState().load();
       checkpoint();
+      usage = currentUsage();
     }
     if (!usage) return 'unknown';
     entitled = usage.entitlementSources?.workspaceIds ?? [];
@@ -192,7 +207,7 @@ async function pullEntries(
         };
       }
       if (!last || (last.created_at === page.cursor && last.id === page.cursorId)) {
-        throw new Error('Shared dictionary snapshot stopped advancing');
+        throw new SyncStalledError('Shared dictionary snapshot stopped advancing');
       }
       page = { cursor: last.created_at, cursorId: last.id, limit: PAGE_LIMIT };
     }
@@ -224,7 +239,7 @@ async function pullEntries(
       };
     }
     if (!last || (last.updated_at === page.since && last.id === page.sinceId)) {
-      throw new Error('Shared dictionary delta stopped advancing');
+      throw new SyncStalledError('Shared dictionary delta stopped advancing');
     }
     page = { since: last.updated_at, sinceId: last.id, limit: PAGE_LIMIT };
   }
@@ -259,12 +274,12 @@ async function pullHides(
     }
     if (stored) {
       if (!last || (last.updated_at === page.since && last.entry_id === page.sinceId)) {
-        throw new Error('Shared dictionary hides delta stopped advancing');
+        throw new SyncStalledError('Shared dictionary hides delta stopped advancing');
       }
       page = { since: last.updated_at, sinceId: last.entry_id, limit: PAGE_LIMIT };
     } else {
       if (!last || (last.updated_at === page.cursor && last.entry_id === page.cursorId)) {
-        throw new Error('Shared dictionary hides snapshot stopped advancing');
+        throw new SyncStalledError('Shared dictionary hides snapshot stopped advancing');
       }
       page = { cursor: last.updated_at, cursorId: last.entry_id, limit: PAGE_LIMIT };
     }
@@ -289,7 +304,7 @@ async function pullPass(
     try {
       const entries = await pullEntries(workspace.id, forceSnapshot ? null : base, checkpoint);
       if (entries === 'scopesReturned') {
-        checkpoint(true);
+        checkpoint();
         resetSharedDictionaryCursors();
         forceSnapshot = true;
         continue;
@@ -319,60 +334,66 @@ async function pullPass(
       };
     } catch (err) {
       if (forceSnapshot || !isCursorExpired(err)) throw err;
-      checkpoint(true);
+      checkpoint();
       resetSharedDictionaryCursors();
       forceSnapshot = true;
     }
   }
 }
 
-async function clearSharedDictionary(checkpoint: SyncCheckpoint): Promise<void> {
-  checkpoint(true);
-  await saveSharedDictionaryState(null);
+// Returns whether a stored state was actually removed.
+async function clearSharedDictionary(checkpoint: SyncCheckpoint): Promise<boolean> {
+  checkpoint();
+  const changed = await saveSharedDictionaryState(null);
   resetSharedDictionaryCursors();
+  return changed;
 }
 
 /**
  * Mirrors the active workspace's shared words and the member's hides into
  * `shared_dictionary.state`. Gated on nothing but a signed-in account: shared
- * lists follow workspace membership, not cloud backup or a subscription.
+ * lists follow workspace membership, not cloud backup or a subscription, so
+ * its writes check only the account (`checkpoint()`, never the upload gate).
+ * `workspaces` is GET /api/workspaces as the spaces pass already read it;
+ * null fetches it here.
  */
 export async function pullSharedDictionary(
   checkpoint: SyncCheckpoint = uncheckedSync,
+  workspaces: RemoteWorkspace[] | null = null,
 ): Promise<{ changed: boolean }> {
   if (endpointUnavailable) return { changed: false };
   const stored = await loadSharedDictionaryState();
+  // Whether this run already removed a stored state, for the paths that end early.
+  let removed = false;
   try {
-    const workspace = await resolveWorkspace(checkpoint);
+    const workspace = await resolveWorkspace(checkpoint, workspaces);
     if (workspace === 'unknown') return { changed: false };
     if (!workspace) {
-      await clearSharedDictionary(checkpoint);
-      return { changed: stored !== null };
+      return { changed: await clearSharedDictionary(checkpoint) };
     }
 
     const base = stored?.workspaceId === workspace.id ? stored : null;
     if (!base) {
-      checkpoint(true);
+      checkpoint();
       // The old workspace's words go too: if this workspace's first snapshot
       // fails, they must not be republished as its words.
-      await saveSharedDictionaryState(null);
+      removed = await saveSharedDictionaryState(null);
       resetSharedDictionaryCursors();
     }
 
     const result = await pullPass(workspace, base, checkpoint);
-    checkpoint(true);
-    await saveSharedDictionaryState(result.state);
+    checkpoint();
+    const changed = await saveSharedDictionaryState(result.state);
     writeCursor(ENTRIES_CURSOR, result.entriesCursor);
     writeCursor(HIDES_CURSOR, result.hidesCursor);
-    return { changed: JSON.stringify(stored) !== JSON.stringify(result.state) };
+    return { changed };
   } catch (err) {
     if (isAccessLost(err)) {
-      await clearSharedDictionary(checkpoint);
-      return { changed: stored !== null };
+      return { changed: (await clearSharedDictionary(checkpoint)) || removed };
     }
     if (isEndpointUnavailable(err)) {
       endpointUnavailable = true;
-      return { changed: false };
+      return { changed: removed };
     }
     throw err;
   }

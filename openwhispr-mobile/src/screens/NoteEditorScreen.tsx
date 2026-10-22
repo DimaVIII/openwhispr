@@ -22,7 +22,7 @@ import { useUsageStore } from '@/store/useUsageStore';
 import { useConfigStore } from '@/store/useConfigStore';
 import { useDictionaryStore } from '@/store/useDictionaryStore';
 import { extractCorrections } from '@/lib/correctionLearner';
-import { buildEffectiveDictionaryWords, buildLlmDictionaryHints } from '@/lib/dictationHints';
+import { buildDictationHintTiers, buildEffectiveDictionaryWords } from '@/lib/dictationHints';
 import { useActionProcessing } from '@/hooks/useActionProcessing';
 import { useAudioRecording } from '@/hooks/useAudioRecording';
 import { useSuperwallGate } from '@/hooks/useSuperwallGate';
@@ -832,7 +832,7 @@ export default function NoteEditorScreen() {
       lastEnhancementInputHashRef.current = makeContentHash(inputText);
       runAction(action, inputText, {
         inputKind: usesSegmentTranscriptRef.current ? 'meeting-transcript' : 'plain-note',
-        customDictionary: buildLlmDictionaryHints(false),
+        dictionaryTiers: buildDictationHintTiers(false),
         routing: {
           isPrivateNote: note?.isPrivate === 1,
           ...routing,

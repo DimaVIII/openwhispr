@@ -1,8 +1,10 @@
 const mockSyncState = new Map<string, string>();
+const mockSyncStateWrites: string[] = [];
 jest.mock('@/data', () => ({
   notesRepository: {
     getSyncState: (key: string): string | null => mockSyncState.get(key) ?? null,
     setSyncState: (key: string, value: string): void => {
+      mockSyncStateWrites.push(key);
       mockSyncState.set(key, value);
     },
     clearSyncState: (key: string): void => {
@@ -37,12 +39,15 @@ jest.mock('@/data/remote/workspacesApi', () => ({
   fetchMyWorkspaces: (...args: unknown[]) => mockFetchMyWorkspaces(...args),
 }));
 
+const OWNER = 'user-1:cookie';
 const mockUsageState: {
   usage: { entitlementSources?: { workspaceIds: string[] } } | null;
+  ownerKey: string | null;
   load: jest.Mock;
-} = { usage: null, load: jest.fn() };
+} = { usage: null, ownerKey: OWNER, load: jest.fn() };
 jest.mock('@/store/useUsageStore', () => ({
   useUsageStore: { getState: () => mockUsageState },
+  getUsageOwnerKey: () => 'user-1:cookie',
 }));
 
 import { pullSharedDictionary } from '../pullSharedDictionary';
@@ -60,6 +65,7 @@ import {
   type SharedDictionaryState,
 } from '../sharedDictionaryState';
 import { ApiError } from '@/lib/apiClient';
+import { SyncStalledError } from '../syncContext';
 import type {
   RemoteSharedEntry,
   RemoteSharedHide,
@@ -166,7 +172,9 @@ function loadIsolatedPull(): { pull: typeof pullSharedDictionary; ApiError: unkn
 beforeEach(() => {
   jest.clearAllMocks();
   mockSyncState.clear();
+  mockSyncStateWrites.length = 0;
   mockUsageState.usage = null;
+  mockUsageState.ownerKey = OWNER;
   mockUsageState.load.mockImplementation(async () => ({ usage: mockUsageState.usage }));
   mockFetchMyWorkspaces.mockResolvedValue({ data: [{ id: 'ws-1', name: 'Acme' }] });
   mockFetchSharedDictionary.mockResolvedValue(listPage([]));
@@ -375,6 +383,22 @@ describe('pullSharedDictionary', () => {
     expect(mockSyncState.has(SHARED_DICTIONARY_HIDES_CURSOR_KEY)).toBe(false);
   });
 
+  it('reports a change when the clear removes a row this build could not read', async () => {
+    mockSyncState.set(SHARED_DICTIONARY_STATE_KEY, '{not json');
+    mockFetchSharedDictionary.mockRejectedValueOnce(apiError(404, 'SHARED_DICTIONARY_NOT_MEMBER'));
+
+    await expect(pullSharedDictionary()).resolves.toEqual({ changed: true });
+    expect(mockSyncState.has(SHARED_DICTIONARY_STATE_KEY)).toBe(false);
+  });
+
+  it('reports no change when there was nothing to clear', async () => {
+    mockFetchSharedDictionary.mockRejectedValueOnce(apiError(404, 'SHARED_DICTIONARY_NOT_MEMBER'));
+    await expect(pullSharedDictionary()).resolves.toEqual({ changed: false });
+
+    mockFetchMyWorkspaces.mockResolvedValue({ data: [] });
+    await expect(pullSharedDictionary()).resolves.toEqual({ changed: false });
+  });
+
   it('no resolvable workspace clears state', async () => {
     await seedStored();
     mockFetchMyWorkspaces.mockResolvedValue({
@@ -521,23 +545,151 @@ describe('pullSharedDictionary', () => {
     await expect(pullSharedDictionary()).rejects.toThrow('failed');
   });
 
-  it('checks the sync context before writing', async () => {
+  // Shared lists follow the account, not cloud backup, so the upload gate never applies.
+  it('checks the account before writing, never the upload gate', async () => {
     const checkpoint = jest.fn();
     await pullSharedDictionary(checkpoint);
-    expect(checkpoint).toHaveBeenCalledWith(true);
+    expect(checkpoint).toHaveBeenCalled();
+    expect(checkpoint).not.toHaveBeenCalledWith(true);
   });
 
   it('writes nothing when the sync context is cancelled before the write', async () => {
     await seedStored();
+    let cancelled = false;
+    mockFetchSharedDictionaryHides.mockImplementationOnce(async () => {
+      cancelled = true;
+      return hidesPage([]);
+    });
     mockFetchSharedDictionary.mockResolvedValueOnce(listPage([entry('e3', 'Widget')]));
-    const checkpoint = jest.fn((upload?: boolean) => {
-      if (upload) throw new Error('cancelled');
+    const checkpoint = jest.fn(() => {
+      if (cancelled) throw new Error('cancelled');
     });
 
     await expect(pullSharedDictionary(checkpoint)).rejects.toThrow('cancelled');
 
     expect(await loadSharedDictionaryState()).toEqual(STORED);
     expect(mockSyncState.get(SHARED_DICTIONARY_CURSOR_KEY)).toBe(T0);
+  });
+
+  it('does not rewrite an unchanged state', async () => {
+    await seedStored();
+    mockSyncStateWrites.length = 0;
+
+    await expect(pullSharedDictionary()).resolves.toEqual({ changed: false });
+
+    expect(mockSyncStateWrites).not.toContain(SHARED_DICTIONARY_STATE_KEY);
+    // The cursors still advance.
+    expect(mockSyncState.get(SHARED_DICTIONARY_CURSOR_KEY)).toBe(T1);
+  });
+
+  it('uses the workspaces the spaces pass already read', async () => {
+    await pullSharedDictionary(undefined, [{ id: 'ws-1', name: 'Acme' }]);
+
+    expect(mockFetchMyWorkspaces).not.toHaveBeenCalled();
+    expect(mockFetchSharedDictionary).toHaveBeenCalledWith('ws-1', { limit: 200 });
+  });
+
+  it('fetches the workspaces itself when the spaces pass has none', async () => {
+    await pullSharedDictionary(undefined, null);
+
+    expect(mockFetchMyWorkspaces).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores another account's cached usage when picking the workspace", async () => {
+    mockFetchMyWorkspaces.mockResolvedValue({
+      data: [
+        { id: 'ws-1', name: 'Acme' },
+        { id: 'ws-2', name: 'Other' },
+      ],
+    });
+    mockUsageState.usage = { entitlementSources: { workspaceIds: ['ws-1'] } };
+    mockUsageState.ownerKey = 'someone-else:cookie';
+    mockUsageState.load.mockImplementation(async () => {
+      mockUsageState.usage = { entitlementSources: { workspaceIds: ['ws-2'] } };
+      mockUsageState.ownerKey = OWNER;
+      return { usage: mockUsageState.usage };
+    });
+
+    await pullSharedDictionary();
+
+    expect(mockUsageState.load).toHaveBeenCalled();
+    expect(mockFetchSharedDictionary).toHaveBeenCalledWith('ws-2', { limit: 200 });
+  });
+
+  it('keeps the stored state when the usage load still belongs to another account', async () => {
+    await seedStored();
+    mockFetchMyWorkspaces.mockResolvedValue({
+      data: [
+        { id: 'ws-1', name: 'Acme' },
+        { id: 'ws-2', name: 'Other' },
+      ],
+    });
+    mockUsageState.usage = { entitlementSources: { workspaceIds: ['ws-2'] } };
+    mockUsageState.ownerKey = 'someone-else:cookie';
+
+    await expect(pullSharedDictionary()).resolves.toEqual({ changed: false });
+
+    expect(mockFetchSharedDictionary).not.toHaveBeenCalled();
+    expect(await loadSharedDictionaryState()).toEqual(STORED);
+  });
+
+  it('a coded 400 invalid request is rethrown as a server error, never a missing endpoint', async () => {
+    const isolated = loadIsolatedPull();
+    await seedStored();
+    mockFetchSharedDictionary.mockRejectedValueOnce(
+      apiError(400, 'SHARED_DICTIONARY_INVALID_REQUEST', isolated.ApiError),
+    );
+
+    const failure = await isolated.pull().catch((err: unknown) => err);
+    expect(failure).toBeInstanceOf(isolated.ApiError as new () => Error);
+    expect(failure).toMatchObject({ status: 400, code: 'SHARED_DICTIONARY_INVALID_REQUEST' });
+    expect(await loadSharedDictionaryState()).toEqual(STORED);
+
+    await isolated.pull();
+    expect(mockFetchSharedDictionary).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('pullSharedDictionary stalled pages', () => {
+  const page = (overrides: Partial<RemoteSharedEntry>): RemoteSharedEntry =>
+    entry('e1', 'Acme', overrides);
+
+  it('a snapshot page that repeats its cursor throws a SyncStalledError and saves nothing', async () => {
+    const stuck = page({});
+    mockFetchSharedDictionary
+      .mockResolvedValueOnce(listPage([stuck], { hasMore: true }))
+      .mockResolvedValueOnce(listPage([stuck], { hasMore: true }));
+
+    const failure = await pullSharedDictionary().catch((err: unknown) => err);
+
+    expect(failure).toBeInstanceOf(SyncStalledError);
+    expect((failure as Error).name).toBe('SyncStalledError');
+    expect(mockSyncState.has(SHARED_DICTIONARY_CURSOR_KEY)).toBe(false);
+  });
+
+  it('a delta page that repeats its cursor throws a SyncStalledError and keeps the cursor', async () => {
+    await seedStored();
+    const stuck = page({});
+    mockFetchSharedDictionary
+      .mockResolvedValueOnce(listPage([stuck], { hasMore: true }))
+      .mockResolvedValueOnce(listPage([stuck], { hasMore: true }));
+
+    await expect(pullSharedDictionary()).rejects.toBeInstanceOf(SyncStalledError);
+
+    expect(mockSyncState.get(SHARED_DICTIONARY_CURSOR_KEY)).toBe(T0);
+    expect(await loadSharedDictionaryState()).toEqual(STORED);
+  });
+
+  it.each([
+    ['snapshot', false],
+    ['delta', true],
+  ])('a hides %s page that repeats its cursor throws a SyncStalledError', async (_kind, seed) => {
+    if (seed) await seedStored();
+    mockFetchSharedDictionaryHides
+      .mockResolvedValueOnce(hidesPage([hide('e1')], { hasMore: true }))
+      .mockResolvedValueOnce(hidesPage([hide('e1')], { hasMore: true }));
+
+    await expect(pullSharedDictionary()).rejects.toBeInstanceOf(SyncStalledError);
   });
 });
 

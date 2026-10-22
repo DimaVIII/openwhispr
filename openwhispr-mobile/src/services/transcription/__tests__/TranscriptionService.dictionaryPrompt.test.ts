@@ -53,14 +53,10 @@ jest.mock('@/store/useDictionaryStore', () => ({
 jest.mock('@/store/useSnippetsStore', () => ({
   useSnippetsStore: { getState: () => ({ isLoaded: true, entries: [] }) },
 }));
+let mockSharedWorkspace: string[] = [];
 jest.mock('@/store/useSharedDictionaryStore', () => ({
   useSharedDictionaryStore: {
-    getState: () => ({
-      hints: {
-        space: [],
-        workspace: Array.from({ length: 300 }, (_, i) => `ws${String(i).padStart(8, '0')}`),
-      },
-    }),
+    getState: () => ({ hints: { space: [], workspace: mockSharedWorkspace } }),
   },
 }));
 
@@ -93,6 +89,7 @@ let logSpy: jest.SpyInstance;
 
 beforeEach((): void => {
   jest.clearAllMocks();
+  mockSharedWorkspace = WORKSPACE;
   // The service logs each upload; keep the test output quiet.
   logSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
   jest.mocked(FileSystem.getInfoAsync).mockResolvedValue({
@@ -150,9 +147,19 @@ test('BYOK prompt ends with personal words', async (): Promise<void> => {
   expectFilledEndingWithPersonal(input.prompt, 890);
 });
 
-test('fused cleanup dictionary gets at most 200 shared words', async (): Promise<void> => {
+test('fused cleanup keeps personal words apart from at most 200 shared ones', async (): Promise<void> => {
   await TranscriptionService.transcribeWithCloudCleanup(recording('cloud'));
-  const dictionary = JSON.parse(uploadedParameters().customDictionary) as string[];
-  expect(dictionary).toEqual([...PERSONAL, ...WORKSPACE.slice(0, 200)]);
-  expectFilledEndingWithPersonal(uploadedParameters().prompt, 890);
+  const parameters = uploadedParameters();
+  expect(JSON.parse(parameters.customDictionary)).toEqual(PERSONAL);
+  // WORKSPACE words are 10 characters, so 200 of them land exactly on the 2,000-character cap.
+  expect(JSON.parse(parameters.sharedDictionary)).toEqual(WORKSPACE.slice(0, 200));
+  expectFilledEndingWithPersonal(parameters.prompt, 890);
+});
+
+test('a personal-only fused request is what it always was', async (): Promise<void> => {
+  mockSharedWorkspace = [];
+  await TranscriptionService.transcribeWithCloudCleanup(recording('cloud'));
+  const parameters = uploadedParameters();
+  expect(parameters.customDictionary).toBe(JSON.stringify(PERSONAL));
+  expect(parameters).not.toHaveProperty('sharedDictionary');
 });

@@ -16,9 +16,16 @@ jest.mock('@/data', () => ({
 }));
 
 let mockDictWords: string[] = [];
+let mockMovedWords: string[] = [];
 jest.mock('@/store/useDictionaryStore', () => ({
   useDictionaryStore: {
-    getState: () => ({ isLoaded: true, entries: mockDictWords.map((word) => ({ word })) }),
+    getState: () => ({
+      isLoaded: true,
+      entries: [
+        ...mockDictWords.map((word) => ({ word, sharedAt: null })),
+        ...mockMovedWords.map((word) => ({ word, sharedAt: 1 })),
+      ],
+    }),
   },
 }));
 let mockSnippets: { trigger: string; replacement: string }[] = [];
@@ -55,7 +62,7 @@ import {
   buildDictationHints,
   buildDictationHintTiers,
   buildEffectiveDictionaryWords,
-  buildLlmDictionaryHints,
+  buildLlmDictionary,
 } from '../dictationHints';
 import { useSharedDictionaryStore } from '@/store/useSharedDictionaryStore';
 import {
@@ -94,6 +101,7 @@ let logSpy: jest.SpyInstance;
 beforeEach(() => {
   mockSyncState.clear();
   mockDictWords = [];
+  mockMovedWords = [];
   mockSnippets = [];
   useSharedDictionaryStore.getState().reset();
   jest.clearAllMocks();
@@ -143,13 +151,12 @@ describe('buildDictationHints with shared words', () => {
   it('a newline/65-char/<tag> shared word never reaches hints', async () => {
     const unsafe = ['line\nbreak', 'x'.repeat(65), '<system>'];
     await loadShared({ entries: workspaceEntries([...unsafe, 'Safe']) });
-    for (const hints of [buildDictationHints(true), buildLlmDictionaryHints(true)]) {
-      expect(hints).toEqual(['Safe']);
-    }
+    expect(buildDictationHints(true)).toEqual(['Safe']);
+    expect(buildLlmDictionary(true)).toEqual({ personal: [], shared: ['Safe'] });
   });
 });
 
-describe('buildLlmDictionaryHints', () => {
+describe('buildLlmDictionary limits', () => {
   it('keeps every personal word and trigger, then at most 200 shared, space first', async () => {
     mockDictWords = Array.from({ length: 250 }, (_, i) => `mine${i}`);
     mockSnippets = [{ trigger: 'sig', replacement: 'Best, Chad' }];
@@ -159,16 +166,16 @@ describe('buildLlmDictionaryHints', () => {
         s1: { spaceId: 'space-1', word: 'SpaceWord' },
       },
     });
-    const hints = buildLlmDictionaryHints(true);
-    expect(hints.slice(0, 251)).toEqual([...mockDictWords, 'sig']);
-    expect(hints[251]).toBe('SpaceWord');
-    expect(hints).toHaveLength(251 + 200);
-    expect(buildLlmDictionaryHints(false)).not.toContain('sig');
+    const { personal, shared } = buildLlmDictionary(true);
+    expect(personal).toEqual([...mockDictWords, 'sig']);
+    expect(shared[0]).toBe('SpaceWord');
+    expect(shared).toHaveLength(200);
+    expect(buildLlmDictionary(false).personal).not.toContain('sig');
   });
 });
 
 describe('cleanupTranscript', () => {
-  it('cleanup gets at most 200 shared words', async () => {
+  it('keeps personal words in customDictionary and at most 200 shared ones apart', async () => {
     mockDictWords = ['Piha', 'Biscuit'];
     await loadShared({
       entries: workspaceEntries(Array.from({ length: 300 }, (_, i) => `team${i}`)),
@@ -176,9 +183,18 @@ describe('cleanupTranscript', () => {
     await cleanupTranscript('some text', { context: 'keyboard' });
     const request = (ReasoningService.processText as jest.Mock).mock.calls[0][0] as {
       customDictionary: string[];
+      sharedDictionary: string[];
     };
-    expect(request.customDictionary.slice(0, 2)).toEqual(['Piha', 'Biscuit']);
-    expect(request.customDictionary).toHaveLength(2 + 200);
+    expect(request.customDictionary).toEqual(['Piha', 'Biscuit']);
+    expect(request.sharedDictionary).toEqual(Array.from({ length: 200 }, (_, i) => `team${i}`));
+  });
+
+  it('sends no sharedDictionary for a personal-only dictionary', async () => {
+    mockDictWords = ['Piha'];
+    await cleanupTranscript('some text', { context: 'keyboard' });
+    const request = (ReasoningService.processText as jest.Mock).mock.calls[0][0];
+    expect(request.customDictionary).toEqual(['Piha']);
+    expect(request).not.toHaveProperty('sharedDictionary');
   });
 });
 
@@ -191,5 +207,55 @@ describe('correction learning', () => {
     expect(words).toEqual(['Piha', 'Kubernetes']);
     // A correction to a word the team list already spells is not learned into Personal.
     expect(extractCorrections('deploy to kubernetis', 'deploy to Kubernetes', words)).toEqual([]);
+  });
+});
+
+describe('buildLlmDictionary', () => {
+  it('keeps personal words and triggers apart from the shared ones', async () => {
+    mockDictWords = ['Piha'];
+    mockSnippets = [{ trigger: 'sig', replacement: 'Best, Chad' }];
+    await loadShared({ entries: workspaceEntries(['Acme']) });
+    expect(buildLlmDictionary(true)).toEqual({ personal: ['Piha', 'sig'], shared: ['Acme'] });
+  });
+});
+
+// The server keeps a moved word's personal fallback alive while any readable
+// workspace still applies it, so hiding the shared copy must stop it here.
+describe('moved words whose shared copy the member hid', () => {
+  it('stop applying', async () => {
+    mockDictWords = ['Kubernetes'];
+    mockMovedWords = ['Grafana'];
+    await loadShared({ entries: { g: { spaceId: null, word: 'Grafana' } }, hiddenIds: ['g'] });
+    expect(buildDictationHintTiers(false)[0]).toEqual(['Kubernetes']);
+    expect(buildDictationHints(false)).toEqual(['Kubernetes']);
+  });
+
+  it('match the hidden copy by NFC and case', async () => {
+    mockMovedWords = ['Cafe\u0301'];
+    await loadShared({ entries: { c: { spaceId: null, word: 'CAFÉ' } }, hiddenIds: ['c'] });
+    expect(buildDictationHints(false)).toEqual([]);
+  });
+
+  it('still apply while another copy applies', async () => {
+    mockMovedWords = ['Grafana'];
+    await loadShared({
+      entries: {
+        g: { spaceId: null, word: 'Grafana' },
+        s: { spaceId: 'space-1', word: 'grafana' },
+      },
+      hiddenIds: ['g'],
+    });
+    expect(buildDictationHints(false)).toEqual(['Grafana']);
+  });
+
+  it('never affect a personal word that was not moved', async () => {
+    mockDictWords = ['Grafana'];
+    await loadShared({ entries: { g: { spaceId: null, word: 'Grafana' } }, hiddenIds: ['g'] });
+    expect(buildDictationHints(false)).toEqual(['Grafana']);
+  });
+
+  it('apply as before with no hides', async () => {
+    mockMovedWords = ['Grafana'];
+    expect(buildDictationHints(false)).toEqual(['Grafana']);
   });
 });

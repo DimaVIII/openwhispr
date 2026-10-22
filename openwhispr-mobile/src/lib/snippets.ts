@@ -101,10 +101,30 @@ export function getDictionaryHintTiers(
 // from crowding out the instructions. Same cap as desktop.
 export const MAX_SHARED_WORDS_IN_LLM_PROMPTS = 200;
 
-/** Every personal word (tier 0), then at most `maxShared` shared ones, space first. */
-export function withSharedCapped(tiers: string[][], maxShared: number): string[] {
+export const MAX_SHARED_CHARS_IN_LLM_PROMPTS = 2000;
+
+/** LLM dictionary hints with teammates' words kept apart from the user's own. */
+export interface LlmDictionary {
+  personal: string[];
+  shared: string[];
+}
+
+/**
+ * Every personal word (tier 0), then shared ones, space first, while they stay
+ * within `maxShared` words and MAX_SHARED_CHARS_IN_LLM_PROMPTS characters (the
+ * API's limits). The first shared word that doesn't fit ends the fill.
+ */
+export function splitLlmDictionary(
+  tiers: string[][],
+  maxShared: number = MAX_SHARED_WORDS_IN_LLM_PROMPTS,
+): LlmDictionary {
   const [personal = [], space = [], workspace = []] = tiers;
-  const keptSpace = space.slice(0, maxShared);
-  const keptWorkspace = workspace.slice(0, maxShared - keptSpace.length);
-  return [...personal, ...keptSpace, ...keptWorkspace];
+  const shared: string[] = [];
+  let chars = 0;
+  for (const word of [...space, ...workspace]) {
+    if (shared.length >= maxShared || chars + word.length > MAX_SHARED_CHARS_IN_LLM_PROMPTS) break;
+    shared.push(word);
+    chars += word.length;
+  }
+  return { personal: [...personal], shared };
 }

@@ -62,9 +62,9 @@ describe('useSharedDictionaryStore', () => {
     const { hints, sharedWordsLower, summary } = useSharedDictionaryStore.getState();
     expect(hints).toEqual({ space: ['Gizmo'], workspace: ['Acme'] });
     expect(summary).toEqual({ count: 2, workspaceName: 'Acme' });
-    // Hidden words still count: a hidden shared copy keeps a moved personal
-    // word out of the personal list.
-    expect([...sharedWordsLower].sort()).toEqual(['acme', 'gizmo', 'hidden', 'line\nbreak']);
+    // Only the words that apply: a moved word whose shared copy the member hid
+    // (or that isn't term-like) applies as a personal word, so Personal shows it.
+    expect([...sharedWordsLower].sort()).toEqual(['acme', 'gizmo']);
   });
 
   it('applies nothing while paused, and keeps moved words in the personal list', async () => {

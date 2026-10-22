@@ -1,6 +1,6 @@
 import { clearPrivateNoteDeletionQueue, pushPrivateNoteDeletes } from './privateNoteDeletion';
 import { createSyncContext } from './createSyncContext';
-import { SyncCancelledError, type SyncCheckpoint } from './syncContext';
+import { SyncCancelledError, SyncStalledError, type SyncCheckpoint } from './syncContext';
 import * as Sentry from '@sentry/react-native';
 import { AppState, type AppStateStatus } from 'react-native';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -97,8 +97,13 @@ function stopSyncForPolicyBlock(): void {
 // TypeError/Error. Runs that skip the personal gate happen on every foreground
 // trigger for every unpaid user, the largest segment, so surfacing "offline" as
 // a sync error there would spam status:'error' + Sentry on every one of them.
+// A stalled page walk is a server bug, not a network one.
 function isQuietNetworkError(err: unknown): boolean {
-  return !isPolicyCloudBackupBlockedError(err) && !(err instanceof ApiError);
+  return (
+    !isPolicyCloudBackupBlockedError(err) &&
+    !(err instanceof ApiError) &&
+    !(err instanceof SyncStalledError)
+  );
 }
 
 // Ends the run as a clean idle: no lastError, no captureException, and a
@@ -236,10 +241,13 @@ async function retryPrivateNoteDeletes(checkpoint: SyncCheckpoint): Promise<void
 // personal subscription, so this runs for every signed-in account, whichever
 // branch the run takes. Isolated like snippets: a failure here never stops the
 // rest of the run. A missing endpoint is handled (quietly) inside the pull.
-async function syncSharedDictionary(checkpoint: SyncCheckpoint): Promise<void> {
+async function syncSharedDictionary(
+  checkpoint: SyncCheckpoint,
+  workspaces: SyncSpacesResult['workspaces'],
+): Promise<void> {
   try {
     checkpoint();
-    await pullSharedDictionary(checkpoint);
+    await pullSharedDictionary(checkpoint, workspaces);
     checkpoint();
   } catch (err) {
     if (err instanceof SyncCancelledError) throw err;
@@ -364,7 +372,7 @@ async function runSyncNow(reason: SyncReason): Promise<void> {
       level: 'info',
     });
 
-    await syncSharedDictionary(checkpoint);
+    await syncSharedDictionary(checkpoint, spacesResult.workspaces);
     checkpoint();
 
     if (personalSyncAllowed) {
@@ -411,21 +419,28 @@ async function runSyncNow(reason: SyncReason): Promise<void> {
       // Dictionary sync is independent of notes/folders. Isolate its errors so a
       // dictionary endpoint outage doesn't block unrelated note uploads — except
       // a policy block, which must stop the whole run the same way it does for
-      // notes/folders (checked first, before the isolating capture below).
-      try {
-        await pullDictionary(checkpoint);
-        checkpoint();
-        checkpoint(true);
-        await pushDictionary(checkpoint);
-        checkpoint();
-      } catch (err) {
-        if (err instanceof SyncCancelledError) throw err;
-        if (isPolicyCloudBackupBlockedError(err)) {
-          stopSyncForPolicyBlock();
-          return;
+      // notes/folders (checked first, before the isolating capture below). The
+      // pull and push are isolated from each other too: local edits don't depend
+      // on the pull, so a stalled or failed pull (the shared_at backfill
+      // included) must not hold them back.
+      const dictionaryPassStopped = async (step: () => Promise<void>): Promise<boolean> => {
+        try {
+          await step();
+          checkpoint();
+          return false;
+        } catch (err) {
+          if (err instanceof SyncCancelledError) throw err;
+          if (isPolicyCloudBackupBlockedError(err)) {
+            stopSyncForPolicyBlock();
+            return true;
+          }
+          Sentry.captureException(err, { tags: { sync: 'dictionary' } });
+          return false;
         }
-        Sentry.captureException(err, { tags: { sync: 'dictionary' } });
-      }
+      };
+      if (await dictionaryPassStopped(() => pullDictionary(checkpoint))) return;
+      checkpoint(true);
+      if (await dictionaryPassStopped(() => pushDictionary(checkpoint))) return;
 
       // Snippets sync is likewise independent. Isolate its errors too (with the
       // same policy-block exception as dictionary above), and skip it entirely

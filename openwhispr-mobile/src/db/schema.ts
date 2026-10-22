@@ -135,6 +135,8 @@ export const dictionaryEntries = sqliteTable('dictionary_entries', {
   remoteId: text('remote_id'),
   deletedAt: text('deleted_at'),
   sharedAt: text('shared_at'),
+  // 1 while an explicit re-add's clear of shared_at still has to reach the server.
+  sharedAtCleared: integer('shared_at_cleared').notNull().default(0),
   pendingSync: integer('pending_sync').notNull().default(0),
   createdAt: text('created_at').default(sql`(datetime('now'))`),
   updatedAt: text('updated_at').default(sql`(datetime('now'))`),

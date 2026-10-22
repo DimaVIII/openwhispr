@@ -143,7 +143,7 @@ jest.mock('@/store/useDictionaryStore', () => ({
 
 jest.mock('@/lib/dictationHints', () => ({
   buildEffectiveDictionaryWords: (): string[] => [],
-  buildLlmDictionaryHints: (): string[] => [],
+  buildDictationHintTiers: (): string[][] => [[], [], []],
 }));
 
 jest.mock('@/store/useUsageStore', () => {
@@ -177,6 +177,8 @@ jest.mock('@/services/reasoning/ReasoningService', () => ({
   ReasoningService: {
     processText: jest.fn(),
   },
+  // Off device, so note actions keep the usual dictionary.
+  resolveReasoningPlacement: () => ({ localRequired: false }),
 }));
 
 jest.mock('@/utils/generateTitle', () => ({

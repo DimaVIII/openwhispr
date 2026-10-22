@@ -1,4 +1,4 @@
-import { uncheckedSync, type SyncCheckpoint } from './syncContext';
+import { SyncStalledError, uncheckedSync, type SyncCheckpoint } from './syncContext';
 import { and, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { dictionaryEntries } from '@/db/schema';
@@ -95,9 +95,10 @@ function applyRemote(remote: RemoteDictionaryEntry): void {
 
   // For non-tombstone updates, a local pending write wins until pushed. Only
   // shared_at is recorded meanwhile, since the one-time backfill never revisits
-  // the row once its cursor has passed.
+  // the row once its cursor has passed. A create the server hasn't seen and a
+  // clear still to be pushed keep their own marker: the push decides those.
   if (local.pendingSync === 1) {
-    if (sharedAt !== local.sharedAt) {
+    if (local.remoteId && !local.sharedAtCleared && sharedAt !== local.sharedAt) {
       db.update(dictionaryEntries)
         .set({ sharedAt })
         .where(eq(dictionaryEntries.id, local.id))
@@ -114,6 +115,7 @@ function applyRemote(remote: RemoteDictionaryEntry): void {
       remoteId: remote.id,
       deletedAt: null,
       sharedAt,
+      sharedAtCleared: 0,
       pendingSync: 0,
       updatedAt: remote.updated_at,
     })
@@ -131,8 +133,8 @@ type Fetcher = (
 // supplies the field that drives cursor advancement — `created_at` for
 // snapshot pulls (which order by created_at) and `updated_at` for delta pulls
 // (ordered by updated_at). Either way the (cursor, id) pair is a strict
-// keyset; stale-cursor short-circuit guards against an infinite loop if the
-// server ever returned a page without advancing the boundary.
+// keyset; a page that doesn't advance the boundary throws rather than loop, or
+// save a cursor that would freeze the pull.
 async function walkPages(
   fetcher: Fetcher,
   cursorField: 'created_at' | 'updated_at',
@@ -163,7 +165,9 @@ async function walkPages(
     if (!hasMore) break;
     const last = entries[entries.length - 1];
     const lastCursor = last[cursorField];
-    if (lastCursor === cursor && last.id === cursorId) break;
+    if (lastCursor === cursor && last.id === cursorId) {
+      throw new SyncStalledError(`Dictionary ${cursorField} pull stopped advancing`);
+    }
     cursor = lastCursor;
     cursorId = last.id;
   }
@@ -182,24 +186,22 @@ async function walkPages(
 // correct delta boundary for subsequent runs.
 export async function pullDictionary(checkpoint: SyncCheckpoint = uncheckedSync): Promise<void> {
   checkpoint();
-  // Rows pulled before shared_at existed never carry it, and a cursor that
-  // already passed them would never revisit. Replaying once as a snapshot
-  // refreshes them. The flag is set first: a snapshot cut short saves no
-  // cursor, so the next run is a snapshot again without needing the flag.
-  if (!notesRepository.getSyncState(DICTIONARY_SHARED_AT_BACKFILL_KEY)) {
-    notesRepository.clearSyncState(DICTIONARY_CURSOR_KEY);
-    notesRepository.clearSyncState(DICTIONARY_CURSOR_ID_KEY);
-    notesRepository.setSyncState(DICTIONARY_SHARED_AT_BACKFILL_KEY, '1');
-  }
   const since = notesRepository.getSyncState(DICTIONARY_CURSOR_KEY);
   const sinceId = notesRepository.getSyncState(DICTIONARY_CURSOR_ID_KEY);
   const maxes = { updatedAt: since ?? '', id: sinceId ?? '' };
+  // Rows pulled before shared_at existed never carry it, and a cursor that
+  // already passed them never revisits. Once, a snapshot refreshes the live
+  // rows, then the usual delta from the stored cursor applies what a live-only
+  // snapshot can't show: deletions and retirements since that cursor. Nothing
+  // is saved until both finish, so an interrupted backfill simply runs again.
+  const backfill = !notesRepository.getSyncState(DICTIONARY_SHARED_AT_BACKFILL_KEY);
 
-  if (!since) {
+  if (!since || backfill) {
     checkpoint();
     await walkPages(fetchDictionarySnapshot, 'created_at', null, null, maxes, checkpoint);
     checkpoint();
-  } else {
+  }
+  if (since) {
     checkpoint();
     await walkPages(fetchDictionary, 'updated_at', since, sinceId, maxes, checkpoint);
     checkpoint();
@@ -207,4 +209,5 @@ export async function pullDictionary(checkpoint: SyncCheckpoint = uncheckedSync)
 
   if (maxes.updatedAt) notesRepository.setSyncState(DICTIONARY_CURSOR_KEY, maxes.updatedAt);
   if (maxes.id) notesRepository.setSyncState(DICTIONARY_CURSOR_ID_KEY, maxes.id);
+  if (backfill) notesRepository.setSyncState(DICTIONARY_SHARED_AT_BACKFILL_KEY, '1');
 }

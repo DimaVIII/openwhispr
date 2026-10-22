@@ -370,6 +370,7 @@ export function runMigrations(): void {
   addColumnIfMissing('notes', 'conflict_server_note', 'TEXT');
   addColumnIfMissing('notes', 'left_team', 'INTEGER NOT NULL DEFAULT 0');
   addColumnIfMissing('dictionary_entries', 'shared_at', 'TEXT');
+  addColumnIfMissing('dictionary_entries', 'shared_at_cleared', 'INTEGER NOT NULL DEFAULT 0');
 
   tryAlter(
     'CREATE UNIQUE INDEX IF NOT EXISTS idx_folders_client_id ON folders(client_folder_id) WHERE client_folder_id IS NOT NULL',
