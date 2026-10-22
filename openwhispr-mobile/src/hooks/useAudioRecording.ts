@@ -38,8 +38,10 @@ export interface UseAudioRecordingOptions {
   saveToHistory?: boolean;
   // Private mode but the on-device model is unavailable. We never fall back to
   // the cloud silently — the caller prompts, and may invoke retryWithCloud to
-  // transcribe the recording we already captured.
-  onLocalModelMissing?: (retryWithCloud: () => void) => void;
+  // transcribe the recording we already captured. Call discard when the user
+  // declines; it deletes the recording only when saveToHistory is false, since
+  // otherwise the failed history row keeps it for a later retry.
+  onLocalModelMissing?: (retryWithCloud: () => void, discard: () => Promise<void>) => void;
   // Cloud quota is exhausted. The caller can present billing, refresh backend
   // usage, then invoke retryWithCloud only if quota/subscription now permits it.
   onUsageLimitReached?: (
@@ -230,9 +232,12 @@ export function useAudioRecording(options: UseAudioRecordingOptions = {}) {
           if (saveToHistory) {
             await addFailedRecording(retained, transcriptionProvider, transcribeError);
           }
-          options.onLocalModelMissing(() => {
-            retryWithCloud(retained, clientTranscriptionId);
-          });
+          options.onLocalModelMissing(
+            () => {
+              retryWithCloud(retained, clientTranscriptionId);
+            },
+            () => (saveToHistory ? Promise.resolve() : discardRetainedAudio(retained)),
+          );
           return;
         }
         // Cloud quota exhausted. Keep the recording so an approved retry can
@@ -244,6 +249,8 @@ export function useAudioRecording(options: UseAudioRecordingOptions = {}) {
           await options.onUsageLimitReached(transcribeError, () =>
             retryWithCloud(retained, clientTranscriptionId),
           );
+          // Recovery is over, retried or declined; a retry already removed it.
+          if (!saveToHistory) await discardRetainedAudio(retained);
           return;
         }
         if (saveToHistory) {
@@ -384,6 +391,7 @@ export function useAudioRecording(options: UseAudioRecordingOptions = {}) {
         await options.onUsageLimitReached(error, () =>
           retryWithCloud(retained, clientTranscriptionId),
         );
+        if (!saveToHistory) await discardRetainedAudio(retained);
         return;
       }
       if (!saveToHistory) {

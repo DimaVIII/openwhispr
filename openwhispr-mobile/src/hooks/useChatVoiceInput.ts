@@ -6,13 +6,17 @@ import { useUsageLimitRecovery } from '@/hooks/useUsageLimitRecovery';
 import { isMicPermissionError, isNoSpeechError, showMicPermissionAlert } from '@/lib/permissions';
 import { promptLocalModelFallback } from '@/lib/privateMode';
 import { useChatStore, type ChatPending } from '@/store/useChatStore';
+import { useProcessingModeStore } from '@/store/useProcessingModeStore';
+import { useUsageStore } from '@/store/useUsageStore';
 import type { UsageLimitError } from '@/lib/usageLimitError';
 
 export interface ChatVoiceInput {
   state: 'idle' | 'listening' | 'transcribing';
   elapsedSeconds: number;
   audioRecorder: AudioRecorder;
-  start: (allowCloudFallback: boolean) => Promise<void>;
+  // Resolves false when it refused (a turn is pending, or a cancelled transcription is still
+  // settling) or the recorder failed to start.
+  start: (allowCloudFallback: boolean) => Promise<boolean>;
   finish: () => Promise<void>;
   cancel: () => Promise<void>;
 }
@@ -87,7 +91,13 @@ export function useChatVoiceInput({
 
   const recording = useAudioRecording({
     saveToHistory: false,
-    onComplete: sendTranscript,
+    onComplete: (text) => {
+      // The words were spent even if the transcript is dropped below.
+      if (useProcessingModeStore.getState().activeMode === 'cloud') {
+        useUsageStore.getState().load(true);
+      }
+      sendTranscript(text);
+    },
     onError: (error) => {
       releaseSlot();
       if (isMicPermissionError(error)) {
@@ -98,12 +108,16 @@ export function useChatVoiceInput({
       if (isNoSpeechError(error)) return;
       Alert.alert('Couldn’t hear that', error.message);
     },
-    // The fallback prompt has no cancel callback, so the slot is released before it shows
-    // (finish releases it) and taken again only if the user picks the cloud.
-    onLocalModelMissing: (retryWithCloud) => {
+    // The slot is released while the prompt is up (finish releases it) and taken again only if
+    // the user picks the cloud; any other answer drops the question and its recording.
+    onLocalModelMissing: (retryWithCloud, discard) => {
+      const drop = (): void => {
+        discard().catch(() => undefined);
+      };
       promptLocalModelFallback(() => {
         if (takeSlot()) retryWithCloud();
-      });
+        else drop();
+      }, drop);
     },
     onUsageLimitReached: async (
       error: UsageLimitError,
@@ -114,10 +128,11 @@ export function useChatVoiceInput({
     },
   });
 
-  const state: ChatVoiceInput['state'] = recording.isRecording
-    ? 'listening'
-    : isTranscribing
-      ? 'transcribing'
+  // The slot is taken before the recorder finishes stopping, so transcribing wins.
+  const state: ChatVoiceInput['state'] = isTranscribing
+    ? 'transcribing'
+    : recording.isRecording
+      ? 'listening'
       : 'idle';
 
   useEffect(() => {
@@ -127,18 +142,22 @@ export function useChatVoiceInput({
     return () => clearInterval(timer);
   }, [state]);
 
-  const start = async (allowCloudFallback: boolean): Promise<void> => {
+  const start = async (allowCloudFallback: boolean): Promise<boolean> => {
     // A cancelled transcription still delivers its text later, which must not land in a new slot.
     if (useChatStore.getState().pending || recording.isRecording || recording.isProcessing) {
-      return;
+      return false;
     }
     allowCloudFallbackRef.current = allowCloudFallback;
-    // Failures already reached onError.
-    await recording.startRecording().catch(() => undefined);
+    return recording.startRecording().then(
+      () => true,
+      // Failures already reached onError.
+      () => false,
+    );
   };
 
   const finish = async (): Promise<void> => {
-    if (state !== 'listening') return;
+    // A slot means a finish is already stopping the recorder.
+    if (slotRef.current || state !== 'listening') return;
     if (!takeSlot()) {
       await recording.cancelRecording();
       return;
@@ -155,12 +174,12 @@ export function useChatVoiceInput({
   };
 
   const cancel = async (): Promise<void> => {
-    if (recording.isRecording) {
-      await recording.cancelRecording();
-      return;
+    if (slotRef.current) {
+      // Covers the native stop window too, when the recorder still reports recording.
+      releaseSlot();
+      generationRef.current += 1;
     }
-    releaseSlot();
-    generationRef.current += 1;
+    if (recording.isRecording) await recording.cancelRecording();
   };
 
   return {

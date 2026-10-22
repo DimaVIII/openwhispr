@@ -5,6 +5,7 @@ import { transcribeAndCleanup } from '@/lib/transcribeAndCleanup';
 import { analyzeSpeechActivity } from '@/lib/speechActivity';
 import { deleteManagedTranscriptAudio } from '@/lib/transcriptAudio';
 import { isLocalModelMissingError } from '@/services/transcription/TranscriptionService';
+import { isUsageLimitError } from '@/lib/usageLimitError';
 
 jest.mock('expo-file-system/legacy', () => ({
   getInfoAsync: jest.fn(async () => ({ exists: true, size: 1024 })),
@@ -40,6 +41,7 @@ jest.mock('@/lib/transcriptAudio', () => ({
   retainTranscriptAudio: jest.fn(async () => 'file:///docs/transcript-audio/test-id.wav'),
   deleteManagedTranscriptAudio: jest.fn(async () => undefined),
 }));
+jest.mock('@/lib/usageLimitError', () => ({ isUsageLimitError: jest.fn(() => false) }));
 jest.mock('@/lib/transcriptionLanguage', () => ({
   getPreferredTranscriptionLanguage: jest.fn(() => 'en'),
 }));
@@ -97,6 +99,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockTranscribe.mockReset();
   jest.mocked(isLocalModelMissingError).mockReturnValue(false);
+  jest.mocked(isUsageLimitError).mockReturnValue(false);
   mockRecorder.isRecording = false;
 });
 
@@ -164,6 +167,41 @@ it('keeps the recording for a cloud retry without a history row, then removes it
 
   expect(onComplete).toHaveBeenCalledWith('Retried.');
   expect(mockAddTranscript).not.toHaveBeenCalled();
+  expect(deleteManagedTranscriptAudio).toHaveBeenCalledWith(RETAINED_URI);
+});
+
+it('discards audio after a declined usage-limit retry', async () => {
+  mockTranscribe.mockRejectedValue(
+    Object.assign(new Error('Weekly limit reached'), { name: 'UsageLimitError' }),
+  );
+  jest.mocked(isUsageLimitError).mockReturnValue(true);
+  const onUsageLimitReached = jest.fn(async () => undefined);
+
+  await recordAndStop({ saveToHistory: false, onUsageLimitReached });
+
+  expect(onUsageLimitReached).toHaveBeenCalled();
+  expect(mockAddFailedTranscript).not.toHaveBeenCalled();
+  expect(deleteManagedTranscriptAudio).toHaveBeenCalledWith(RETAINED_URI);
+});
+
+it('discards audio after a declined local-model fallback', async () => {
+  const missing = new Error('Local model missing');
+  mockTranscribe.mockRejectedValue(missing);
+  jest.mocked(isLocalModelMissingError).mockImplementation((error) => error === missing);
+  let discard: (() => Promise<void>) | undefined;
+
+  await recordAndStop({
+    saveToHistory: false,
+    onLocalModelMissing: (_retry, discardRecording) => {
+      discard = discardRecording;
+    },
+  });
+  expect(deleteManagedTranscriptAudio).not.toHaveBeenCalled();
+
+  await act(async () => {
+    await discard?.();
+  });
+
   expect(deleteManagedTranscriptAudio).toHaveBeenCalledWith(RETAINED_URI);
 });
 
