@@ -3706,7 +3706,7 @@
     "learnMore": "詳しく見る",
     "integrations": "連携",
     "defaultUser": "ユーザー",
-    "notSignedIn": "未サインイン",
+    "accountMenu": "アカウント：{{name}}",
     "chat": "チャット",
     "collapse": "サイドバーを折りたたむ",
     "expand": "サイドバーを展開"

@@ -28,7 +28,15 @@ test("a list that hasn't arrived yet shows a placeholder", async () => {
 test("a failed load is not mistaken for having no workspace", async () => {
   const { resolveWorkspaceSwitcher } = await load();
 
-  assert.deepEqual(resolveWorkspaceSwitcher({ ...base, error: true }), { kind: "error" });
+  assert.deepEqual(resolveWorkspaceSwitcher({ ...base, error: true, activeWorkspaceId: "acme" }), {
+    kind: "error",
+  });
+});
+
+test("offline, a user who had no workspace stays personal instead of seeing an error", async () => {
+  const { resolveWorkspaceSwitcher } = await load();
+
+  assert.deepEqual(resolveWorkspaceSwitcher({ ...base, error: true }), { kind: "personal" });
 });
 
 test("a cached list survives a failed refresh", async () => {
@@ -87,4 +95,15 @@ test("only owners and admins of the current workspace can invite from it", async
   assert.equal(stateFor("owner").canInvite, true);
   assert.equal(stateFor("admin").canInvite, true);
   assert.equal(stateFor("member").canInvite, false);
+});
+
+test("with none chosen, an entitled Enterprise workspace becomes active, else the first", async () => {
+  const { defaultActiveWorkspaceId } = await load();
+  const pro = { id: "beta", plan: "pro", status: "active" };
+  const enterprise = (status) => ({ id: "acme", plan: "enterprise", status });
+
+  assert.equal(defaultActiveWorkspaceId([pro, enterprise("active")]), "acme");
+  assert.equal(defaultActiveWorkspaceId([pro, enterprise("trialing")]), "acme");
+  assert.equal(defaultActiveWorkspaceId([pro, enterprise("canceled")]), "beta");
+  assert.equal(defaultActiveWorkspaceId([]), null);
 });

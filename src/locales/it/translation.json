@@ -3706,7 +3706,7 @@
     "learnMore": "Scopri di più",
     "integrations": "Integrazioni",
     "defaultUser": "Utente",
-    "notSignedIn": "Non hai effettuato l'accesso",
+    "accountMenu": "Account: {{name}}",
     "chat": "Chat",
     "collapse": "Comprimi barra laterale",
     "expand": "Espandi barra laterale"

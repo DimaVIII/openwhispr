@@ -3014,7 +3014,7 @@
     "learnMore": "En savoir plus",
     "integrations": "Intégrations",
     "defaultUser": "Utilisateur",
-    "notSignedIn": "Non connecté",
+    "accountMenu": "Compte : {{name}}",
     "chat": "Chat",
     "collapse": "Réduire la barre latérale",
     "expand": "Développer la barre latérale"

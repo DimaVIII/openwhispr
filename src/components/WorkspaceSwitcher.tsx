@@ -1,4 +1,4 @@
-import React, { Suspense, useState } from "react";
+import React, { Suspense, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useTranslation } from "react-i18next";
 import { Check, ChevronsUpDown, Loader2, Plus, UserCircle, UserPlus } from "./icons";
@@ -25,6 +25,8 @@ const triggerClass =
   "group flex items-center gap-2.5 w-full h-9 px-2.5 rounded-md text-start outline-none hover:bg-foreground/4 dark:hover:bg-white/4 active:bg-foreground/6 data-[state=open]:bg-foreground/5 dark:data-[state=open]:bg-white/6 focus-visible:ring-1 focus-visible:ring-primary/30 transition-colors duration-150";
 const nameClass = "flex-1 min-w-0 truncate text-[13px] font-medium text-foreground";
 const itemClass = "gap-2.5 px-2 py-1.5 text-[13px]";
+// Counting members fetches the whole roster, so each workspace's count is reused for a while.
+const MEMBER_COUNT_TTL_MS = 5 * 60_000;
 
 export default function WorkspaceSwitcher(): React.ReactElement | null {
   const { t } = useTranslation();
@@ -41,9 +43,8 @@ export default function WorkspaceSwitcher(): React.ReactElement | null {
   const [createOpen, setCreateOpen] = useState(false);
   // Right after creating a workspace the invite is optional, so it offers Skip.
   const [invite, setInvite] = useState<{ workspace: Workspace; afterCreate: boolean } | null>(null);
-  const [memberCount, setMemberCount] = useState<{ workspaceId: string; count: number } | null>(
-    null
-  );
+  const [memberCounts, setMemberCounts] = useState<Record<string, number>>({});
+  const memberCountRequestedAt = useRef<Record<string, number>>({});
 
   const state = resolveWorkspaceSwitcher({
     isSignedIn: Boolean(isSignedIn),
@@ -70,33 +71,40 @@ export default function WorkspaceSwitcher(): React.ReactElement | null {
         type="button"
         onClick={() => void refresh()}
         disabled={loading}
-        className={cn(triggerClass, "disabled:opacity-60")}
+        className={cn(triggerClass, "h-auto min-h-9 py-1.5 disabled:opacity-60")}
       >
-        <span className="flex-1 min-w-0 truncate text-xs text-muted-foreground">
-          {t("settingsPage.workspace.loadError.title")}
-        </span>
-        {loading ? (
-          <Loader2 size={12} className="shrink-0 animate-spin text-muted-foreground" />
-        ) : (
-          <span className="shrink-0 text-xs font-medium text-primary">
-            {t("settingsPage.workspace.loadError.retry")}
+        {/* Stacked, so long translations wrap instead of truncating beside Retry. */}
+        <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5 text-xs leading-snug">
+          <span className="text-muted-foreground">
+            {t("settingsPage.workspace.loadError.title")}
           </span>
-        )}
+          {loading ? (
+            <Loader2 size={12} className="animate-spin text-muted-foreground" />
+          ) : (
+            <span className="font-medium text-primary">
+              {t("settingsPage.workspace.loadError.retry")}
+            </span>
+          )}
+        </span>
       </button>
     );
   }
 
   const current = state.kind === "workspace" ? state.current : null;
-  const currentMemberCount =
-    current && memberCount?.workspaceId === current.id ? memberCount.count : null;
+  const currentMemberCount = current ? (memberCounts[current.id] ?? null) : null;
 
   const handleOpenChange = (open: boolean): void => {
     if (!open || !current) return;
     const workspaceId = current.id;
+    const now = Date.now();
+    if (now - (memberCountRequestedAt.current[workspaceId] ?? 0) < MEMBER_COUNT_TTL_MS) return;
+    memberCountRequestedAt.current[workspaceId] = now;
     WorkspacesService.listMembers(workspaceId).then(
-      (members) => setMemberCount({ workspaceId, count: members.length }),
-      // The count is decoration; the menu works without it.
-      () => {}
+      (members) => setMemberCounts((counts) => ({ ...counts, [workspaceId]: members.length })),
+      // The count is decoration; the menu works without it. Ask again on the next open.
+      () => {
+        delete memberCountRequestedAt.current[workspaceId];
+      }
     );
   };
 

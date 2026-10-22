@@ -3,6 +3,11 @@ import { useWorkspaceStore } from "../stores/workspaceStore";
 import { useAuth } from "./useAuth";
 import type { Workspace, WorkspaceRole } from "../types/electron";
 
+// Focus fires on every switch back to the app, so a server that keeps failing would otherwise get
+// a request each time. Shared by every mounted caller, which all listen.
+const FOCUS_RETRY_INTERVAL_MS = 30_000;
+let lastFocusRetryAt = 0;
+
 interface UseWorkspaceResult {
   workspaces: Workspace[];
   active: Workspace | null;
@@ -32,11 +37,17 @@ export function useWorkspace(): UseWorkspaceResult {
   useEffect(() => {
     if (!isSignedIn || !error) return;
     const retry = (): void => void refresh();
+    const retryOnFocus = (): void => {
+      const now = Date.now();
+      if (now - lastFocusRetryAt < FOCUS_RETRY_INTERVAL_MS) return;
+      lastFocusRetryAt = now;
+      retry();
+    };
     window.addEventListener("online", retry);
-    window.addEventListener("focus", retry);
+    window.addEventListener("focus", retryOnFocus);
     return () => {
       window.removeEventListener("online", retry);
-      window.removeEventListener("focus", retry);
+      window.removeEventListener("focus", retryOnFocus);
     };
   }, [isSignedIn, error, refresh]);
 

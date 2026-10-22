@@ -17,13 +17,16 @@ const itemClass = "gap-2.5 px-2 py-1.5 text-[13px]";
 const itemIconClass = "shrink-0 text-foreground/60";
 
 interface ProfileMenuProps {
-  /** Opens Settings at a section; no section opens its default. */
-  onOpenSettings: (section?: string) => void;
+  onOpenSettings: (section: string) => void;
 }
 
 export default function ProfileMenu({ onOpenSettings }: ProfileMenuProps): React.ReactElement {
   const { t } = useTranslation();
-  const { isSignedIn, user } = useAuth();
+  const { isSignedIn, isLoaded, user } = useAuth();
+
+  // Until the session settles a signed-in user reads as signed out; hold the slot instead of
+  // flashing Sign in.
+  if (!isLoaded) return <span aria-hidden="true" className="h-8 w-8 shrink-0" />;
 
   // Signed out there is nothing to choose between: Profile is where sign-in lives.
   if (!isSignedIn || !user) {
@@ -44,12 +47,12 @@ export default function ProfileMenu({ onOpenSettings }: ProfileMenuProps): React
 
   return (
     <DropdownMenu modal={false}>
-      <DropdownMenuTrigger aria-label={t("settingsModal.groups.account")} className={triggerClass}>
-        <MemberAvatar name={name} email={user.email} image={user.image} />
+      <DropdownMenuTrigger aria-label={t("sidebar.accountMenu", { name })} className={triggerClass}>
+        <MemberAvatar name={user.name} email={user.email} image={user.image} />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <div className="flex items-center gap-2.5 px-2 pt-1 pb-2">
-          <MemberAvatar name={name} email={user.email} image={user.image} />
+          <MemberAvatar name={user.name} email={user.email} image={user.image} />
           <div className="min-w-0">
             <p dir="auto" className="truncate text-[13px] font-medium text-foreground">
               {name}
@@ -70,7 +73,7 @@ export default function ProfileMenu({ onOpenSettings }: ProfileMenuProps): React
           <CreditCard size={15} className={itemIconClass} />
           {t("settingsModal.sections.plansBilling.label")}
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => onOpenSettings()} className={itemClass}>
+        <DropdownMenuItem onSelect={() => onOpenSettings("general")} className={itemClass}>
           <Settings size={15} className={itemIconClass} />
           {t("sidebar.settings")}
         </DropdownMenuItem>

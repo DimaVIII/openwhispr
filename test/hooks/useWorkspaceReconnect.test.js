@@ -85,6 +85,12 @@ test("a workspace list that failed to load retries when the app reconnects", asy
   events.fire("focus");
   assert.equal(refreshes, 2);
 
+  // Switching windows again soon after doesn't send another request; coming online does.
+  events.fire("focus");
+  assert.equal(refreshes, 2);
+  events.fire("online");
+  assert.equal(refreshes, 3);
+
   // A loaded list stops listening.
   await render({ store: { error: false } });
   assert.equal(events.count("online"), 0);
@@ -93,5 +99,5 @@ test("a workspace list that failed to load retries when the app reconnects", asy
   // Signed out, a stale error never triggers a request.
   await render({ isSignedIn: false });
   events.fire("online");
-  assert.equal(refreshes, 2);
+  assert.equal(refreshes, 3);
 });

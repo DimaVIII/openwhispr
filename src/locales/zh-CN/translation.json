@@ -3706,7 +3706,7 @@
     "learnMore": "了解更多",
     "integrations": "集成",
     "defaultUser": "用户",
-    "notSignedIn": "未登录",
+    "accountMenu": "账户：{{name}}",
     "chat": "聊天",
     "collapse": "折叠侧边栏",
     "expand": "展开侧边栏"

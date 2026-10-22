@@ -2888,7 +2888,7 @@
     "learnMore": "Learn More",
     "integrations": "Integrations",
     "defaultUser": "User",
-    "notSignedIn": "Not signed in",
+    "accountMenu": "Account: {{name}}",
     "chat": "Chat",
     "collapse": "Collapse sidebar",
     "expand": "Expand sidebar"

@@ -4608,7 +4608,7 @@
     "learnMore": "معرفة المزيد",
     "integrations": "التكاملات",
     "defaultUser": "مستخدم",
-    "notSignedIn": "لم يتم تسجيل الدخول",
+    "accountMenu": "الحساب: {{name}}",
     "chat": "الدردشة",
     "collapse": "طي الشريط الجانبي",
     "expand": "توسيع الشريط الجانبي",
