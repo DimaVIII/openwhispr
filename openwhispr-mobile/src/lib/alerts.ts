@@ -1,4 +1,4 @@
-import { Alert } from 'react-native';
+import { Alert, type AlertButton } from 'react-native';
 import { safeHaptics } from './utils';
 
 type ConfirmCallback = () => void | Promise<void>;
@@ -13,22 +13,20 @@ export function confirmDestructive(
   onConfirm: ConfirmCallback,
   options?: { destructiveLabel?: string; onCancel?: () => void },
 ): void {
-  Alert.alert(
-    title,
-    message,
-    [
-      { text: 'Cancel', style: 'cancel', onPress: options?.onCancel },
-      {
-        text: options?.destructiveLabel ?? 'Delete',
-        style: 'destructive',
-        onPress: () => {
-          runConfirm(onConfirm);
-        },
+  const onCancel = options?.onCancel;
+  const buttons: AlertButton[] = [
+    { text: 'Cancel', style: 'cancel', onPress: onCancel },
+    {
+      text: options?.destructiveLabel ?? 'Delete',
+      style: 'destructive',
+      onPress: () => {
+        runConfirm(onConfirm);
       },
-    ],
-    // Android reports a tap outside the dialog or Back through onDismiss, not the Cancel button.
-    options?.onCancel ? { cancelable: true, onDismiss: options.onCancel } : undefined,
-  );
+    },
+  ];
+  // Android reports a tap outside the dialog or Back through onDismiss, not the Cancel button.
+  if (onCancel) Alert.alert(title, message, buttons, { cancelable: true, onDismiss: onCancel });
+  else Alert.alert(title, message, buttons);
 }
 
 // Shared by the Account and Profile screens so both Delete Account entry
