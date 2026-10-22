@@ -51,7 +51,7 @@ export function iosColor(name: string): string {
 // Fixed colors for the Chat tab that have no system token. Text and fills that
 // do have one (label, secondaryLabel, ...) use the NativeWind token instead.
 export const CHAT_COLORS = {
-  stopButton: '#111113',
+  darkFill: '#111113',
   hairline: 'rgba(0,0,0,0.08)',
   neutralRing: 'rgba(0,0,0,0.12)',
   neutralTrack: 'rgba(0,0,0,0.06)',

@@ -29,14 +29,27 @@ describe('chat components', () => {
     const onRetry = jest.fn();
     const onEdit = jest.fn();
     const { getByText, getByLabelText } = render(
-      <ChatErrorRow message="No connection" onRetry={onRetry} onEdit={onEdit} />,
+      <ChatErrorRow message="No connection." disabled={false} onRetry={onRetry} onEdit={onEdit} />,
     );
     expect(getByText('Couldn’t get an answer')).toBeTruthy();
-    expect(getByText('No connection')).toBeTruthy();
+    expect(getByText('No connection. Your question is saved.')).toBeTruthy();
     fireEvent.press(getByLabelText('Retry'));
     fireEvent.press(getByLabelText('Edit question'));
     expect(onRetry).toHaveBeenCalledTimes(1);
     expect(onEdit).toHaveBeenCalledTimes(1);
+  });
+
+  it('ChatErrorRow ignores presses while disabled', () => {
+    const onRetry = jest.fn();
+    const onEdit = jest.fn();
+    const { getByLabelText } = render(
+      <ChatErrorRow message="No connection." disabled onRetry={onRetry} onEdit={onEdit} />,
+    );
+    expect(getByLabelText('Retry').props.accessibilityState).toEqual({ disabled: true });
+    fireEvent.press(getByLabelText('Retry'));
+    fireEvent.press(getByLabelText('Edit question'));
+    expect(onRetry).not.toHaveBeenCalled();
+    expect(onEdit).not.toHaveBeenCalled();
   });
 
   it('ChatTranscribingBubble shows the elapsed audio time', () => {
@@ -52,7 +65,6 @@ describe('chat components', () => {
       <ChatVoicePanel
         elapsedSeconds={7}
         audioRecorder={null}
-        isRecording
         onCancel={onCancel}
         onSwitchToTyping={onSwitchToTyping}
         onSend={onSend}

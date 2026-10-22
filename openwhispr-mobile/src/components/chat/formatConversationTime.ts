@@ -17,5 +17,6 @@ export function formatConversationTime(timestamp: number, now: Date = new Date()
   }
   if (daysAgo === 1) return 'Yesterday';
   if (daysAgo <= 6) return WEEKDAYS[date.getDay()];
-  return `${MONTHS[date.getMonth()]} ${date.getDate()}`;
+  const day = `${MONTHS[date.getMonth()]} ${date.getDate()}`;
+  return date.getFullYear() === now.getFullYear() ? day : `${day}, ${date.getFullYear()}`;
 }

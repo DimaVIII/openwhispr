@@ -12,6 +12,8 @@ import {
   isNotNull,
   isNull,
   inArray,
+  type SQL,
+  type SQLWrapper,
 } from 'drizzle-orm';
 import * as FileSystem from 'expo-file-system/legacy';
 import { parseRemoteTranscript, serializeSegmentsForSync } from '@/lib/notes/remoteTranscript';
@@ -565,26 +567,42 @@ export class LocalNotesRepository implements NotesRepository {
     terms: string[],
     options: { includePrivate: boolean; limit: number },
   ): Note[] {
-    // Escape LIKE wildcards so a term such as "50%" matches literally.
     const termMatches = terms.map((term) => {
+      // Escape LIKE wildcards so a term such as "50%" matches literally.
       const pattern = `%${term.replace(/[\\%_]/g, '\\$&')}%`;
-      return or(
-        ...[notes.title, notes.content, notes.enhancedContent, notes.transcript].map(
-          (column) => sql`${column} LIKE ${pattern} ESCAPE '\\'`,
-        ),
-      );
+      const matches = (column: SQLWrapper): SQL => sql`${column} LIKE ${pattern} ESCAPE '\\'`;
+      // notes.transcript is JSON, whose keys ("source", "text", "speaker") would match every
+      // meeting, so a transcript is searched through its segments' text.
+      const inTranscript = sql`EXISTS (
+        SELECT 1 FROM ${transcriptSegments}
+        WHERE ${transcriptSegments.noteId} = ${notes.id}
+          AND ${transcriptSegments.deletedAt} IS NULL
+          AND ${matches(transcriptSegments.text)}
+      )`;
+      return {
+        title: matches(notes.title),
+        body: sql`(${matches(notes.content)} OR ${matches(notes.enhancedContent)} OR ${inTranscript})`,
+      };
     });
     const conditions = [
       isNull(notes.deletedAt),
       eq(notes.leftTeam, 0),
       options.includePrivate ? undefined : eq(notes.isPrivate, 0),
-      termMatches.length > 0 ? or(...termMatches) : undefined,
+      or(...termMatches.flatMap((match) => [match.title, match.body])),
     ];
+    // The pool is cut at the limit, so it keeps the notes that match the most terms, a title match
+    // counting double, rather than whichever matching notes changed last.
+    const matchScore = termMatches.map(
+      (match) => sql`(CASE WHEN ${match.title} THEN 2 WHEN ${match.body} THEN 1 ELSE 0 END)`,
+    );
     return this.database
       .select()
       .from(notes)
       .where(and(...conditions))
-      .orderBy(desc(notes.updatedAt))
+      .orderBy(
+        ...(matchScore.length > 0 ? [desc(sql.join(matchScore, sql` + `))] : []),
+        desc(notes.updatedAt),
+      )
       .limit(options.limit)
       .all();
   }

@@ -10,7 +10,8 @@ export interface ChatSuggestion {
 }
 
 export interface ChatSuggestionsInput {
-  nextEvent: GoogleCalendarEvent | null;
+  /** Upcoming events by start time; the first one worth prepping for is suggested. */
+  events: GoogleCalendarEvent[];
   recentMeetingNote: Note | null;
   now: Date;
 }
@@ -23,6 +24,8 @@ const describeDay = (date: Date, now: Date): string => {
 };
 
 const calendarSuggestion = (event: GoogleCalendarEvent, now: Date): ChatSuggestion | null => {
+  // An all-day event has no start time to prep for.
+  if (event.allDay) return null;
   const start = tryParseNoteTimestamp(event.startAt);
   if (!start || !isSameLocalDay(start, now)) return null;
   if (start.getTime() < now.getTime() - RECENTLY_STARTED_MS) return null;
@@ -48,14 +51,20 @@ const noteSuggestion = (note: Note, now: Date): ChatSuggestion => {
 };
 
 export const buildChatSuggestions = ({
-  nextEvent,
+  events,
   recentMeetingNote,
   now,
 }: ChatSuggestionsInput): ChatSuggestion[] => {
   const suggestions: ChatSuggestion[] = [];
 
-  const calendar = nextEvent ? calendarSuggestion(nextEvent, now) : null;
-  if (calendar) suggestions.push(calendar);
+  // A meeting still running, or an all-day event, mustn't hide a later meeting today.
+  for (const event of events) {
+    const calendar = calendarSuggestion(event, now);
+    if (calendar) {
+      suggestions.push(calendar);
+      break;
+    }
+  }
   if (recentMeetingNote) suggestions.push(noteSuggestion(recentMeetingNote, now));
 
   suggestions.push({

@@ -30,4 +30,8 @@ describe('formatConversationTime', () => {
   it('shows Mon D beyond that', () => {
     expect(formatConversationTime(new Date(2026, 9, 15, 12).getTime(), now)).toBe('Oct 15');
   });
+
+  it('adds the year for an earlier year', () => {
+    expect(formatConversationTime(new Date(2025, 9, 15, 12).getTime(), now)).toBe('Oct 15, 2025');
+  });
 });

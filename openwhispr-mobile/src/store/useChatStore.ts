@@ -36,15 +36,18 @@ interface ChatState {
   activeConversationId: string | null;
   messages: ChatMessage[];
   pending: ChatPending | null;
-  failure: ChatFailure | null;
+  // Keyed by conversation, so a failure in one chat never takes another's Retry away.
+  failures: Record<string, ChatFailure>;
   loadConversations: () => void;
   openConversation: (id: string) => void;
-  closeConversation: () => void;
+  // Clears the open conversation only while it is still `id`, so a screen that's leaving never
+  // closes the one opened over it.
+  closeConversation: (id: string | null) => void;
   beginTranscribing: (conversationId: string | null) => boolean;
   endTranscribing: () => void;
   send: (question: string, options: ChatSendOptions) => ChatSendResult | null;
-  retry: (options: { allowCloudFallback: boolean }) => Promise<void>;
-  editFailedQuestion: () => string | null;
+  retry: (conversationId: string, options: { allowCloudFallback: boolean }) => Promise<void>;
+  editFailedQuestion: (conversationId: string) => string | null;
   cancel: () => void;
   deleteConversation: (id: string) => void;
   reset: () => void;
@@ -60,13 +63,23 @@ interface TurnRequest {
 
 const INITIAL_STATE: Pick<
   ChatState,
-  'conversations' | 'activeConversationId' | 'messages' | 'pending' | 'failure'
+  'conversations' | 'activeConversationId' | 'messages' | 'pending' | 'failures'
 > = {
   conversations: [],
   activeConversationId: null,
   messages: [],
   pending: null,
-  failure: null,
+  failures: {},
+};
+
+const withoutFailure = (
+  failures: Record<string, ChatFailure>,
+  conversationId: string,
+): Record<string, ChatFailure> => {
+  if (!(conversationId in failures)) return failures;
+  const rest = { ...failures };
+  delete rest[conversationId];
+  return rest;
 };
 
 // One turn runs at a time across every conversation. Bumping the generation orphans whatever is
@@ -141,15 +154,18 @@ export const useChatStore = create<ChatState>((set, get) => {
       // Cancel and reset already orphaned their turn, so anything reaching here, an AbortError
       // included, is a real failure the user can retry.
       turn.controller = null;
-      set({
+      set((state) => ({
         pending: null,
-        failure: {
-          conversationId: request.conversationId,
-          messageId: request.userMessageId,
-          question: request.question,
-          message: toChatErrorMessage(error),
+        failures: {
+          ...state.failures,
+          [request.conversationId]: {
+            conversationId: request.conversationId,
+            messageId: request.userMessageId,
+            question: request.question,
+            message: toChatErrorMessage(error),
+          },
         },
-      });
+      }));
     }
   };
 
@@ -164,8 +180,8 @@ export const useChatStore = create<ChatState>((set, get) => {
       set({ activeConversationId: id, messages: chatRepository.getMessages(id) });
     },
 
-    closeConversation: () => {
-      set({ activeConversationId: null, messages: [] });
+    closeConversation: (id) => {
+      if (get().activeConversationId === id) set({ activeConversationId: null, messages: [] });
     },
 
     beginTranscribing: (conversationId) => {
@@ -191,8 +207,7 @@ export const useChatStore = create<ChatState>((set, get) => {
       const history = chatRepository.getMessages(conversationId);
       const userMessage = chatRepository.appendMessage({ conversationId, role: 'user', text });
       set((state) => ({
-        // A failure belongs to its own conversation, so a send anywhere else leaves it showing.
-        failure: state.failure?.conversationId === conversationId ? null : state.failure,
+        failures: withoutFailure(state.failures, conversationId),
         conversations: chatRepository.listConversations(),
         messages:
           state.activeConversationId === conversationId
@@ -210,13 +225,14 @@ export const useChatStore = create<ChatState>((set, get) => {
       return { conversationId, done };
     },
 
-    retry: async ({ allowCloudFallback }) => {
-      const { failure, pending } = get();
+    retry: async (conversationId, { allowCloudFallback }) => {
+      const { failures, pending } = get();
+      const failure = failures[conversationId];
       if (!failure || pending) return;
 
-      const stored = chatRepository.getMessages(failure.conversationId);
+      const stored = chatRepository.getMessages(conversationId);
       const index = stored.findIndex((message) => message.id === failure.messageId);
-      set({ failure: null });
+      set((state) => ({ failures: withoutFailure(state.failures, conversationId) }));
       if (index === -1) return;
 
       await runTurn({
@@ -228,8 +244,8 @@ export const useChatStore = create<ChatState>((set, get) => {
       });
     },
 
-    editFailedQuestion: () => {
-      const { failure } = get();
+    editFailedQuestion: (conversationId) => {
+      const failure = get().failures[conversationId];
       if (!failure) return null;
 
       chatRepository.deleteMessage(failure.messageId);
@@ -238,7 +254,7 @@ export const useChatStore = create<ChatState>((set, get) => {
       const emptied = chatRepository.getMessages(failure.conversationId).length === 0;
       if (emptied) chatRepository.deleteConversation(failure.conversationId);
       set((state) => ({
-        failure: null,
+        failures: withoutFailure(state.failures, conversationId),
         conversations: chatRepository.listConversations(),
         ...(emptied && state.activeConversationId === failure.conversationId
           ? { activeConversationId: null, messages: [] }
@@ -257,7 +273,7 @@ export const useChatStore = create<ChatState>((set, get) => {
       chatRepository.deleteConversation(id);
       set((state) => ({
         conversations: chatRepository.listConversations(),
-        failure: state.failure?.conversationId === id ? null : state.failure,
+        failures: withoutFailure(state.failures, id),
         ...(state.activeConversationId === id ? { activeConversationId: null, messages: [] } : {}),
       }));
     },

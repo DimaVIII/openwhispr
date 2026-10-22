@@ -1,5 +1,6 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
 import { router } from 'expo-router';
+import type { GoogleCalendarEvent, Note } from '@/data';
 import { useChatStore } from '@/store/useChatStore';
 import { ChatHomeScreen } from '../ChatHomeScreen';
 
@@ -12,6 +13,9 @@ const mockVoice = {
   cancel: jest.fn(async () => undefined),
 };
 let mockOnSent: ((conversationId: string) => void) | undefined;
+let mockChatEnabled = true;
+let mockCandidateNotes: Partial<Note>[] = [];
+let mockEvents: Partial<GoogleCalendarEvent>[] = [];
 
 jest.mock('expo-router', () => ({
   router: { push: jest.fn() },
@@ -22,19 +26,19 @@ jest.mock('expo-router', () => ({
 }));
 jest.mock('@/data', () => ({
   chatRepository: { listConversations: () => [] },
-  notesRepository: { getChatCandidateNotes: () => [] },
+  notesRepository: { getChatCandidateNotes: () => mockCandidateNotes },
   calendarRepository: {},
 }));
 jest.mock('@/lib/chat/runChatTurn', () => ({ runChatTurn: jest.fn() }));
 jest.mock('@/lib/calendar/meetingSuggestions', () => ({
-  getMeetingCalendarEventSuggestions: () => [],
+  getMeetingCalendarEventSuggestions: () => mockEvents,
 }));
 jest.mock('@/store/useGoogleCalendarStore', () => ({
   useGoogleCalendarStore: { getState: () => ({ accounts: [], load: async () => undefined }) },
 }));
 jest.mock('@/hooks/useChatSendGate', () => ({
   useChatSendGate: () => ({
-    chatEnabled: true,
+    chatEnabled: mockChatEnabled,
     gate: (run: (allowCloudFallback: boolean) => void) => run(false),
   }),
 }));
@@ -85,11 +89,18 @@ const renderHome = async (): Promise<ReturnType<typeof render>> => {
 beforeEach(() => {
   mockVoice.state = 'idle';
   mockOnSent = undefined;
+  mockChatEnabled = true;
+  mockCandidateNotes = [];
+  mockEvents = [];
   jest.clearAllMocks();
-  useChatStore.setState({ conversations: [], pending: null, failure: null, send: mockSend });
+  useChatStore.setState({ conversations: [], pending: null, failures: {}, send: mockSend });
 });
 
 describe('ChatHomeScreen', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it('sends a suggestion and opens its chat', async () => {
     const screen = await renderHome();
     fireEvent.press(screen.getByText(ACTION_ITEMS));
@@ -98,6 +109,64 @@ describe('ChatHomeScreen', () => {
       allowCloudFallback: false,
     });
     expect(router.push).toHaveBeenCalledWith('/(tabs)/(chat)/c9');
+  });
+
+  it('offers no New chat while Chat is off', async () => {
+    mockChatEnabled = false;
+    const screen = await renderHome();
+
+    expect(screen.getByText('Chat is turned off')).toBeTruthy();
+    expect(screen.queryByLabelText('New chat')).toBeNull();
+    expect(screen.getByLabelText('All chats')).toBeTruthy();
+  });
+
+  it('suggests a later meeting when the next one has been running a while', async () => {
+    const now = new Date();
+    const at = (hours: number, minutes = 0): string =>
+      new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes).toISOString();
+    jest.useFakeTimers({ now: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 9) });
+    mockEvents = [
+      { id: 1, summary: 'Standup', startAt: at(8, 30), endAt: at(9, 30) },
+      { id: 2, summary: 'Design review', startAt: at(14), endAt: at(15) },
+    ];
+    const screen = await renderHome();
+
+    expect(screen.getByText(/^Design review · /)).toBeTruthy();
+    expect(screen.queryByText(/^Standup · /)).toBeNull();
+  });
+
+  it('skips a meeting note that is still transcribing or has nothing in it', async () => {
+    const updatedAt = new Date().toISOString();
+    mockCandidateNotes = [
+      {
+        id: 1,
+        title: 'Recording now',
+        noteType: 'meeting',
+        transcriptionStatus: 'recording',
+        content: 'typed',
+        updatedAt,
+      },
+      {
+        id: 2,
+        title: 'Failed empty',
+        noteType: 'meeting',
+        transcriptionStatus: 'failed',
+        content: '',
+        updatedAt,
+      },
+      {
+        id: 3,
+        title: 'Weekly sync',
+        noteType: 'meeting',
+        transcriptionStatus: 'done',
+        content: '',
+        updatedAt,
+      },
+    ];
+    const screen = await renderHome();
+
+    expect(screen.getByText('Weekly sync · Today')).toBeTruthy();
+    expect(screen.queryByText(/Recording now|Failed empty/)).toBeNull();
   });
 
   it('ignores a suggestion tap while listening', async () => {

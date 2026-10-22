@@ -10,6 +10,9 @@ jest.mock('@/lib/utils', () => ({
   ...jest.requireActual<typeof import('@/lib/utils')>('@/lib/utils'),
   safeHaptics: jest.fn(),
 }));
+jest.mock('@/store/useConfigStore', () => ({
+  useConfigStore: { getState: () => ({ config: { inference: { noteChat: { mode: 'local' } } } }) },
+}));
 let mockActiveMode = 'private';
 jest.mock('@/store/useProcessingModeStore', () => ({
   useProcessingModeStore: { getState: () => ({ activeMode: mockActiveMode }) },
@@ -29,6 +32,7 @@ jest.mock('@/hooks/useUsageLimitRecovery', () => ({
 // The recorder is driven by hand: each test decides what stopping it produces.
 let mockRecordingOptions: UseAudioRecordingOptions = {};
 let mockIsRecording = false;
+let mockIsProcessing = false;
 let mockStopBehavior: () => Promise<void> = async () => undefined;
 // The recorder keeps reporting recording until its native stop resolves.
 let mockNativeStop: Promise<void> = Promise.resolve();
@@ -48,7 +52,7 @@ jest.mock('@/hooks/useAudioRecording', () => ({
     mockRecordingOptions = options;
     return {
       isRecording: mockIsRecording,
-      isProcessing: false,
+      isProcessing: mockIsProcessing,
       startRecording: mockStartRecording,
       stopRecording: mockStopRecording,
       cancelRecording: mockCancelRecording,
@@ -77,12 +81,24 @@ const deferred = (): Deferred => {
   return { promise, resolve };
 };
 
+const mockOnRouteChanged = jest.fn();
+let mockFocused = true;
+
 const renderVoiceInput = (conversationId: string | null, onSent?: (id: string) => void) =>
-  renderHook(() => useChatVoiceInput({ conversationId, onSent }));
+  renderHook(() =>
+    useChatVoiceInput({
+      conversationId,
+      onSent,
+      onRouteChanged: mockOnRouteChanged,
+      isFocused: () => mockFocused,
+    }),
+  );
 
 beforeEach(() => {
   jest.clearAllMocks();
   mockIsRecording = false;
+  mockIsProcessing = false;
+  mockFocused = true;
   mockStopBehavior = async () => undefined;
   mockNativeStop = Promise.resolve();
   mockActiveMode = 'private';
@@ -124,6 +140,62 @@ it('sends the transcript as a chat question', async () => {
   expect(useChatStore.getState().pending).toBeNull();
   rerender({});
   expect(result.current.state).toBe('idle');
+});
+
+it('hands the transcript back instead of sending when the chat route changed', async () => {
+  mockStopBehavior = async () => {
+    mockActiveMode = 'cloud';
+    mockRecordingOptions.onComplete?.('When is my next meeting?');
+  };
+  const { result, rerender } = renderVoiceInput('conv-1');
+
+  await act(async () => {
+    await result.current.start(false);
+  });
+  rerender({});
+  await act(async () => {
+    await result.current.finish();
+  });
+
+  expect(mockSend).not.toHaveBeenCalled();
+  expect(mockOnRouteChanged).toHaveBeenCalledWith('When is my next meeting?');
+  expect(useChatStore.getState().pending).toBeNull();
+});
+
+it('opens one recording for two quick taps', async () => {
+  const { result } = renderVoiceInput('conv-1');
+
+  let started: boolean[] = [];
+  await act(async () => {
+    started = await Promise.all([result.current.start(false), result.current.start(false)]);
+  });
+
+  expect(started).toEqual([true, false]);
+  expect(mockStartRecording).toHaveBeenCalledTimes(1);
+});
+
+it('closes a mic that opened after the screen was left', async () => {
+  mockStartRecording.mockImplementationOnce(async () => {
+    mockIsRecording = true;
+    mockFocused = false;
+  });
+  const { result } = renderVoiceInput('conv-1');
+
+  let started = true;
+  await act(async () => {
+    started = await result.current.start(false);
+  });
+
+  expect(started).toBe(false);
+  expect(mockCancelRecording).toHaveBeenCalledTimes(1);
+});
+
+it('reports settling while a cancelled question is still transcribing', () => {
+  mockIsProcessing = true;
+  const { result } = renderVoiceInput('conv-1');
+
+  expect(result.current.state).toBe('idle');
+  expect(result.current.isSettling).toBe(true);
 });
 
 it('ignores a transcript that arrives after cancel', async () => {

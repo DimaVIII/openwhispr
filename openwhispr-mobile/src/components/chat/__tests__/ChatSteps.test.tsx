@@ -1,4 +1,5 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
+import { AccessibilityInfo } from 'react-native';
 import type { ChatStep } from '@/lib/chat/types';
 import { ChatSteps } from '../ChatSteps';
 
@@ -105,6 +106,30 @@ describe('ChatSteps', () => {
     expect(getByText('Still working')).toBeTruthy();
     expect(getByText('0:15')).toBeTruthy();
     expect(getByText('Questions that span many notes can take up to a minute.')).toBeTruthy();
+    // One heading: the step line gives way to "Still working" rather than sitting above it.
+    expect(queryByText('Reading “Pricing call”…')).toBeNull();
+  });
+
+  it('announces Still working once to screen readers', () => {
+    jest.useFakeTimers();
+    const announce = jest
+      .spyOn(AccessibilityInfo, 'announceForAccessibility')
+      .mockImplementation(() => undefined);
+    render(<ChatSteps steps={steps} variant="working" startedAt={Date.now()} />);
+    announce.mockClear();
+
+    act(() => {
+      jest.advanceTimersByTime(20_000);
+    });
+
+    expect(announce).toHaveBeenCalledTimes(1);
+    expect(announce).toHaveBeenCalledWith('Still working on your answer.');
+    announce.mockRestore();
+  });
+
+  it('marks the header label as a polite live region', () => {
+    const { getByText } = render(<ChatSteps steps={steps} variant="working" />);
+    expect(getByText('Reading “Pricing call”…').props.accessibilityLiveRegion).toBe('polite');
   });
 
   it('clears its one-second timer on unmount', () => {

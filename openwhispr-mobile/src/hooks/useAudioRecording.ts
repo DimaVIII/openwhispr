@@ -77,7 +77,8 @@ export function useAudioRecording(options: UseAudioRecordingOptions = {}) {
   const addTranscript = useTranscriptStore((state) => state.addTranscript);
   const addFailedTranscript = useTranscriptStore((state) => state.addFailedTranscript);
   const jobRouteRef = useRef<TranscriptionJobRoute>({ provider: 'cloud' });
-  // A stop under way owns the recorder's file, so a cancel racing it never deletes that file.
+  // Held only across a native stop: whichever stop or cancel claims it owns the recording, so a
+  // second one never stops it again or deletes the file the first is transcribing.
   const stoppingRef = useRef(false);
 
   const recorderOptions = getDefaultRecorderOptions();
@@ -172,12 +173,16 @@ export function useAudioRecording(options: UseAudioRecordingOptions = {}) {
     try {
       const { audioRecorder: recorder } = ensureAudioSupport();
 
-      if (!isRecording) {
+      if (!isRecording || stoppingRef.current) {
         return;
       }
 
       stoppingRef.current = true;
-      await recorder.stop();
+      try {
+        await recorder.stop();
+      } finally {
+        stoppingRef.current = false;
+      }
 
       const uri = recorder.uri;
 
@@ -267,7 +272,6 @@ export function useAudioRecording(options: UseAudioRecordingOptions = {}) {
       options.onError?.(error as Error);
       throw error;
     } finally {
-      stoppingRef.current = false;
       setIsProcessing(false);
     }
   };
@@ -411,16 +415,24 @@ export function useAudioRecording(options: UseAudioRecordingOptions = {}) {
     }
   };
 
-  // A cancelled recording is discarded, so the file it was writing goes too. Only a recording this
-  // call stopped is deleted: the recorder's uri still names the last finished file once it stops.
+  // A cancelled recording is discarded, so the file it was writing goes too. A recording another
+  // stop already claimed is left to it, file and processing state alike.
   const cancelRecording = async () => {
-    if (audioRecorder?.isRecording) {
-      const ownsFile = !stoppingRef.current;
+    if (stoppingRef.current) return;
+    if (!audioRecorder?.isRecording) {
+      setIsRecording(false);
+      return;
+    }
+    stoppingRef.current = true;
+    // Read before stopping: the recorder may move on to a new file once it stops.
+    const uri = audioRecorder.uri;
+    try {
       await audioRecorder.stop();
-      const uri = audioRecorder.uri;
-      if (ownsFile && uri) {
-        await FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => undefined);
-      }
+    } finally {
+      stoppingRef.current = false;
+    }
+    if (uri) {
+      await FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => undefined);
     }
     setIsRecording(false);
     setIsProcessing(false);

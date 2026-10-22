@@ -8,6 +8,7 @@ import {
   extractSearchTerms,
   formatChatTime,
   isInChatCalendarWindow,
+  lacksNoteText,
   rankChatNotes,
   type ChatCalendar,
   type ChatPayload,
@@ -20,6 +21,9 @@ const MIN_CHAT_NOTES = 2;
 const CONTEXT_LIMIT_NOTE_CHAR_BUDGET = 3_000;
 // Well past what 48 hours can hold, so a busy day never pushes tomorrow out of the request.
 const CHAT_CALENDAR_EVENT_LIMIT = 50;
+// An all-day event is stored as UTC midnight to UTC midnight, so west of UTC today's ends before
+// the local day does. A day's lookback keeps it; chatContext drops the events that have ended.
+const CHAT_CALENDAR_LOOKBACK_MS = 24 * 60 * 60 * 1000;
 
 export interface ChatTurnInput {
   question: string;
@@ -50,6 +54,8 @@ export interface ChatTurnDeps {
     options: { includePrivate: boolean; limit: number },
   ) => Note[];
   isNotePrivate: (noteId: number) => boolean;
+  /** The note's transcript, formatted for a model, or '' when it has none. */
+  getNoteTranscript: (noteId: number) => string;
   getConnectedCalendarAccounts: () => GoogleCalendarAccount[];
   getCalendarEvents: (accounts: GoogleCalendarAccount[], now: Date) => GoogleCalendarEvent[];
   chat: (request: ChatModelRequest) => Promise<ReasoningResponse>;
@@ -69,6 +75,22 @@ export const createDefaultChatTurnDeps = (): ChatTurnDeps => ({
     const note = notesRepository.getNoteById(noteId);
     return note == null || note.isPrivate === 1;
   },
+  getNoteTranscript: (noteId) => {
+    const { notesRepository } = require('@/data') as typeof import('@/data');
+    const segments = notesRepository.getSegments(noteId);
+    if (segments.length === 0) return '';
+    const { formatTranscriptForExport } =
+      require('@/lib/diarization/transcriptDisplay') as typeof import('@/lib/diarization/transcriptDisplay');
+    const { buildMeetingNotesInput } =
+      require('@/lib/notes/meetingNotesInput') as typeof import('@/lib/notes/meetingNotesInput');
+    // Formatted as the note's own chat sends it; the note's title already heads its block.
+    return buildMeetingNotesInput({
+      transcript: formatTranscriptForExport({
+        segments,
+        speakers: notesRepository.getSpeakers(noteId),
+      }),
+    });
+  },
   getConnectedCalendarAccounts: () => {
     const { useGoogleCalendarStore } =
       require('@/store/useGoogleCalendarStore') as typeof import('@/store/useGoogleCalendarStore');
@@ -85,6 +107,7 @@ export const createDefaultChatTurnDeps = (): ChatTurnDeps => ({
       calendarRepository,
       now,
       CHAT_CALENDAR_EVENT_LIMIT,
+      CHAT_CALENDAR_LOOKBACK_MS,
     );
   },
   chat: (request) => {
@@ -122,6 +145,7 @@ const toChatRoute = (selection: InferenceSelection | undefined): InferenceRoute 
 
 // A later answer can quote one built from a private note without listing that note (one made on
 // a local route, say), so a single such answer keeps the whole conversation out of the request.
+// An answer whose sources can't be read may have used one too.
 const usedPrivateNote = (
   history: ChatMessage[],
   isNotePrivate: (noteId: number) => boolean,
@@ -129,7 +153,8 @@ const usedPrivateNote = (
   history.some(
     (message) =>
       message.role === 'assistant' &&
-      message.sources.some((source) => isNotePrivate(source.noteId)),
+      (message.sourcesUnreadable === true ||
+        message.sources.some((source) => isNotePrivate(source.noteId))),
   );
 
 // A calendar that can't be read is reported as unavailable, and the notes can still answer.
@@ -251,10 +276,16 @@ export async function runChatTurn(
   const privateNoteIds = new Set(
     notes.filter((note) => note.isPrivate === 1).map((note) => note.id),
   );
-  const buildPayload = (payloadNotes: Note[], noteCharBudget?: number): ChatPayload =>
-    buildChatPayload({ question, history, notes: payloadNotes, calendar, now, noteCharBudget });
+  const transcripts = new Map(
+    notes.filter(lacksNoteText).map((note) => [note.id, deps.getNoteTranscript(note.id)]),
+  );
+  const buildPayload = (
+    payloadNotes: Note[],
+    options: { noteCharBudget?: number; history: ChatMessage[] },
+  ): ChatPayload =>
+    buildChatPayload({ question, notes: payloadNotes, calendar, now, transcripts, ...options });
 
-  let payload = buildPayload(notes);
+  let payload = buildPayload(notes, { history });
   if (payload.sources.length > 0) {
     const reading = describeReading(payload.sources);
     setStep({ id: 'read', status: 'active', label: reading.active });
@@ -284,7 +315,14 @@ export async function runChatTurn(
     response = await send(payload);
   } catch (error) {
     if (!isLocalContextLimitError(error)) throw error;
-    payload = buildPayload(notes.slice(0, 1), CONTEXT_LIMIT_NOTE_CHAR_BUDGET);
+    // History is uncapped in length, so a long chat would overflow on every retry. A retry that
+    // cuts nothing would fail the same way.
+    const retryPayload = buildPayload(notes.slice(0, 1), {
+      noteCharBudget: CONTEXT_LIMIT_NOTE_CHAR_BUDGET,
+      history: [],
+    });
+    if (retryPayload.text === payload.text) throw error;
+    payload = retryPayload;
     // The first payload always reads at least the note the retry keeps, so the read step is
     // already in place before the write step and is relabelled there.
     if (payload.sources.length > 0) {

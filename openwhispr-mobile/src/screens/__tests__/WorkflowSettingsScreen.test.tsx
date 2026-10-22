@@ -959,7 +959,7 @@ describe('the Chat page', () => {
     mockConfig = { defaultMode: 'cloud', noteChatEnabled: false };
     render(<WorkflowSettingsScreen />);
     expect(
-      screen.getByText('Notes don’t offer Ask about this note while chat is off.'),
+      screen.getByText('The Chat tab and Ask about this note are off while chat is off.'),
     ).toBeTruthy();
   });
 

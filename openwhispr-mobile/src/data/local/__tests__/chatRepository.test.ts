@@ -96,6 +96,47 @@ describe('LocalChatRepository', () => {
     expect(reloaded.sources).toEqual([]);
   });
 
+  it('flags an answer whose sources_json is corrupt or NULL', () => {
+    const { repo, db } = createMemoryChatRepository();
+    const conversation = repo.createConversation('A');
+    const question = repo.appendMessage({
+      conversationId: conversation.id,
+      role: 'user',
+      text: 'q',
+    });
+    const corrupt = repo.appendMessage({
+      conversationId: conversation.id,
+      role: 'assistant',
+      text: 'a',
+    });
+    const missing = repo.appendMessage({
+      conversationId: conversation.id,
+      role: 'assistant',
+      text: 'b',
+    });
+    const intact = repo.appendMessage({
+      conversationId: conversation.id,
+      role: 'assistant',
+      text: 'c',
+    });
+    db.run(sql`UPDATE chat_messages SET sources_json = '{' WHERE id = ${corrupt.id}`);
+    db.run(
+      sql`UPDATE chat_messages SET sources_json = NULL WHERE id IN (${missing.id}, ${question.id})`,
+    );
+
+    const flags = repo
+      .getMessages(conversation.id)
+      .map((message) => [message.text, message.sourcesUnreadable === true]);
+
+    expect(flags).toEqual([
+      ['q', false],
+      ['a', true],
+      ['b', true],
+      ['c', false],
+    ]);
+    expect(intact.sourcesUnreadable).toBeUndefined();
+  });
+
   it('deleteConversation removes its messages', () => {
     const { repo } = createMemoryChatRepository();
     const doomed = repo.createConversation('Doomed');

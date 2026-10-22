@@ -64,6 +64,7 @@ import { SystemIcon } from '@/components/ui/SystemIcon';
 import { GradientGlassSurface } from '@/components/ui/GradientGlassSurface';
 import { Glass } from '@/components/ui/Glass';
 import { GlassBackButton } from '@/components/ui/GlassBackButton';
+import { TAB_BAR_CLEARANCE } from '@/components/ui/tabBarClearance';
 import { TabScreenHeader } from '@/components/ui/TabScreenHeader';
 import { buildNoteShareContent, exportNote } from '@/lib/noteExport';
 import { AppFont } from '@/lib/fonts';
@@ -127,7 +128,24 @@ const transcriptStatusText = (status: string): string => {
   }
 };
 
-export default function NoteEditorScreen() {
+/** Where the editor sits: the screens it opens are pushed onto the same tab's stack. */
+export interface NoteEditorStack {
+  /** Where Back goes when there is nothing to go back to. */
+  root: string;
+  /** The prefix of the stack's actions and voice-enrollment routes. */
+  routePrefix: string;
+}
+
+const NOTES_EDITOR_STACK: NoteEditorStack = {
+  root: '/(tabs)/(notes)',
+  routePrefix: '/(tabs)/(notes)',
+};
+
+export default function NoteEditorScreen({
+  stack = NOTES_EDITOR_STACK,
+}: {
+  stack?: NoteEditorStack;
+}) {
   const { id } = useLocalSearchParams<{ id: string }>();
   const noteId = parseInt(id ?? '', 10);
   const router = useRouter();
@@ -512,8 +530,8 @@ export default function NoteEditorScreen() {
   );
 
   const openVoiceScript = useCallback(() => {
-    router.push(`/(tabs)/(notes)/voice-enrollment?owner=1&noteId=${noteId}`);
-  }, [noteId, router]);
+    router.push(`${stack.routePrefix}/voice-enrollment?owner=1&noteId=${noteId}`);
+  }, [noteId, router, stack.routePrefix]);
 
   // iOS drops a push made while a page sheet is still sliding away, so it waits for the
   // sheet's onDismiss; Android's Modal has no onDismiss.
@@ -733,7 +751,8 @@ export default function NoteEditorScreen() {
     useAudioRecording({
       onComplete: handleDictationComplete,
       onError: handleDictationError,
-      onLocalModelMissing: promptLocalModelFallback,
+      // A declined cloud retry keeps the recording, which the failed history row holds for a retry.
+      onLocalModelMissing: (retryWithCloud) => promptLocalModelFallback(retryWithCloud),
       onUsageLimitReached: handleUsageLimitReached,
     });
 
@@ -1082,8 +1101,8 @@ export default function NoteEditorScreen() {
   }, []);
 
   const handleManageActions = useCallback(() => {
-    router.push('/(tabs)/(notes)/actions');
-  }, [router]);
+    router.push(`${stack.routePrefix}/actions`);
+  }, [router, stack.routePrefix]);
 
   const handleDelete = useCallback(() => {
     confirmDestructive('Delete Note', 'This note will be deleted permanently.', () => {
@@ -1255,7 +1274,7 @@ export default function NoteEditorScreen() {
       ) : null}
       <TabScreenHeader
         title={title || 'Untitled'}
-        left={<GlassBackButton fallbackRoute="/(tabs)/(notes)" />}
+        left={<GlassBackButton fallbackRoute={stack.root} />}
         right={
           <NoteActionsMenu
             noteId={noteId}
@@ -1590,10 +1609,8 @@ export default function NoteEditorScreen() {
   );
 }
 
-// Approximate height of the iOS 18 floating NativeTabs bar (incl. home-indicator
-// inset). Used to lift the floating mic FAB clear of the tab bar.
-const TAB_BAR_OFFSET = Platform.OS === 'ios' ? 110 : 70;
-const FAB_BOTTOM = TAB_BAR_OFFSET + 32;
+// Lifts the floating mic FAB clear of the tab bar.
+const FAB_BOTTOM = TAB_BAR_CLEARANCE + 32;
 const ASK_PILL_HEIGHT = 52;
 const ASK_PILL_GAP = 12;
 const SYSTEM_RED = '#FF3B30';

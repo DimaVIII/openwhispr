@@ -9,7 +9,10 @@ export const CHAT_NOTE_CHAR_CAP = 6_000;
 const CALENDAR_WINDOW_MS = 48 * 60 * 60 * 1000;
 const NOTE_CUT_MARKER = '\n\n[...rest of the note omitted...]';
 const MAX_SEARCH_TERMS = 6;
-const MIN_TERM_LENGTH = 3;
+// Two characters keeps terms like "Q3" and "AI"; the stopwords drop the common short words.
+const MIN_TERM_LENGTH = 2;
+// Chinese and Japanese don't put spaces between words, so their runs are searched as bigrams.
+const UNSPACED_SCRIPT_RUN = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]+/gu;
 const TITLE_HIT_SCORE = 3;
 const BODY_HIT_SCORE = 1;
 
@@ -33,9 +36,67 @@ const STOPWORDS = new Set([
   'that',
   'what',
   'who',
+  'whom',
+  'whose',
+  'when',
+  'where',
+  'which',
+  'why',
+  'how',
   'did',
   'does',
+  'do',
+  'done',
+  'is',
+  'are',
+  'am',
+  'was',
+  'were',
+  'be',
+  'been',
+  'being',
+  'has',
+  'have',
+  'had',
+  'can',
+  'could',
+  'will',
+  'would',
+  'should',
+  'shall',
+  'may',
+  'might',
+  'must',
   'about',
+  'any',
+  'some',
+  'there',
+  'their',
+  'they',
+  'them',
+  'you',
+  'your',
+  'we',
+  'us',
+  'it',
+  'its',
+  'an',
+  'as',
+  'at',
+  'by',
+  'if',
+  'in',
+  'into',
+  'of',
+  'on',
+  'or',
+  'so',
+  'to',
+  'up',
+  'no',
+  'not',
+  'but',
+  'all',
   'my',
   'me',
   'our',
@@ -45,6 +106,7 @@ const STOPWORDS = new Set([
   'tell',
   'show',
   'give',
+  'please',
 ]);
 
 /** `null` means no calendar is connected; `'unavailable'` means one is but couldn't be read. */
@@ -57,6 +119,8 @@ export interface ChatPayloadInput {
   calendar: ChatCalendar;
   now: Date;
   noteCharBudget?: number;
+  /** Transcripts of the notes with no text or summary of their own, by note id. */
+  transcripts?: ReadonlyMap<number, string>;
 }
 
 export interface ChatPayload {
@@ -83,13 +147,25 @@ export const shiftLocalDay = (date: Date, days: number): Date => {
   return shifted;
 };
 
+const toBigrams = (run: string): string[] => {
+  const characters = Array.from(run);
+  return characters.slice(1).map((character, index) => `${characters[index]}${character}`);
+};
+
 // The note lookup treats a blank term as "match everything". Matching whole letter/digit runs
 // can't produce one, and the length filter drops the short leftovers.
 export const extractSearchTerms = (question: string): string[] => {
-  const words = question.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
-  const terms = words.filter((word) => word.length >= MIN_TERM_LENGTH && !STOPWORDS.has(word));
-  return [...new Set(terms)].slice(0, MAX_SEARCH_TERMS);
+  const lower = question.toLowerCase();
+  const words = (lower.replace(UNSPACED_SCRIPT_RUN, ' ').match(/[\p{L}\p{N}]+/gu) ?? []).filter(
+    (word) => word.length >= MIN_TERM_LENGTH && !STOPWORDS.has(word),
+  );
+  const bigrams = (lower.match(UNSPACED_SCRIPT_RUN) ?? []).flatMap(toBigrams);
+  return [...new Set([...words, ...bigrams])].slice(0, MAX_SEARCH_TERMS);
 };
+
+/** Whether a note has neither text nor an AI summary, so only its transcript can say anything. */
+export const lacksNoteText = (note: Note): boolean =>
+  !note.content.trim() && !note.enhancedContent?.trim();
 
 const updatedAtMs = (note: Note): number => tryParseNoteTimestamp(note.updatedAt)?.getTime() ?? 0;
 
@@ -184,15 +260,18 @@ const formatCalendarSection = (calendar: ChatCalendar, now: Date): string => {
 const formatNotesSection = (
   notes: Note[],
   budget: number,
+  transcripts: ReadonlyMap<number, string> | undefined,
 ): { section: string; sources: ChatSource[] } => {
   const blocks: string[] = [];
   const sources: ChatSource[] = [];
   let remaining = budget;
 
   for (const note of notes) {
+    // A meeting whose summary never ran is sent as its transcript.
+    const sourceText = lacksNoteText(note) ? (transcripts?.get(note.id) ?? '') : note.content;
     const body = buildNoteChatContext({
       generatedNotes: note.enhancedContent,
-      sourceText: note.content,
+      sourceText,
     }).slice(0, CHAT_NOTE_CHAR_CAP);
     // The top note is cut to fit rather than dropped, so a tight budget still sends one note. Any
     // later note that won't fit is dropped whole, but a smaller, lower-ranked one may still fit.
@@ -213,7 +292,15 @@ const formatNotesSection = (
 };
 
 export const buildChatPayload = (input: ChatPayloadInput): ChatPayload => {
-  const { question, history, notes, calendar, now, noteCharBudget = CHAT_NOTE_CHAR_BUDGET } = input;
+  const {
+    question,
+    history,
+    notes,
+    calendar,
+    now,
+    noteCharBudget = CHAT_NOTE_CHAR_BUDGET,
+    transcripts,
+  } = input;
   const today = now.toLocaleString('en-US', {
     weekday: 'long',
     month: 'long',
@@ -222,7 +309,7 @@ export const buildChatPayload = (input: ChatPayloadInput): ChatPayload => {
     hour: 'numeric',
     minute: '2-digit',
   });
-  const { section: notesSection, sources } = formatNotesSection(notes, noteCharBudget);
+  const { section: notesSection, sources } = formatNotesSection(notes, noteCharBudget, transcripts);
 
   const text = [
     `TODAY:\n${today}`,

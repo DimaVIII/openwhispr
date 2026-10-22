@@ -15,6 +15,8 @@ interface ChatComposerProps {
   disabled: boolean;
   onSend: () => void;
   onMicPress: () => void;
+  /** Locks only the mic, e.g. while a cancelled question finishes transcribing. */
+  micDisabled?: boolean;
   /** Stops the screen's own turn; without it a busy composer is simply locked. */
   onStop?: () => void;
   /** Focuses the input when it mounts, e.g. on returning from the voice panel. */
@@ -29,6 +31,7 @@ export function ChatComposer({
   disabled,
   onSend,
   onMicPress,
+  micDisabled = false,
   onStop,
   autoFocus = false,
 }: ChatComposerProps): React.JSX.Element {
@@ -68,7 +71,11 @@ export function ChatComposer({
           <SystemIcon name="arrow.up" mdName="ArrowUp" size={18} color={CHAT_COLORS.onGradient} />
         </ChatGradientButton>
       ) : (
-        <ChatGradientButton label="Speak your question" disabled={locked} onPress={onMicPress}>
+        <ChatGradientButton
+          label="Speak your question"
+          disabled={locked || micDisabled}
+          onPress={onMicPress}
+        >
           <SystemIcon name="mic.fill" mdName="Mic" size={18} color={CHAT_COLORS.onGradient} />
         </ChatGradientButton>
       )}
@@ -88,6 +95,6 @@ const styles = StyleSheet.create({
     height: COMPOSER_BUTTON_SIZE,
     borderRadius: COMPOSER_BUTTON_RADIUS,
     borderCurve: 'continuous',
-    backgroundColor: CHAT_COLORS.stopButton,
+    backgroundColor: CHAT_COLORS.darkFill,
   },
 });

@@ -75,6 +75,23 @@ describe('extractSearchTerms', () => {
   it('never returns a blank term', () => {
     expect(extractSearchTerms('  ?? ! a to ')).toEqual([]);
   });
+
+  it('drops question words and auxiliaries', () => {
+    expect(extractSearchTerms('When was the Acme kickoff, and how have we done?')).toEqual([
+      'acme',
+      'kickoff',
+    ]);
+  });
+
+  it('keeps two-character terms', () => {
+    expect(extractSearchTerms('What is our Q3 AI budget?')).toEqual(['q3', 'ai', 'budget']);
+  });
+
+  it('splits Chinese and Japanese runs into bigrams', () => {
+    expect(extractSearchTerms('预算会议')).toEqual(['预算', '算会', '会议']);
+    expect(extractSearchTerms('Acme 会議')).toEqual(['acme', '会議']);
+    expect(extractSearchTerms('第三季度预算会议的结论是什么')).toHaveLength(6);
+  });
 });
 
 describe('rankChatNotes', () => {
@@ -156,6 +173,24 @@ describe('buildChatPayload', () => {
     const { sources } = buildPayload({ notes, noteCharBudget: 6_000 });
 
     expect(sources.map((source) => source.noteId)).toEqual([1, 3]);
+  });
+
+  it('sends the transcript of a note with no text or summary', () => {
+    const notes = [
+      makeNote({ id: 1, title: 'Weekly sync' }),
+      makeNote({ id: 2, title: 'Summarized', enhancedContent: 'The summary' }),
+    ];
+    const transcripts = new Map([
+      [1, 'Meeting transcript:\n[00:00] Priya: We ship Friday.'],
+      [2, 'Meeting transcript:\n[00:00] Sam: Not sent.'],
+    ]);
+
+    const { text } = buildPayload({ notes, transcripts });
+
+    expect(text).toContain('### Weekly sync');
+    expect(text).toContain('[00:00] Priya: We ship Friday.');
+    expect(text).toContain('The summary');
+    expect(text).not.toContain('Not sent.');
   });
 
   it('says when there are no matching notes', () => {

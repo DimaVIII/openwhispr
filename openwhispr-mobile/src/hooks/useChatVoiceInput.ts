@@ -7,6 +7,7 @@ import { isMicPermissionError, isNoSpeechError, showMicPermissionAlert } from '@
 import { promptLocalModelFallback } from '@/lib/privateMode';
 import { safeHaptics } from '@/lib/utils';
 import { useChatStore, type ChatPending } from '@/store/useChatStore';
+import { useConfigStore } from '@/store/useConfigStore';
 import { useProcessingModeStore } from '@/store/useProcessingModeStore';
 import { useUsageStore } from '@/store/useUsageStore';
 import type { UsageLimitError } from '@/lib/usageLimitError';
@@ -14,6 +15,8 @@ import type { UsageLimitError } from '@/lib/usageLimitError';
 export interface ChatVoiceInput {
   state: 'idle' | 'listening' | 'transcribing';
   elapsedSeconds: number;
+  // A cancelled question is still being transcribed in the background, so the mic refuses.
+  isSettling: boolean;
   audioRecorder: AudioRecorder;
   // Resolves false when it refused (a turn is pending, or a cancelled transcription is still
   // settling) or the recorder failed to start.
@@ -25,6 +28,10 @@ export interface ChatVoiceInput {
 interface UseChatVoiceInputOptions {
   conversationId: string | null;
   onSent?: (conversationId: string) => void;
+  /** Gets a transcript instead of sending it when the chat route changed since the mic opened. */
+  onRouteChanged: (text: string) => void;
+  /** Whether the screen is still showing; a mic that opens after it isn't is closed again. */
+  isFocused: () => boolean;
 }
 
 interface TranscribingSlot {
@@ -32,9 +39,18 @@ interface TranscribingSlot {
   pending: ChatPending | null;
 }
 
+// The send gate's checks (account, paywall, Local Mode consent) depend on these two, so a question
+// is sent only on the route they were run for.
+const currentGateRoute = (): string =>
+  `${useConfigStore.getState().config?.inference?.noteChat?.mode ?? ''}:${
+    useProcessingModeStore.getState().activeMode
+  }`;
+
 export function useChatVoiceInput({
   conversationId,
   onSent,
+  onRouteChanged,
+  isFocused,
 }: UseChatVoiceInputOptions): ChatVoiceInput {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -42,7 +58,14 @@ export function useChatVoiceInput({
   conversationIdRef.current = conversationId;
   const onSentRef = useRef(onSent);
   onSentRef.current = onSent;
+  const onRouteChangedRef = useRef(onRouteChanged);
+  onRouteChangedRef.current = onRouteChanged;
+  const isFocusedRef = useRef(isFocused);
+  isFocusedRef.current = isFocused;
   const allowCloudFallbackRef = useRef(false);
+  const gateRouteRef = useRef('');
+  // A second tap while the recorder is still starting would open a second recording.
+  const startingRef = useRef(false);
   // Bumped by cancel, so a transcript that lands afterwards is ignored.
   const generationRef = useRef(0);
   const slotRef = useRef<TranscribingSlot | null>(null);
@@ -83,6 +106,10 @@ export function useChatVoiceInput({
     const movedAway = useChatStore.getState().pending?.conversationId !== targetId;
     releaseSlot();
     if (movedAway) return;
+    if (currentGateRoute() !== gateRouteRef.current) {
+      onRouteChangedRef.current(text);
+      return;
+    }
     const result = useChatStore.getState().send(text, {
       conversationId: targetId,
       allowCloudFallback: allowCloudFallbackRef.current,
@@ -145,15 +172,31 @@ export function useChatVoiceInput({
 
   const start = async (allowCloudFallback: boolean): Promise<boolean> => {
     // A cancelled transcription still delivers its text later, which must not land in a new slot.
-    if (useChatStore.getState().pending || recording.isRecording || recording.isProcessing) {
+    if (
+      startingRef.current ||
+      useChatStore.getState().pending ||
+      recording.isRecording ||
+      recording.isProcessing
+    ) {
       return false;
     }
+    startingRef.current = true;
     allowCloudFallbackRef.current = allowCloudFallback;
-    return recording.startRecording().then(
-      () => true,
+    gateRouteRef.current = currentGateRoute();
+    try {
+      await recording.startRecording();
+    } catch {
       // Failures already reached onError.
-      () => false,
-    );
+      return false;
+    } finally {
+      startingRef.current = false;
+    }
+    // The screen was left while the recorder started, so nobody would see it listening.
+    if (!isFocusedRef.current()) {
+      await recording.cancelRecording();
+      return false;
+    }
+    return true;
   };
 
   const finish = async (): Promise<void> => {
@@ -188,6 +231,7 @@ export function useChatVoiceInput({
   return {
     state,
     elapsedSeconds,
+    isSettling: recording.isProcessing && state === 'idle',
     audioRecorder: recording.audioRecorder,
     start,
     finish,

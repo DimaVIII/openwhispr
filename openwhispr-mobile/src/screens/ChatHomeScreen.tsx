@@ -10,12 +10,13 @@ import { ChatInputBar } from '@/components/chat/ChatInputBar';
 import { ChatRecentList } from '@/components/chat/ChatRecentList';
 import { ChatSuggestionCards } from '@/components/chat/ChatSuggestionCards';
 import { ChatTurnedOff } from '@/components/chat/ChatTurnedOff';
-import { TAB_BAR_CLEARANCE } from '@/components/chat/tabBarClearance';
-import { calendarRepository, notesRepository } from '@/data';
+import { TAB_BAR_CLEARANCE } from '@/components/ui/tabBarClearance';
+import { calendarRepository, notesRepository, type Note } from '@/data';
 import { useChatSendGate } from '@/hooks/useChatSendGate';
 import { useChatVoiceInput } from '@/hooks/useChatVoiceInput';
 import { getMeetingCalendarEventSuggestions } from '@/lib/calendar/meetingSuggestions';
 import { chatTabGateOptions } from '@/lib/chat/chatConsent';
+import { lacksNoteText } from '@/lib/chat/chatContext';
 import { selectPendingTitle, workingElsewhereLabel } from '@/lib/chat/chatPending';
 import { CHAT_HISTORY_ROUTE, chatConversationRoute, NEW_CHAT_ID } from '@/lib/chat/chatRoutes';
 import { buildChatSuggestions, type ChatSuggestion } from '@/lib/chat/chatSuggestions';
@@ -27,6 +28,21 @@ import { useProcessingModeStore } from '@/store/useProcessingModeStore';
 const RECENT_CONVERSATION_COUNT = 4;
 const RECENT_MEETING_WINDOW_MS = 2 * 24 * 60 * 60 * 1000;
 const RECENT_NOTE_POOL = 20;
+// Enough that a running meeting or a day of all-day events can't hide the next meeting worth
+// prepping.
+const SUGGESTION_EVENT_POOL = 50;
+const UNFINISHED_TRANSCRIPTS = new Set(['recording', 'transcribing', 'diarizing']);
+
+// A meeting still recording or transcribing, or one that failed with nothing typed, has nothing to
+// ask about yet.
+const isAskableMeeting = (note: Note): boolean => {
+  const status = note.transcriptionStatus ?? 'idle';
+  return (
+    note.noteType === 'meeting' &&
+    !UNFINISHED_TRANSCRIPTS.has(status) &&
+    (status === 'done' || !lacksNoteText(note))
+  );
+};
 
 const greetingFor = (date: Date): string => {
   const hour = date.getHours();
@@ -37,11 +53,12 @@ const greetingFor = (date: Date): string => {
 
 const loadSuggestions = (now: Date): ChatSuggestion[] => {
   const { accounts } = useGoogleCalendarStore.getState();
-  // buildChatSuggestions needs a start time, which an all-day event doesn't have.
-  const nextEvent =
-    getMeetingCalendarEventSuggestions(accounts, calendarRepository, now).find(
-      (event) => !event.allDay,
-    ) ?? null;
+  const events = getMeetingCalendarEventSuggestions(
+    accounts,
+    calendarRepository,
+    now,
+    SUGGESTION_EVENT_POOL,
+  );
   const cutoff = now.getTime() - RECENT_MEETING_WINDOW_MS;
   // Candidates come newest first, so the first meeting is the newest one.
   const recentMeetingNote =
@@ -49,10 +66,10 @@ const loadSuggestions = (now: Date): ChatSuggestion[] => {
       .getChatCandidateNotes([], { includePrivate: false, limit: RECENT_NOTE_POOL })
       .find(
         (note) =>
-          note.noteType === 'meeting' &&
+          isAskableMeeting(note) &&
           (tryParseNoteTimestamp(note.updatedAt)?.getTime() ?? 0) >= cutoff,
       ) ?? null;
-  return buildChatSuggestions({ nextEvent, recentMeetingNote, now });
+  return buildChatSuggestions({ events, recentMeetingNote, now });
 };
 
 const pushConversation = (conversationId: string): void => {
@@ -76,6 +93,8 @@ export function ChatHomeScreen(): React.JSX.Element {
     onSent: (conversationId) => {
       if (focusedRef.current) pushConversation(conversationId);
     },
+    onRouteChanged: setDraft,
+    isFocused: () => focusedRef.current,
   });
   const voiceRef = useRef(voice);
   voiceRef.current = voice;
@@ -146,12 +165,14 @@ export function ChatHomeScreen(): React.JSX.Element {
       >
         <SystemIcon name="clock.arrow.circlepath" mdName="History" size={18} color="brand" />
       </GlassIconButton>
-      <GlassIconButton
-        accessibilityLabel="New chat"
-        onPress={() => runIfVoiceIdle(() => pushConversation(NEW_CHAT_ID))}
-      >
-        <SystemIcon name="square.and.pencil" mdName="SquarePen" size={18} color="brand" />
-      </GlassIconButton>
+      {chatEnabled ? (
+        <GlassIconButton
+          accessibilityLabel="New chat"
+          onPress={() => runIfVoiceIdle(() => pushConversation(NEW_CHAT_ID))}
+        >
+          <SystemIcon name="square.and.pencil" mdName="SquarePen" size={18} color="brand" />
+        </GlassIconButton>
+      ) : null}
     </View>
   );
 

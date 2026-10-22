@@ -286,4 +286,67 @@ describe('cancelRecording', () => {
 
     expect(FileSystem.deleteAsync).not.toHaveBeenCalled();
   });
+
+  it('keeps a send that lands during a cancel from transcribing the deleted file', async () => {
+    let finishNativeStop: () => void = () => undefined;
+    mockRecorder.stop.mockImplementationOnce(
+      () =>
+        new Promise<undefined>((resolve) => {
+          finishNativeStop = () => resolve(undefined);
+        }),
+    );
+    const { result } = await startHook();
+
+    let cancelling: Promise<void> = Promise.resolve();
+    await act(async () => {
+      cancelling = result.current.cancelRecording();
+      await result.current.stopRecording();
+    });
+    await act(async () => {
+      finishNativeStop();
+      mockRecorder.isRecording = false;
+      await cancelling;
+    });
+
+    expect(mockRecorder.stop).toHaveBeenCalledTimes(1);
+    expect(mockTranscribe).not.toHaveBeenCalled();
+    expect(FileSystem.deleteAsync).toHaveBeenCalledWith('file:///tmp/rec.wav', {
+      idempotent: true,
+    });
+  });
+
+  it('leaves a transcription under way processing when cancelled', async () => {
+    let finishTranscribing: () => void = () => undefined;
+    mockTranscribe.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishTranscribing = () => resolve(transcribed('Kept.'));
+        }),
+    );
+    const onComplete = jest.fn();
+    const hook = renderHook(() => useAudioRecording({ saveToHistory: false, onComplete }));
+    await act(async () => {
+      await hook.result.current.startRecording();
+    });
+    mockRecorder.isRecording = true;
+
+    let stopping: Promise<void> = Promise.resolve();
+    await act(async () => {
+      stopping = hook.result.current.stopRecording();
+      await Promise.resolve();
+      mockRecorder.isRecording = false;
+    });
+    await act(async () => {
+      await hook.result.current.cancelRecording();
+    });
+
+    expect(hook.result.current.isProcessing).toBe(true);
+
+    await act(async () => {
+      finishTranscribing();
+      await stopping;
+    });
+    expect(onComplete).toHaveBeenCalledWith('Kept.');
+    expect(hook.result.current.isProcessing).toBe(false);
+  });
 });

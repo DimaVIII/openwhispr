@@ -9,7 +9,6 @@ import { formatElapsed } from './formatElapsed';
 interface ChatVoicePanelProps {
   elapsedSeconds: number;
   audioRecorder: Parameters<typeof useAudioWaveform>[0];
-  isRecording: boolean;
   onCancel: () => void;
   onSwitchToTyping: () => void;
   onSend: () => void;
@@ -18,12 +17,12 @@ interface ChatVoicePanelProps {
 export function ChatVoicePanel({
   elapsedSeconds,
   audioRecorder,
-  isRecording,
   onCancel,
   onSwitchToTyping,
   onSend,
 }: ChatVoicePanelProps): React.JSX.Element {
-  const { waveformData, currentAmplitude } = useAudioWaveform(audioRecorder, isRecording);
+  // The panel only shows while listening.
+  const { waveformData, currentAmplitude } = useAudioWaveform(audioRecorder, true);
 
   return (
     <View className="gap-3 bg-secondarySystemGroupedBackground p-4" style={styles.panel}>
@@ -36,7 +35,7 @@ export function ChatVoicePanel({
       </View>
       <View className="items-center">
         <RecordingBars
-          isRecording={isRecording}
+          isRecording
           color={BRAND_GRADIENT[1]}
           height={44}
           amplitude={currentAmplitude}

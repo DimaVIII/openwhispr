@@ -9,9 +9,15 @@ import {
 import type { ChatMessage, ChatStep } from '../types';
 
 const mockGetNoteById = jest.fn();
+const mockGetSegments = jest.fn();
+const mockGetSpeakers = jest.fn();
 const mockGetUpcomingEvents = jest.fn();
 jest.mock('@/data', () => ({
-  notesRepository: { getNoteById: mockGetNoteById },
+  notesRepository: {
+    getNoteById: mockGetNoteById,
+    getSegments: mockGetSegments,
+    getSpeakers: mockGetSpeakers,
+  },
   calendarRepository: { getUpcomingEvents: mockGetUpcomingEvents },
 }));
 
@@ -71,6 +77,7 @@ const makeDeps = (overrides: Partial<ChatTurnDeps> = {}): ChatTurnDeps => ({
   getConnectedCalendarAccounts: jest.fn(() => [CONNECTED_ACCOUNT]),
   getCalendarEvents: jest.fn(() => []),
   isNotePrivate: jest.fn(() => false),
+  getNoteTranscript: jest.fn(() => ''),
   chat: jest.fn(async () => ({ text: 'The answer.', model: 'test' })),
   getChatSelection: jest.fn(() => ({ mode: 'openwhispr' as const })),
   ...overrides,
@@ -341,6 +348,69 @@ describe('runChatTurn', () => {
     expect(text).not.toContain('As I said, launch is June 3.');
   });
 
+  it('sends no history on a cloud route once an answer’s sources can’t be read', async () => {
+    const history = [
+      makeMessage('m1', 'user', 'What was the launch date?'),
+      { ...makeMessage('m2', 'assistant', 'Launch is June 3.'), sourcesUnreadable: true },
+    ];
+    const deps = makeDeps();
+
+    await runChatTurn(makeInput({ history }), deps);
+
+    expect(sentText(deps.chat)).toContain('RECENT CHAT:\nNo prior chat messages.');
+  });
+
+  it('sends the transcript of a matched meeting that has no summary', async () => {
+    const meeting = makeNote({ id: 3, title: 'Weekly sync', noteType: 'meeting' });
+    const getNoteTranscript = jest.fn(() => 'Meeting transcript:\n[00:00] Priya: Pricing holds.');
+    const deps = makeDeps({
+      getCandidateNotes: jest.fn((terms: string[]) => (terms.length > 0 ? [meeting, PRICING] : [])),
+      getNoteTranscript,
+    });
+
+    await runChatTurn(makeInput(), deps);
+
+    expect(getNoteTranscript).toHaveBeenCalledTimes(1);
+    expect(getNoteTranscript).toHaveBeenCalledWith(3);
+    expect(sentText(deps.chat)).toContain('### Weekly sync');
+    expect(sentText(deps.chat)).toContain('[00:00] Priya: Pricing holds.');
+  });
+
+  it('formats a transcript from the note’s segments and speakers', () => {
+    mockGetSegments.mockReturnValueOnce([
+      {
+        id: 1,
+        noteId: 3,
+        startMs: 0,
+        endMs: 1000,
+        text: 'Pricing holds.',
+        speakerLabel: 'S1',
+        sortOrder: 0,
+      },
+    ]);
+    mockGetSpeakers.mockReturnValueOnce([
+      { id: 1, noteId: 3, speakerLabel: 'S1', displayName: 'Priya', sortOrder: 0 },
+    ]);
+
+    expect(createDefaultChatTurnDeps().getNoteTranscript(3)).toBe(
+      'Meeting transcript:\n[0:00] Priya: Pricing holds.',
+    );
+    mockGetSegments.mockReturnValueOnce([]);
+    expect(createDefaultChatTurnDeps().getNoteTranscript(4)).toBe('');
+  });
+
+  it('reads the calendar from a day back, so today’s all-day events stay in', () => {
+    mockGetUpcomingEvents.mockReturnValue([]);
+
+    createDefaultChatTurnDeps().getCalendarEvents([CONNECTED_ACCOUNT], NOW);
+
+    expect(mockGetUpcomingEvents).toHaveBeenCalledWith(
+      CONNECTED_ACCOUNT.id,
+      new Date(NOW.getTime() - 24 * 60 * 60 * 1000).toISOString(),
+      expect.any(String),
+    );
+  });
+
   it('keeps history answers built from private notes on a local route', async () => {
     const isNotePrivate = jest.fn((noteId: number) => noteId === 7);
     const deps = makeDeps({ isNotePrivate, getChatSelection: LOCAL_SELECTION });
@@ -367,6 +437,36 @@ describe('runChatTurn', () => {
     expect(sentText(chat, 1).match(/###/g)).toHaveLength(1);
     expect(result.text).toBe('Short answer.');
     expect(result.sources).toEqual([{ noteId: 1, title: 'Pricing call' }]);
+  });
+
+  it('drops the chat history from a context-limit retry', async () => {
+    const history = [
+      makeMessage('m1', 'user', 'What was the launch date?'),
+      makeMessage('m2', 'assistant', 'Launch is June 3.'),
+    ];
+    const chat = jest
+      .fn()
+      .mockRejectedValueOnce(new LocalReasoningError('LOCAL_CONTEXT_LIMIT', 'Too long'))
+      .mockResolvedValueOnce({ text: 'Short answer.', model: 'local' });
+    const deps = makeDeps({ chat, getChatSelection: LOCAL_SELECTION });
+
+    await runChatTurn(makeInput({ history }), deps);
+
+    expect(sentText(chat, 0)).toContain('Launch is June 3.');
+    expect(sentText(chat, 1)).toContain('RECENT CHAT:\nNo prior chat messages.');
+  });
+
+  it('skips a context-limit retry that would send the same request', async () => {
+    const error = new LocalReasoningError('LOCAL_CONTEXT_LIMIT', 'Too long');
+    const chat = jest.fn().mockRejectedValue(error);
+    const deps = makeDeps({
+      chat,
+      getChatSelection: LOCAL_SELECTION,
+      getCandidateNotes: jest.fn((terms: string[]) => (terms.length > 0 ? [PRICING] : [])),
+    });
+
+    await expect(runChatTurn(makeInput(), deps)).rejects.toBe(error);
+    expect(chat).toHaveBeenCalledTimes(1);
   });
 
   it('retries a long note cut to the budget', async () => {

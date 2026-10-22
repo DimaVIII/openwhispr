@@ -23,7 +23,7 @@ describe('buildChatSuggestions', () => {
     const start = new Date(2026, 9, 22, 11, 0);
 
     const suggestions = buildChatSuggestions({
-      nextEvent: makeEvent('Design review', start),
+      events: [makeEvent('Design review', start)],
       recentMeetingNote: makeNote('Roadmap sync', new Date(2026, 9, 21, 15, 0)),
       now: NOW,
     });
@@ -55,7 +55,7 @@ describe('buildChatSuggestions', () => {
 
   it('skips a meeting that started more than 15 minutes ago', () => {
     const suggestions = buildChatSuggestions({
-      nextEvent: makeEvent('Standup', new Date(2026, 9, 22, 8, 40)),
+      events: [makeEvent('Standup', new Date(2026, 9, 22, 8, 40))],
       recentMeetingNote: null,
       now: NOW,
     });
@@ -65,7 +65,7 @@ describe('buildChatSuggestions', () => {
 
   it('keeps a meeting that started within the last 15 minutes', () => {
     const suggestions = buildChatSuggestions({
-      nextEvent: makeEvent('Standup', new Date(2026, 9, 22, 8, 50)),
+      events: [makeEvent('Standup', new Date(2026, 9, 22, 8, 50))],
       recentMeetingNote: null,
       now: NOW,
     });
@@ -73,9 +73,26 @@ describe('buildChatSuggestions', () => {
     expect(suggestions.map((suggestion) => suggestion.kind)).toEqual(['calendar', 'actions']);
   });
 
+  it('suggests a later meeting when the first has been running a while', () => {
+    const later = new Date(2026, 9, 22, 14, 0);
+    const allDay = { ...makeEvent('Offsite', new Date(Date.UTC(2026, 9, 22))), allDay: 1 };
+
+    const suggestions = buildChatSuggestions({
+      events: [
+        allDay,
+        makeEvent('Standup', new Date(2026, 9, 22, 8, 30)),
+        makeEvent('Design review', later),
+      ],
+      recentMeetingNote: null,
+      now: NOW,
+    });
+
+    expect(suggestions[0].meta).toBe(`Design review · ${time(later)}`);
+  });
+
   it('skips a meeting that starts on another day', () => {
     const suggestions = buildChatSuggestions({
-      nextEvent: makeEvent('Tomorrow sync', new Date(2026, 9, 23, 10, 0)),
+      events: [makeEvent('Tomorrow sync', new Date(2026, 9, 23, 10, 0))],
       recentMeetingNote: null,
       now: NOW,
     });
@@ -85,12 +102,12 @@ describe('buildChatSuggestions', () => {
 
   it('labels a note updated today and one from an earlier day', () => {
     const today = buildChatSuggestions({
-      nextEvent: null,
+      events: [],
       recentMeetingNote: makeNote('Kickoff', new Date(2026, 9, 22, 8, 0)),
       now: NOW,
     });
     const earlier = buildChatSuggestions({
-      nextEvent: null,
+      events: [],
       recentMeetingNote: makeNote('Kickoff', new Date(2026, 9, 18, 8, 0)),
       now: NOW,
     });

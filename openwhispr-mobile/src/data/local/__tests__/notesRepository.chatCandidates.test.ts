@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { notes } from '@/db/schema';
+import { notes, transcriptSegments } from '@/db/schema';
 import { createMemoryRepository, type TestDb } from './testDb';
 
 type SeedNote = {
@@ -42,16 +42,66 @@ describe('LocalNotesRepository.getChatCandidateNotes', () => {
     expect(result.map((note) => note.id)).toEqual([id]);
   });
 
-  it('matches a term in the transcript', () => {
+  it('matches a term in the transcript segments', () => {
     const { repo, db } = createMemoryRepository();
-    const id = seed(repo, db, {
-      transcript: 'we agreed on the roadmap',
-      updatedAt: '2026-10-01 10:00:00',
-    });
+    // A note created first gives the segments ids that differ from their note's id.
+    seed(repo, db, { title: 'Other', updatedAt: '2026-10-01 09:00:00' });
+    const id = repo.createNote('Weekly sync', '').id;
+    repo.replaceSegments(id, [
+      { noteId: id, startMs: 0, endMs: 1000, text: 'hello everyone' },
+      { noteId: id, startMs: 1000, endMs: 2000, text: 'we agreed on the roadmap' },
+    ]);
 
     const result = repo.getChatCandidateNotes(['roadmap'], { includePrivate: false, limit: 10 });
 
     expect(result.map((note) => note.id)).toEqual([id]);
+  });
+
+  it('never matches the keys of the transcript JSON', () => {
+    const { repo, db } = createMemoryRepository();
+    seed(repo, db, {
+      title: 'Weekly sync',
+      transcript: JSON.stringify([{ source: 'system', text: 'hi', speakerLockSource: 'user' }]),
+      updatedAt: '2026-10-01 10:00:00',
+    });
+
+    for (const term of ['source', 'system', 'text', 'user']) {
+      expect(repo.getChatCandidateNotes([term], { includePrivate: false, limit: 10 })).toEqual([]);
+    }
+  });
+
+  it('ignores deleted transcript segments', () => {
+    const { repo, db } = createMemoryRepository();
+    const id = repo.createNote('Weekly sync', '').id;
+    repo.replaceSegments(id, [{ noteId: id, startMs: 0, endMs: 1000, text: 'roadmap' }]);
+    db.update(transcriptSegments).set({ deletedAt: '2026-10-01 10:00:00' }).run();
+
+    expect(repo.getChatCandidateNotes(['roadmap'], { includePrivate: false, limit: 10 })).toEqual(
+      [],
+    );
+  });
+
+  it('keeps the notes matching the most terms when the pool is cut', () => {
+    const { repo, db } = createMemoryRepository();
+    const acme = seed(repo, db, {
+      title: 'Acme kickoff',
+      content: 'Kickoff with Acme on the 4th.',
+      updatedAt: '2026-09-01 10:00:00',
+    });
+    const bodyOnly = seed(repo, db, {
+      content: 'acme and kickoff both mentioned',
+      updatedAt: '2026-09-02 10:00:00',
+    });
+    for (let day = 10; day < 20; day += 1) {
+      seed(repo, db, { content: 'another kickoff', updatedAt: `2026-10-${day} 10:00:00` });
+    }
+
+    const result = repo.getChatCandidateNotes(['acme', 'kickoff'], {
+      includePrivate: false,
+      limit: 2,
+    });
+
+    expect(result.map((note) => note.id)).toEqual([acme, bodyOnly]);
   });
 
   it('treats % and _ in a term literally', () => {
@@ -95,7 +145,7 @@ describe('LocalNotesRepository.getChatCandidateNotes', () => {
     expect(result.map((note) => note.id)).toEqual([keptId]);
   });
 
-  it('orders by most recently updated and caps at the limit', () => {
+  it('orders equal matches by most recently updated and caps at the limit', () => {
     const { repo, db } = createMemoryRepository();
     seed(repo, db, { content: 'alpha old', updatedAt: '2026-10-01 10:00:00' });
     const newest = seed(repo, db, { content: 'alpha new', updatedAt: '2026-10-03 10:00:00' });

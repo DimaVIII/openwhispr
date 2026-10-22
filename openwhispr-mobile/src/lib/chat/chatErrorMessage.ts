@@ -1,4 +1,5 @@
 import { isLocalContextLimitError, LocalReasoningError } from '@/lib/localReasoning';
+import { UPGRADE_REQUIRED_MESSAGE } from '@/lib/policyMessages';
 
 export const CHAT_CONNECTION_ERROR_MESSAGE = 'Check your connection and try again.';
 export const CHAT_ON_DEVICE_UNAVAILABLE_MESSAGE = 'On-device AI isn’t available right now.';
@@ -19,6 +20,17 @@ export const toChatErrorMessage = (error: unknown): string => {
     return CHAT_ON_DEVICE_UNAVAILABLE_MESSAGE;
   }
   if (error instanceof Error && error.message.startsWith(ORGANIZATION_POLICY_PREFIX)) {
+    return error.message;
+  }
+  if (error instanceof Error && error.message === UPGRADE_REQUIRED_MESSAGE) return error.message;
+  // Route refusals and provider rejections are marked as not worth retrying, and their messages
+  // say what to fix (a missing key, an unsupported model). On-device errors have their own copy.
+  if (
+    error instanceof Error &&
+    !(error instanceof LocalReasoningError) &&
+    (error as { retryable?: unknown }).retryable === false &&
+    error.message
+  ) {
     return error.message;
   }
   return CHAT_CONNECTION_ERROR_MESSAGE;

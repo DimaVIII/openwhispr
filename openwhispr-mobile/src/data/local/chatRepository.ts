@@ -22,14 +22,15 @@ const getDefaultDb = (): ChatDb => {
   return db;
 };
 
-// A corrupt or NULL column must never hide the message itself, so it degrades to an empty list.
-const parseJsonArray = <T>(raw: string | null): T[] => {
-  if (!raw) return [];
+// A corrupt or NULL column must never hide the message itself, so it reads as null and the
+// message shows with an empty list.
+const parseJsonArray = <T>(raw: string | null): T[] | null => {
+  if (!raw) return null;
   try {
     const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as T[]) : [];
+    return Array.isArray(parsed) ? (parsed as T[]) : null;
   } catch {
-    return [];
+    return null;
   }
 };
 
@@ -43,15 +44,20 @@ const toConversation = (row: ConversationRow): ChatConversation => ({
   updatedAt: row.updatedAt,
 });
 
-const toMessage = (row: MessageRow): ChatMessage => ({
-  id: row.id,
-  conversationId: row.conversationId,
-  role: row.role as ChatRole,
-  text: row.text,
-  steps: parseJsonArray<ChatStep>(row.stepsJson),
-  sources: parseJsonArray<ChatSource>(row.sourcesJson),
-  createdAt: row.createdAt,
-});
+const toMessage = (row: MessageRow): ChatMessage => {
+  const sources = parseJsonArray<ChatSource>(row.sourcesJson);
+  return {
+    id: row.id,
+    conversationId: row.conversationId,
+    role: row.role as ChatRole,
+    text: row.text,
+    steps: parseJsonArray<ChatStep>(row.stepsJson) ?? [],
+    sources: sources ?? [],
+    // Every saved answer records its sources, so one that can't be read fails closed.
+    ...(sources === null && row.role === 'assistant' ? { sourcesUnreadable: true } : {}),
+    createdAt: row.createdAt,
+  };
+};
 
 export class LocalChatRepository {
   private readonly database: ChatDb;

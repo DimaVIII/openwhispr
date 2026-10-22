@@ -199,7 +199,7 @@ describe('useChatStore', () => {
       activeConversationId: null,
       messages: [],
       pending: null,
-      failure: null,
+      failures: {},
     });
   });
 
@@ -220,7 +220,7 @@ describe('useChatStore', () => {
     const conversationId = conversation.id;
     const userMessage = mockRepo.getMessages(conversationId)[2];
 
-    expect(useChatStore.getState().failure).toEqual({
+    expect(useChatStore.getState().failures[conversationId]).toEqual({
       conversationId,
       messageId: userMessage.id,
       question: 'question',
@@ -228,7 +228,7 @@ describe('useChatStore', () => {
     });
     expect(useChatStore.getState().pending).toBeNull();
 
-    await useChatStore.getState().retry({ allowCloudFallback: true });
+    await useChatStore.getState().retry(conversationId, { allowCloudFallback: true });
 
     expect(turnInput(0).history).toEqual(earlier);
     expect(turnInput(1)).toMatchObject({ question: 'question', allowCloudFallback: true });
@@ -239,7 +239,7 @@ describe('useChatStore', () => {
       { role: 'user', text: 'question' },
       { role: 'assistant', text: 'retried answer' },
     ]);
-    expect(useChatStore.getState().failure).toBeNull();
+    expect(useChatStore.getState().failures).toEqual({});
   });
 
   it('falls back to a connection message when the error has none', async () => {
@@ -251,7 +251,9 @@ describe('useChatStore', () => {
     });
     await sent?.done;
 
-    expect(useChatStore.getState().failure?.message).toBe('Check your connection and try again.');
+    expect(useChatStore.getState().failures[sent?.conversationId ?? '']?.message).toBe(
+      'Check your connection and try again.',
+    );
   });
 
   it('keeps a failure through sends elsewhere and clears it on a send to its conversation', async () => {
@@ -267,21 +269,60 @@ describe('useChatStore', () => {
     const failedId = sent?.conversationId ?? '';
     useChatStore.getState().openConversation(other.id);
 
-    expect(useChatStore.getState().failure?.conversationId).toBe(failedId);
+    expect(Object.keys(useChatStore.getState().failures)).toEqual([failedId]);
 
     await useChatStore.getState().send('in B', { conversationId: other.id, ...sendOptions })?.done;
     await useChatStore.getState().send('a new chat', { conversationId: null, ...sendOptions })
       ?.done;
 
-    expect(useChatStore.getState().failure?.conversationId).toBe(failedId);
+    expect(Object.keys(useChatStore.getState().failures)).toEqual([failedId]);
 
     const again = useChatStore.getState().send('again', {
       conversationId: failedId,
       ...sendOptions,
     });
 
-    expect(useChatStore.getState().failure).toBeNull();
+    expect(useChatStore.getState().failures).toEqual({});
     await again?.done;
+  });
+
+  it('keeps each chat’s failure when another chat fails', async () => {
+    const first = mockRepo.createConversation('A');
+    const second = mockRepo.createConversation('B');
+    mockRun.mockRejectedValueOnce(new Error('boom'));
+    mockRun.mockRejectedValueOnce(new Error('boom'));
+    mockRun.mockResolvedValueOnce(answer('retried A'));
+
+    await useChatStore.getState().send('in A', { conversationId: first.id, ...sendOptions })?.done;
+    await useChatStore.getState().send('in B', { conversationId: second.id, ...sendOptions })?.done;
+
+    expect(Object.keys(useChatStore.getState().failures).sort()).toEqual(
+      [first.id, second.id].sort(),
+    );
+
+    await useChatStore.getState().retry(first.id, sendOptions);
+
+    expect(turnInput(2).question).toBe('in A');
+    expect(Object.keys(useChatStore.getState().failures)).toEqual([second.id]);
+    expect(useChatStore.getState().editFailedQuestion(second.id)).toBe('in B');
+    expect(useChatStore.getState().failures).toEqual({});
+  });
+
+  it('closes a conversation only while it is still the open one', () => {
+    const first = mockRepo.createConversation('A');
+    const second = mockRepo.createConversation('B');
+    mockRepo.appendMessage({ conversationId: second.id, role: 'user', text: 'in B' });
+
+    // Pushing B over A focuses B before A's blur closes A.
+    useChatStore.getState().openConversation(first.id);
+    useChatStore.getState().openConversation(second.id);
+    useChatStore.getState().closeConversation(first.id);
+
+    expect(useChatStore.getState().activeConversationId).toBe(second.id);
+    expect(useChatStore.getState().messages.map(({ text }) => text)).toEqual(['in B']);
+
+    useChatStore.getState().closeConversation(second.id);
+    expect(useChatStore.getState()).toMatchObject({ activeConversationId: null, messages: [] });
   });
 
   it('hands the failed question back for editing and deletes it', async () => {
@@ -295,11 +336,11 @@ describe('useChatStore', () => {
     });
     await sent?.done;
 
-    expect(useChatStore.getState().editFailedQuestion()).toBe('fix me');
+    expect(useChatStore.getState().editFailedQuestion(conversation.id)).toBe('fix me');
     expect(mockRepo.getMessages(conversation.id)).toEqual([]);
     expect(useChatStore.getState().messages).toEqual([]);
-    expect(useChatStore.getState().failure).toBeNull();
-    expect(useChatStore.getState().editFailedQuestion()).toBeNull();
+    expect(useChatStore.getState().failures).toEqual({});
+    expect(useChatStore.getState().editFailedQuestion(conversation.id)).toBeNull();
   });
 
   it('deletes a conversation that editing the failed question leaves empty', async () => {
@@ -313,7 +354,7 @@ describe('useChatStore', () => {
     useChatStore.getState().openConversation(conversationId);
     await sent?.done;
 
-    expect(useChatStore.getState().editFailedQuestion()).toBe('fix me');
+    expect(useChatStore.getState().editFailedQuestion(conversationId)).toBe('fix me');
     expect(mockRepo.getConversation(conversationId)).toBeNull();
     expect(useChatStore.getState().conversations).toEqual([]);
     expect(useChatStore.getState().activeConversationId).toBeNull();
@@ -330,7 +371,7 @@ describe('useChatStore', () => {
       ...sendOptions,
     })?.done;
 
-    expect(useChatStore.getState().editFailedQuestion()).toBe('fix me');
+    expect(useChatStore.getState().editFailedQuestion(conversation.id)).toBe('fix me');
     expect(mockRepo.getConversation(conversation.id)).not.toBeNull();
     expect(mockRepo.getMessages(conversation.id).map(({ text }) => text)).toEqual(['q1', 'a1']);
   });
@@ -354,7 +395,7 @@ describe('useChatStore', () => {
     expect(mockRepo.getMessages(sent?.conversationId ?? '').map(({ text }) => text)).toEqual([
       'question',
     ]);
-    expect(useChatStore.getState().failure).toBeNull();
+    expect(useChatStore.getState().failures).toEqual({});
     expect(useChatStore.getState().pending).toBeNull();
   });
 
@@ -367,7 +408,7 @@ describe('useChatStore', () => {
     });
     await sent?.done;
 
-    expect(useChatStore.getState().failure).toMatchObject({
+    expect(useChatStore.getState().failures[sent?.conversationId ?? '']).toMatchObject({
       conversationId: sent?.conversationId,
       question: 'question',
       message: 'Check your connection and try again.',
@@ -402,7 +443,7 @@ describe('useChatStore', () => {
     turn.reject(new Error('The model is unavailable.'));
     await sent?.done;
 
-    expect(useChatStore.getState().failure).toBeNull();
+    expect(useChatStore.getState().failures).toEqual({});
     expect(useChatStore.getState().pending).toBeNull();
     expect(db.select().from(chatMessages).all()).toEqual([]);
   });

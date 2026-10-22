@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { View } from 'react-native';
 import type { ChatVoiceInput } from '@/hooks/useChatVoiceInput';
 import { useKeyboardHeight } from '@/hooks/useKeyboardHeight';
@@ -7,6 +7,9 @@ import { ChatComposer } from './ChatComposer';
 import { ChatVoicePanel } from './ChatVoicePanel';
 
 const COMPOSER_KEYBOARD_GAP = 10;
+// The voice panel's Send and the composer's Stop share a spot, so a double tap on Send would stop
+// the question it just sent.
+const STOP_AFTER_SEND_GRACE_MS = 500;
 
 export type StartVoice = (allowCloudFallback: boolean) => void;
 
@@ -48,6 +51,7 @@ export function ChatInputBar({
   const keyboardHeight = useKeyboardHeight();
   // The composer unmounts while the voice panel shows, so it takes focus as it mounts again.
   const [focusComposer, setFocusComposer] = useState(false);
+  const finishedAtRef = useRef(0);
 
   const startVoice: StartVoice = (allowCloudFallback) => {
     setFocusComposer(false);
@@ -56,9 +60,18 @@ export function ChatInputBar({
     });
   };
 
+  const handleFinish = (): void => {
+    finishedAtRef.current = Date.now();
+    voice.finish().catch(() => undefined);
+  };
+
   const handleStop = (): void => {
-    if (voice.state === 'transcribing') voice.cancel().catch(() => undefined);
-    else onCancelTurn();
+    if (voice.state !== 'transcribing') {
+      onCancelTurn();
+      return;
+    }
+    if (Date.now() - finishedAtRef.current < STOP_AFTER_SEND_GRACE_MS) return;
+    voice.cancel().catch(() => undefined);
   };
 
   const handleSwitchToTyping = (): void => {
@@ -79,10 +92,9 @@ export function ChatInputBar({
         <ChatVoicePanel
           elapsedSeconds={voice.elapsedSeconds}
           audioRecorder={voice.audioRecorder}
-          isRecording
           onCancel={() => voice.cancel().catch(() => undefined)}
           onSwitchToTyping={handleSwitchToTyping}
-          onSend={() => voice.finish().catch(() => undefined)}
+          onSend={handleFinish}
         />
       ) : (
         <ChatComposer
@@ -93,6 +105,7 @@ export function ChatInputBar({
           disabled={disabled}
           onSend={onSend}
           onMicPress={() => onMicPress(startVoice)}
+          micDisabled={voice.isSettling}
           onStop={canStop ? handleStop : undefined}
           autoFocus={focusComposer}
         />

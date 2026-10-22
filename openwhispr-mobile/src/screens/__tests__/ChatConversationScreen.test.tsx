@@ -1,4 +1,5 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
+import { AccessibilityInfo, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { chatRepository } from '@/data';
 import { useChatStore } from '@/store/useChatStore';
@@ -12,6 +13,12 @@ const mockDb: { conversations: ChatConversation[]; messages: ChatMessage[] } = {
   conversations: [],
   messages: [],
 };
+let mockChatEnabled = true;
+let mockVoiceOptions: {
+  onSent?: (id: string) => void;
+  onRouteChanged: (text: string) => void;
+  isFocused: () => boolean;
+} | null = null;
 const mockVoice = {
   state: 'idle' as 'idle' | 'listening' | 'transcribing',
   elapsedSeconds: 3,
@@ -59,11 +66,16 @@ jest.mock('@/lib/chat/runChatTurn', () => ({
 }));
 jest.mock('@/hooks/useChatSendGate', () => ({
   useChatSendGate: () => ({
-    chatEnabled: true,
+    chatEnabled: mockChatEnabled,
     gate: (run: (allowCloudFallback: boolean) => void) => run(false),
   }),
 }));
-jest.mock('@/hooks/useChatVoiceInput', () => ({ useChatVoiceInput: () => mockVoice }));
+jest.mock('@/hooks/useChatVoiceInput', () => ({
+  useChatVoiceInput: (options: typeof mockVoiceOptions) => {
+    mockVoiceOptions = options;
+    return mockVoice;
+  },
+}));
 jest.mock('@/hooks/useAudioWaveform', () => ({
   useAudioWaveform: () => ({ waveformData: [], currentAmplitude: 0 }),
 }));
@@ -109,6 +121,7 @@ const mockEditFailedQuestion = jest.fn(() => 'What did we decide?');
 beforeEach(() => {
   mockParams = { id: 'c1' };
   mockRunFocusEffects = false;
+  mockChatEnabled = true;
   mockDb.conversations = [];
   mockDb.messages = [];
   mockVoice.state = 'idle';
@@ -120,7 +133,7 @@ beforeEach(() => {
     activeConversationId: 'c1',
     messages: [question],
     pending: null,
-    failure: null,
+    failures: {},
     cancel: mockCancel,
     retry: mockRetry,
     editFailedQuestion: mockEditFailedQuestion,
@@ -178,44 +191,52 @@ describe('ChatConversationScreen', () => {
 
   it('shows Retry after a failure', () => {
     useChatStore.setState({
-      failure: {
-        conversationId: 'c1',
-        messageId: 'm1',
-        question: question.text,
-        message: 'Check your connection and try again.',
+      failures: {
+        c1: {
+          conversationId: 'c1',
+          messageId: 'm1',
+          question: question.text,
+          message: 'Check your connection and try again.',
+        },
       },
     });
     const screen = render(<ChatConversationScreen />);
-    expect(screen.getByText('Check your connection and try again.')).toBeTruthy();
+    expect(
+      screen.getByText('Check your connection and try again. Your question is saved.'),
+    ).toBeTruthy();
 
     fireEvent.press(screen.getByLabelText('Retry'));
-    expect(mockRetry).toHaveBeenCalledWith({ allowCloudFallback: false });
+    expect(mockRetry).toHaveBeenCalledWith('c1', { allowCloudFallback: false });
   });
 
   it('fills the composer from Edit question', () => {
     useChatStore.setState({
-      failure: {
-        conversationId: 'c1',
-        messageId: 'm1',
-        question: question.text,
-        message: 'Check your connection and try again.',
+      failures: {
+        c1: {
+          conversationId: 'c1',
+          messageId: 'm1',
+          question: question.text,
+          message: 'Check your connection and try again.',
+        },
       },
     });
     const screen = render(<ChatConversationScreen />);
 
     fireEvent.press(screen.getByLabelText('Edit question'));
-    expect(mockEditFailedQuestion).toHaveBeenCalledTimes(1);
+    expect(mockEditFailedQuestion).toHaveBeenCalledWith('c1');
     expect(screen.getByPlaceholderText('Reply').props.value).toBe('What did we decide?');
     expect(router.setParams).not.toHaveBeenCalled();
   });
 
   it('starts over as a new chat when Edit question empties this one', () => {
     useChatStore.setState({
-      failure: {
-        conversationId: 'c1',
-        messageId: 'm1',
-        question: question.text,
-        message: 'Check your connection and try again.',
+      failures: {
+        c1: {
+          conversationId: 'c1',
+          messageId: 'm1',
+          question: question.text,
+          message: 'Check your connection and try again.',
+        },
       },
     });
     mockEditFailedQuestion.mockImplementationOnce(() => {
@@ -232,7 +253,9 @@ describe('ChatConversationScreen', () => {
 
   it('hides a failure from another chat', () => {
     useChatStore.setState({
-      failure: { conversationId: 'c2', messageId: 'm9', question: 'Other', message: 'Offline' },
+      failures: {
+        c2: { conversationId: 'c2', messageId: 'm9', question: 'Other', message: 'Offline' },
+      },
     });
     const screen = render(<ChatConversationScreen />);
     expect(screen.queryByLabelText('Retry')).toBeNull();
@@ -251,7 +274,9 @@ describe('ChatConversationScreen', () => {
           sources: [{ noteId: 7, title: 'Pricing call' }],
         },
       ],
-      failure: { conversationId: 'c1', messageId: 'm1', question: 'q', message: 'Offline' },
+      failures: {
+        c1: { conversationId: 'c1', messageId: 'm1', question: 'q', message: 'Offline' },
+      },
     });
     const screen = render(<ChatConversationScreen />);
 
@@ -259,6 +284,142 @@ describe('ChatConversationScreen', () => {
     fireEvent.press(screen.getByText('Pricing call'));
     expect(mockRetry).not.toHaveBeenCalled();
     expect(router.push).not.toHaveBeenCalled();
+  });
+
+  it('disables Retry and Edit question while another chat is working', () => {
+    useChatStore.setState({
+      pending: { conversationId: 'c2', phase: 'working', steps: [], startedAt: Date.now() },
+      failures: {
+        c1: { conversationId: 'c1', messageId: 'm1', question: 'q', message: 'Offline' },
+      },
+    });
+    const screen = render(<ChatConversationScreen />);
+
+    expect(screen.getByLabelText('Retry').props.accessibilityState).toEqual({ disabled: true });
+    fireEvent.press(screen.getByLabelText('Retry'));
+    fireEvent.press(screen.getByLabelText('Edit question'));
+    expect(mockRetry).not.toHaveBeenCalled();
+    expect(mockEditFailedQuestion).not.toHaveBeenCalled();
+  });
+
+  it('says Chat is off above the composer and links to its setting', () => {
+    mockChatEnabled = false;
+    const screen = render(<ChatConversationScreen />);
+
+    expect(screen.getByPlaceholderText('Reply').props.editable).toBe(false);
+    fireEvent.press(screen.getByLabelText('Chat is turned off'));
+    expect(router.push).toHaveBeenCalledWith('/(account)/ai-workflow?scope=noteChat');
+  });
+
+  it('opens a source note on the Chat tab’s own stack', () => {
+    useChatStore.setState({
+      messages: [
+        question,
+        {
+          ...question,
+          id: 'm2',
+          role: 'assistant',
+          text: 'We kept $12.',
+          sources: [{ noteId: 7, title: 'Pricing call' }],
+        },
+      ],
+    });
+    const screen = render(<ChatConversationScreen />);
+
+    fireEvent.press(screen.getByText('Pricing call'));
+    expect(router.push).toHaveBeenCalledWith('/(tabs)/(chat)/note/7');
+  });
+
+  it('keeps the reader’s place when content grows above the end', () => {
+    const scrollToEnd = jest.spyOn(ScrollView.prototype, 'scrollToEnd');
+    const screen = render(<ChatConversationScreen />);
+    const list = screen.UNSAFE_getByType(ScrollView);
+    scrollToEnd.mockClear();
+
+    fireEvent.scroll(list, {
+      nativeEvent: {
+        contentOffset: { y: 0 },
+        layoutMeasurement: { height: 600 },
+        contentSize: { height: 2_000 },
+      },
+    });
+    fireEvent(list, 'contentSizeChange', 400, 2_200);
+    expect(scrollToEnd).not.toHaveBeenCalled();
+
+    fireEvent.scroll(list, {
+      nativeEvent: {
+        contentOffset: { y: 1_560 },
+        layoutMeasurement: { height: 600 },
+        contentSize: { height: 2_200 },
+      },
+    });
+    fireEvent(list, 'contentSizeChange', 400, 2_400);
+    expect(scrollToEnd).toHaveBeenCalledTimes(1);
+    scrollToEnd.mockRestore();
+  });
+
+  it('announces the answer and an error to screen readers', () => {
+    const announce = jest
+      .spyOn(AccessibilityInfo, 'announceForAccessibility')
+      .mockImplementation(() => undefined);
+    const working = {
+      conversationId: 'c1',
+      phase: 'working' as const,
+      steps: [],
+      startedAt: Date.now(),
+    };
+    useChatStore.setState({ pending: working });
+    render(<ChatConversationScreen />);
+
+    act(() => {
+      useChatStore.setState({
+        pending: null,
+        messages: [question, { ...question, id: 'm2', role: 'assistant', text: 'We kept $12.' }],
+      });
+    });
+    expect(announce).toHaveBeenCalledWith('Answer ready.');
+
+    act(() => {
+      useChatStore.setState({ pending: working });
+    });
+    act(() => {
+      useChatStore.setState({
+        pending: null,
+        failures: {
+          c1: { conversationId: 'c1', messageId: 'm1', question: 'q', message: 'Offline.' },
+        },
+      });
+    });
+    expect(announce).toHaveBeenLastCalledWith('Couldn’t get an answer. Offline.');
+    expect(announce).toHaveBeenCalledTimes(2);
+    announce.mockRestore();
+  });
+
+  it('puts a spoken question back in the composer when the chat route changed', () => {
+    const screen = render(<ChatConversationScreen />);
+
+    act(() => {
+      mockVoiceOptions?.onRouteChanged('When is my next meeting?');
+    });
+    expect(screen.getByPlaceholderText('Reply').props.value).toBe('When is my next meeting?');
+  });
+
+  it('adopts a late spoken question only while it is still showing', () => {
+    mockRunFocusEffects = true;
+    mockParams = { id: 'new' };
+    const screen = render(<ChatConversationScreen />);
+    expect(mockVoiceOptions?.isFocused()).toBe(true);
+
+    act(() => {
+      mockVoiceOptions?.onSent?.('c7');
+    });
+    expect(router.setParams).toHaveBeenCalledWith({ id: 'c7' });
+
+    const options = mockVoiceOptions;
+    screen.unmount();
+    expect(options?.isFocused()).toBe(false);
+    options?.onSent?.('c8');
+    expect(router.setParams).toHaveBeenCalledTimes(1);
   });
 
   it('cancels listening when the screen loses focus', () => {

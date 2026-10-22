@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Keyboard, ScrollView, StyleSheet, View } from 'react-native';
+import { AccessibilityInfo, Keyboard, ScrollView, StyleSheet, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TabScreenHeader } from '@/components/ui/TabScreenHeader';
@@ -16,9 +16,18 @@ import { useChatSendGate } from '@/hooks/useChatSendGate';
 import { useChatVoiceInput } from '@/hooks/useChatVoiceInput';
 import { chatTabGateOptions } from '@/lib/chat/chatConsent';
 import { ownsChatPending, selectPendingTitle, workingElsewhereLabel } from '@/lib/chat/chatPending';
-import { CHAT_HOME_ROUTE, chatConversationRoute, NEW_CHAT_ID } from '@/lib/chat/chatRoutes';
+import {
+  CHAT_HOME_ROUTE,
+  CHAT_SETTINGS_ROUTE,
+  chatConversationRoute,
+  chatNoteRoute,
+  NEW_CHAT_ID,
+} from '@/lib/chat/chatRoutes';
 import { useChatStore } from '@/store/useChatStore';
 import { useProcessingModeStore } from '@/store/useProcessingModeStore';
+
+// How close to the end counts as reading the latest message, so new content keeps it in view.
+const NEAR_BOTTOM_PX = 80;
 
 export function ChatConversationScreen(): React.JSX.Element {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -26,10 +35,15 @@ export function ChatConversationScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
   const [draft, setDraft] = useState('');
+  const focusedRef = useRef(false);
+  const nearBottomRef = useRef(true);
+  const wasWorkingRef = useRef(false);
 
   const messages = useChatStore((s) => s.messages);
   const pending = useChatStore((s) => s.pending);
-  const failure = useChatStore((s) => s.failure);
+  const failureHere = useChatStore((s) =>
+    conversationId ? s.failures[conversationId] : undefined,
+  );
   const title = useChatStore(
     (s) => s.conversations.find((conversation) => conversation.id === conversationId)?.title,
   );
@@ -37,27 +51,36 @@ export function ChatConversationScreen(): React.JSX.Element {
   const activeMode = useProcessingModeStore((s) => s.activeMode);
   const { chatEnabled, gate } = useChatSendGate();
 
+  // router.setParams acts on whichever screen is focused, so a popped or covered new chat whose
+  // spoken question lands late must leave it alone.
   const adoptConversation = useCallback(
     (newId: string): void => {
-      if (!conversationId) router.setParams({ id: newId });
+      if (!conversationId && focusedRef.current) router.setParams({ id: newId });
     },
     [conversationId],
   );
-  const voice = useChatVoiceInput({ conversationId, onSent: adoptConversation });
+  const voice = useChatVoiceInput({
+    conversationId,
+    onSent: adoptConversation,
+    onRouteChanged: setDraft,
+    isFocused: () => focusedRef.current,
+  });
   const voiceRef = useRef(voice);
   voiceRef.current = voice;
 
   useFocusEffect(
     useCallback(() => {
+      focusedRef.current = true;
       const store = useChatStore.getState();
       store.loadConversations();
       if (conversationId) store.openConversation(conversationId);
-      else store.closeConversation();
       return () => {
+        focusedRef.current = false;
         // A question still being spoken is dropped; one already transcribing may still send.
         if (voiceRef.current.state === 'listening')
           voiceRef.current.cancel().catch(() => undefined);
-        useChatStore.getState().closeConversation();
+        // A chat opened over this one has already taken its place, so only this one is closed.
+        useChatStore.getState().closeConversation(conversationId);
       };
     }, [conversationId]),
   );
@@ -71,10 +94,30 @@ export function ChatConversationScreen(): React.JSX.Element {
   }, []);
 
   const pendingHere = ownsChatPending(pending, conversationId, voice.state) ? pending : null;
-  const failureHere = failure && failure.conversationId === conversationId ? failure : null;
   // One turn runs at a time across every chat, so a turn elsewhere locks this composer too.
   const busy = pending !== null || voice.state === 'transcribing';
   const gateOptions = chatTabGateOptions(activeMode);
+  const workingHere = pendingHere?.phase === 'working';
+  const lastMessage = messages.at(-1);
+
+  // A new message or a change of phase always brings the end into view.
+  useEffect(() => {
+    nearBottomRef.current = true;
+  }, [messages.length, pendingHere?.phase, failureHere]);
+
+  // The answer and the error arrive out of sight of a screen reader, so they're announced.
+  useEffect(() => {
+    if (wasWorkingRef.current && !workingHere) {
+      if (failureHere) {
+        AccessibilityInfo.announceForAccessibility(
+          `Couldn’t get an answer. ${failureHere.message}`,
+        );
+      } else if (lastMessage?.role === 'assistant') {
+        AccessibilityInfo.announceForAccessibility('Answer ready.');
+      }
+    }
+    wasWorkingRef.current = workingHere;
+  }, [workingHere, failureHere, lastMessage]);
 
   const handleSend = (): void => {
     const question = draft.trim();
@@ -87,44 +130,50 @@ export function ChatConversationScreen(): React.JSX.Element {
     }, gateOptions);
   };
 
+  const errorActionsDisabled = !chatEnabled || busy || voice.state !== 'idle';
+
   const handleRetry = (): void => {
-    if (!chatEnabled || voiceRef.current.state !== 'idle') return;
+    if (!conversationId || errorActionsDisabled) return;
     gate((allowCloudFallback) => {
       useChatStore
         .getState()
-        .retry({ allowCloudFallback })
+        .retry(conversationId, { allowCloudFallback })
         .catch(() => undefined);
     }, gateOptions);
   };
 
   const handleEditQuestion = (): void => {
-    const question = useChatStore.getState().editFailedQuestion();
+    // A question still being spoken belongs to this chat, which the edit may delete.
+    if (!conversationId || voice.state !== 'idle') return;
+    const question = useChatStore.getState().editFailedQuestion(conversationId);
     if (question === null) return;
     setDraft(question);
     // Editing the only question deletes the chat, so the next send starts a new one.
-    const deleted =
-      conversationId !== null &&
-      !useChatStore
-        .getState()
-        .conversations.some((conversation) => conversation.id === conversationId);
+    const deleted = !useChatStore
+      .getState()
+      .conversations.some((conversation) => conversation.id === conversationId);
     if (deleted) router.setParams({ id: NEW_CHAT_ID });
   };
 
   const openNote = (noteId: number): void => {
     // Leaving mid-question would drop what's being said.
     if (voiceRef.current.state !== 'idle') return;
-    router.push(`/(tabs)/(notes)/${noteId}`);
+    router.push(chatNoteRoute(noteId));
   };
 
   // A turn in another chat locks this composer without offering to stop it.
   const workingId = pending?.conversationId ?? null;
-  const workingElsewhere =
-    pending && !pendingHere ? (
-      <ChatComposerNotice
-        label={workingElsewhereLabel(pendingTitle)}
-        onPress={workingId ? () => router.push(chatConversationRoute(workingId)) : undefined}
-      />
-    ) : null;
+  const composerNotice = !chatEnabled ? (
+    <ChatComposerNotice
+      label="Chat is turned off"
+      onPress={() => router.push(CHAT_SETTINGS_ROUTE)}
+    />
+  ) : pending && !pendingHere ? (
+    <ChatComposerNotice
+      label={workingElsewhereLabel(pendingTitle)}
+      onPress={workingId ? () => router.push(chatConversationRoute(workingId)) : undefined}
+    />
+  ) : null;
 
   return (
     <View className="flex-1 bg-systemBackground">
@@ -141,7 +190,17 @@ export function ChatConversationScreen(): React.JSX.Element {
         keyboardDismissMode="interactive"
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-        onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+        scrollEventThrottle={100}
+        onScroll={({ nativeEvent }) => {
+          nearBottomRef.current =
+            nativeEvent.contentOffset.y + nativeEvent.layoutMeasurement.height >=
+            nativeEvent.contentSize.height - NEAR_BOTTOM_PX;
+        }}
+        // Opening an earlier answer's steps grows the content too, which mustn't pull the reader
+        // away from it.
+        onContentSizeChange={() => {
+          if (nearBottomRef.current) scrollRef.current?.scrollToEnd({ animated: true });
+        }}
       >
         {messages.map((message) =>
           message.role === 'user' ? (
@@ -163,6 +222,7 @@ export function ChatConversationScreen(): React.JSX.Element {
         {failureHere ? (
           <ChatErrorRow
             message={failureHere.message}
+            disabled={errorActionsDisabled}
             onRetry={handleRetry}
             onEdit={handleEditQuestion}
           />
@@ -183,7 +243,7 @@ export function ChatConversationScreen(): React.JSX.Element {
         }}
         onCancelTurn={() => useChatStore.getState().cancel()}
         restingBottomPadding={Math.max(insets.bottom, 14)}
-        notice={workingElsewhere}
+        notice={composerNotice}
       />
     </View>
   );

@@ -6,7 +6,7 @@ import { TabScreenHeader } from '@/components/ui/TabScreenHeader';
 import { GlassBackButton } from '@/components/ui/GlassBackButton';
 import { SwipeableCard } from '@/components/ui/SwipeableCard';
 import { ChatConversationRow } from '@/components/chat/ChatConversationRow';
-import { TAB_BAR_CLEARANCE } from '@/components/chat/tabBarClearance';
+import { TAB_BAR_CLEARANCE } from '@/components/ui/tabBarClearance';
 import { CHAT_HOME_ROUTE, chatConversationRoute } from '@/lib/chat/chatRoutes';
 import { safeHaptics } from '@/lib/utils';
 import { useChatStore } from '@/store/useChatStore';

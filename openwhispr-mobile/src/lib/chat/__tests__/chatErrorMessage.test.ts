@@ -1,4 +1,5 @@
 import { LocalReasoningError } from '@/lib/localReasoning';
+import { UPGRADE_REQUIRED_MESSAGE } from '@/lib/policyMessages';
 import { toChatErrorMessage } from '../chatErrorMessage';
 
 const CONNECTION = 'Check your connection and try again.';
@@ -37,6 +38,30 @@ describe('toChatErrorMessage', () => {
   it('keeps an organization policy message', () => {
     const message = "Your organization's policy doesn't allow OpenWhispr cloud AI.";
     expect(toChatErrorMessage(new Error(message))).toBe(message);
+  });
+
+  it('keeps the update-required message', () => {
+    expect(toChatErrorMessage(new Error(UPGRADE_REQUIRED_MESSAGE))).toBe(UPGRADE_REQUIRED_MESSAGE);
+  });
+
+  it('keeps a route refusal or provider rejection that says what to fix', () => {
+    const refusal = Object.assign(new Error('Add your provider credentials in AI Models.'), {
+      retryable: false,
+    });
+    expect(toChatErrorMessage(refusal)).toBe('Add your provider credentials in AI Models.');
+  });
+
+  it('keeps the connection message for a retryable provider error', () => {
+    const unavailable = Object.assign(new Error('OpenAI is temporarily unavailable.'), {
+      retryable: true,
+    });
+    expect(toChatErrorMessage(unavailable)).toBe(CONNECTION);
+  });
+
+  it('keeps on-device errors out of the pass-through', () => {
+    expect(
+      toChatErrorMessage(new LocalReasoningError('APPLE_LLM_GUARDRAIL', 'raw guardrail text')),
+    ).not.toBe('raw guardrail text');
   });
 
   it('hides raw provider text and anything that is not an error', () => {

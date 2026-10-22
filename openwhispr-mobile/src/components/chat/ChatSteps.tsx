@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { AccessibilityInfo, Pressable, StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { Text } from '@/components/ui/Text';
 import { SystemIcon } from '@/components/ui/SystemIcon';
@@ -8,6 +8,7 @@ import type { ChatStep } from '@/lib/chat/types';
 import { ChatSlowNotice } from './ChatSlowNotice';
 import { ChatSparkle } from './ChatSparkle';
 import { ChatStepRow } from './ChatStepRow';
+import { formatElapsed } from './formatElapsed';
 import { usePulseStyle } from './useChatMotion';
 
 interface ChatStepsProps {
@@ -19,6 +20,7 @@ interface ChatStepsProps {
 }
 
 const SLOW_AFTER_MS = 15_000;
+const SLOW_LABEL = 'Still working';
 
 const sourcesLabel = (count: number): string => {
   if (count === 0) return 'Searched your notes · no matches';
@@ -34,7 +36,8 @@ export function ChatSteps({
   const [expanded, setExpanded] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const working = variant === 'working';
-  const labelPulse = usePulseStyle(0.45, 1000, working);
+  // Dims no further than keeps the label readable.
+  const labelPulse = usePulseStyle(0.6, 1000, working);
 
   useEffect(() => {
     if (!working) return;
@@ -46,9 +49,17 @@ export function ChatSteps({
   // it must not show a spinner.
   const shownSteps = working ? steps : steps.map((step): ChatStep => ({ ...step, status: 'done' }));
   const activeStep = steps.find((step) => step.status === 'active');
-  const headerLabel = working ? (activeStep?.label ?? 'Thinking…') : sourcesLabel(sourceCount);
   const elapsedMs = working && startedAt != null ? now - startedAt : 0;
   const slow = working && startedAt != null && elapsedMs >= SLOW_AFTER_MS;
+  const headerLabel = slow
+    ? SLOW_LABEL
+    : working
+      ? (activeStep?.label ?? 'Thinking…')
+      : sourcesLabel(sourceCount);
+
+  useEffect(() => {
+    if (slow) AccessibilityInfo.announceForAccessibility(`${SLOW_LABEL} on your answer.`);
+  }, [slow]);
 
   return (
     <View
@@ -82,16 +93,22 @@ export function ChatSteps({
               working ? 'text-[15px] font-medium text-label' : 'text-[14px] text-secondaryLabel'
             }
             numberOfLines={1}
+            accessibilityLiveRegion="polite"
           >
             {headerLabel}
           </Text>
         </Animated.View>
+        {slow ? (
+          <Text className="ml-auto text-[13px] text-secondaryLabel">
+            {formatElapsed(Math.floor(elapsedMs / 1000))}
+          </Text>
+        ) : null}
         <View style={expanded ? styles.flipped : undefined}>
           <SystemIcon name="chevron.down" mdName="ChevronDown" size={16} color="secondaryLabel" />
         </View>
       </Pressable>
 
-      {slow ? <ChatSlowNotice elapsedSeconds={Math.floor(elapsedMs / 1000)} /> : null}
+      {slow ? <ChatSlowNotice /> : null}
 
       {expanded ? (
         <View className="mt-2 gap-2.5 pb-1">

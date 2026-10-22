@@ -196,7 +196,7 @@ function NoteChatSettings({ enabled }: { enabled: boolean }): React.JSX.Element 
       mdIcon="MessagesSquare"
       enabled={enabled}
       onToggle={toggleNoteChat}
-      offNote="Notes don’t offer Ask about this note while chat is off."
+      offNote="The Chat tab and Ask about this note are off while chat is off."
     />
   );
 }

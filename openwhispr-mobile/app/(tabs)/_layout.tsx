@@ -6,7 +6,8 @@ import { AppFont } from '@/lib/fonts';
 // Static routes inside the (notes) stack — anything else under (notes) is the
 // dynamic [id] editor route.
 const NOTES_STATIC_ROUTES = new Set(['index', 'notes', 'actions']);
-// Static routes inside the (chat) stack; anything else is a conversation.
+// Static routes inside the (chat) stack; anything else is a conversation, or a note opened
+// from one.
 const CHAT_STATIC_ROUTES = new Set(['index', 'history']);
 
 // Without an explicit anchor, expo-router resolves /(tabs) to the

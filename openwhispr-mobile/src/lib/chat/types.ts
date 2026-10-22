@@ -20,6 +20,8 @@ export interface ChatMessage {
   text: string;
   steps: ChatStep[];
   sources: ChatSource[];
+  /** A saved answer whose source list couldn't be read, so which notes it used is unknown. */
+  sourcesUnreadable?: boolean;
   createdAt: number;
 }
 

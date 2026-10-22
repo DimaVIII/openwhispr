@@ -15,6 +15,7 @@ jest.mock('@/lib/utils', () => ({ safeHaptics: jest.fn() }));
 const makeVoice = (overrides: Partial<ChatVoiceInput> = {}): ChatVoiceInput => ({
   state: 'idle',
   elapsedSeconds: 0,
+  isSettling: false,
   audioRecorder: {} as ChatVoiceInput['audioRecorder'],
   start: jest.fn(async () => true),
   finish: jest.fn(async () => undefined),
@@ -66,6 +67,34 @@ describe('ChatInputBar', () => {
     fireEvent.press(second.getByLabelText('Stop'));
     expect(onCancelTurn).toHaveBeenCalledTimes(1);
     expect(idle.cancel).not.toHaveBeenCalled();
+  });
+
+  it('ignores a Stop that lands right after the voice panel’s Send', () => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(10_000);
+    const voice = makeVoice({ state: 'listening' });
+    const screen = render(<ChatInputBar {...baseProps(voice, { busy: true })} />);
+    fireEvent.press(screen.getByLabelText('Send'));
+
+    screen.rerender(
+      <ChatInputBar {...baseProps({ ...voice, state: 'transcribing' }, { busy: true })} />,
+    );
+    now.mockReturnValue(10_300);
+    fireEvent.press(screen.getByLabelText('Stop'));
+    expect(voice.cancel).not.toHaveBeenCalled();
+
+    now.mockReturnValue(10_600);
+    fireEvent.press(screen.getByLabelText('Stop'));
+    expect(voice.cancel).toHaveBeenCalledTimes(1);
+    now.mockRestore();
+  });
+
+  it('disables the mic while a cancelled question is still settling', () => {
+    const screen = render(<ChatInputBar {...baseProps(makeVoice({ isSettling: true }))} />);
+
+    expect(screen.getByLabelText('Speak your question').props.accessibilityState).toEqual({
+      disabled: true,
+    });
+    expect(screen.getByPlaceholderText('Reply').props.editable).toBe(true);
   });
 
   it('offers no Stop for a turn the screen does not own, and shows its notice', () => {
