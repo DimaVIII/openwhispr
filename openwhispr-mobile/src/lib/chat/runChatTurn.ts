@@ -1,5 +1,5 @@
 import type { GoogleCalendarAccount, GoogleCalendarEvent, Note } from '@/data';
-import type { InferenceSelection } from '@/lib/mobileProviders';
+import type { InferenceRoute, InferenceSelection } from '@/lib/mobileProviders';
 import { isLocalContextLimitError } from '@/lib/localReasoning';
 import { tryParseNoteTimestamp } from '@/lib/parseNoteTimestamp';
 import type { ReasoningResponse, ReasoningRoutingOptions } from '@/types';
@@ -7,11 +7,11 @@ import {
   buildChatPayload,
   extractSearchTerms,
   formatChatTime,
+  isInChatCalendarWindow,
   rankChatNotes,
-  utcDateAsLocalDay,
   type ChatPayload,
 } from './chatContext';
-import type { ChatMessage, ChatSource, ChatStep } from './types';
+import type { ChatMessage, ChatSource, ChatStep, ChatStepId } from './types';
 
 const CANDIDATE_POOL_LIMIT = 50;
 const MAX_MATCHED_NOTES = 4;
@@ -38,6 +38,7 @@ export interface ChatModelRequest {
   text: string;
   signal?: AbortSignal;
   routing?: ReasoningRoutingOptions;
+  inferenceRoute?: InferenceRoute;
 }
 
 export interface ChatTurnDeps {
@@ -45,10 +46,11 @@ export interface ChatTurnDeps {
     terms: string[],
     options: { includePrivate: boolean; limit: number },
   ) => Note[];
+  isNotePrivate: (noteId: number) => boolean;
   getConnectedCalendarAccounts: () => GoogleCalendarAccount[];
   getCalendarEvents: (accounts: GoogleCalendarAccount[], now: Date) => GoogleCalendarEvent[];
   chat: (request: ChatModelRequest) => Promise<ReasoningResponse>;
-  getChatMode: () => InferenceSelection['mode'] | undefined;
+  getChatSelection: () => InferenceSelection | undefined;
 }
 
 // Required lazily, as ReasoningService does, so importing this module doesn't pull SQLite and the
@@ -57,6 +59,10 @@ const createDefaultChatTurnDeps = (): ChatTurnDeps => ({
   getCandidateNotes: (terms, options) => {
     const { notesRepository } = require('@/data') as typeof import('@/data');
     return notesRepository.getChatCandidateNotes(terms, options);
+  },
+  isNotePrivate: (noteId) => {
+    const { notesRepository } = require('@/data') as typeof import('@/data');
+    return notesRepository.getNoteById(noteId)?.isPrivate === 1;
   },
   getConnectedCalendarAccounts: () => {
     const { useGoogleCalendarStore } =
@@ -76,10 +82,10 @@ const createDefaultChatTurnDeps = (): ChatTurnDeps => ({
       require('@/services/reasoning/ReasoningService') as typeof import('@/services/reasoning/ReasoningService');
     return ReasoningService.chat(request);
   },
-  getChatMode: () => {
+  getChatSelection: () => {
     const { getInferenceSelection } =
       require('@/lib/inferenceRouting') as typeof import('@/lib/inferenceRouting');
-    return getInferenceSelection('noteChat')?.mode;
+    return getInferenceSelection('noteChat');
   },
 });
 
@@ -87,17 +93,62 @@ const throwIfAborted = (signal: AbortSignal): void => {
   if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
 };
 
-const hasEnded = (event: GoogleCalendarEvent, now: Date): boolean => {
-  const end = tryParseNoteTimestamp(event.endAt);
-  if (!end) return true;
-  if (!event.allDay) return end.getTime() <= now.getTime();
-  // An all-day endAt is the exclusive end date at UTC midnight, so compare calendar days.
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  return utcDateAsLocalDay(end).getTime() <= today.getTime();
+// ReasoningService treats an inferenceRoute as the selection it would otherwise look up, and
+// validates a provider route itself, so this only gives the selection the route's shape. No
+// selection means OpenWhispr Cloud, which is what ReasoningService.chat does without one.
+const toChatRoute = (selection: InferenceSelection | undefined): InferenceRoute => {
+  if (selection?.mode !== 'providers') {
+    return { mode: selection?.mode ?? 'openwhispr', scope: 'noteChat' };
+  }
+  return {
+    ...selection,
+    mode: 'providers',
+    scope: 'noteChat',
+    providerId: selection.providerId ?? '',
+    modelId: selection.modelId ?? '',
+    endpoint: selection.endpoint ?? '',
+  };
+};
+
+// An answer built from a note that is private now carries that note's content, so it leaves the
+// history together with the question that asked for it.
+const withoutPrivateAnswers = (
+  history: ChatMessage[],
+  isNotePrivate: (noteId: number) => boolean,
+): ChatMessage[] => {
+  const dropped = new Set<number>();
+  history.forEach((message, index) => {
+    if (message.role !== 'assistant') return;
+    if (!message.sources.some((source) => isNotePrivate(source.noteId))) return;
+    dropped.add(index);
+    if (history[index - 1]?.role === 'user') dropped.add(index - 1);
+  });
+  return history.filter((_, index) => !dropped.has(index));
+};
+
+// A calendar that can't be read counts as none connected, so the notes can still answer.
+const readAccounts = (deps: ChatTurnDeps): GoogleCalendarAccount[] => {
+  try {
+    return deps.getConnectedCalendarAccounts();
+  } catch {
+    return [];
+  }
+};
+
+const readEvents = (
+  deps: ChatTurnDeps,
+  accounts: GoogleCalendarAccount[],
+  now: Date,
+): GoogleCalendarEvent[] | null => {
+  try {
+    return deps.getCalendarEvents(accounts, now);
+  } catch {
+    return null;
+  }
 };
 
 const describeNextEvent = (events: GoogleCalendarEvent[], now: Date): string => {
-  const next = events.find((event) => !hasEnded(event, now));
+  const next = events.find((event) => isInChatCalendarWindow(event, now));
   if (!next) return 'No meetings coming up';
 
   const summary = next.summary?.trim() || 'Untitled meeting';
@@ -122,7 +173,7 @@ export async function runChatTurn(
   input: ChatTurnInput,
   deps: ChatTurnDeps = createDefaultChatTurnDeps(),
 ): Promise<ChatTurnResult> {
-  const { question, history, signal, allowCloudFallback, onSteps, now = new Date() } = input;
+  const { question, signal, allowCloudFallback, onSteps, now = new Date() } = input;
   const steps: ChatStep[] = [];
   const setStep = (step: ChatStep): void => {
     const index = steps.findIndex((existing) => existing.id === step.id);
@@ -130,24 +181,40 @@ export async function runChatTurn(
     else steps[index] = step;
     onSteps([...steps]);
   };
+  const removeStep = (id: ChatStepId): void => {
+    const index = steps.findIndex((existing) => existing.id === id);
+    if (index === -1) return;
+    steps.splice(index, 1);
+    onSteps([...steps]);
+  };
 
   throwIfAborted(signal);
-  const includePrivate = deps.getChatMode() === 'local';
+  // Read once, so the notes picked for this route and the route that receives them can't diverge.
+  const selection = deps.getChatSelection();
+  const inferenceRoute = toChatRoute(selection);
+  const includePrivate = selection?.mode === 'local';
   // The repository already filters private notes; this keeps them out whatever it returns.
   const allowed = (notes: Note[]): Note[] =>
     includePrivate ? notes : notes.filter((note) => note.isPrivate !== 1);
+  const history = includePrivate
+    ? input.history
+    : withoutPrivateAnswers(input.history, deps.isNotePrivate);
 
   let calendar: GoogleCalendarEvent[] | null = null;
-  const accounts = deps.getConnectedCalendarAccounts();
+  const accounts = readAccounts(deps);
   if (accounts.length > 0) {
     setStep({ id: 'calendar', status: 'active', label: 'Checking your calendar…' });
-    calendar = deps.getCalendarEvents(accounts, now);
-    setStep({
-      id: 'calendar',
-      status: 'done',
-      label: 'Checked your calendar',
-      detail: describeNextEvent(calendar, now),
-    });
+    calendar = readEvents(deps, accounts, now);
+    if (calendar === null) {
+      removeStep('calendar');
+    } else {
+      setStep({
+        id: 'calendar',
+        status: 'done',
+        label: 'Checked your calendar',
+        detail: describeNextEvent(calendar, now),
+      });
+    }
     throwIfAborted(signal);
   }
 
@@ -174,10 +241,13 @@ export async function runChatTurn(
   });
   throwIfAborted(signal);
 
+  const privateNoteIds = new Set(
+    notes.filter((note) => note.isPrivate === 1).map((note) => note.id),
+  );
   const buildPayload = (payloadNotes: Note[], noteCharBudget?: number): ChatPayload =>
     buildChatPayload({ question, history, notes: payloadNotes, calendar, now, noteCharBudget });
-  let payload = buildPayload(notes);
 
+  let payload = buildPayload(notes);
   if (payload.sources.length > 0) {
     const reading = describeReading(payload.sources);
     setStep({ id: 'read', status: 'active', label: reading.active });
@@ -187,12 +257,14 @@ export async function runChatTurn(
   setStep({ id: 'write', status: 'active', label: 'Writing your answer…' });
   // A failure after an abort reports the abort, so the caller never shows it as an error.
   const send = async (request: ChatPayload): Promise<ReasoningResponse> => {
+    const isPrivateNote = request.sources.some((source) => privateNoteIds.has(source.noteId));
     try {
       return await deps.chat({
         systemPrompt: request.systemPrompt,
         text: request.text,
         signal,
-        routing: { allowCloudFallback },
+        routing: isPrivateNote ? { allowCloudFallback, isPrivateNote } : { allowCloudFallback },
+        inferenceRoute,
       });
     } catch (error) {
       throwIfAborted(signal);
@@ -206,6 +278,13 @@ export async function runChatTurn(
   } catch (error) {
     if (!isLocalContextLimitError(error)) throw error;
     payload = buildPayload(notes.slice(0, 1), CONTEXT_LIMIT_NOTE_CHAR_BUDGET);
+    // The first payload always reads at least the note the retry keeps, so the read step is
+    // already in place before the write step and is relabelled there.
+    if (payload.sources.length > 0) {
+      setStep({ id: 'read', status: 'done', label: describeReading(payload.sources).done });
+    } else {
+      removeStep('read');
+    }
     response = await send(payload);
   }
   throwIfAborted(signal);

@@ -7,6 +7,7 @@ export const CHAT_NOTE_CHAR_BUDGET = 18_000;
 export const CHAT_NOTE_CHAR_CAP = 6_000;
 
 const CALENDAR_WINDOW_MS = 48 * 60 * 60 * 1000;
+const NOTE_CUT_MARKER = '\n\n[...rest of the note omitted...]';
 const MAX_SEARCH_TERMS = 6;
 const MIN_TERM_LENGTH = 3;
 const TITLE_HIT_SCORE = 3;
@@ -120,7 +121,7 @@ interface CalendarEntry {
 
 // All-day events are stored as UTC midnight of the calendar date, so their date is read from the
 // UTC parts. Reading local parts would shift them a day in zones behind UTC.
-export const utcDateAsLocalDay = (date: Date): Date =>
+const utcDateAsLocalDay = (date: Date): Date =>
   new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 
 const toCalendarEntry = (
@@ -145,6 +146,10 @@ const toCalendarEntry = (
   if (start.getTime() >= windowEnd || end.getTime() < now.getTime()) return null;
   return { event, sortTime: start.getTime(), day: start, start, end };
 };
+
+/** Whether an event belongs in the request's calendar section: not ended and starting within 48 hours. */
+export const isInChatCalendarWindow = (event: GoogleCalendarEvent, now: Date): boolean =>
+  toCalendarEntry(event, now, now.getTime() + CALENDAR_WINDOW_MS) !== null;
 
 const formatCalendarDay = (day: Date, now: Date): string => {
   if (isSameLocalDay(day, now)) return 'Today';
@@ -186,14 +191,19 @@ const formatNotesSection = (
       generatedNotes: note.enhancedContent,
       sourceText: note.content,
     }).slice(0, CHAT_NOTE_CHAR_CAP);
-    // A note that won't fit is dropped whole, but a smaller, lower-ranked one may still fit.
-    if (body.length > remaining) continue;
+    // The top note is cut to fit rather than dropped, so a tight budget still sends one note. Any
+    // later note that won't fit is dropped whole, but a smaller, lower-ranked one may still fit.
+    let included = body;
+    if (body.length > remaining) {
+      if (blocks.length > 0 || remaining <= NOTE_CUT_MARKER.length) continue;
+      included = `${body.slice(0, remaining - NOTE_CUT_MARKER.length).trimEnd()}${NOTE_CUT_MARKER}`;
+    }
 
     const updated = tryParseNoteTimestamp(note.updatedAt);
     const updatedLabel = updated ? ` (updated ${formatChatDate(updated)})` : '';
-    blocks.push(`### ${note.title}${updatedLabel}\n${body}`);
+    blocks.push(`### ${note.title}${updatedLabel}\n${included}`);
     sources.push({ noteId: note.id, title: note.title });
-    remaining -= body.length;
+    remaining -= included.length;
   }
 
   return { section: blocks.length > 0 ? blocks.join('\n\n') : 'No matching notes.', sources };

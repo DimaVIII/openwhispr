@@ -129,6 +129,23 @@ describe('buildChatPayload', () => {
     ]);
   });
 
+  it('cuts the first note to the budget instead of dropping it', () => {
+    const notes = [
+      makeNote({ id: 1, title: 'Long', content: 'a'.repeat(4_000) }),
+      makeNote({ id: 2, title: 'Also long', content: 'b'.repeat(4_000) }),
+    ];
+
+    const { text, sources } = buildPayload({ notes, noteCharBudget: 3_000 });
+
+    expect(sources).toEqual([{ noteId: 1, title: 'Long' }]);
+    expect(text.match(/^### /gm)).toHaveLength(1);
+    expect(text).toContain('[...rest of the note omitted...]');
+    expect(
+      text.match(/a+/g)?.reduce((longest, run) => Math.max(longest, run.length), 0),
+    ).toBeLessThanOrEqual(3_000);
+    expect(text).not.toContain('b'.repeat(10));
+  });
+
   it('fits a smaller later note after skipping one that is too long', () => {
     const notes = [
       makeNote({ id: 1, title: 'First', content: 'a'.repeat(5_000) }),

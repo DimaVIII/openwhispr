@@ -1,7 +1,7 @@
 import type { GoogleCalendarAccount, GoogleCalendarEvent, Note } from '@/data';
 import { LocalReasoningError } from '@/lib/localReasoning';
 import { runChatTurn, type ChatTurnDeps, type ChatTurnInput } from '../runChatTurn';
-import type { ChatStep } from '../types';
+import type { ChatMessage, ChatStep } from '../types';
 
 // Built with local-time constructors so assertions don't depend on the machine's timezone.
 const NOW = new Date(2026, 9, 22, 9, 0, 0);
@@ -38,12 +38,29 @@ const CONNECTED_ACCOUNT = { id: 1, status: 'connected' } as GoogleCalendarAccoun
 const PRICING = makeNote({ id: 1, title: 'Pricing call', content: 'Pricing stays at $12.' });
 const ROADMAP = makeNote({ id: 2, title: 'Roadmap review', content: 'Pricing page ships in May.' });
 
+const LOCAL_SELECTION = jest.fn(() => ({ mode: 'local' as const }));
+
+const makeMessage = (
+  id: string,
+  role: ChatMessage['role'],
+  text: string,
+  sources: ChatMessage['sources'] = [],
+): ChatMessage => ({ id, conversationId: 'c1', role, text, steps: [], sources, createdAt: 0 });
+
+const PRIVATE_HISTORY: ChatMessage[] = [
+  makeMessage('m1', 'user', 'What was the launch date?'),
+  makeMessage('m2', 'assistant', 'Launch is June 3.', [{ noteId: 7, title: 'Launch plan' }]),
+  makeMessage('m3', 'user', 'And the price?'),
+  makeMessage('m4', 'assistant', 'Price stays at $12.', [{ noteId: 1, title: 'Pricing call' }]),
+];
+
 const makeDeps = (overrides: Partial<ChatTurnDeps> = {}): ChatTurnDeps => ({
   getCandidateNotes: jest.fn((terms: string[]) => (terms.length > 0 ? [PRICING, ROADMAP] : [])),
   getConnectedCalendarAccounts: jest.fn(() => [CONNECTED_ACCOUNT]),
   getCalendarEvents: jest.fn(() => []),
+  isNotePrivate: jest.fn(() => false),
   chat: jest.fn(async () => ({ text: 'The answer.', model: 'test' })),
-  getChatMode: jest.fn(() => 'openwhispr' as const),
+  getChatSelection: jest.fn(() => ({ mode: 'openwhispr' as const })),
   ...overrides,
 });
 
@@ -99,7 +116,11 @@ describe('runChatTurn', () => {
       ],
     });
     expect(deps.chat).toHaveBeenCalledWith(
-      expect.objectContaining({ routing: { allowCloudFallback: false }, signal: input.signal }),
+      expect.objectContaining({
+        routing: { allowCloudFallback: false },
+        signal: input.signal,
+        inferenceRoute: { mode: 'openwhispr', scope: 'noteChat' },
+      }),
     );
   });
 
@@ -227,7 +248,7 @@ describe('runChatTurn', () => {
       isPrivate: 1,
     });
     const getCandidateNotes = jest.fn(() => [secret]);
-    const deps = makeDeps({ getCandidateNotes, getChatMode: jest.fn(() => 'local' as const) });
+    const deps = makeDeps({ getCandidateNotes, getChatSelection: LOCAL_SELECTION });
 
     await runChatTurn(makeInput(), deps);
 
@@ -236,6 +257,37 @@ describe('runChatTurn', () => {
       expect.objectContaining({ includePrivate: true }),
     );
     expect(sentText(deps.chat)).toContain('Secret pricing plan');
+    expect(deps.chat).toHaveBeenCalledWith(
+      expect.objectContaining({
+        routing: { allowCloudFallback: false, isPrivateNote: true },
+        inferenceRoute: { mode: 'local', scope: 'noteChat' },
+      }),
+    );
+  });
+
+  it('drops history answers built from private notes on a cloud route', async () => {
+    const isNotePrivate = jest.fn((noteId: number) => noteId === 7);
+    const deps = makeDeps({ isNotePrivate });
+
+    await runChatTurn(makeInput({ history: PRIVATE_HISTORY }), deps);
+
+    const text = sentText(deps.chat);
+    expect(text).not.toContain('What was the launch date?');
+    expect(text).not.toContain('Launch is June 3.');
+    expect(text).toContain('And the price?');
+    expect(text).toContain('Price stays at $12.');
+  });
+
+  it('keeps history answers built from private notes on a local route', async () => {
+    const isNotePrivate = jest.fn((noteId: number) => noteId === 7);
+    const deps = makeDeps({ isNotePrivate, getChatSelection: LOCAL_SELECTION });
+
+    await runChatTurn(makeInput({ history: PRIVATE_HISTORY }), deps);
+
+    const text = sentText(deps.chat);
+    expect(text).toContain('What was the launch date?');
+    expect(text).toContain('Launch is June 3.');
+    expect(isNotePrivate).not.toHaveBeenCalled();
   });
 
   it('retries a local context-limit error with one short note', async () => {
@@ -243,7 +295,7 @@ describe('runChatTurn', () => {
       .fn()
       .mockRejectedValueOnce(new LocalReasoningError('LOCAL_CONTEXT_LIMIT', 'Too long'))
       .mockResolvedValueOnce({ text: 'Short answer.', model: 'local' });
-    const deps = makeDeps({ chat, getChatMode: jest.fn(() => 'local' as const) });
+    const deps = makeDeps({ chat, getChatSelection: LOCAL_SELECTION });
 
     const result = await runChatTurn(makeInput(), deps);
 
@@ -252,6 +304,129 @@ describe('runChatTurn', () => {
     expect(sentText(chat, 1).match(/###/g)).toHaveLength(1);
     expect(result.text).toBe('Short answer.');
     expect(result.sources).toEqual([{ noteId: 1, title: 'Pricing call' }]);
+  });
+
+  it('retries a long note cut to the budget', async () => {
+    const long = makeNote({
+      id: 5,
+      title: 'Pricing deep dive',
+      content: `Pricing ${'p'.repeat(4_500)}`,
+      updatedAt: new Date(2026, 9, 21, 12, 0, 0).toISOString(),
+    });
+    const chat = jest
+      .fn()
+      .mockRejectedValueOnce(new LocalReasoningError('LOCAL_CONTEXT_LIMIT', 'Too long'))
+      .mockResolvedValueOnce({ text: 'Short answer.', model: 'local' });
+    const input = makeInput();
+    const deps = makeDeps({
+      chat,
+      getChatSelection: LOCAL_SELECTION,
+      getCandidateNotes: jest.fn((terms: string[]) => (terms.length > 0 ? [long, PRICING] : [])),
+    });
+
+    const result = await runChatTurn(input, deps);
+
+    expect(sentText(chat, 0).match(/^### /gm)).toHaveLength(2);
+    const retryText = sentText(chat, 1);
+    expect(retryText.match(/^### /gm)).toHaveLength(1);
+    const longestRun = Math.max(...(retryText.match(/p{10,}/g) ?? ['']).map((run) => run.length));
+    expect(longestRun).toBeGreaterThan(2_500);
+    expect(longestRun).toBeLessThanOrEqual(3_000);
+    expect(result.sources).toEqual([{ noteId: 5, title: 'Pricing deep dive' }]);
+    expect(lastSteps(input.onSteps).find((step) => step.id === 'read')).toEqual({
+      id: 'read',
+      status: 'done',
+      label: 'Read “Pricing deep dive”',
+    });
+    expect(lastSteps(input.onSteps).map((step) => step.id)).toEqual([
+      'calendar',
+      'search',
+      'read',
+      'write',
+    ]);
+  });
+
+  it('uses one route snapshot for both calls', async () => {
+    const getChatSelection = jest
+      .fn()
+      .mockReturnValueOnce({ mode: 'local' })
+      .mockReturnValue({ mode: 'openwhispr' });
+    const chat = jest.fn(async () => {
+      if (chat.mock.calls.length === 1) {
+        throw new LocalReasoningError('LOCAL_CONTEXT_LIMIT', 'Too long');
+      }
+      return { text: 'Short answer.', model: 'local' };
+    });
+
+    await runChatTurn(makeInput(), makeDeps({ chat, getChatSelection }));
+
+    expect(chat).toHaveBeenCalledTimes(2);
+    for (const [request] of chat.mock.calls as unknown as [{ inferenceRoute: unknown }][]) {
+      expect(request.inferenceRoute).toEqual({ mode: 'local', scope: 'noteChat' });
+    }
+  });
+
+  it('passes a provider selection through as the route', async () => {
+    const deps = makeDeps({
+      getChatSelection: jest.fn(() => ({
+        mode: 'providers' as const,
+        providerId: 'openai',
+        modelId: 'gpt-5-mini',
+        credentialRef: 'openai-key',
+      })),
+    });
+
+    await runChatTurn(makeInput(), deps);
+
+    expect(deps.chat).toHaveBeenCalledWith(
+      expect.objectContaining({
+        inferenceRoute: {
+          mode: 'providers',
+          scope: 'noteChat',
+          providerId: 'openai',
+          modelId: 'gpt-5-mini',
+          endpoint: '',
+          credentialRef: 'openai-key',
+        },
+      }),
+    );
+  });
+
+  it("keeps going when the calendar can't be read", async () => {
+    for (const broken of [
+      {
+        getConnectedCalendarAccounts: jest.fn((): GoogleCalendarAccount[] => {
+          throw new Error('store unavailable');
+        }),
+      },
+      {
+        getCalendarEvents: jest.fn((): GoogleCalendarEvent[] => {
+          throw new Error('SQLITE_BUSY');
+        }),
+      },
+    ]) {
+      const deps = makeDeps(broken);
+      const input = makeInput();
+
+      const result = await runChatTurn(input, deps);
+
+      expect(result.text).toBe('The answer.');
+      expect(lastSteps(input.onSteps).map((step) => step.id)).toEqual(['search', 'read', 'write']);
+      expect(sentText(deps.chat)).toContain('No calendar connected.');
+    }
+  });
+
+  it('describes only meetings inside the next 48 hours', async () => {
+    const deps = makeDeps({
+      getCalendarEvents: jest.fn(() => [
+        makeEvent('Planning', new Date(2026, 9, 25, 10, 0), new Date(2026, 9, 25, 11, 0)),
+      ]),
+    });
+    const input = makeInput();
+
+    await runChatTurn(input, deps);
+
+    expect(lastSteps(input.onSteps)[0].detail).toBe('No meetings coming up');
   });
 
   it('rethrows other model errors without retrying', async () => {
