@@ -21,7 +21,6 @@ const EXTENSION_FILES = [
 ];
 const BUILD_PHASE_ISA = {
   Sources: 'PBXSourcesBuildPhase',
-  Resources: 'PBXResourcesBuildPhase',
 };
 
 function firstScheme(value) {
@@ -311,8 +310,21 @@ function ensureBuildPhaseExists(xcodeProject, targetUuid, phase) {
   return newPhaseUuid;
 }
 
+// CocoaPods rewrites the group with only `path`, and older plugin versions could leave an
+// empty named duplicate beside it, so prefer whichever group already holds the sources.
 function ensureExtensionGroup(xcodeProject) {
-  const existingGroupKey = xcodeProject.findPBXGroupKey({ name: EXTENSION_NAME });
+  const groups = xcodeProject.hash.project.objects.PBXGroup || {};
+  const candidates = Object.keys(groups).filter(
+    (key) =>
+      !key.endsWith('_comment') &&
+      [groups[key]?.name, groups[key]?.path].some(
+        (value) => typeof value === 'string' && value.replace(/"/g, '') === EXTENSION_NAME,
+      ),
+  );
+  const existingGroupKey =
+    candidates.find((key) =>
+      EXTENSION_FILES.some((file) => findGroupFileReferenceUuid(xcodeProject, key, file.name)),
+    ) ?? candidates[0];
   if (existingGroupKey) {
     return existingGroupKey;
   }
@@ -322,7 +334,7 @@ function ensureExtensionGroup(xcodeProject) {
   return groupKey;
 }
 
-// Every source and resource the keyboard needs, in its own target only. Throws rather
+// Every source the keyboard needs, in its own target only. Throws rather
 // than letting prebuild ship a keyboard that doesn't compile.
 function ensureExtensionFiles(xcodeProject, targetUuid, groupKey) {
   for (const file of EXTENSION_FILES) {
@@ -382,7 +394,7 @@ function withKeyboardExtension(config) {
         sourceTree: '"<group>"',
       });
 
-      // Add the extension target; ensureExtensionFiles below gives it Sources and Resources.
+      // Add the extension target; ensureExtensionFiles below gives it its Sources phase.
       const target = xcodeProject.addTarget(
         EXTENSION_NAME,
         'app_extension',
