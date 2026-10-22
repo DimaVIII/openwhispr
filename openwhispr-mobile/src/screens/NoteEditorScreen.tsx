@@ -24,6 +24,7 @@ import { useDictionaryStore } from '@/store/useDictionaryStore';
 import { extractCorrections } from '@/lib/correctionLearner';
 import { useActionProcessing } from '@/hooks/useActionProcessing';
 import { useAudioRecording } from '@/hooks/useAudioRecording';
+import { useChatSendGate } from '@/hooks/useChatSendGate';
 import { useSuperwallGate } from '@/hooks/useSuperwallGate';
 import { useUsageLimitRecovery } from '@/hooks/useUsageLimitRecovery';
 import { EditableMarkdown } from '@/components/notes/EditableMarkdown';
@@ -43,7 +44,6 @@ import { shouldOfferVoiceSetup, voiceSetupCandidates } from '@/lib/notes/voiceSe
 import { SpeakerProfileOwnerAlreadyExistsError } from '@/data/local/notesRepository';
 import { VOICE_ALREADY_TAUGHT_ALERT } from '@/lib/voiceEnrollmentMessages';
 import { NoteChatSheet } from '@/components/notes/NoteChatSheet';
-import { isNoteChatEnabled } from '@/lib/dictationAgent';
 import { SpeakerTranscript } from '@/components/notes/SpeakerTranscript';
 import { TranscriptSheet } from '@/components/notes/TranscriptSheet';
 import { NoteMetaRow } from '@/components/notes/NoteMetaRow';
@@ -175,11 +175,8 @@ export default function NoteEditorScreen() {
   const autoLearnEnabled = useConfigStore((s) => s.config?.autoLearnCorrections ?? true);
   const notesMode = useConfigStore((s) => s.config?.inference?.notes?.mode);
   const notesProviderId = useConfigStore((s) => s.config?.inference?.notes?.providerId);
-  const chatMode = useConfigStore((s) => s.config?.inference?.noteChat?.mode);
-  const chatEnabled = useConfigStore((s) => (s.config ? isNoteChatEnabled(s.config) : true));
+  const { chatEnabled, gate: gateChatSend } = useChatSendGate();
   const providerNotes = notesMode === 'providers';
-  // Only an unset or OpenWhispr chat route reaches Cloud, so only it needs an account and the paywall.
-  const cloudChat = chatMode !== 'providers' && chatMode !== 'local';
   const dictionaryEntries = useDictionaryStore((s) => s.entries);
   const dictionaryWords = useMemo(() => dictionaryEntries.map((e) => e.word), [dictionaryEntries]);
   const addLearnedWords = useDictionaryStore((s) => s.addLearnedWords);
@@ -1027,44 +1024,19 @@ export default function NoteEditorScreen() {
 
   const runChatWithCloudConfirmation = useCallback(
     (question: string, appendUserMessage: boolean) => {
-      if (cloudChat && requiresRealAccount(user)) {
-        showAccountRequiredAlert('AI chat', { cloudOnly: true });
-        return;
-      }
-
-      const gateAndRun = (allowRemoteContent = false) => {
-        if (!cloudChat) {
-          startChatRequest(question, appendUserMessage, allowRemoteContent).catch(() => {});
-          return;
-        }
-        registerSuperwallGate({
-          placement: SUPERWALL_PLACEMENTS.noteChatStart,
-          params: { source: 'note_chat' },
-          requiresAccount: false,
-          feature: () => {
-            startChatRequest(question, appendUserMessage, allowRemoteContent).catch(() => {});
-          },
-        }).catch(() => {});
-      };
-
-      if (chatRequiresCloudConfirmation && chatMode !== 'local') {
-        confirmCloudOnce(
-          'Chat sends this note context to your selected AI service for this request. Your note privacy and sync settings will not change.',
-          () => gateAndRun(true),
-        );
-        return;
-      }
-
-      gateAndRun();
+      gateChatSend(
+        (allowCloudFallback) => {
+          startChatRequest(question, appendUserMessage, allowCloudFallback).catch(() => {});
+        },
+        {
+          consentMessage: chatRequiresCloudConfirmation
+            ? 'Chat sends this note context to your selected AI service for this request. Your note privacy and sync settings will not change.'
+            : null,
+          source: 'note_chat',
+        },
+      );
     },
-    [
-      chatMode,
-      chatRequiresCloudConfirmation,
-      cloudChat,
-      registerSuperwallGate,
-      startChatRequest,
-      user,
-    ],
+    [chatRequiresCloudConfirmation, gateChatSend, startChatRequest],
   );
 
   const handleAskNote = useCallback(() => {
