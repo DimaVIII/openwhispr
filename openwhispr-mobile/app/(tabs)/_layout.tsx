@@ -41,10 +41,6 @@ export default function TabsLayout() {
         <NativeTabs.Trigger.Label>Dictionary</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="text.book.closed.fill" />
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="(referral)">
-        <NativeTabs.Trigger.Label>Referral</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="gift.fill" />
-      </NativeTabs.Trigger>
     </NativeTabs>
   );
 }
