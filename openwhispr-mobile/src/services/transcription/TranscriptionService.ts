@@ -11,8 +11,19 @@ import { LocalWhisperService } from './LocalWhisperService';
 import { LocalTranscriptionService } from './LocalTranscriptionService';
 import { useAuthStore } from '../../store/useAuthStore';
 import { getClientVersionHeader } from '../../lib/apiClient';
-import { buildDictationHints, isDictationContext } from '../../lib/dictationHints';
-import { dictionaryPromptLimit, trimDictionaryPrompt } from '../../lib/transcriptionPromptCap';
+import {
+  buildDictationHintTiers,
+  buildLlmDictionary,
+  isDictationContext,
+} from '../../lib/dictationHints';
+import {
+  GROQ_PROMPT_CHARS,
+  WHISPER_PROMPT_CHARS,
+  dictionaryPromptLimit,
+  formatDictionaryPrompt,
+  promptLimitKeepingPersonal,
+  sharedDictionaryPromptChars,
+} from '../../lib/transcriptionPromptCap';
 import { BackgroundUploader } from '../../../modules/background-uploader/src';
 import { AudioTools } from '../../../modules/audio-tools/src';
 import { AppGroupStorage, APP_GROUP_KEYS } from '../../../modules/app-group-storage/src';
@@ -506,13 +517,17 @@ export class TranscriptionService {
       parameters.clientAudioMimeType = finalMimeType;
       parameters.clientAudioFileName = uploadFileName;
     }
-    // TODO(prompt-token-cap): Whisper's `prompt` parameter is capped at ~244
-    // tokens. A dictionary larger than ~50-100 entries will silently truncate.
-    // When this matters, prioritize entries (recency, source, usage frequency)
-    // and/or split context across multiple requests rather than naive join.
-    const promptHints = buildDictationHints(isDictationContext(options.requestContext));
-    if (promptHints.length > 0) {
-      parameters.prompt = promptHints.join(', ');
+    // OpenWhispr Cloud's Groq provider keeps only the head 896 characters, and
+    // its Whisper decoder reads only the decoder window, so shared words fill at
+    // most that; personal words are never cut.
+    const promptTiers = buildDictationHintTiers(isDictationContext(options.requestContext));
+    const prompt = formatDictionaryPrompt(
+      promptTiers,
+      promptLimitKeepingPersonal(promptTiers, GROQ_PROMPT_CHARS),
+      sharedDictionaryPromptChars(GROQ_PROMPT_CHARS),
+    );
+    if (prompt) {
+      parameters.prompt = prompt;
     }
 
     const endpointPath = options.endpointPath ?? TRANSCRIBE_ENDPOINT;
@@ -851,12 +866,18 @@ export class TranscriptionService {
     // Dictionary words + (dictation-only) snippet triggers as the Whisper initial
     // prompt, so on-device/private transcription recognizes them too. (Parakeet has
     // no prompt input; the facade drops it on that branch.)
-    const hintWords = buildDictationHints(isDictationContext(requestContext));
+    // Shared words fill at most the decoder window; personal words are never cut.
+    const promptTiers = buildDictationHintTiers(isDictationContext(requestContext));
+    const prompt = formatDictionaryPrompt(
+      promptTiers,
+      promptLimitKeepingPersonal(promptTiers, WHISPER_PROMPT_CHARS),
+      sharedDictionaryPromptChars(WHISPER_PROMPT_CHARS),
+    );
     const { getPickedLocalModel } =
       require('@/lib/inferenceRouting') as typeof import('@/lib/inferenceRouting');
     const response = await LocalTranscriptionService.transcribe(audioUri, {
       language,
-      prompt: hintWords.length > 0 ? hintWords.join(', ') : undefined,
+      prompt: prompt || undefined,
       model: getPickedLocalModel(requestContext === 'file' ? 'upload' : 'dictation'),
     });
     if (__DEV__) {
@@ -898,9 +919,14 @@ export class TranscriptionService {
       extraParameters.cleanupLanguage = cleanupLanguage;
       extraParameters.cleanupLocale = cleanupLanguage;
     }
-    const cleanupHints = buildDictationHints(isDictationContext(request.requestContext));
-    if (cleanupHints.length > 0) {
-      extraParameters.customDictionary = JSON.stringify(cleanupHints);
+    // Teammates' words go in their own field, which the API quotes as data; a
+    // personal-only request is what it always was.
+    const cleanupHints = buildLlmDictionary(isDictationContext(request.requestContext));
+    if (cleanupHints.personal.length > 0) {
+      extraParameters.customDictionary = JSON.stringify(cleanupHints.personal);
+    }
+    if (cleanupHints.shared.length > 0) {
+      extraParameters.sharedDictionary = JSON.stringify(cleanupHints.shared);
     }
 
     const runFusedCleanup = (candidate: TranscriptionRequest) =>
@@ -990,8 +1016,12 @@ export class TranscriptionService {
               },
             })
           : undefined;
-        const promptHints = buildDictationHints(isDictationContext(request.requestContext));
-        const prompt = trimDictionaryPrompt(promptHints.join(', '), dictionaryPromptLimit(route));
+        const promptLimit = dictionaryPromptLimit(route);
+        const prompt = formatDictionaryPrompt(
+          buildDictationHintTiers(isDictationContext(request.requestContext)),
+          promptLimit,
+          sharedDictionaryPromptChars(promptLimit),
+        );
         const result = await transcribeWithProvider({
           route,
           audioUri,
