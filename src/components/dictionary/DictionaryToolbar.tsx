@@ -1,4 +1,4 @@
-import { useState, type ReactElement, type ReactNode } from "react";
+import { useEffect, useState, type ReactElement, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowUpDown, Check, RefreshCw, Search, X } from "../icons";
 import { Input } from "../ui/input";
@@ -24,6 +24,9 @@ interface DictionaryToolbarProps {
   lastSyncedAt: string | null;
   onSync: () => void;
 }
+
+// How often "Synced N min ago" is reworded, so an open tooltip doesn't go stale.
+const SYNCED_LABEL_REFRESH_MS = 30_000;
 
 const ICON_BUTTON_CLASS =
   "grid size-[26px] place-items-center rounded-md text-foreground/50 transition-colors hover:bg-foreground/5 hover:text-foreground/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 dark:hover:bg-white/6";
@@ -90,6 +93,13 @@ export function DictionaryToolbar({
 }: DictionaryToolbarProps): ReactElement {
   const { t, i18n } = useTranslation();
   const [searchOpen, setSearchOpen] = useState(search !== "");
+  const [, setLabelTick] = useState(0);
+
+  useEffect(() => {
+    if (!showSync) return;
+    const timer = setInterval(() => setLabelTick((tick) => tick + 1), SYNCED_LABEL_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [showSync]);
 
   const closeSearch = (): void => {
     setSearchOpen(false);

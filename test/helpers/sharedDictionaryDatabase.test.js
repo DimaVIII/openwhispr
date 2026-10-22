@@ -287,11 +287,14 @@ test("retireMovedDictionaryWords removes only moved rows", (t) => {
   assert.deepEqual(result, { retired: ["Qdrant", "Orukeet"] });
   assert.deepEqual(db.getDictionary(), ["Parakeet", "Kubernetes"]);
   assert.deepEqual(db.getMovedDictionaryWords(), []);
-  // The synced row is tombstoned for the push; the never-synced one is gone,
-  // so no pending create can send it again.
+  // Neither tombstone is pushed: the server retires the synced row itself (or
+  // keeps it, when the word still applies somewhere this device never saw),
+  // and a never-synced row has nothing to delete.
+  assert.deepEqual(db.getPendingDictionaryDeletes(), []);
+  const qdrant = db.getDictionaryEntryByClientId("client-0");
   assert.deepEqual(
-    db.getPendingDictionaryDeletes().map((row) => [row.word, row.cloud_id]),
-    [["Qdrant", "cloud-0"]]
+    [qdrant.sync_status, qdrant.fallback_retired, qdrant.deleted_at !== null],
+    ["synced", 1, true]
   );
   assert.deepEqual(
     db.getPendingDictionary().map((row) => row.word),
@@ -299,6 +302,153 @@ test("retireMovedDictionaryWords removes only moved rows", (t) => {
   );
   assert.equal(db.getDictionaryEntryByClientId("client-1").deleted_at, null);
   assert.deepEqual(db.retireMovedDictionaryWords(["Qdrant"]), { retired: [] });
+});
+
+test("with sync on, retirement leaves synced rows to the pull", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+
+  db.upsertDictionaryFromCloud({
+    id: "cloud-0",
+    client_dict_id: "client-0",
+    word: "Qdrant",
+    shared_at: "2026-10-20T12:00:00.000Z",
+    created_at: "2026-10-20T09:00:00.000Z",
+    updated_at: "2026-10-20T12:00:00.000Z",
+  });
+  db.applyDictionaryChanges({ add: ["Orukeet"] });
+  db.markDictionaryWordsShared(["Orukeet"], "2026-10-20T12:00:00.000Z");
+
+  const result = db.retireMovedDictionaryWords(["Qdrant", "Orukeet"], { includeSynced: false });
+
+  assert.deepEqual(result, { retired: ["Orukeet"] });
+  assert.deepEqual(db.getDictionary(), ["Qdrant"]);
+});
+
+test("reviveRetiredDictionaryWords undoes a retirement, and nothing else", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+
+  db.upsertDictionaryFromCloud({
+    id: "cloud-0",
+    client_dict_id: "client-0",
+    word: "Qdrant",
+    source: "manual",
+    created_at: "2026-10-20T09:00:00.000Z",
+    updated_at: "2026-10-20T09:00:00.000Z",
+  });
+  db.applyDictionaryChanges({ add: ["Orukeet", "Kubernetes", "Parakeet"] });
+  db.markDictionaryWordsShared(["Qdrant", "Orukeet", "Parakeet"], "2026-10-20T12:00:00.000Z");
+  db.retireMovedDictionaryWords(["Qdrant", "Orukeet", "Parakeet"]);
+  // A deliberate delete is not a retirement, and a re-add already covers its word.
+  db.applyDictionaryChanges({ remove: ["Kubernetes"] });
+  db.applyDictionaryChanges({ add: ["parakeet"] });
+
+  const result = db.reviveRetiredDictionaryWords(["qdrant", "Orukeet", "Parakeet", "Kubernetes"]);
+
+  assert.deepEqual(result, { revived: ["Qdrant", "Orukeet"] });
+  assert.deepEqual(db.getDictionary(), ["Qdrant", "Orukeet", "parakeet"]);
+  const qdrant = db.getDictionaryEntryByClientId("client-0");
+  assert.equal(qdrant.sync_status, "synced", "the server owns the revive; the pull reconciles");
+  assert.equal(qdrant.shared_at, "2026-10-20T12:00:00.000Z");
+  assert.deepEqual(
+    db
+      .getPendingDictionary()
+      .map((row) => row.word)
+      .sort(),
+    ["Orukeet", "parakeet"],
+    "a never-synced row is a pending create again"
+  );
+  assert.deepEqual(db.reviveRetiredDictionaryWords(["Qdrant"]), { revived: [] });
+});
+
+test("a push ack clears the marker only for the row it pushed", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+
+  db.upsertDictionaryFromCloud({
+    id: "cloud-1",
+    client_dict_id: "client-1",
+    word: "Qdrant",
+    shared_at: "2026-10-20T12:00:00.000Z",
+    created_at: "2026-10-20T09:00:00.000Z",
+    updated_at: "2026-10-20T12:00:00.000Z",
+  });
+  db.applyDictionaryChanges({ add: ["Qdrant"] }); // un-share: dirty, pending
+  const pushed = db.getDictionaryEntryByClientId("client-1");
+  // While that push is in flight, the user renames the word.
+  db.applyDictionaryChanges({ add: ["QDRANT"] });
+
+  const result = db.markDictionaryEntrySynced(pushed.id, "cloud-1", {
+    word: pushed.word,
+    shared_at: pushed.shared_at,
+    updated_at: pushed.updated_at,
+  });
+
+  const row = db.getDictionaryEntryByClientId("client-1");
+  assert.equal(result.changes, 1);
+  assert.deepEqual([row.sync_status, row.shared_at_dirty], ["pending", 1], "pushed again");
+
+  const again = db.getDictionaryEntryByClientId("client-1");
+  db.markDictionaryEntrySynced(again.id, "cloud-1", {
+    word: again.word,
+    shared_at: again.shared_at,
+    updated_at: again.updated_at,
+  });
+  const done = db.getDictionaryEntryByClientId("client-1");
+  assert.deepEqual([done.sync_status, done.shared_at_dirty], ["synced", 0]);
+});
+
+test("shared_at is dirty only while a local set or clear awaits its push", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+
+  db.upsertDictionaryFromCloud({
+    id: "cloud-1",
+    client_dict_id: "client-1",
+    word: "Qdrant",
+    source: "learned",
+    shared_at: "2026-10-20T12:00:00.000Z",
+    created_at: "2026-10-20T09:00:00.000Z",
+    updated_at: "2026-10-20T12:00:00.000Z",
+  });
+  const dirty = () => db.getDictionaryEntryByClientId("client-1").shared_at_dirty;
+  assert.equal(dirty(), 0);
+
+  // An ordinary edit (here a learned word promoted to manual) leaves the marker alone.
+  db.applyDictionaryChanges({ add: ["Qdrant"] }, "manual");
+  assert.equal(dirty(), 1, "an explicit add takes the word back into Personal");
+  db.markDictionaryEntrySynced(db.getDictionaryEntryByClientId("client-1").id, "cloud-1");
+  assert.equal(dirty(), 0, "the push carried it");
+
+  db.markDictionaryWordsShared(["Qdrant"], "2026-10-20T13:00:00.000Z");
+  assert.equal(dirty(), 0, "the server recorded the share itself");
+
+  db.upsertDictionaryFromCloud({
+    id: "cloud-1",
+    client_dict_id: "client-1",
+    word: "Qdrant",
+    source: "learned",
+    created_at: "2026-10-20T09:00:00.000Z",
+    updated_at: "2026-10-20T14:00:00.000Z",
+  });
+  db.applyDictionaryChanges({ remove: ["Qdrant"] });
+  db.applyDictionaryChanges({ add: ["Qdrant"] });
+  assert.equal(dirty(), 1, "a restored word is sent as personal");
+
+  db.upsertDictionaryFromCloud({
+    id: "cloud-1",
+    client_dict_id: "client-1",
+    word: "Qdrant",
+    shared_at: null,
+    created_at: "2026-10-20T09:00:00.000Z",
+    updated_at: "2026-10-20T15:00:00.000Z",
+  });
+  assert.equal(dirty(), 0, "the cloud's row replaces the local change");
+
+  db.applyDictionaryChanges({ add: ["Parakeet"] });
+  const parakeet = db.getPendingDictionary().find((row) => row.word === "Parakeet");
+  assert.equal(parakeet.shared_at_dirty, 0, "a new word has nothing to clear");
 });
 
 test("replaceSharedDictionary removes entries absent from the snapshot", (t) => {
@@ -438,10 +588,52 @@ test("clearSharedDictionary() empties all three tables", (t) => {
     });
   }
 
-  db.clearSharedDictionary(WS);
+  assert.deepEqual(db.clearSharedDictionary(WS), { changed: 3 }, "entry, hide and meta");
   assert.deepEqual(db.getSharedDictionary(WS), { entries: [], hiddenIds: [], meta: null });
   assert.equal(db.getSharedDictionary(OTHER_WS).entries.length, 1);
+  assert.deepEqual(db.clearSharedDictionary(WS), { changed: 0 });
 
   db.clearSharedDictionary();
   assert.deepEqual(db.getSharedDictionary(OTHER_WS), { entries: [], hiddenIds: [], meta: null });
+});
+
+test("pruneSharedDictionary keeps only the listed workspaces", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+
+  for (const ws of [WS, OTHER_WS]) {
+    db.applySharedDictionaryPull(ws, {
+      upserts: [entry(`${ws}-e1`, "Qdrant", { workspace_id: ws })],
+      deletedIds: [],
+      meta: meta([scope(null)]),
+    });
+    db.applySharedDictionaryHides(ws, {
+      hidden: [{ entryId: `${ws}-e1`, updatedAt: "2026-10-20T10:00:00.000Z" }],
+      unhidden: [],
+    });
+  }
+
+  assert.deepEqual(db.pruneSharedDictionary([WS]), { changed: 3 });
+  assert.equal(db.getSharedDictionary(WS).entries.length, 1);
+  assert.deepEqual(db.getSharedDictionary(WS).hiddenIds, [`${WS}-e1`]);
+  assert.deepEqual(db.getSharedDictionary(OTHER_WS), { entries: [], hiddenIds: [], meta: null });
+
+  assert.deepEqual(db.pruneSharedDictionary([]), { changed: 3 });
+  assert.deepEqual(db.getSharedDictionary(WS), { entries: [], hiddenIds: [], meta: null });
+});
+
+test("replaceSharedDictionaryHides reports what it changed, and hides are indexed", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+
+  const hide = { entryId: "e1", updatedAt: "2026-10-20T10:00:00.000Z" };
+  assert.deepEqual(db.replaceSharedDictionaryHides(WS, [hide]), { changed: 1 });
+  assert.deepEqual(db.replaceSharedDictionaryHides(WS, [hide]), { changed: 0 });
+  assert.deepEqual(db.replaceSharedDictionaryHides(WS, []), { changed: 1 });
+
+  const indexes = db.db
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = ?")
+    .all("shared_dictionary_hides")
+    .map((row) => row.name);
+  assert.ok(indexes.includes("idx_shared_dictionary_hides_workspace"));
 });

@@ -3538,7 +3538,12 @@
       "undo": "元に戻す",
       "errors": {
         "generic": "{{list}} を更新できませんでした。もう一度お試しください。",
-        "listFull": "{{list}} がいっぱいです"
+        "listFull": "{{list}} がいっぱいです",
+        "planRequired": "共有辞書には Business プランが必要なため、{{list}} は変更されませんでした",
+        "ssoRequired": "{{list}} を変更するには、会社の SSO でサインインしてください",
+        "notMember": "{{list}} にアクセスできなくなりました",
+        "invalid": "{{list}} に追加できるのは短い用語だけです（64 文字・6 語まで。カンマ、文末の句読点、< > { } [ ] ` | などの記号は使えません）",
+        "recentlyDeleted": "この単語は {{list}} から削除されたばかりです。もう一度追加してください。"
       },
       "deleteOneTitle": "{{list}} の全員から「{{word}}」を削除しますか？",
       "deleteManyTitle_one": "{{list}} の全員から {{count}} 個の単語を削除しますか？",
@@ -3583,7 +3588,11 @@
         "spaceDescription": "1 つのチームだけが必要とする単語",
         "wordCount_one": "{{count}} 個の単語",
         "wordCount_other": "{{count}} 個の単語",
-        "lockLabel": "Business プランに含まれます"
+        "lockLabel": "Business プランに含まれます",
+        "ssoRequired": "{{workspace}} では会社の SSO が必要です。サインアウトしてから SSO でサインインし直すと、共有単語を使えます。",
+        "noAccess": "{{workspace}} の共有単語にアクセスできなくなりました。心当たりがない場合は管理者にお問い合わせください。",
+        "pausedMember_one": "{{workspace}} の共有単語 {{count}} 個は一時停止中です。管理者またはオーナーに Business へのアップグレードを依頼すると、再び音声入力で使えます。",
+        "pausedMember_other": "{{workspace}} の共有単語 {{count}} 個は一時停止中です。管理者またはオーナーに Business へのアップグレードを依頼すると、再び音声入力で使えます。"
       },
       "empty": {
         "body": "このチームが使う用語を追加するか、個人リストから共有しましょう。{{list}} の全員（{{count}} 人）に届きます。",
@@ -3596,7 +3605,14 @@
         "description": "{{workspace}} の共有単語が、音声入力と会議ノートに適用されるようになりました。",
         "descriptionNoWorkspace": "チームの共有単語が、音声入力と会議ノートに適用されるようになりました。",
         "viewWords": "単語を表示"
-      }
+      },
+      "lockedEntry": "ロック中",
+      "notTermLike": "共有リストに追加できるのは短い用語だけです（64 文字・6 語まで。カンマ、文末の句読点、< > { } [ ] ` | などの記号、不可視文字は使えません）",
+      "notUsed": "音声入力では使われません",
+      "notUsedTooltip": "64 文字または 6 語を超える共有単語や、カンマ・文末の句読点・< > { } [ ] ` | などの記号・不可視文字を含む共有単語は音声入力で使われません",
+      "badgeMore": "{{list}} +{{extra}}",
+      "skipped_one": "{{count}} 個の単語を除外しました：{{words}}",
+      "skipped_other": "{{count}} 個の単語を除外しました：{{words}}"
     }
   },
   "referral": {

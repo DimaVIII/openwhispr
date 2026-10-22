@@ -3961,7 +3961,12 @@
       "undo": "Rückgängig",
       "errors": {
         "generic": "{{list}} konnte nicht aktualisiert werden. Versuche es erneut.",
-        "listFull": "{{list}} ist voll"
+        "listFull": "{{list}} ist voll",
+        "planRequired": "Geteilte Wörterbücher brauchen Business, daher wurde {{list}} nicht geändert",
+        "ssoRequired": "Melde dich mit dem SSO deines Unternehmens an, um {{list}} zu ändern",
+        "notMember": "Du hast keinen Zugriff mehr auf {{list}}",
+        "invalid": "{{list}} nimmt nur kurze Begriffe auf: höchstens 64 Zeichen und 6 Wörter, ohne Kommas, Satzzeichen oder Zeichen wie < > { } [ ] ` |",
+        "recentlyDeleted": "Dieses Wort wurde gerade aus {{list}} gelöscht. Füge es stattdessen erneut hinzu."
       },
       "deleteOneTitle": "„{{word}}“ für alle in {{list}} löschen?",
       "deleteManyTitle_one": "{{count}} Wort für alle in {{list}} löschen?",
@@ -4006,7 +4011,11 @@
         "spaceDescription": "Wörter, die nur ein Team braucht",
         "wordCount_one": "{{count}} Wort",
         "wordCount_other": "{{count}} Wörter",
-        "lockLabel": "In Business enthalten"
+        "lockLabel": "In Business enthalten",
+        "ssoRequired": "{{workspace}} verlangt das SSO des Unternehmens. Melde dich ab und mit SSO wieder an, um die geteilten Wörter zu nutzen.",
+        "noAccess": "Du hast keinen Zugriff mehr auf die geteilten Wörter von {{workspace}}. Frag einen Admin, falls das ein Fehler ist.",
+        "pausedMember_one": "Das {{count}} geteilte Wort von {{workspace}} ist pausiert. Bitte einen Admin oder Inhaber, auf Business upzugraden, um es wieder beim Diktieren zu nutzen.",
+        "pausedMember_other": "Die {{count}} geteilten Wörter von {{workspace}} sind pausiert. Bitte einen Admin oder Inhaber, auf Business upzugraden, um sie wieder beim Diktieren zu nutzen."
       },
       "empty": {
         "body": "Füge die Begriffe hinzu, die dieses Team verwendet, oder teile einige aus deiner persönlichen Liste. Alle in {{list}} ({{count}}) bekommen sie.",
@@ -4019,7 +4028,14 @@
         "description": "Die gemeinsamen Wörter von {{workspace}} gelten jetzt für dein Diktat und deine Meeting-Notizen.",
         "descriptionNoWorkspace": "Die gemeinsamen Wörter deines Teams gelten jetzt für dein Diktat und deine Meeting-Notizen.",
         "viewWords": "Wörter ansehen"
-      }
+      },
+      "lockedEntry": "Gesperrt",
+      "notTermLike": "Geteilte Listen nehmen nur kurze Begriffe auf: höchstens 64 Zeichen und 6 Wörter, ohne Kommas, Satzzeichen, Zeichen wie < > { } [ ] ` | oder unsichtbare Zeichen",
+      "notUsed": "Nicht beim Diktieren genutzt",
+      "notUsedTooltip": "Beim Diktieren werden geteilte Wörter mit mehr als 64 Zeichen oder 6 Wörtern ausgelassen, ebenso solche mit Kommas, Satzzeichen, Zeichen wie < > { } [ ] ` | oder unsichtbaren Zeichen",
+      "badgeMore": "{{list}} +{{extra}}",
+      "skipped_one": "{{count}} Wort wurde ausgelassen: {{words}}",
+      "skipped_other": "{{count}} Wörter wurden ausgelassen: {{words}}"
     }
   },
   "support": {

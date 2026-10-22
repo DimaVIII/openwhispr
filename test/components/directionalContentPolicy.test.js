@@ -24,7 +24,7 @@ test("dynamic prose and identity values keep their own direction", () => {
     ],
     [
       "src/components/dictionary/DictionaryWordList.tsx",
-      /<span\s+dir="auto"[^>]*>\s*\{row\.badge\}/,
+      /<span\s+dir="auto"[^>]*>\s*\{row\.otherLists > 0[\s\S]*?: row\.badge\}/,
     ],
     [
       "src/components/dictionary/DictionaryListPicker.tsx",

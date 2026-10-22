@@ -10,7 +10,8 @@ const {
 
 async function mountListener(t, { workspaces = [{ id: "ws-1", name: "Acme" }] } = {}) {
   let root;
-  const listeners = new Map();
+  // The main process's sync-event rebroadcast, as preload exposes it.
+  const syncListeners = new Set();
   const calls = { toasts: [], requestedLists: [], viewWordsClicks: 0 };
   globalThis.__arrival = calls;
   globalThis.__arrivalWorkspaces = workspaces;
@@ -21,9 +22,11 @@ async function mountListener(t, { workspaces = [{ id: "ws-1", name: "Acme" }] } 
   });
   installBrowserGlobals(t, {
     window: {
-      addEventListener: (name, listener) => listeners.set(name, listener),
-      removeEventListener: (name, listener) => {
-        if (listeners.get(name) === listener) listeners.delete(name);
+      electronAPI: {
+        onSyncEvent: (callback) => {
+          syncListeners.add(callback);
+          return () => syncListeners.delete(callback);
+        },
       },
     },
   });
@@ -67,12 +70,21 @@ async function mountListener(t, { workspaces = [{ id: "ws-1", name: "Acme" }] } 
       })
     )
   );
-  const arrive = (detail) =>
-    React.act(async () => listeners.get("shared-dictionary-arrived")({ detail }));
-  return { calls, listeners, arrive, unmount: () => React.act(async () => root.unmount()) };
+  const emit = (name, payload) =>
+    React.act(async () => {
+      for (const listener of syncListeners) listener({ name, payload });
+    });
+  const arrive = (detail) => emit("shared-dictionary-arrived", detail);
+  return {
+    calls,
+    syncListeners,
+    arrive,
+    emit,
+    unmount: () => React.act(async () => root.unmount()),
+  };
 }
 
-test("dispatching the event shows the toast with both actions, and View words sets requestedList to allShared", async (t) => {
+test("the sync event shows the toast with both actions, and View words sets requestedList to allShared", async (t) => {
   const { calls, arrive } = await mountListener(t);
 
   await arrive({ workspaceId: "ws-1", count: 127 });
@@ -105,13 +117,15 @@ test("a workspace the store hasn't loaded gets the neutral description", async (
   assert.equal(toast.description, "dictionary.shared.arrival.descriptionNoWorkspace");
 });
 
-test("a malformed event shows nothing, and unmounting stops listening", async (t) => {
-  const { calls, listeners, arrive, unmount } = await mountListener(t);
+test("a malformed or unrelated event shows nothing, and unmounting stops listening", async (t) => {
+  const { calls, syncListeners, arrive, emit, unmount } = await mountListener(t);
 
   await arrive({ workspaceId: "ws-1", count: 0 });
   await arrive(undefined);
+  await emit("shared-dictionary-changed", { workspaceId: "ws-1", count: 3 });
   assert.equal(calls.toasts.length, 0);
+  assert.equal(syncListeners.size, 1);
 
   await unmount();
-  assert.equal(listeners.has("shared-dictionary-arrived"), false);
+  assert.equal(syncListeners.size, 0);
 });

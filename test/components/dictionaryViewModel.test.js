@@ -1,8 +1,10 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
+  allWordsArePersonal,
   buildPicker,
   defaultAddTarget,
+  filterRows,
   resolveSharedAccessState,
   rowsForList,
   shareTargetsFor,
@@ -68,22 +70,32 @@ const rowInput = (overrides = {}) => ({
 
 const words = (rows) => rows.map((row) => row.word);
 
-test("resolveSharedAccessState: capability, workspace, plan and the server's paused flag", () => {
+test("resolveSharedAccessState: status, workspace, plan and the server's paused flag", () => {
   const base = {
-    capabilityAvailable: true,
+    status: "ready",
     workspace: workspace({ role: "owner" }),
     serverPaused: null,
     hasWords: false,
   };
-  assert.equal(resolveSharedAccessState({ ...base, capabilityAvailable: false }), "unavailable");
+  assert.equal(resolveSharedAccessState({ ...base, status: "unavailable" }), "unavailable");
   assert.equal(resolveSharedAccessState({ ...base, workspace: null }), "noWorkspace");
   assert.equal(resolveSharedAccessState(base), "available");
   assert.equal(resolveSharedAccessState({ ...base, serverPaused: false }), "available");
 });
 
+test("SSO and lost access lock the shared lists ahead of any plan state", () => {
+  const free = workspace({ plan: "free", role: "owner" });
+  for (const status of ["ssoRequired", "noAccess"]) {
+    const input = { status, serverPaused: true, hasWords: true };
+    assert.equal(resolveSharedAccessState({ ...input, workspace: workspace() }), status);
+    assert.equal(resolveSharedAccessState({ ...input, workspace: free }), status);
+    assert.equal(resolveSharedAccessState({ ...input, workspace: null }), "noWorkspace");
+  }
+});
+
 test("paused workspace with words is paused, without words is an upgrade state", () => {
   const lapsed = (role) => workspace({ plan: "free", role });
-  const input = { capabilityAvailable: true, serverPaused: true };
+  const input = { status: "ready", serverPaused: true };
   assert.equal(
     resolveSharedAccessState({ ...input, workspace: lapsed("owner"), hasWords: true }),
     "paused"
@@ -101,13 +113,13 @@ test("paused workspace with words is paused, without words is an upgrade state",
     resolveSharedAccessState({ ...input, workspace: lapsed("member"), hasWords: false }),
     "upgradeMember"
   );
-  const unpaused = { capabilityAvailable: true, workspace: lapsed("owner"), hasWords: true };
+  const unpaused = { status: "ready", workspace: lapsed("owner"), hasWords: true };
   assert.equal(resolveSharedAccessState({ ...unpaused, serverPaused: false }), "upgradeAdmin");
   assert.equal(resolveSharedAccessState({ ...unpaused, serverPaused: null }), "upgradeAdmin");
 });
 
 test("upgrade state depends on whether the role can manage the workspace", () => {
-  const input = { capabilityAvailable: true, serverPaused: null, hasWords: false };
+  const input = { status: "ready", serverPaused: null, hasWords: false };
   const free = (role) => workspace({ plan: "free", role });
   assert.equal(resolveSharedAccessState({ ...input, workspace: free("owner") }), "upgradeAdmin");
   assert.equal(resolveSharedAccessState({ ...input, workspace: free("admin") }), "upgradeAdmin");
@@ -191,7 +203,7 @@ test("buildPicker counts are null before the shared lists are read", () => {
     movedPersonal: [],
     snapshot: null,
     workspaceName: "Acme",
-    access: "noWorkspace",
+    access: "upgradeAdmin",
     t,
   });
   assert.deepEqual(
@@ -201,9 +213,37 @@ test("buildPicker counts are null before the shared lists are read", () => {
       ["personal", 2],
       ["allShared", null],
       ["workspace", null],
-      ["hidden", null],
     ]
   );
+});
+
+test("without a workspace the picker names the workspace list generically and has no Hidden", () => {
+  const picker = buildPicker({
+    personal: [],
+    movedPersonal: [],
+    snapshot: null,
+    workspaceName: "",
+    access: "noWorkspace",
+    t,
+  });
+  assert.equal(
+    picker.find((item) => item.key === "workspace").label,
+    "dictionary.shared.locked.workspaceTitle"
+  );
+  assert.equal(
+    picker.find((item) => item.key === "hidden"),
+    undefined
+  );
+  // A paused workspace still lists the words it hid.
+  const paused = buildPicker({
+    personal: [],
+    movedPersonal: [],
+    snapshot: snapshot([]),
+    workspaceName: "Acme",
+    access: "paused",
+    t,
+  });
+  assert.ok(paused.find((item) => item.key === "hidden"));
 });
 
 test("a moved word leaves Personal only while its shared copy exists", () => {
@@ -272,6 +312,9 @@ test("All words: a space row beats a workspace row, hidden words are left out", 
   assert.equal(rows.length, 1);
   assert.equal(rows[0].entryId, "e2");
   assert.equal(rows[0].badge, "Engineering");
+  // The one row stands for both copies, so hiding or deleting it reaches each.
+  assert.deepEqual(rows[0].entryIds, ["e2", "e1"]);
+  assert.equal(rows[0].otherLists, 1);
 });
 
 test("All shared shows one row per list entry", () => {
@@ -371,6 +414,72 @@ test("sort: a-z and z-a ignore case, newest and oldest use createdAt with person
   assert.deepEqual(run("oldest"), ["cherry", "banana", "Apple", "Zulu"]);
 });
 
+test("newest and oldest order personal words by when they were added, after dated words", () => {
+  const snap = snapshot([
+    entry("e1", "banana", null, { createdAt: "2026-10-02T00:00:00.000Z" }),
+    entry("e2", "Apple", ENGINEERING, { createdAt: "2026-10-03T00:00:00.000Z" }),
+  ]);
+  // The settings array keeps insertion order: Zulu first, then Mike, then Alpha.
+  const personal = ["Zulu", "Mike", "Alpha"];
+  const run = (list, sort) =>
+    words(rowsForList(list, rowInput({ personal, snapshot: snap, sort })));
+  assert.deepEqual(run("personal", "newest"), ["Alpha", "Mike", "Zulu"]);
+  assert.deepEqual(run("personal", "oldest"), ["Zulu", "Mike", "Alpha"]);
+  assert.deepEqual(run("all", "newest"), ["Apple", "banana", "Alpha", "Mike", "Zulu"]);
+  assert.deepEqual(run("all", "oldest"), ["banana", "Apple", "Zulu", "Mike", "Alpha"]);
+});
+
+test("filterRows keeps the sorted order and rowsForList matches it", () => {
+  const input = rowInput({ personal: ["beta", "Alpha", "alphabet"], sort: "az" });
+  const sorted = rowsForList("personal", input);
+  assert.deepEqual(words(filterRows(sorted, "ALPHA")), ["Alpha", "alphabet"]);
+  assert.deepEqual(
+    words(rowsForList("personal", { ...input, search: "alpha" })),
+    words(filterRows(sorted, "alpha"))
+  );
+});
+
+test("case variants of a personal word get their own row keys", () => {
+  const rows = rowsForList("personal", rowInput({ personal: ["Supabase", "supabase"] }));
+  assert.equal(new Set(rows.map((row) => row.key)).size, 2);
+});
+
+test("shared words dictation leaves out are flagged; personal words never are", () => {
+  const long = "x".repeat(65);
+  const rows = rowsForList(
+    "all",
+    rowInput({
+      personal: ["{{template}}"],
+      snapshot: snapshot([
+        entry("e1", "Kubernetes", null),
+        entry("e2", long, null),
+        entry("e3", "a <b> tag", null),
+      ]),
+    })
+  );
+  const used = Object.fromEntries(rows.map((row) => [row.word, row.usedInDictation]));
+  assert.deepEqual(used, {
+    "{{template}}": true,
+    Kubernetes: true,
+    [long]: false,
+    "a <b> tag": false,
+  });
+});
+
+test("All words is personal-only while no shared word applies", () => {
+  const withWords = snapshot([entry("e1", "Kubernetes", null)]);
+  assert.equal(allWordsArePersonal(withWords, "available"), false);
+  assert.equal(allWordsArePersonal(withWords, "upgradeMember"), true);
+  assert.equal(allWordsArePersonal(snapshot([]), "available"), true);
+  assert.equal(
+    allWordsArePersonal(
+      snapshot([entry("e1", "Kubernetes", null)], { hiddenIds: ["e1"] }),
+      "available"
+    ),
+    true
+  );
+});
+
 test("defaultAddTarget: the open list's target, else the last used one", () => {
   assert.equal(defaultAddTarget("personal", `${SALES}`), "personal");
   assert.equal(defaultAddTarget("workspace", "personal"), null);
@@ -457,4 +566,25 @@ test("visiblePersonalWords is what clear-all and export act on", () => {
   const snap = snapshot([entry("e1", "Qdrant", null)]);
   const acted = visiblePersonalWords(["OpenWhispr", "Qdrant"], ["Qdrant"], snap);
   assert.deepEqual(acted, ["OpenWhispr"]);
+});
+
+test("All words groups spellings dictation treats as one word, Unicode forms included", () => {
+  const composed = "Café";
+  const decomposed = "Café";
+  const rows = rowsForList(
+    "all",
+    rowInput({
+      snapshot: snapshot([entry("e1", decomposed, ENGINEERING), entry("e2", composed, null)]),
+    })
+  );
+  assert.equal(rows.length, 1);
+  assert.deepEqual(rows[0].entryIds, ["e1", "e2"]);
+  const withPersonal = rowsForList(
+    "all",
+    rowInput({ personal: [composed], snapshot: snapshot([entry("e1", decomposed, null)]) })
+  );
+  assert.deepEqual(
+    withPersonal.map((row) => row.kind),
+    ["personal"]
+  );
 });

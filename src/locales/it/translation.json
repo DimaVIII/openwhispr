@@ -3518,6 +3518,7 @@
     "importPlaceholder": "Incolla parole separate da virgole o a capo...",
     "separateWithCommas": "Una parola per riga, oppure separate da virgole",
     "wordsReady_one": "{{count}} parola pronta",
+    "wordsReady_many": "{{count}} di parole pronte",
     "wordsReady_other": "{{count}} parole pronte",
     "promptLimitNotice": "Il tuo dizionario contiene {{chars}} caratteri. I modelli Groq e Whisper ne leggono solo le ultime centinaia di caratteri, quindi lì conviene un elenco più corto. Gli altri modelli ricevono l'elenco completo.",
     "exportDictionary": "Esporta dizionario",
@@ -3602,6 +3603,7 @@
         "oldest": "Meno recenti prima"
       },
       "memberCount_one": "{{count}} membro",
+      "memberCount_many": "{{count}} di membri",
       "memberCount_other": "{{count}} membri",
       "emptyList": "Ancora nessuna parola in {{list}}",
       "allHiddenList": "Tutte le parole di {{list}} sono nascoste per te",
@@ -3610,17 +3612,26 @@
       "undo": "Annulla",
       "errors": {
         "generic": "Impossibile aggiornare {{list}}. Riprova.",
-        "listFull": "{{list}} è piena"
+        "listFull": "{{list}} è piena",
+        "planRequired": "I dizionari condivisi richiedono Business, quindi {{list}} non è stata modificata",
+        "ssoRequired": "Accedi con l'SSO aziendale per modificare {{list}}",
+        "notMember": "Non hai più accesso a {{list}}",
+        "invalid": "{{list}} accetta solo termini brevi: al massimo 64 caratteri e 6 parole, senza virgole, punteggiatura di frase o simboli come < > { } [ ] ` |",
+        "recentlyDeleted": "Questa parola è appena stata eliminata da {{list}}. Aggiungila di nuovo."
       },
       "deleteOneTitle": "Eliminare «{{word}}» per tutti in {{list}}?",
       "deleteManyTitle_one": "Eliminare {{count}} parola per tutti in {{list}}?",
+      "deleteManyTitle_many": "Eliminare {{count}} di parole per tutti in {{list}}?",
       "deleteManyTitle_other": "Eliminare {{count}} parole per tutti in {{list}}?",
       "deletedManyForEveryone_one": "{{count}} parola eliminata per tutti",
+      "deletedManyForEveryone_many": "{{count}} di parole eliminate per tutti",
       "deletedManyForEveryone_other": "{{count}} parole eliminate per tutti",
       "deletedPersonalMany_one": "{{count}} parola eliminata",
+      "deletedPersonalMany_many": "{{count}} di parole eliminate",
       "deletedPersonalMany_other": "{{count}} parole eliminate",
       "selection": {
         "count_one": "{{count}} selezionata",
+        "count_many": "{{count}} selezionate",
         "count_other": "{{count}} selezionate",
         "selectAll": "Seleziona tutte ({{total}})",
         "shareWith": "Condividi con…",
@@ -3631,11 +3642,14 @@
       "share": {
         "titleOne": "Condividi «{{word}}» con",
         "titleMany_one": "Condividi {{count}} parola con",
+        "titleMany_many": "Condividi {{count}} di parole con",
         "titleMany_other": "Condividi {{count}} parole con",
         "alreadyShared": "Già condivisa",
         "movesOut_one": "La sposta fuori da Personali",
+        "movesOut_many": "Le sposta fuori da Personali",
         "movesOut_other": "Le sposta fuori da Personali",
         "partial_one": "Condivise {{moved}} parole su {{total}}. {{count}} non è stata condivisa.",
+        "partial_many": "Condivise {{moved}} parole su {{total}}. {{count}} non sono state condivise.",
         "partial_other": "Condivise {{moved}} parole su {{total}}. {{count}} non sono state condivise.",
         "reasons": {
           "personalChanged": "Una parola è cambiata su un altro dispositivo. Riprova.",
@@ -3648,14 +3662,21 @@
         "upgradeAdmin": "I dizionari condivisi sono inclusi in Business. Passa {{workspace}} a un piano superiore così tutti avranno le stesse parole.",
         "upgradeMember": "I dizionari condivisi sono inclusi in Business. Chiedi a un amministratore di passare {{workspace}} a un piano superiore.",
         "paused_one": "La {{count}} parola condivisa di {{workspace}} è in pausa. Passa a Business per usarla di nuovo nella dettatura.",
+        "paused_many": "Le {{count}} di parole condivise di {{workspace}} sono in pausa. Passa a Business per usarle di nuovo nella dettatura.",
         "paused_other": "Le {{count}} parole condivise di {{workspace}} sono in pausa. Passa a Business per usarle di nuovo nella dettatura.",
         "workspaceTitle": "Tutti nella tua area di lavoro",
         "workspaceDescription": "Parole per tutta l'azienda",
         "spaceTitle": "Un elenco per spazio",
         "spaceDescription": "Parole che servono a un solo team",
         "wordCount_one": "{{count}} parola",
+        "wordCount_many": "{{count}} di parole",
         "wordCount_other": "{{count}} parole",
-        "lockLabel": "Incluso in Business"
+        "lockLabel": "Incluso in Business",
+        "ssoRequired": "{{workspace}} richiede l'SSO aziendale. Esci e accedi di nuovo con l'SSO per usare le sue parole condivise.",
+        "noAccess": "Non hai più accesso alle parole condivise di {{workspace}}. Chiedi a un amministratore se pensi che sia un errore.",
+        "pausedMember_one": "La {{count}} parola condivisa di {{workspace}} è in pausa. Chiedi a un amministratore o al proprietario di passare a Business per usarla di nuovo nella dettatura.",
+        "pausedMember_many": "Le {{count}} di parole condivise di {{workspace}} sono in pausa. Chiedi a un amministratore o al proprietario di passare a Business per usarle di nuovo nella dettatura.",
+        "pausedMember_other": "Le {{count}} parole condivise di {{workspace}} sono in pausa. Chiedi a un amministratore o al proprietario di passare a Business per usarle di nuovo nella dettatura."
       },
       "empty": {
         "body": "Aggiungi i termini che usa questo team o condividine alcuni dal tuo elenco personale. Tutti in {{list}} ({{count}}) li riceveranno.",
@@ -3664,11 +3685,20 @@
       },
       "arrival": {
         "title_one": "{{count}} parola del team aggiunta",
+        "title_many": "{{count}} di parole del team aggiunte",
         "title_other": "{{count}} parole del team aggiunte",
         "description": "Le parole condivise di {{workspace}} ora valgono per il tuo dettato e per le note delle riunioni.",
         "descriptionNoWorkspace": "Le parole condivise del tuo team ora valgono per il tuo dettato e per le note delle riunioni.",
         "viewWords": "Vedi le parole"
-      }
+      },
+      "lockedEntry": "Bloccata",
+      "notTermLike": "Le liste condivise accettano solo termini brevi: al massimo 64 caratteri e 6 parole, senza virgole, punteggiatura di frase, simboli come < > { } [ ] ` | o caratteri invisibili",
+      "notUsed": "Non usata nella dettatura",
+      "notUsedTooltip": "La dettatura esclude le parole condivise con più di 64 caratteri o 6 parole, o con virgole, punteggiatura di frase, simboli come < > { } [ ] ` | o caratteri invisibili",
+      "badgeMore": "{{list}} +{{extra}}",
+      "skipped_one": "{{count}} parola è stata esclusa: {{words}}",
+      "skipped_many": "{{count}} di parole sono state escluse: {{words}}",
+      "skipped_other": "{{count}} parole sono state escluse: {{words}}"
     }
   },
   "insights": {

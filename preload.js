@@ -1280,8 +1280,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("db-get-dictionary-by-client-id", clientDictId),
   upsertDictionaryFromCloud: (cloudEntry) =>
     ipcRenderer.invoke("db-upsert-dictionary-from-cloud", cloudEntry),
-  markDictionarySynced: (id, cloudId) =>
-    ipcRenderer.invoke("db-mark-dictionary-synced", id, cloudId),
+  markDictionarySynced: (id, cloudId, pushed) =>
+    ipcRenderer.invoke("db-mark-dictionary-synced", id, cloudId, pushed),
   hardDeleteDictionary: (id) => ipcRenderer.invoke("db-hard-delete-dictionary", id),
   clearDictionaryCloudId: (id) => ipcRenderer.invoke("db-clear-dictionary-cloud-id", id),
   broadcastDictionaryUpdated: () => ipcRenderer.invoke("db-broadcast-dictionary-updated"),
@@ -1290,8 +1290,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
   markDictionaryWordsShared: (words, sharedAt) =>
     ipcRenderer.invoke("db-mark-dictionary-words-shared", words, sharedAt),
   getMovedDictionaryWords: () => ipcRenderer.invoke("db-get-moved-dictionary-words"),
-  retireMovedDictionaryWords: (words) =>
-    ipcRenderer.invoke("db-retire-moved-dictionary-words", words),
+  retireMovedDictionaryWords: (words, options) =>
+    ipcRenderer.invoke("db-retire-moved-dictionary-words", words, options),
+  reviveRetiredDictionaryWords: (words) =>
+    ipcRenderer.invoke("db-revive-retired-dictionary-words", words),
 
   getSharedDictionary: (workspaceId) => ipcRenderer.invoke("db-shared-dictionary-get", workspaceId),
   applySharedDictionaryPull: (workspaceId, change) =>
@@ -1304,6 +1306,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("db-shared-dictionary-replace-hides", workspaceId, hidden),
   clearSharedDictionary: (workspaceId) =>
     ipcRenderer.invoke("db-shared-dictionary-clear", workspaceId),
+  pruneSharedDictionary: (keepWorkspaceIds) =>
+    ipcRenderer.invoke("db-shared-dictionary-prune", keepWorkspaceIds),
   setSharedDictionaryHints: (hints) => ipcRenderer.invoke("dictionary-set-shared-hints", hints),
 
   getPendingSnippets: () => ipcRenderer.invoke("db-get-pending-snippets"),

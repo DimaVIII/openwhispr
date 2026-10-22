@@ -33,3 +33,69 @@ test("formatDictionaryPrompt returns an empty string for empty tiers", async () 
   const { formatDictionaryPrompt } = await load();
   assert.equal(formatDictionaryPrompt([[], [], []], 900), "");
 });
+
+test("shared limits bound only the shared fill, never the personal tier", async () => {
+  const { formatDictionaryPrompt } = await load();
+  const personal = ["P1", "P2"];
+  // sharedChars caps the whole prompt once shared words join it.
+  assert.equal(
+    formatDictionaryPrompt([personal, ["S1"], ["W1"]], 900, { sharedChars: 10 }),
+    "S1, P1, P2"
+  );
+  assert.equal(
+    formatDictionaryPrompt([personal, ["S1", "S2"], []], 900, { sharedWords: 1 }),
+    "S1, P1, P2"
+  );
+  assert.equal(
+    formatDictionaryPrompt([personal, ["S1"], ["W1"]], 900, { totalTerms: 3 }),
+    "S1, P1, P2"
+  );
+  // A personal tier past every shared limit is kept whole and takes no shared words.
+  assert.equal(
+    formatDictionaryPrompt([personal, ["S1"], []], 900, { sharedChars: 1, totalTerms: 1 }),
+    "P1, P2"
+  );
+  // Without shared words the limits change nothing.
+  assert.equal(
+    formatDictionaryPrompt([personal, [], []], 900, {
+      sharedChars: 1,
+      sharedWords: 0,
+      totalTerms: 0,
+    }),
+    "P1, P2"
+  );
+});
+
+test("totalTerms counts a personal entry with commas as the terms a provider splits it into", async () => {
+  const { formatDictionaryPrompt } = await load();
+  assert.equal(
+    formatDictionaryPrompt([["Smith, John"], ["S1"], []], 900, { totalTerms: 2 }),
+    "Smith, John"
+  );
+  assert.equal(
+    formatDictionaryPrompt([["Smith, John"], ["S1"], []], 900, { totalTerms: 3 }),
+    "S1, Smith, John"
+  );
+});
+
+test("selectDictionaryPromptTiers returns the kept words highest priority first", async () => {
+  const { selectDictionaryPromptTiers } = await load();
+  assert.deepEqual(selectDictionaryPromptTiers([["P1"], ["S1"], ["W1", "W2"]], 12), [
+    ["P1"],
+    ["S1"],
+    ["W1"],
+  ]);
+});
+
+test("sharedDictionaryPromptChars caps Whisper-style budgets at the decoder window", async () => {
+  const {
+    sharedDictionaryPromptChars,
+    GROQ_PROMPT_CHARS,
+    WHISPER_PROMPT_CHARS,
+    WHISPER_DECODER_PROMPT_CHARS,
+    TRANSCRIBE_PROMPT_CHARS,
+  } = await load();
+  assert.equal(sharedDictionaryPromptChars(GROQ_PROMPT_CHARS), WHISPER_DECODER_PROMPT_CHARS);
+  assert.equal(sharedDictionaryPromptChars(WHISPER_PROMPT_CHARS), WHISPER_DECODER_PROMPT_CHARS);
+  assert.equal(sharedDictionaryPromptChars(TRANSCRIBE_PROMPT_CHARS), TRANSCRIBE_PROMPT_CHARS);
+});

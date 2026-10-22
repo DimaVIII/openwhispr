@@ -112,6 +112,7 @@ export interface DictationRealtimeSessionOptions {
   pipelineOptions?: {
     agentName?: string;
     customDictionary?: string[];
+    sharedDictionary?: string[];
     customPrompt?: string;
     tone?: DictationTone;
     appCategory?: ToneAppCategory;
@@ -705,6 +706,10 @@ export interface DictionaryEntryItem {
   deleted_at: string | null;
   // Set once the word was shared into a team list; the row stays live.
   shared_at: string | null;
+  // 1 while a local set or clear of shared_at awaits its push.
+  shared_at_dirty?: number;
+  // 1 on a local tombstone of a moved word whose shared copy went.
+  fallback_retired?: number;
 }
 
 export interface SnippetEntryItem {
@@ -2683,6 +2688,7 @@ declare global {
           model?: string;
           agentName?: string;
           customDictionary?: string[];
+          sharedDictionary?: string[];
           customPrompt?: string;
           systemPrompt?: string;
           requestPurpose?: "agent";
@@ -3743,9 +3749,11 @@ declare global {
       upsertDictionaryFromCloud?: (
         cloudEntry: Record<string, unknown>
       ) => Promise<DictionaryEntryItem | null>;
+      /** `pushed` (the row as pushed) keeps a row edited since then pending. */
       markDictionarySynced?: (
         id: number,
-        cloudId: string
+        cloudId: string,
+        pushed?: Pick<DictionaryEntryItem, "word" | "shared_at" | "updated_at">
       ) => Promise<{ success: boolean; changes: number }>;
       hardDeleteDictionary?: (id: number) => Promise<{ success: boolean; id: number }>;
       clearDictionaryCloudId?: (id: number) => Promise<{ success: boolean }>;
@@ -3762,7 +3770,13 @@ declare global {
       /** Live personal words that were shared into a team list. */
       getMovedDictionaryWords?: () => Promise<string[]>;
       /** Removes moved personal words whose shared copy is gone for the sharer. */
-      retireMovedDictionaryWords?: (words: string[]) => Promise<{ retired: string[] }>;
+      /** `includeSynced: false` leaves rows the cloud has to the personal pull. */
+      retireMovedDictionaryWords?: (
+        words: string[],
+        options?: { includeSynced?: boolean }
+      ) => Promise<{ retired: string[] }>;
+      /** Brings back fallbacks retired for these words, once their shared copy returns. */
+      reviveRetiredDictionaryWords?: (words: string[]) => Promise<{ revived: string[] }>;
 
       getSharedDictionary?: (workspaceId: string) => Promise<SharedDictionarySnapshot>;
       applySharedDictionaryPull?: (
@@ -3781,9 +3795,11 @@ declare global {
       replaceSharedDictionaryHides?: (
         workspaceId: string,
         hidden: SharedDictionaryHideRecord[]
-      ) => Promise<void>;
-      /** With no workspace, clears every workspace's shared words. */
-      clearSharedDictionary?: (workspaceId?: string) => Promise<void>;
+      ) => Promise<{ changed: number }>;
+      /** With no workspace, clears every workspace's shared words. `changed` counts rows removed. */
+      clearSharedDictionary?: (workspaceId?: string) => Promise<{ changed: number }>;
+      /** Clears every workspace's shared words except these workspaces'. */
+      pruneSharedDictionary?: (keepWorkspaceIds: string[]) => Promise<{ changed: number }>;
       /** Tells main which shared words apply, so auto-learn skips them. */
       setSharedDictionaryHints?: (hints: SharedHintWords) => Promise<void>;
 

@@ -1,5 +1,5 @@
 import type { TFunction } from "i18next";
-import type { ListKey } from "../../stores/sharedDictionaryStore";
+import type { ListKey, SharedDictionaryStatus } from "../../stores/sharedDictionaryStore";
 import type { ShareTarget } from "../../services/sharedDictionaryActions";
 import type { Workspace } from "../../types/electron";
 import type {
@@ -8,6 +8,8 @@ import type {
 } from "../../types/sharedDictionary";
 import { hasSharedDictionaryPlan } from "../../lib/workspaceBilling";
 import { canManageWorkspace } from "../../lib/spacePermissions";
+import { isTermLikeSharedWord } from "../../utils/sharedDictionaryHints";
+import { dictionaryWordKey } from "../../utils/snippets";
 
 export type SortKey = "az" | "za" | "newest" | "oldest";
 
@@ -19,7 +21,14 @@ export const SORT_LABEL_KEYS: Record<SortKey, string> = {
 };
 
 export type SharedAccessState =
-  "unavailable" | "noWorkspace" | "upgradeAdmin" | "upgradeMember" | "paused" | "available";
+  | "unavailable"
+  | "noWorkspace"
+  | "ssoRequired"
+  | "noAccess"
+  | "upgradeAdmin"
+  | "upgradeMember"
+  | "paused"
+  | "available";
 
 export interface PickerEntry {
   key: ListKey;
@@ -34,11 +43,21 @@ export interface DictionaryRow {
   key: string;
   word: string;
   kind: "personal" | "shared";
+  // The entry an edit renames: for a word in several lists, the copy dictation ranks first.
   entryId: string | null;
+  // Every shared copy the row stands for. All words lists a word once, so
+  // hiding or deleting it there acts on each copy rather than revealing the next.
+  entryIds: string[];
   // The list a shared row belongs to, shown where a list mixes several.
   badge: string | null;
+  // How many more lists hold the word, shown as "+n" beside the badge.
+  otherLists: number;
   attribution: "you" | "former" | { name: string } | null;
   createdAt: string | null;
+  // A personal word's place in the dictionary, which keeps the order words were added.
+  addedIndex: number | null;
+  // False for a shared word dictation leaves out (see isTermLikeSharedWord).
+  usedInDictation: boolean;
 }
 
 type Snapshot = SharedDictionarySnapshot | null;
@@ -59,19 +78,23 @@ interface SharedRowOptions {
   attribution: boolean;
 }
 
-const wordKey = (word: string): string => word.trim().toLowerCase();
+// The key dictation dedupes by, so a list never shows two rows dictation treats as one word.
+const wordKey = dictionaryWordKey;
 
 export function resolveSharedAccessState(input: {
-  capabilityAvailable: boolean;
+  status: SharedDictionaryStatus;
   workspace: Workspace | null;
   // The server's flag. It is set on every answer for a workspace without the
   // plan, so it only means "paused" when there are words to pause.
   serverPaused: boolean | null;
   hasWords: boolean;
 }): SharedAccessState {
-  const { capabilityAvailable, workspace, serverPaused, hasWords } = input;
-  if (!capabilityAvailable) return "unavailable";
+  const { status, workspace, serverPaused, hasWords } = input;
+  if (status === "unavailable") return "unavailable";
   if (!workspace) return "noWorkspace";
+  // Neither can be fixed from a plan, so they come before the plan checks.
+  if (status === "ssoRequired") return "ssoRequired";
+  if (status === "noAccess") return "noAccess";
   if (serverPaused === true && hasWords) return "paused";
   if (!hasSharedDictionaryPlan(workspace)) {
     return canManageWorkspace(workspace.role) ? "upgradeAdmin" : "upgradeMember";
@@ -121,6 +144,13 @@ export function visiblePersonalWords(
   });
 }
 
+// The workspace list's name; without a workspace name it reads as the locked panel does.
+export function workspaceListLabel(workspaceName: string, t: TFunction): string {
+  return workspaceName.trim()
+    ? t("dictionary.shared.everyoneAt", { workspace: workspaceName })
+    : t("dictionary.shared.locked.workspaceTitle");
+}
+
 function scopeName(snapshot: Snapshot, spaceId: string | null, workspaceName: string): string {
   if (spaceId === null) return workspaceName;
   const scope = snapshot?.meta?.scopes.find((candidate) => candidate.space_id === spaceId);
@@ -145,31 +175,47 @@ function attributionFor(
 function sharedRow(
   entry: SharedDictionarySnapshotEntry,
   input: RowsInput,
-  options: SharedRowOptions
+  options: SharedRowOptions,
+  // The other copies of the word this row stands for, in All words.
+  others: SharedDictionarySnapshotEntry[] = []
 ): DictionaryRow {
   return {
     key: `shared:${entry.cloudId}`,
     word: entry.word,
     kind: "shared",
     entryId: entry.cloudId,
+    entryIds: [entry.cloudId, ...others.map((other) => other.cloudId)],
     badge: options.badge ? scopeName(input.snapshot, entry.spaceId, input.workspaceName) : null,
+    otherLists: options.badge ? new Set(others.map((other) => other.spaceId)).size : 0,
     attribution: options.attribution
       ? attributionFor(entry, input.snapshot, input.currentUserId)
       : null,
     createdAt: entry.createdAt,
+    addedIndex: null,
+    usedInDictation: isTermLikeSharedWord(entry.word),
   };
 }
 
-function personalRow(word: string): DictionaryRow {
+// Keyed by the exact spelling: case variants are separate personal words.
+function personalRow(word: string, addedIndex: number): DictionaryRow {
   return {
-    key: `personal:${wordKey(word)}`,
+    key: `personal:${word}`,
     word,
     kind: "personal",
     entryId: null,
+    entryIds: [],
     badge: null,
+    otherLists: 0,
     attribution: null,
     createdAt: null,
+    addedIndex,
+    usedInDictation: true,
   };
+}
+
+function personalRows(input: RowsInput): DictionaryRow[] {
+  const order = new Map(input.personal.map((word, index) => [word, index]));
+  return personalWordsShown(input).map((word) => personalRow(word, order.get(word) ?? 0));
 }
 
 // Space words rank above workspace words, as they do in dictation hints.
@@ -193,21 +239,31 @@ function personalWordsShown(input: RowsInput): string[] {
 function allWordsRows(input: RowsInput): DictionaryRow[] {
   const seen = new Set<string>();
   const rows: DictionaryRow[] = [];
-  for (const word of personalWordsShown(input)) {
-    const key = wordKey(word);
+  for (const row of personalRows(input)) {
+    const key = wordKey(row.word);
     if (seen.has(key)) continue;
     seen.add(key);
-    rows.push(personalRow(word));
+    rows.push(row);
   }
   // Shared words only join All words while they apply.
   if (input.access !== "available") return rows;
+  const copies = new Map<string, SharedDictionarySnapshotEntry[]>();
   for (const entry of spaceEntriesFirst(visibleSharedEntries(input.snapshot))) {
     const key = wordKey(entry.word);
     if (seen.has(key)) continue;
-    seen.add(key);
-    rows.push(sharedRow(entry, input, { badge: true, attribution: false }));
+    const list = copies.get(key);
+    if (list) list.push(entry);
+    else copies.set(key, [entry]);
+  }
+  for (const [first, ...others] of copies.values()) {
+    rows.push(sharedRow(first, input, { badge: true, attribution: false }, others));
   }
   return rows;
+}
+
+// True while All words lists only personal words, so it shows what Personal does.
+export function allWordsArePersonal(snapshot: Snapshot, access: SharedAccessState): boolean {
+  return access !== "available" || visibleSharedEntries(snapshot).length === 0;
 }
 
 function unsortedRows(list: ListKey, input: RowsInput): DictionaryRow[] {
@@ -221,7 +277,7 @@ function unsortedRows(list: ListKey, input: RowsInput): DictionaryRow[] {
     case "all":
       return allWordsRows(input);
     case "personal":
-      return personalWordsShown(input).map(personalRow);
+      return personalRows(input);
     case "allShared":
       // One row per list entry: the same word in two lists is two rows.
       return visibleSharedEntries(snapshot).map((entry) =>
@@ -238,34 +294,54 @@ function unsortedRows(list: ListKey, input: RowsInput): DictionaryRow[] {
   }
 }
 
+// One collator for every comparison: localeCompare builds one per call, which
+// costs hundreds of milliseconds per keystroke on a large workspace.
+const wordCollator = new Intl.Collator(undefined, { sensitivity: "base" });
+
 function timestamp(row: DictionaryRow): number | null {
   if (!row.createdAt) return null;
   const parsed = Date.parse(row.createdAt);
   return Number.isNaN(parsed) ? null : parsed;
 }
 
-function compareRows(sort: SortKey): (left: DictionaryRow, right: DictionaryRow) => number {
+/**
+ * Newest and oldest: shared words by the date they were added; personal words
+ * have no date, so they follow the dated words in the order they were added to
+ * the dictionary (the newest last added). Words without either come last, A–Z.
+ */
+function sortRows(rows: DictionaryRow[], sort: SortKey): DictionaryRow[] {
   const byWord = (left: DictionaryRow, right: DictionaryRow): number =>
-    left.word.localeCompare(right.word, undefined, { sensitivity: "base" });
-  if (sort === "az") return byWord;
-  if (sort === "za") return (left, right) => byWord(right, left);
+    wordCollator.compare(left.word, right.word);
+  if (sort === "az") return [...rows].sort(byWord);
+  if (sort === "za") return [...rows].sort((left, right) => byWord(right, left));
   const direction = sort === "newest" ? -1 : 1;
-  return (left, right) => {
-    const leftTime = timestamp(left);
-    const rightTime = timestamp(right);
-    // Rows without a date (personal words) sort last either way.
-    if (leftTime === null && rightTime === null) return byWord(left, right);
-    if (leftTime === null) return 1;
-    if (rightTime === null) return -1;
-    return leftTime === rightTime ? byWord(left, right) : direction * (leftTime - rightTime);
-  };
+  // Dates are parsed once per row rather than once per comparison.
+  const decorated = rows.map((row) => ({ row, time: timestamp(row) }));
+  const rank = (time: number | null, row: DictionaryRow): number =>
+    time !== null ? 0 : row.addedIndex !== null ? 1 : 2;
+  decorated.sort((left, right) => {
+    const leftRank = rank(left.time, left.row);
+    const rightRank = rank(right.time, right.row);
+    if (leftRank !== rightRank) return leftRank - rightRank;
+    if (leftRank === 0 && left.time !== right.time) {
+      return direction * ((left.time as number) - (right.time as number));
+    }
+    if (leftRank === 1) {
+      return direction * ((left.row.addedIndex as number) - (right.row.addedIndex as number));
+    }
+    return byWord(left.row, right.row);
+  });
+  return decorated.map(({ row }) => row);
+}
+
+// A case-insensitive substring match; run over sorted rows, it keeps their order.
+export function filterRows(rows: DictionaryRow[], search: string): DictionaryRow[] {
+  const needle = search.trim().toLowerCase();
+  return needle ? rows.filter((row) => row.word.toLowerCase().includes(needle)) : rows;
 }
 
 export function rowsForList(list: ListKey, input: RowsInput): DictionaryRow[] {
-  const needle = input.search.trim().toLowerCase();
-  const rows = unsortedRows(list, input);
-  const matching = needle ? rows.filter((row) => row.word.toLowerCase().includes(needle)) : rows;
-  return [...matching].sort(compareRows(input.sort));
+  return filterRows(sortRows(unsortedRows(list, input), input.sort), input.search);
 }
 
 export function buildPicker(input: {
@@ -317,7 +393,7 @@ export function buildPicker(input: {
     },
     {
       key: "workspace",
-      label: t("dictionary.shared.everyoneAt", { workspace: workspaceName }),
+      label: workspaceListLabel(workspaceName, t),
       count: countIn(null),
       locked,
       group: "shared",
@@ -336,13 +412,16 @@ export function buildPicker(input: {
     });
   }
 
-  entries.push({
-    key: "hidden",
-    label: t("dictionary.shared.hidden"),
-    count: snapshot ? hiddenSharedEntries(snapshot).length : null,
-    locked,
-    group: "bottom",
-  });
+  // Hiding is for words that apply; a paused workspace keeps the words it hid.
+  if (access === "available" || access === "paused") {
+    entries.push({
+      key: "hidden",
+      label: t("dictionary.shared.hidden"),
+      count: snapshot ? hiddenSharedEntries(snapshot).length : null,
+      locked,
+      group: "bottom",
+    });
+  }
   return entries;
 }
 
@@ -379,10 +458,7 @@ export function shareTargetsFor(
     );
     return {
       target: scope.space_id,
-      label:
-        scope.space_id === null
-          ? t("dictionary.shared.everyoneAt", { workspace: workspaceName })
-          : scope.name,
+      label: scope.space_id === null ? workspaceListLabel(workspaceName, t) : scope.name,
       memberCount: scope.member_count,
       alreadyShared: wanted.length > 0 && wanted.every((word) => inList.has(word)),
     };

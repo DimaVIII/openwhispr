@@ -177,7 +177,7 @@ const TableMark = glyph(
 );
 
 // The Dictionary page's "Hide for me": Nucleo has an eye but no crossed-out one
-// (Lucide's eye-off shape).
+// (Lucide's eye-off shape; Lucide is ISC licensed, https://lucide.dev/license).
 const EyeOffMark = glyph(
   <>
     <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />

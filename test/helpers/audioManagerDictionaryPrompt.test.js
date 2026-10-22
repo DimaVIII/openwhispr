@@ -123,7 +123,11 @@ test("the OpenAI transcription request carries the formatted prompt", async (t) 
     }).processWithOpenAIAPI(audioBlob(), {});
 
     const prompt = requests[0].prompt;
-    assert.ok(prompt.length <= 890, `groq prompt must stay capped, got ${prompt.length}`);
+    assert.ok(
+      prompt.length <= 550,
+      `shared words stop at the decoder window, got ${prompt.length}`
+    );
+    assert.ok(prompt.length > 530, "the decoder window is filled");
     assert.ok(prompt.endsWith("Piha, Biscuit, my sig"), "personal words and triggers are the tail");
     assert.ok(prompt.startsWith("Team0000"), "shared words are cut from the end of their tier");
   });
@@ -150,7 +154,7 @@ test("the OpenAI transcription request carries the formatted prompt", async (t) 
     assert.ok(prompt.endsWith(", Piha"));
   });
 
-  await t.test("gpt-transcribe sends personal words as its first keywords", async (st) => {
+  await t.test("gpt-transcribe sends personal words first and at most 100 shared", async (st) => {
     setSettings(
       dictionarySettings({ personal: ["Piha"], space: ["S1"], workspace: teamWords("Team", 950) })
     );
@@ -159,9 +163,65 @@ test("the OpenAI transcription request carries the formatted prompt", async (t) 
     await openAIManager({ model: "gpt-transcribe" }).processWithOpenAIAPI(audioBlob(), {});
 
     const { keywords, prompt } = requests[0];
-    assert.equal(keywords.length, 900);
+    assert.equal(keywords.length, 1 + 100);
     assert.deepEqual(keywords.slice(0, 3), ["Piha", "S1", "Team0000"]);
-    assert.equal(prompt, teamWords("Team", 950).slice(898).join(", "));
+    assert.equal(prompt, null, "no shared word rides in the overflow prompt");
+  });
+
+  await t.test("gpt-transcribe overflow still carries a long personal list", async (st) => {
+    const personal = teamWords("Mine", 950);
+    setSettings(dictionarySettings({ personal, workspace: ["Team"] }));
+    const requests = captureRequests(st);
+
+    await openAIManager({ model: "gpt-transcribe" }).processWithOpenAIAPI(audioBlob(), {});
+
+    const { keywords, prompt } = requests[0];
+    assert.deepEqual(keywords, personal.slice(0, 900));
+    assert.equal(prompt, [...personal.slice(900), "Team"].join(", "));
+  });
+
+  await t.test("gpt-4o-transcribe carries at most 100 shared words", async (st) => {
+    setSettings(dictionarySettings({ personal: ["Piha"], workspace: teamWords("Team", 500) }));
+    const requests = captureRequests(st);
+
+    await openAIManager({ model: "gpt-4o-transcribe" }).processWithOpenAIAPI(audioBlob(), {});
+
+    assert.equal(
+      requests[0].prompt,
+      [...teamWords("Team", 100), "Piha"].join(", "),
+      "the 4o budget is large, but the shared list is capped like every other STT path"
+    );
+  });
+
+  await t.test("a personal-only list is sent as it always was", async (st) => {
+    setSettings(dictionarySettings({ personal: ["Piha", "Biscuit"] }));
+    const requests = captureRequests(st);
+
+    await openAIManager({ model: "gpt-4o-transcribe" }).processWithOpenAIAPI(audioBlob(), {});
+    await openAIManager({}).processWithOpenAIAPI(audioBlob(), {});
+    await openAIManager({ model: "gpt-transcribe" }).processWithOpenAIAPI(audioBlob(), {});
+
+    assert.equal(requests[0].prompt, "Piha, Biscuit");
+    assert.equal(requests[1].prompt, "Piha, Biscuit");
+    assert.deepEqual(requests[2].keywords, ["Piha", "Biscuit"]);
+    assert.equal(requests[2].prompt, null);
+  });
+
+  await t.test("a personal word longer than the budget is dropped, never cut", async (st) => {
+    const long = "x".repeat(950);
+    setSettings(dictionarySettings({ personal: [long], workspace: ["Team"] }));
+    const requests = captureRequests(st);
+    const manager = openAIManager({});
+    let echoPrompts = null;
+    manager.isDictionaryEcho = (_text, prompt, personalPrompt) => {
+      echoPrompts = [prompt, personalPrompt];
+      return false;
+    };
+
+    await manager.processWithOpenAIAPI(audioBlob(), {});
+
+    assert.equal(requests[0].prompt, null, "no fragment of the word is sent");
+    assert.deepEqual(echoPrompts, [null, null], "echo checks read the capped (empty) prompt");
   });
 });
 
@@ -187,9 +247,20 @@ test("paths with no provider limit still send a long personal list whole", async
     // prompt that opens with shared words stays inside Groq's limit.
     setSettings(dictionarySettings({ personal: ["Piha"], workspace: teamWords("Team", 300) }));
     const prompt = createManager().getCustomDictionaryPrompt();
-    assert.ok(prompt.length <= 890, `shared words stay inside Groq's budget, got ${prompt.length}`);
-    assert.ok(prompt.length > 880, "the budget is used, not a smaller one");
+    assert.ok(
+      prompt.length <= 550,
+      `shared words stop at the decoder window, got ${prompt.length}`
+    );
+    assert.ok(prompt.length > 530, "the window is used, not a smaller one");
     assert.ok(prompt.endsWith(", Piha"));
+
+    // The Cloud API's Gemini route keeps the first 100 terms, which the shared
+    // words open, so they stop before the total reaches it.
+    const short = (prefix, count) => Array.from({ length: count }, (_, i) => `${prefix}${i}`);
+    setSettings(dictionarySettings({ personal: short("p", 30), workspace: short("w", 300) }));
+    const terms = createManager().getCustomDictionaryPrompt().split(", ");
+    assert.equal(terms.length, 100);
+    assert.deepEqual(terms.slice(70), short("p", 30));
   });
 
   await t.test("with a Chinese script bias the whole prompt stays inside Groq's limit", () => {
@@ -199,7 +270,7 @@ test("paths with no provider limit still send a long personal list whole", async
     const prompt = manager.getWhisperPrompt();
 
     assert.ok(prompt.startsWith(`${ZH_CN_BIAS} Team0000, `));
-    assert.ok(prompt.length <= 890, `bias plus dictionary must fit, got ${prompt.length}`);
+    assert.ok(prompt.length <= 550, `bias plus dictionary must fit, got ${prompt.length}`);
     assert.ok(prompt.endsWith(", Piha"));
   });
 
@@ -227,14 +298,95 @@ test("paths with no provider limit still send a long personal list whole", async
   });
 });
 
-test("dictation keyterms keep every personal word and at most 100 shared ones", async (t) => {
+test("dictation keyterms keep every personal word and fill shared ones to 100", async (t) => {
   const { setSettings, createManager } = await setUp(t, "openwhispr-dictionary-keyterms-");
   setSettings(dictionarySettings({ personal: ["Piha"], workspace: teamWords("Team", 500) }));
 
   const keyterms = createManager().getKeyterms();
 
   assert.equal(keyterms[0], "Piha");
-  assert.equal(keyterms.length, 1 + 100);
+  assert.equal(keyterms.length, 100);
   // The echo strip still knows every shared word the prompt may have carried.
   assert.equal(createManager().getCustomDictionaryArray().length, 1 + 500);
+});
+
+test("Mistral's contextBias keeps personal words when a team list is long", async (t) => {
+  const { window, setSettings, createManager } = await setUp(t, "openwhispr-dictionary-mistral-");
+  const payloads = [];
+  window.electronAPI.proxyMistralTranscription = async (payload) => {
+    payloads.push(payload);
+    return { text: "transcribed text" };
+  };
+  const manager = () =>
+    createManager({
+      getEffectiveSttLanguage: () => "auto",
+      getTranscriptionModel: () => "voxtral-mini-latest",
+      getAPIKey: async () => "test-key",
+      getKeyterms: () => [],
+      shouldStreamTranscription: () => false,
+      processTranscription: async (text) => text,
+      isReasoningAvailable: async () => false,
+    });
+
+  setSettings(
+    dictionarySettings({
+      cloudTranscriptionProvider: "mistral",
+      personal: ["Piha", "Biscuit"],
+      workspace: teamWords("Team", 300),
+    })
+  );
+  await manager().processWithOpenAIAPI(audioBlob(), {});
+  assert.deepEqual(payloads[0].contextBias.slice(0, 3), ["Piha", "Biscuit", "Team0000"]);
+  assert.ok(payloads[0].contextBias.length <= 100);
+
+  setSettings(
+    dictionarySettings({ cloudTranscriptionProvider: "mistral", personal: ["Piha", "Gizmo Labs"] })
+  );
+  await manager().processWithOpenAIAPI(audioBlob(), {});
+  assert.deepEqual(payloads[1].contextBias, ["Piha", "Gizmo", "Labs"], "personal-only unchanged");
+});
+
+test("echoes are caught with shared words in the prompt", async (t) => {
+  const { setSettings, createManager } = await setUp(t, "openwhispr-dictionary-echo-shared-");
+  setSettings(
+    dictionarySettings({ personal: ["Piha", "Biscuit"], workspace: teamWords("Team", 300) })
+  );
+  const manager = createManager({ getEffectiveSttLanguage: () => "auto" });
+  const prompt = manager.getCustomDictionaryPrompt();
+
+  assert.equal(manager.isDictionaryEcho("Piha, Biscuit."), true, "an echo of the personal words");
+  assert.equal(manager.isDictionaryEcho(prompt), true, "an echo of the decoder window");
+  assert.equal(manager.isDictionaryEcho("Piha said the biscuit was great."), false);
+
+  // Personal-only behaves as before: the personal list is the whole prompt.
+  setSettings(dictionarySettings({ personal: ["Piha", "Biscuit"] }));
+  assert.equal(manager.isDictionaryEcho("Piha, Biscuit."), true);
+  assert.equal(manager.getPersonalDictionaryPrompt(), manager.getCustomDictionaryPrompt());
+});
+
+test("local whisper discards an echo of the personal words with shared words present", async (t) => {
+  const { window, setSettings, createManager } = await setUp(
+    t,
+    "openwhispr-dictionary-local-echo-shared-"
+  );
+  setSettings(
+    dictionarySettings({
+      useLocalWhisper: true,
+      localTranscriptionProvider: "whisper",
+      personal: ["Piha", "Biscuit"],
+      workspace: teamWords("Team", 300),
+    })
+  );
+  const calls = [];
+  window.electronAPI.transcribeLocalWhisper = async (_buf, options) => {
+    calls.push(options);
+    return { success: true, text: calls.length === 1 ? "Piha, Biscuit." : "real speech here" };
+  };
+  const manager = createManager({ getEffectiveSttLanguage: () => "auto" });
+
+  const result = await manager.processWithLocalWhisper(audioBlob(), "base", {});
+
+  assert.equal(calls.length, 2, "the echo triggers the prompt-free retry");
+  assert.equal(calls[1].initialPrompt, undefined);
+  assert.equal(result.rawText, "real speech here");
 });

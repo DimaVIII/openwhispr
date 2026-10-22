@@ -67,6 +67,8 @@ export interface SharedDictionaryShareResponse {
   created: CloudSharedEntry[];
   alreadyPresent: Array<{ space_id: string | null; word: string }>;
   movedPersonalIds: string[];
+  // Words the shared lists refused (id is the personal row's, null for a plain word).
+  rejected?: Array<{ id: string | null; word: string }>;
 }
 
 // What a pass stores alongside the entries: the lists the member can read,

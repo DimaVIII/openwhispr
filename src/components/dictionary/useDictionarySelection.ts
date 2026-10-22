@@ -10,6 +10,7 @@ export interface SelectionState {
 export type SelectionAction =
   | { type: "toggle"; key: string }
   | { type: "range"; key: string; orderedKeys: string[] }
+  // Adds every listed key; keys a search hides stay selected.
   | { type: "selectAll"; orderedKeys: string[] }
   // Drops keys of rows that left the list, so a row that comes back isn't still ticked.
   | { type: "retain"; orderedKeys: string[] }
@@ -40,7 +41,10 @@ export function selectionReducer(state: SelectionState, action: SelectionAction)
       return { selected, anchor: state.anchor };
     }
     case "selectAll":
-      return { selected: new Set(action.orderedKeys), anchor: state.anchor };
+      return {
+        selected: new Set([...state.selected, ...action.orderedKeys]),
+        anchor: state.anchor,
+      };
     case "retain": {
       const keep = new Set(action.orderedKeys);
       const selected = new Set([...state.selected].filter((key) => keep.has(key)));
@@ -54,24 +58,39 @@ export function selectionReducer(state: SelectionState, action: SelectionAction)
 }
 
 export interface DictionarySelection {
-  // Selected rows in list order.
+  // Selected rows in list order, including those the search hides.
   selectedRows: DictionaryRow[];
+  // Whether every row the search shows is selected.
+  allShownSelected: boolean;
   isSelected: (key: string) => boolean;
   toggle: (key: string, extend: boolean) => void;
   selectAll: () => void;
   clear: () => void;
 }
 
-export function useDictionarySelection(rows: DictionaryRow[]): DictionarySelection {
+/**
+ * `rows` are the rows shown (ranges and select-all work on them); `listRows`
+ * are all the open list's rows. Only a row that leaves the list is unselected,
+ * so a search narrowing what's shown keeps the rest of the selection.
+ */
+export function useDictionarySelection(
+  rows: DictionaryRow[],
+  listRows: DictionaryRow[]
+): DictionarySelection {
   const [state, dispatch] = useReducer(selectionReducer, EMPTY_SELECTION);
   const orderedKeys = useMemo(() => rows.map((row) => row.key), [rows]);
-  useEffect(() => dispatch({ type: "retain", orderedKeys }), [orderedKeys]);
+  const listKeys = useMemo(() => listRows.map((row) => row.key), [listRows]);
+  useEffect(() => dispatch({ type: "retain", orderedKeys: listKeys }), [listKeys]);
   // Filtered as well, for the render before the prune lands.
   const selectedRows = useMemo(
-    () => rows.filter((row) => state.selected.has(row.key)),
-    [rows, state.selected]
+    () => listRows.filter((row) => state.selected.has(row.key)),
+    [listRows, state.selected]
   );
   const visible = useMemo(() => new Set(selectedRows.map((row) => row.key)), [selectedRows]);
+  const allShownSelected = useMemo(
+    () => rows.length > 0 && rows.every((row) => visible.has(row.key)),
+    [rows, visible]
+  );
 
   const toggle = useCallback(
     (key: string, extend: boolean): void =>
@@ -85,5 +104,5 @@ export function useDictionarySelection(rows: DictionaryRow[]): DictionarySelecti
   const clear = useCallback((): void => dispatch({ type: "clear" }), []);
   const isSelected = useCallback((key: string): boolean => visible.has(key), [visible]);
 
-  return { selectedRows, isSelected, toggle, selectAll, clear };
+  return { selectedRows, allShownSelected, isSelected, toggle, selectAll, clear };
 }

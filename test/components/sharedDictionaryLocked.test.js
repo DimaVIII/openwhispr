@@ -52,6 +52,7 @@ async function renderLocked(props) {
     createElement(SharedDictionaryLocked, {
       workspaceName: "Acme",
       scopes: SCOPES,
+      canManage: true,
       onUpgrade() {},
       ...props,
     })
@@ -130,6 +131,7 @@ test("paused bar alone is the same bar a read-only list shows above its words", 
       access: "paused",
       workspaceName: "Acme",
       scopes: [{ space_id: null, name: "Acme", member_count: 3, word_count: 1 }],
+      canManage: true,
       onUpgrade() {},
     })
   );
@@ -137,6 +139,30 @@ test("paused bar alone is the same bar a read-only list shows above its words", 
   assert.ok(text.includes("Acme's 1 shared word is paused."));
   assert.ok(text.includes("View Plans"));
   assert.equal(count(markup, /opacity-60/g), 0);
+});
+
+test("a paused workspace asks a member to contact an admin or owner, with no button", async () => {
+  const markup = await renderLocked({ access: "paused", canManage: false });
+  const text = textOf(markup);
+  assert.ok(
+    text.includes(
+      "Acme's 127 shared words are paused. Ask an admin or owner to upgrade to Business to use them in dictation again."
+    )
+  );
+  assert.ok(text.includes("Engineering 31 words"));
+  assert.equal(count(markup, /<button/g), 0);
+});
+
+test("SSO and lost access explain themselves, with no lists and no button", async () => {
+  const sso = textOf(await renderLocked({ access: "ssoRequired" }));
+  assert.ok(sso.includes("Acme requires company SSO. Sign out, then sign in with SSO"));
+  assert.ok(!sso.includes("Engineering"));
+  assert.ok(!sso.includes("View Plans"));
+
+  const lost = await renderLocked({ access: "noAccess" });
+  assert.ok(textOf(lost).includes("You no longer have access to Acme's shared words."));
+  assert.equal(count(lost, /<button/g), 0);
+  assert.equal(count(lost, /opacity-60/g), 0);
 });
 
 test("an empty list names the list and its members, with both buttons", async () => {

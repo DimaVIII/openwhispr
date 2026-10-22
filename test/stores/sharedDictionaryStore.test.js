@@ -147,3 +147,70 @@ test("an account change empties the hints", async (t) => {
   assert.equal(state.workspaceId, null);
   assert.equal(state.requestedList, null);
 });
+
+test("an access status is kept per workspace and cleared by success or account change", async (t) => {
+  const ctx = await setup(t);
+  const store = () => ctx.useSharedDictionaryStore.getState();
+  const stored = () => JSON.parse(harness.localStorage.getItem("sharedDictionaryAccess"));
+  ctx.useWorkspaceStore.getState().setActiveWorkspaceId(W1);
+  await flush();
+
+  store().setStatus("noAccess");
+  assert.deepEqual(stored(), { [W1]: "noAccess" });
+  assert.equal(harness.localStorage.getItem("sharedDictionaryCapability"), "true");
+
+  // B's own status doesn't clear A's.
+  ctx.useWorkspaceStore.getState().setActiveWorkspaceId(W2);
+  await flush();
+  assert.equal(store().status, "ready", "another workspace isn't refused");
+  store().setStatus("ssoRequired");
+  store().setStatus("ready");
+  assert.deepEqual(stored(), { [W1]: "noAccess" });
+  ctx.useWorkspaceStore.getState().setActiveWorkspaceId(W1);
+  await flush();
+  assert.equal(store().status, "noAccess");
+
+  store().setStatus("ready");
+  assert.equal(stored(), null);
+
+  store().setStatus("ssoRequired");
+  store().resetForAccountChange();
+  assert.equal(store().status, "ready");
+  assert.equal(stored(), null);
+
+  // An API without the routes stays unavailable across workspaces.
+  store().setStatus("unavailable");
+  ctx.useWorkspaceStore.getState().setActiveWorkspaceId(W2);
+  await flush();
+  assert.equal(store().status, "unavailable");
+  store().setStatus("ready");
+});
+
+test("a status another window writes reaches this window's workspace only", async (t) => {
+  const ctx = await setup(t);
+  const {
+    handleSharedDictionaryStatusStorage,
+  } = require("../../src/stores/sharedDictionaryStore.ts");
+  const store = () => ctx.useSharedDictionaryStore.getState();
+  ctx.useWorkspaceStore.getState().setActiveWorkspaceId(W1);
+  await flush();
+  const otherWindowWrites = (map) => {
+    const value = map ? JSON.stringify(map) : null;
+    if (value) harness.localStorage.setItem("sharedDictionaryAccess", value);
+    else harness.localStorage.removeItem("sharedDictionaryAccess");
+    handleSharedDictionaryStatusStorage({ key: "sharedDictionaryAccess", newValue: value });
+  };
+
+  otherWindowWrites({ [W2]: "noAccess" });
+  assert.equal(store().status, "ready", "W2's refusal isn't this window's");
+
+  otherWindowWrites({ [W1]: "ssoRequired", [W2]: "noAccess" });
+  assert.equal(store().status, "ssoRequired");
+
+  otherWindowWrites({ [W2]: "noAccess" });
+  assert.equal(store().status, "ready", "its next good pass clears it here too");
+
+  handleSharedDictionaryStatusStorage({ key: "unrelated", newValue: "x" });
+  assert.equal(store().status, "ready");
+  otherWindowWrites(null);
+});

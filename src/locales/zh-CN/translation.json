@@ -3610,7 +3610,12 @@
       "undo": "撤销",
       "errors": {
         "generic": "无法更新 {{list}}，请重试。",
-        "listFull": "{{list}} 已满"
+        "listFull": "{{list}} 已满",
+        "planRequired": "共享词典需要 Business 方案，{{list}} 未更改",
+        "ssoRequired": "请使用公司 SSO 登录后再更改 {{list}}",
+        "notMember": "你已无法访问 {{list}}",
+        "invalid": "{{list}} 只接受简短词语：不超过 64 个字符和 6 个词，且不含逗号、句末标点或 < > { } [ ] ` | 等符号",
+        "recentlyDeleted": "该词语刚从 {{list}} 中删除，请重新添加。"
       },
       "deleteOneTitle": "要为 {{list}} 中的所有人删除“{{word}}”吗？",
       "deleteManyTitle_one": "要为 {{list}} 中的所有人删除 {{count}} 个词语吗？",
@@ -3653,7 +3658,10 @@
         "spaceTitle": "每个空间一个列表",
         "spaceDescription": "只有一个团队需要的词语",
         "wordCount_other": "{{count}} 个词语",
-        "lockLabel": "包含在 Business 方案中"
+        "lockLabel": "包含在 Business 方案中",
+        "ssoRequired": "{{workspace}} 要求使用公司 SSO。请退出后使用 SSO 重新登录，以使用其共享词语。",
+        "noAccess": "你已无法访问 {{workspace}} 的共享词语。如有疑问，请联系管理员。",
+        "pausedMember_other": "{{workspace}} 的 {{count}} 个共享词语已暂停。请让管理员或所有者升级到 Business，即可在听写中再次使用。"
       },
       "empty": {
         "body": "添加这个团队使用的术语，或从你的个人列表中共享一些。{{list}} 中的所有人（{{count}}）都会收到。",
@@ -3666,7 +3674,13 @@
         "description": "{{workspace}} 的共享词汇现已应用于你的听写和会议笔记。",
         "descriptionNoWorkspace": "你团队的共享词汇现已应用于你的听写和会议笔记。",
         "viewWords": "查看词汇"
-      }
+      },
+      "lockedEntry": "已锁定",
+      "notTermLike": "共享列表只接受简短词语：不超过 64 个字符和 6 个词，且不含逗号、句末标点、< > { } [ ] ` | 等符号或不可见字符",
+      "notUsed": "听写中不使用",
+      "notUsedTooltip": "超过 64 个字符或 6 个词，或包含逗号、句末标点、< > { } [ ] ` | 等符号或不可见字符的共享词语不会用于听写",
+      "badgeMore": "{{list}} +{{extra}}",
+      "skipped_other": "已略过 {{count}} 个词语：{{words}}"
     }
   },
   "insights": {

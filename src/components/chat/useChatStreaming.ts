@@ -42,7 +42,7 @@ import { createToolRegistry } from "../../services/tools";
 import type { SharedDictionaryWord } from "../../services/tools/dictionaryTool";
 import { setSharedWordsHidden } from "../../services/sharedDictionaryActions";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
-import { selectAppliedSharedEntries } from "../../utils/sharedDictionaryHints";
+import { selectAppliedSharedWords } from "../../utils/sharedDictionaryHints";
 import {
   executeTool,
   type HoldDeliveryOptions,
@@ -74,10 +74,7 @@ async function readAppliedSharedWords(): Promise<SharedDictionaryWord[]> {
   try {
     const snapshot = await window.electronAPI?.getSharedDictionary?.(workspaceId);
     if (!snapshot) return [];
-    return selectAppliedSharedEntries(snapshot).map((entry) => ({
-      id: entry.cloudId,
-      word: entry.word,
-    }));
+    return selectAppliedSharedWords(snapshot);
   } catch (error) {
     // The assistant then treats shared words as absent rather than failing the call.
     logger.warn(

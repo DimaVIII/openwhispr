@@ -240,13 +240,16 @@ function parseSharedHints(raw: string | null, activeWorkspaceId: string | null):
   try {
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== "object" || parsed === null) return EMPTY_SHARED_HINTS;
-    const { workspaceId, space, workspace } = parsed as Record<string, unknown>;
+    const { workspaceId, space, workspace, suppressedPersonal } = parsed as Record<string, unknown>;
     if (workspaceId !== null && typeof workspaceId !== "string") return EMPTY_SHARED_HINTS;
     if (workspaceId !== activeWorkspaceId) return EMPTY_SHARED_HINTS;
     if (!Array.isArray(space) || !Array.isArray(workspace)) return EMPTY_SHARED_HINTS;
     const words = (value: unknown[]): string[] =>
       value.filter((w): w is string => typeof w === "string");
-    return { space: words(space), workspace: words(workspace) };
+    const suppressed = Array.isArray(suppressedPersonal) ? words(suppressedPersonal) : [];
+    return suppressed.length > 0
+      ? { space: words(space), workspace: words(workspace), suppressedPersonal: suppressed }
+      : { space: words(space), workspace: words(workspace) };
   } catch {
     return EMPTY_SHARED_HINTS;
   }
@@ -2181,11 +2184,25 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   // data, so nothing is written back. Main gets a copy so auto-learn never adds a
   // word the workspace already applies. Cleared hints are EMPTY with no workspace.
   setSharedDictionaryHints: (hints: SharedHintWords, workspaceId: string | null) => {
-    if (isBrowser) {
-      localStorage.setItem(SHARED_HINTS_KEY, JSON.stringify({ workspaceId, ...hints }));
-      sendSharedHintsToMain(hints);
-    }
     set({ sharedDictionaryHints: hints });
+    if (!isBrowser) return;
+    sendSharedHintsToMain(hints);
+    try {
+      localStorage.setItem(SHARED_HINTS_KEY, JSON.stringify({ workspaceId, ...hints }));
+    } catch (err) {
+      // Quota: this window and main have the hints. Drop the stored copy so
+      // other windows and the next launch don't apply outdated words.
+      logger.warn(
+        "Failed to persist shared dictionary hints",
+        { error: (err as Error)?.message },
+        "settings"
+      );
+      try {
+        localStorage.removeItem(SHARED_HINTS_KEY);
+      } catch {
+        // Nothing more to do.
+      }
+    }
   },
 
   // Replaces the whole dictionary: anything absent from `words` is deleted.

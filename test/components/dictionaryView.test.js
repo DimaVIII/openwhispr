@@ -81,11 +81,19 @@ const MOCKS = {
   "/ui/tabs": `
     import { createElement } from "react";
     const Pass = ({ children }) => createElement("div", null, children);
-    export const Tabs = Pass;
+    export const Tabs = ({ children, value, onValueChange }) => {
+      globalThis.__tabs = { value, onValueChange };
+      return createElement("div", null, children);
+    };
     export const TabsList = Pass;
-    export const TabsTrigger = Pass;
+    export const TabsTrigger = ({ children, value }) =>
+      createElement(
+        "button",
+        { "data-tab": value, onClick: () => globalThis.__tabs.onValueChange(value) },
+        children
+      );
     export const TabsContent = ({ children, value }) =>
-      value === "dictionary" ? createElement("div", null, children) : null;
+      value === globalThis.__tabs?.value ? createElement("div", null, children) : null;
   `,
   "/ui/dialog": `
     import { createElement } from "react";
@@ -172,6 +180,7 @@ function setState(t, { initialStorage = {}, shared = {}, settings = {} } = {}) {
     role: "member",
   };
   globalThis.__shared = {
+    workspaceId: "ws",
     status: "ready",
     snapshot: SNAPSHOT,
     movedPersonal: [],
@@ -194,6 +203,7 @@ function setState(t, { initialStorage = {}, shared = {}, settings = {} } = {}) {
       "__settings",
       "__workspace",
       "__shared",
+      "__tabs",
     ]) {
       delete globalThis[key];
     }
@@ -208,10 +218,15 @@ async function renderView(t, options = {}) {
   });
   const { calls, initialStorage } = setState(t, options);
   const exported = [];
+  const syncListeners = new Set();
   const electronAPI = {
     exportDictionary: async (words) => {
       exported.push(words);
       return {};
+    },
+    onSyncEvent: (listener) => {
+      syncListeners.add(listener);
+      return () => syncListeners.delete(listener);
     },
   };
   const { storage } = installBrowserGlobals(t, { initialStorage, window: { electronAPI } });
@@ -225,10 +240,15 @@ async function renderView(t, options = {}) {
   // Loaded after the DOM is installed, so react-dom detects native input events.
   const { createRoot } = require("react-dom/client");
   root = createRoot(container);
-  await React.act(async () =>
-    root.render(createElement(DictionaryView, { onUpgrade: () => calls.push(["upgrade"]) }))
-  );
-  return { container, calls, storage, exported };
+  const rerender = () =>
+    React.act(async () =>
+      root.render(createElement(DictionaryView, { onUpgrade: () => calls.push(["upgrade"]) }))
+    );
+  await rerender();
+  const emitSyncEvent = (event) => {
+    for (const listener of syncListeners) listener(event);
+  };
+  return { container, calls, storage, exported, rerender, emitSyncEvent };
 }
 
 const click = (element) =>
@@ -308,14 +328,17 @@ test("renders picker entries with counts", async (t) => {
   assert.ok(calls.some(([name]) => name === "reload"));
 });
 
-test("the Shared group is not rendered while the feature is unavailable", async (t) => {
-  const { container } = await renderView(t);
-  globalThis.__shared.status = "unavailable";
-  await openList(container, "personal");
+test("without the shared dictionary the page is Personal alone, with Clear all and Export", async (t) => {
+  const { container } = await renderView(t, { shared: { status: "unavailable" } });
+  // All words would only repeat Personal, so there is no picker at all.
+  assert.equal(pickerEntry(container, "all"), null);
   assert.equal(pickerEntry(container, "allShared"), null);
-  assert.equal(pickerEntry(container, "hidden"), null);
-  assert.ok(pickerEntry(container, "all"));
   assert.ok(!container.textContent.includes("dictionary.shared.group"));
+  assert.ok(container.textContent.includes("dictionary.shared.personal · 2"));
+  assert.ok(rowFor(container, "OpenWhispr"));
+  assert.equal(rowFor(container, "ARR"), null);
+  assert.ok(byAttribute(container, "aria-label", "dictionary.clearAll"));
+  assert.ok(byAttribute(container, "aria-label", "dictionary.exportDictionary"));
 });
 
 test("mixed view shows list badges", async (t) => {
@@ -669,7 +692,9 @@ const shiftClick = (element) =>
 const keyDown = (element, key, extra = {}) =>
   React.act(async () => element.dispatchEvent(domEvent("keydown", { key, ...extra })));
 
-const toolbar = (container) => byAttribute(container, "role", "toolbar");
+// The floating selection bar, found by its accessible name.
+const toolbar = (container) =>
+  byAttribute(container, "aria-label", "dictionary.shared.selection.label");
 
 const barButton = (container, label) =>
   findElement(
@@ -716,10 +741,11 @@ test("⌘A selects all while the list has focus, Esc clears, and a new list star
   const list = container.querySelector("ul");
 
   // The add field keeps ⌘A for its text.
-  await keyDown(addInput(container), "a", { metaKey: true });
+  await keyDown(addInput(container), "a", { metaKey: true, code: "KeyA" });
   assert.equal(toolbar(container), null);
 
-  await keyDown(list, "a", { metaKey: true });
+  // By physical key: a Russian layout's ⌘A sends "ф".
+  await keyDown(list, "ф", { metaKey: true, code: "KeyA" });
   assert.equal(checkedWords(container).length, 5);
   await keyDown(list, "Escape");
   assert.equal(toolbar(container), null);
@@ -856,7 +882,7 @@ test("the Hidden list has no checkboxes", async (t) => {
 test("⌘A then Delete in Personal offers Undo, which adds every removed word back", async (t) => {
   const { container, calls } = await renderView(t, { settings: FIVE_WORDS });
   await openList(container, "personal");
-  await keyDown(container.querySelector("ul"), "a", { metaKey: true });
+  await keyDown(container.querySelector("ul"), "a", { metaKey: true, code: "KeyA" });
   await click(barButton(container, "dictionary.shared.actions.delete"));
 
   const removed = ["Biscuit", "Piha", "Qdrant", "sherpa-onnx", "Tiptap"];
@@ -929,7 +955,7 @@ test("a full list is named when known and generic when the share went to several
 });
 
 test("a ticked row that leaves the list isn't still ticked when it comes back", async (t) => {
-  const { container } = await renderView(t, { settings: FIVE_WORDS });
+  const { container, rerender } = await renderView(t, { settings: FIVE_WORDS });
   await openList(container, "personal");
   await click(checkboxFor(container, "Piha"));
   await click(checkboxFor(container, "Tiptap"));
@@ -944,8 +970,22 @@ test("a ticked row that leaves the list isn't still ticked when it comes back", 
     );
   await type(search(), "ti");
   assert.deepEqual(checkedWords(container), ["Tiptap"]);
+  // The search only hides Piha, so it stays selected and counted.
+  assert.ok(
+    toolbar(container).textContent.includes('dictionary.shared.selection.count{"count":2}')
+  );
 
   await type(search(), "");
+  assert.deepEqual(checkedWords(container), ["Piha", "Tiptap"], "a search never unticks");
+
+  // A word that is removed from the dictionary is unticked for good.
+  globalThis.__settings = { ...globalThis.__settings, customDictionary: ["Biscuit", "Tiptap"] };
+  await rerender();
+  globalThis.__settings = {
+    ...globalThis.__settings,
+    customDictionary: FIVE_WORDS.customDictionary,
+  };
+  await rerender();
   assert.deepEqual(checkedWords(container), ["Tiptap"], "Piha left the list, so it was unticked");
 });
 
@@ -1035,6 +1075,15 @@ test("an empty list imports into itself or sends the member to Personal", async 
   await click(buttonWithText(container, "dictionary.shared.empty.shareFromPersonal"));
   assert.equal(pickerEntry(container, "personal").getAttribute("aria-current"), "true");
   assert.ok(rowFor(container, "OpenWhispr"), "Personal is open");
+  // ...in select mode: the bar is up with nothing ticked yet, and the rows show their checkboxes.
+  assert.ok(
+    toolbar(container).textContent.includes('dictionary.shared.selection.count{"count":0}')
+  );
+  assert.deepEqual(ariaLabels(rowFor(container, "Supabase")), [
+    named("dictionary.shared.selection.selectWord", "Supabase"),
+  ]);
+  await click(byAttribute(container, "aria-label", "dictionary.shared.selection.clear"));
+  assert.equal(toolbar(container), null);
 });
 
 test("a list whose words are all hidden says so, without the empty list's buttons", async (t) => {
@@ -1047,4 +1096,250 @@ test("a list whose words are all hidden says so, without the empty list's button
   assert.ok(!container.textContent.includes("dictionary.shared.emptyList"));
   assert.equal(buttonWithText(container, "dictionary.shared.empty.import"), null);
   assert.equal(buttonWithText(container, "dictionary.shared.empty.shareFromPersonal"), null);
+});
+
+const focusOut = (element) =>
+  React.act(async () => element.dispatchEvent(domEvent("focusout", { relatedTarget: null })));
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+test("All words offers Clear all and Export while it lists only personal words", async (t) => {
+  const { container, rerender } = await renderView(t);
+  // Shared words apply here, so All words isn't Personal and keeps them out.
+  assert.equal(byAttribute(container, "aria-label", "dictionary.clearAll"), null);
+
+  globalThis.__workspace = { ...globalThis.__workspace, plan: "pro" };
+  await rerender();
+  assert.ok(byAttribute(container, "aria-label", "dictionary.clearAll"));
+  assert.ok(byAttribute(container, "aria-label", "dictionary.exportDictionary"));
+});
+
+for (const status of ["ssoRequired", "noAccess"]) {
+  test(`${status}: the shared lists are locked and the add field is Personal-only`, async (t) => {
+    const { container } = await renderView(t, { shared: { status } });
+    await openList(container, "workspace");
+    assert.ok(
+      container.textContent.includes(`dictionary.shared.locked.${status}{"workspace":"Acme"}`)
+    );
+    assert.equal(addInput(container), null);
+    assert.equal(buttonWithText(container, "integrations.api.viewPlans"), null);
+    assert.ok(
+      pickerEntry(container, "workspace").textContent.includes("dictionary.shared.lockedEntry")
+    );
+
+    await openList(container, "all");
+    assert.equal(rowFor(container, "ARR"), null, "shared words don't apply");
+    assert.equal(
+      targetChip(container).textContent,
+      'dictionary.shared.add.to{"list":"dictionary.shared.personal"}'
+    );
+  });
+}
+
+test("a failure that retrying can't fix names its cause instead of asking to try again", async (t) => {
+  const { container } = await renderView(t);
+  await openList(container, "workspace");
+  globalThis.__results.addSharedWords = { failed: { words: ["Foo"], reason: "planRequired" } };
+  await type(addInput(container), "Foo");
+  await pressEnter(addInput(container));
+  const list = 'dictionary.shared.everyoneAt{\\"workspace\\":\\"Acme\\"}';
+  assert.equal(
+    globalThis.__toasts.at(-1).title,
+    `dictionary.shared.errors.planRequired{"list":"${list}"}`
+  );
+
+  globalThis.__results.setSharedWordsHidden = "throw:ssoRequired";
+  await click(
+    byAttribute(container, "aria-label", named("dictionary.shared.actions.hideWord", "ARR"))
+  );
+  assert.match(globalThis.__toasts.at(-1).title, /^dictionary\.shared\.errors\.ssoRequired/);
+
+  globalThis.__results.setSharedWordsHidden = "throw:network";
+  await click(
+    byAttribute(container, "aria-label", named("dictionary.shared.actions.hideWord", "ARR"))
+  );
+  assert.match(globalThis.__toasts.at(-1).title, /^dictionary\.shared\.errors\.generic/);
+});
+
+test("All words shows a word in two lists once, and hiding it hides both copies", async (t) => {
+  const snapshot = {
+    ...SNAPSHOT,
+    entries: [...SNAPSHOT.entries, entry("e-qdrant-ws", "qdrant", null)],
+  };
+  const { container, calls } = await renderView(t, { shared: { snapshot } });
+  assert.match(
+    rowFor(container, "Qdrant").textContent,
+    /dictionary\.shared\.badgeMore\{"list":"Engineering","extra":1\}/
+  );
+  await click(
+    byAttribute(container, "aria-label", named("dictionary.shared.actions.hideWord", "Qdrant"))
+  );
+  assert.deepEqual(
+    calls.find(([name]) => name === "setSharedWordsHidden"),
+    ["setSharedWordsHidden", "ws", ["e-qdrant", "e-qdrant-ws"], true]
+  );
+
+  await click(
+    byAttribute(
+      container,
+      "aria-label",
+      named("dictionary.shared.actions.deleteForEveryoneWord", "Qdrant")
+    )
+  );
+  const dialog = findElement(container, (node) =>
+    node.getAttribute?.("data-dialog")?.includes("deleteOneTitle")
+  );
+  assert.ok(dialog.getAttribute("data-dialog").includes("Engineering"));
+  await click(byAttribute(dialog, "data-confirm"));
+  assert.deepEqual(
+    calls.find(([name]) => name === "deleteSharedWords"),
+    ["deleteSharedWords", "ws", ["e-qdrant", "e-qdrant-ws"]]
+  );
+});
+
+test("Delete in a mixed selection removes the personal words and keeps the shared ones selected", async (t) => {
+  const { container, calls } = await renderView(t);
+  await click(checkboxFor(container, "OpenWhispr"));
+  await click(checkboxFor(container, "ARR"));
+  await click(barButton(container, "dictionary.shared.actions.delete"));
+  assert.deepEqual(calls.filter(([name]) => name === "updateCustomDictionary").at(-1), [
+    "updateCustomDictionary",
+    { remove: ["OpenWhispr"] },
+  ]);
+  assert.ok(toolbar(container), "the shared word is still selected");
+  assert.ok(checkedWords(container).includes("ARR"));
+});
+
+test("a word a shared list can't use is refused before it's sent, and badged where it exists", async (t) => {
+  const snapshot = { ...SNAPSHOT, entries: [...SNAPSHOT.entries, entry("e-pipe", "a | b", null)] };
+  const { container, calls } = await renderView(t, {
+    shared: { snapshot },
+    settings: { customDictionary: ["OpenWhispr", "x<y>"] },
+  });
+  await openList(container, "workspace");
+  assert.ok(rowFor(container, "a | b").textContent.includes("dictionary.shared.notUsed"));
+  assert.ok(!rowFor(container, "ARR").textContent.includes("dictionary.shared.notUsed"));
+
+  await type(addInput(container), "<script>");
+  assert.ok(container.textContent.includes("dictionary.shared.notTermLike"));
+  await pressEnter(addInput(container));
+  assert.equal(
+    calls.find(([name]) => name === "addSharedWords"),
+    undefined
+  );
+
+  // Personal words never reach a teammate, so Personal takes them.
+  await openList(container, "personal");
+  await type(addInput(container), "<script>");
+  assert.ok(!container.textContent.includes("dictionary.shared.notTermLike"));
+
+  // Sharing one from Personal is refused in the popover.
+  await click(
+    byAttribute(container, "aria-label", named("dictionary.shared.actions.shareWord", "x<y>"))
+  );
+  const popover = byAttribute(container, "data-popover");
+  assert.ok(popover.textContent.includes("dictionary.shared.notTermLike"));
+  assert.ok(isDisabled(buttonWithText(popover, "dictionary.shared.actions.share")));
+});
+
+test("a refused rename closes when focus leaves; a failed save keeps its text", async (t) => {
+  const { container, calls } = await renderView(t);
+  await openList(container, `space:${ENGINEERING}`);
+  const editor = () => findElement(rowFor(container, "Qdrant"), (node) => node.tagName === "INPUT");
+  const openEditor = () =>
+    click(byAttribute(container, "aria-label", named("dictionary.editWord", "Qdrant")));
+
+  globalThis.__results.editSharedWord = "throw:alreadyInList";
+  await openEditor();
+  await type(editor(), "sherpa-onnx");
+  await pressEnter(editor());
+  assert.ok(editor(), "Enter keeps the refused editor open with its reason");
+  assert.equal(editor().getAttribute("aria-describedby") !== null, true);
+  await focusOut(editor());
+  assert.equal(editor(), null, "leaving a refused edit reverts it");
+  assert.equal(calls.filter(([name]) => name === "editSharedWord").length, 1);
+
+  globalThis.__results.editSharedWord = "throw:network";
+  await openEditor();
+  await type(editor(), "Qdrant DB");
+  // The user clicked somewhere else; the failed save mustn't pull the focus back.
+  globalThis.document.activeElement = null;
+  await focusOut(editor());
+  assert.ok(editor(), "a failed save stays open");
+  assert.equal(globalThis.document.activeElement, null, "the focus stays where the user put it");
+  assert.equal(editor().value, "Qdrant DB");
+  assert.ok(
+    rowFor(container, "Qdrant").textContent.includes(
+      'dictionary.shared.errors.generic{"list":"Engineering"}'
+    )
+  );
+  // Leaving again doesn't resend the same failed text.
+  await focusOut(editor());
+  assert.equal(calls.filter(([name]) => name === "editSharedWord").length, 2);
+});
+
+test("View words opens the Dictionary tab and the asked-for list", async (t) => {
+  const { container, rerender } = await renderView(t);
+  await click(byAttribute(container, "data-tab", "snippets"));
+  assert.equal(addInput(container), null, "the Snippets tab is open");
+
+  globalThis.__shared.requestedList = "allShared";
+  await rerender();
+  assert.ok(addInput(container), "the Dictionary tab is open again");
+  assert.equal(pickerEntry(container, "allShared").getAttribute("aria-current"), "true");
+});
+
+test("a change from the other window rereads the shared lists once", async (t) => {
+  const { calls, emitSyncEvent } = await renderView(t);
+  const reloads = () => calls.filter(([name]) => name === "reload").length;
+  const before = reloads();
+  await React.act(async () => {
+    emitSyncEvent({ name: "shared-dictionary-changed", payload: { workspaceId: "ws" } });
+    emitSyncEvent({ name: "shared-dictionary-changed", payload: { workspaceId: "ws" } });
+    emitSyncEvent({ name: "shared-dictionary-changed", payload: { workspaceId: "other" } });
+    emitSyncEvent({ name: "notes-changed", payload: {} });
+    await wait(300);
+  });
+  assert.equal(reloads(), before + 1);
+});
+
+test("a comma list or import adds the words a shared list takes and names the rest", async (t) => {
+  const { container, calls } = await renderView(t);
+  await openList(container, "workspace");
+  globalThis.__results.addSharedWords = {};
+  await type(addInput(container), "Helm, a<b, c|d, {e}, f`g, Argo");
+  assert.ok(
+    !container.textContent.includes("dictionary.shared.notTermLike"),
+    "a list isn't blocked"
+  );
+  await pressEnter(addInput(container));
+  assert.deepEqual(
+    calls.find(([name]) => name === "addSharedWords"),
+    ["addSharedWords", "ws", null, ["Helm", "Argo"]]
+  );
+  assert.deepEqual(globalThis.__toasts.at(-1), {
+    title: 'dictionary.shared.skipped{"count":4,"words":"a<b, c|d, {e}, …"}',
+    description: "dictionary.shared.notTermLike",
+    variant: "default",
+  });
+  assert.equal(addInput(container).value, "", "what went in clears the field");
+});
+
+test("sharing a selection moves the words a shared list takes and keeps the rest selected", async (t) => {
+  const { container, calls } = await renderView(t, {
+    settings: { customDictionary: ["OpenWhispr", "x<y>"] },
+  });
+  await openList(container, "personal");
+  await click(checkboxFor(container, "OpenWhispr"));
+  await click(checkboxFor(container, "x<y>"));
+  globalThis.__results.sharePersonalWords = { moved: ["OpenWhispr"], alreadyPresent: [] };
+  await shareTo(container, ["Engineering"]);
+  assert.deepEqual(
+    calls.find(([name]) => name === "sharePersonalWords"),
+    ["sharePersonalWords", "ws", [ENGINEERING], ["OpenWhispr"]]
+  );
+  assert.equal(
+    globalThis.__toasts.at(-1).title,
+    'dictionary.shared.skipped{"count":1,"words":"x<y>"}'
+  );
+  assert.ok(checkedWords(container).includes("x<y>"), "the word left out stays selected");
 });

@@ -2161,8 +2161,8 @@ class IPCHandlers {
       return this.databaseManager.upsertDictionaryFromCloud(cloudEntry);
     });
 
-    ipcMain.handle("db-mark-dictionary-synced", async (_event, id, cloudId) => {
-      return this.databaseManager.markDictionaryEntrySynced(id, cloudId);
+    ipcMain.handle("db-mark-dictionary-synced", async (_event, id, cloudId, pushed) => {
+      return this.databaseManager.markDictionaryEntrySynced(id, cloudId, pushed);
     });
 
     ipcMain.handle("db-hard-delete-dictionary", async (_event, id) => {
@@ -2183,9 +2183,16 @@ class IPCHandlers {
       return this.databaseManager.markDictionaryWordsShared(words, sharedAt);
     });
 
-    ipcMain.handle("db-retire-moved-dictionary-words", async (_event, words) => {
+    ipcMain.handle("db-retire-moved-dictionary-words", async (_event, words, options) => {
       if (!Array.isArray(words)) throw new Error("words must be an array");
-      return this.databaseManager.retireMovedDictionaryWords(words);
+      return this.databaseManager.retireMovedDictionaryWords(words, {
+        includeSynced: options?.includeSynced !== false,
+      });
+    });
+
+    ipcMain.handle("db-revive-retired-dictionary-words", async (_event, words) => {
+      if (!Array.isArray(words)) throw new Error("words must be an array");
+      return this.databaseManager.reviveRetiredDictionaryWords(words);
     });
 
     ipcMain.handle("db-get-moved-dictionary-words", async () => {
@@ -2243,6 +2250,12 @@ class IPCHandlers {
     ipcMain.handle("db-shared-dictionary-clear", async (_event, workspaceId) => {
       if (workspaceId != null) requireWorkspaceId(workspaceId);
       return this.databaseManager.clearSharedDictionary(workspaceId);
+    });
+
+    ipcMain.handle("db-shared-dictionary-prune", async (_event, keepWorkspaceIds) => {
+      if (!Array.isArray(keepWorkspaceIds)) throw new Error("keepWorkspaceIds must be an array");
+      keepWorkspaceIds.forEach(requireWorkspaceId);
+      return this.databaseManager.pruneSharedDictionary(keepWorkspaceIds);
     });
 
     ipcMain.handle("dictionary-set-shared-hints", async (_event, hints) => {
@@ -10206,6 +10219,8 @@ class IPCHandlers {
             model: opts.model,
             agentName: opts.agentName,
             customDictionary: opts.customDictionary,
+            // Teammates' words, which the API quotes as data; absent when none.
+            sharedDictionary: opts.sharedDictionary,
             customPrompt: opts.customPrompt,
             systemPrompt: opts.systemPrompt,
             requestPurpose: opts.requestPurpose,

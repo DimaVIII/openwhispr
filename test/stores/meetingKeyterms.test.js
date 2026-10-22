@@ -84,7 +84,7 @@ test("meeting keyterms include shared words, exclude hidden", async (t) => {
   assert.deepEqual(options.keyterms, ["Piha", "OpenWhispr", "Qdrant", "ARR"]);
 });
 
-test("meeting keyterms keep every personal word and cap shared ones at 100", async (t) => {
+test("meeting keyterms keep every personal word and fill shared ones to 100 in all", async (t) => {
   const workspaceEntries = Array.from({ length: 500 }, (_, i) => entry(`w${i}`, null, `Team${i}`));
   const options = await prepareWithDictionary(t, {
     customDictionary: ["Piha"],
@@ -92,5 +92,5 @@ test("meeting keyterms keep every personal word and cap shared ones at 100", asy
   });
 
   assert.equal(options.keyterms[0], "Piha");
-  assert.equal(options.keyterms.length, 1 + 100);
+  assert.equal(options.keyterms.length, 100);
 });

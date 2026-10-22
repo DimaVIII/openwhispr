@@ -198,10 +198,15 @@ const SHARED_DICTIONARY_READ_OVERLAP_MS = 10_000;
 // Covers both cursor families: lastSyncedAt.sharedDictionary.<ws> and
 // lastSyncedAt.sharedDictionaryHides.<ws>, each with an `.id` companion.
 const SHARED_DICTIONARY_CURSOR_PREFIX = "lastSyncedAt.sharedDictionary";
+// sharedDictionaryWelcomed.<account>.<workspace>: the arrival toast shows once
+// per account and workspace on each device, so sign-out keeps these.
 const SHARED_DICTIONARY_WELCOMED_PREFIX = "sharedDictionaryWelcomed.";
-// Personal rows pulled before shared_at existed never got it; one full re-read
-// of the personal dictionary picks it up.
+// Personal rows pulled before shared_at existed never got it; one re-read of
+// the personal dictionary from the epoch picks it up.
 const DICTIONARY_SHARED_AT_BACKFILL_KEY = "dictionarySharedAtBackfill";
+// A personal pull with no cursor reads the delta from here: unlike the list's
+// snapshot it includes tombstones and pages on (updated_at, id).
+const DICTIONARY_PULL_EPOCH = "1970-01-01T00:00:00.000Z";
 
 interface SharedCursor {
   at: string;
@@ -242,6 +247,20 @@ function clearSharedCursors(workspaceId: string): void {
     localStorage.removeItem(key);
     localStorage.removeItem(`${key}.id`);
   }
+}
+
+function clearSharedCursorsExcept(keepWorkspaceIds: string[]): void {
+  const keep = new Set(
+    keepWorkspaceIds.flatMap((id) => [sharedEntriesCursorKey(id), sharedHidesCursorKey(id)])
+  );
+  const keys: string[] = [];
+  for (let index = 0; index < localStorage.length; index++) {
+    const key = localStorage.key(index);
+    if (key?.startsWith(SHARED_DICTIONARY_CURSOR_PREFIX) && !keep.has(key.replace(/\.id$/, ""))) {
+      keys.push(key);
+    }
+  }
+  for (const key of keys) localStorage.removeItem(key);
 }
 
 function removeLocalStorageKeysWithPrefix(prefix: string): void {
@@ -290,13 +309,12 @@ function isSharedDictionaryCursorExpired(err: unknown): boolean {
   );
 }
 
-// The member can't read this workspace's lists any more.
-function isSharedDictionaryAccessLost(err: unknown): boolean {
-  return (
-    err instanceof CloudApiError &&
-    ((err.status === 404 && err.code === "SHARED_DICTIONARY_NOT_MEMBER") ||
-      (err.status === 403 && err.code === "SSO_REQUIRED"))
-  );
+// The member can't read this workspace's lists any more: why, or null.
+function sharedDictionaryAccessLost(err: unknown): "noAccess" | "ssoRequired" | null {
+  if (!(err instanceof CloudApiError)) return null;
+  if (err.status === 404 && err.code === "SHARED_DICTIONARY_NOT_MEMBER") return "noAccess";
+  if (err.status === 403 && err.code === "SSO_REQUIRED") return "ssoRequired";
+  return null;
 }
 
 type SharedEntriesPull = "snapshot" | "delta" | "scopesReturned";
@@ -424,6 +442,8 @@ export class SyncService {
   // Set by any pass that actually moves team or shared content; drives the
   // ambient team-only backoff (see shouldRunAmbientTeamOnlyPass).
   private teamPassMovedWork = false;
+  // Set when the current shared dictionary pass changed the mirror or hides.
+  private sharedDictionaryPassChanged = false;
   // The same, for Insights counters. Kept separate so neither kind of work is
   // ever inferred from the other (see nextAmbientEmptyStreak).
   private analyticsPassMovedWork = false;
@@ -569,9 +589,9 @@ export class SyncService {
     // Both hold account-scoped/local numeric ids that collide across accounts.
     localStorage.removeItem("activeWorkspaceId");
     localStorage.removeItem("notesTree.expanded");
-    // Shared lists, hides and the arrival toast belong to the departing account.
+    // Shared lists and hides belong to the departing account. The arrival
+    // toast's flags are keyed by account and stay, so it never repeats.
     removeLocalStorageKeysWithPrefix(SHARED_DICTIONARY_CURSOR_PREFIX);
-    removeLocalStorageKeysWithPrefix(SHARED_DICTIONARY_WELCOMED_PREFIX);
     localStorage.removeItem(SHARED_DICTIONARY_CAPABILITY_KEY);
     useSharedDictionaryStore.getState().resetForAccountChange();
     try {
@@ -2759,8 +2779,11 @@ export class SyncService {
         await DictionaryService.update(entry.cloud_id!, {
           word: entry.word,
           source: entry.source,
+          // Only a local set or clear: an ordinary edit leaves the server's
+          // value alone, which another device may have set meanwhile.
+          ...(entry.shared_at_dirty ? { shared_at: toCloudSharedAt(entry.shared_at) } : {}),
         });
-        await window.electronAPI.markDictionarySynced?.(entry.id, entry.cloud_id!);
+        await window.electronAPI.markDictionarySynced?.(entry.id, entry.cloud_id!, entry);
       } catch (err) {
         // 404: another device purged the cloud row. Clear the stale cloud_id so
         // the next push re-creates it via batchCreate instead of retrying PATCH.
@@ -2782,9 +2805,11 @@ export class SyncService {
             source: e.source,
             created_at: e.created_at,
             updated_at: e.updated_at,
-            // A plain re-push clears shared_at on the server, so a moved word
-            // must resend it.
-            shared_at: toCloudSharedAt(e.shared_at),
+            // Absent keeps the server's value (a re-created row may revive a
+            // tombstone); a moved word resends it, and a local clear sends null.
+            ...(e.shared_at || e.shared_at_dirty
+              ? { shared_at: toCloudSharedAt(e.shared_at) }
+              : {}),
           }))
         );
         const byClientId = new Map(created.map((c) => [c.client_dict_id, c]));
@@ -2797,7 +2822,11 @@ export class SyncService {
           }
           // 0 changes means the local row was deleted between snapshot and ack —
           // delete the freshly-created server row so we don't orphan it.
-          const result = await window.electronAPI.markDictionarySynced?.(local.id, server.id);
+          const result = await window.electronAPI.markDictionarySynced?.(
+            local.id,
+            server.id,
+            local
+          );
           if (result && result.changes === 0) {
             try {
               await DictionaryService.delete(server.id);
@@ -2836,10 +2865,10 @@ export class SyncService {
   }
 
   private async pullDictionary(): Promise<void> {
+    let changed = false;
     try {
-      const since = localStorage.getItem("lastSyncedAt.dictionary") ?? undefined;
+      const since = localStorage.getItem("lastSyncedAt.dictionary") ?? DICTIONARY_PULL_EPOCH;
       const sinceId = localStorage.getItem("lastSyncedAt.dictionary.id") ?? undefined;
-      let changed = false;
 
       let cursor: string | undefined = since;
       let cursorId: string | undefined = sinceId;
@@ -2859,20 +2888,23 @@ export class SyncService {
             cloudEntry.client_dict_id ?? ""
           );
 
-          if (cloudEntry.deleted_at) {
-            if (local) {
-              await window.electronAPI.hardDeleteDictionary?.(local.id);
-              changed = true;
-            }
-            continue;
-          }
-
           // Last-writer-wins on normalized timestamps (see normalizeTimestamp).
           const cloudTs = normalizeTimestamp(cloudEntry.updated_at);
           const localTs = local ? normalizeTimestamp(local.updated_at) : "";
-          if (
+
+          if (cloudEntry.deleted_at) {
+            // A pull from the epoch sees old tombstones too; a newer local
+            // edit still waiting to be pushed outlives them.
+            if (local && !(local.sync_status === "pending" && localTs > cloudTs)) {
+              await window.electronAPI.hardDeleteDictionary?.(local.id);
+              changed = true;
+            }
+          } else if (
             !local ||
             cloudTs > localTs ||
+            // A fallback retired here is only this device's guess; a live
+            // cloud row means the server kept it.
+            (local.deleted_at && local.fallback_retired) ||
             sharedAtOnlyDiffers(cloudEntry, local, cloudTs, localTs)
           ) {
             await window.electronAPI.upsertDictionaryFromCloud?.(
@@ -2891,21 +2923,26 @@ export class SyncService {
 
         if (!hasMore) break;
         const last = entries[entries.length - 1];
-        // Stall guard: if the (updated_at, id) cursor didn't advance after a
-        // full page, bail rather than loop forever.
-        if (last.updated_at === cursor && last.id === cursorId) break;
+        // Stall guard: a page that ends where it started would loop forever,
+        // and saving its cursor would freeze every later pull at that row.
+        if (last.updated_at === cursor && last.id === cursorId) {
+          throw new Error("Dictionary pull stopped advancing");
+        }
         cursor = last.updated_at;
         cursorId = last.id;
       }
 
       if (maxUpdatedAt) localStorage.setItem("lastSyncedAt.dictionary", maxUpdatedAt);
       if (maxId) localStorage.setItem("lastSyncedAt.dictionary.id", maxId);
-      if (changed) await window.electronAPI.broadcastDictionaryUpdated?.();
     } catch (err) {
       console.error("Dictionary pull failed:", err);
     }
+    // Pages applied before a failure are already in the database.
+    if (changed) await window.electronAPI.broadcastDictionaryUpdated?.()?.catch(console.error);
   }
 
+  // Dropping the cursor makes the next pull read from the epoch, tombstones
+  // included. An interrupted pull saves no cursor, so it simply starts over.
   private backfillPersonalSharedAt(): void {
     if (localStorage.getItem(DICTIONARY_SHARED_AT_BACKFILL_KEY) != null) return;
     localStorage.removeItem("lastSyncedAt.dictionary");
@@ -2921,6 +2958,7 @@ export class SyncService {
    */
   private async syncSharedDictionary(authGeneration: number): Promise<void> {
     this.backfillPersonalSharedAt();
+    this.sharedDictionaryPassChanged = false;
     const store = useSharedDictionaryStore.getState();
     const generation = store.generation;
     const workspaceId = useWorkspaceStore.getState().activeWorkspaceId;
@@ -2938,6 +2976,7 @@ export class SyncService {
         "applySharedDictionaryHides",
         "replaceSharedDictionaryHides",
         "clearSharedDictionary",
+        "pruneSharedDictionary",
       ] as const;
       const missing = required.filter((name) => typeof api?.[name] !== "function");
       if (missing.length > 0) {
@@ -2947,8 +2986,16 @@ export class SyncService {
       }
 
       if (!workspaceId) {
-        await api.clearSharedDictionary!();
-        removeLocalStorageKeysWithPrefix(SHARED_DICTIONARY_CURSOR_PREFIX);
+        // Only the workspaces the member left go: a switch back to one they
+        // still belong to then needs no full re-download. Without a loaded
+        // list nobody can tell, so every mirror stays until one loads.
+        const { loaded, error, workspaces } = useWorkspaceStore.getState();
+        if (loaded && !error) {
+          const keep = workspaces.map((workspace) => workspace.id);
+          const result = await api.pruneSharedDictionary!(keep);
+          this.noteSharedDictionaryChange(result?.changed);
+          clearSharedCursorsExcept(keep);
+        }
         if (isCurrent()) {
           useSettingsStore.getState().setSharedDictionaryHints(EMPTY_SHARED_HINTS, null);
         }
@@ -2958,7 +3005,11 @@ export class SyncService {
       if (isCurrent()) store.setSyncing(true);
       const before = await api.getSharedDictionary!(workspaceId);
       await this.pullSharedDictionary(workspaceId, before.meta, authGeneration);
-      store.setStatus("ready");
+      // A stale pass still proves the routes exist, but its workspace's access
+      // says nothing about the current one's.
+      if (isCurrent() || useSharedDictionaryStore.getState().status === "unavailable") {
+        store.setStatus("ready");
+      }
 
       if (!isCurrent()) return;
       await store.load(workspaceId, generation);
@@ -2966,17 +3017,21 @@ export class SyncService {
       this.announceSharedDictionaryArrival(workspaceId, countApplyingSharedWords(before));
     } catch (err) {
       if (isAuthContextError(err)) throw err;
-      if (workspaceId && isSharedDictionaryAccessLost(err)) {
+      const lostAccess = workspaceId ? sharedDictionaryAccessLost(err) : null;
+      if (workspaceId && lostAccess) {
         clearSharedCursors(workspaceId);
-        this.teamPassMovedWork = true;
         let cleared = true;
         try {
-          await api?.clearSharedDictionary?.(workspaceId);
+          const result = await api?.clearSharedDictionary?.(workspaceId);
+          // Only a clear that removed something is work: a member who stays
+          // locked out must not pin the ambient cadence on every pass.
+          this.noteSharedDictionaryChange(result?.changed);
         } catch (clearErr) {
           cleared = false;
           console.error("Shared dictionary cleanup failed:", clearErr);
         }
         if (!isCurrent()) return;
+        store.setStatus(lostAccess);
         // A load after a failed clear would republish the lost lists' words.
         if (cleared) await store.load(workspaceId, generation);
         else useSettingsStore.getState().setSharedDictionaryHints(EMPTY_SHARED_HINTS, workspaceId);
@@ -2991,17 +3046,28 @@ export class SyncService {
       console.error("Shared dictionary sync failed:", err);
     } finally {
       if (isCurrent()) useSharedDictionaryStore.getState().setSyncing(false);
+      // Lets every window's Dictionary page reload a mirror this pass rewrote,
+      // including pages applied before a failure.
+      if (workspaceId && this.sharedDictionaryPassChanged) {
+        this.emitSyncUiEvent("shared-dictionary-changed", { workspaceId });
+      }
     }
   }
 
+  private noteSharedDictionaryChange(changed: number | undefined): void {
+    if (!changed) return;
+    this.teamPassMovedWork = true;
+    this.sharedDictionaryPassChanged = true;
+  }
+
   private announceSharedDictionaryArrival(workspaceId: string, applyingBefore: number): void {
-    const welcomedKey = `${SHARED_DICTIONARY_WELCOMED_PREFIX}${workspaceId}`;
+    const accountId = getAuthRequestContextSnapshot().sessionUserId;
+    if (!accountId) return;
+    const welcomedKey = `${SHARED_DICTIONARY_WELCOMED_PREFIX}${accountId}.${workspaceId}`;
     const count = countApplyingSharedWords(useSharedDictionaryStore.getState().snapshot);
     if (applyingBefore > 0 || count === 0 || localStorage.getItem(welcomedKey) != null) return;
     localStorage.setItem(welcomedKey, "true");
-    window.dispatchEvent(
-      new CustomEvent("shared-dictionary-arrived", { detail: { workspaceId, count } })
-    );
+    this.emitSyncUiEvent("shared-dictionary-arrived", { workspaceId, count });
   }
 
   // An expired cursor or a returning list re-runs the whole pass as a snapshot,
@@ -3071,7 +3137,7 @@ export class SyncService {
           paused: response.paused,
         };
         const result = await api.replaceSharedDictionary!(workspaceId, { entries, meta });
-        if (result?.changed) this.teamPassMovedWork = true;
+        this.noteSharedDictionaryChange(result?.changed);
         writeSharedCursor(key, null, passStartedAt, entries.at(-1)?.id ?? null);
         return "snapshot";
       }
@@ -3097,7 +3163,7 @@ export class SyncService {
 
       if (response.hasMore) {
         const result = await api.applySharedDictionaryPull!(workspaceId, { upserts, deletedIds });
-        if (result?.changed) this.teamPassMovedWork = true;
+        this.noteSharedDictionaryChange(result?.changed);
         // Stall guard: the next request must start after this one.
         if (!last || (last.updated_at === page.since && last.id === page.sinceId)) {
           throw new Error("Shared dictionary delta stopped advancing");
@@ -3117,7 +3183,7 @@ export class SyncService {
         deletedIds,
         meta,
       });
-      if (result?.changed) this.teamPassMovedWork = true;
+      this.noteSharedDictionaryChange(result?.changed);
       writeSharedCursor(key, stored, passStartedAt, lastId);
       return "delta";
     }
@@ -3154,7 +3220,8 @@ export class SyncService {
           page = { cursor: last.updated_at, cursorId: last.entry_id, limit };
           continue;
         }
-        await api.replaceSharedDictionaryHides!(workspaceId, hidden);
+        const result = await api.replaceSharedDictionaryHides!(workspaceId, hidden);
+        this.noteSharedDictionaryChange(result?.changed);
         writeSharedCursor(key, null, passStartedAt, hidden.at(-1)?.entryId ?? null);
         return;
       }
@@ -3171,7 +3238,7 @@ export class SyncService {
         hidden: response.hides.filter((hide) => !hide.deleted_at).map(toRecord),
         unhidden: response.hides.filter((hide) => hide.deleted_at).map((hide) => hide.entry_id),
       });
-      if (result?.changed) this.teamPassMovedWork = true;
+      this.noteSharedDictionaryChange(result?.changed);
       const last = response.hides.at(-1);
       if (last) lastId = last.entry_id;
       if (!response.hasMore) {

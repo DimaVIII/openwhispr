@@ -9,8 +9,6 @@ interface DictionaryListPickerProps {
   entries: PickerEntry[];
   selected: ListKey;
   onSelect: (list: ListKey) => void;
-  // False while the API has no shared dictionary: the group and Hidden are left out.
-  showShared: boolean;
 }
 
 function PickerButton({
@@ -22,6 +20,7 @@ function PickerButton({
   selected: boolean;
   onSelect: (list: ListKey) => void;
 }): ReactElement {
+  const { t } = useTranslation();
   const nested = entry.key === "workspace" || entry.key.startsWith("space:");
   return (
     <button
@@ -43,7 +42,10 @@ function PickerButton({
         {entry.label}
       </span>
       {entry.locked ? (
-        <Lock size={11} className="shrink-0 text-foreground/40" aria-hidden="true" />
+        <>
+          <Lock size={11} className="shrink-0 text-foreground/40" aria-hidden="true" />
+          <span className="sr-only">{t("dictionary.shared.lockedEntry")}</span>
+        </>
       ) : (
         entry.count !== null && (
           <span className="shrink-0 tabular-nums text-foreground/40">{entry.count}</span>
@@ -57,7 +59,6 @@ export function DictionaryListPicker({
   entries,
   selected,
   onSelect,
-  showShared,
 }: DictionaryListPickerProps): ReactElement {
   const { t } = useTranslation();
   const inGroup = (group: PickerEntry["group"]): PickerEntry[] =>
@@ -74,14 +75,18 @@ export function DictionaryListPicker({
   return (
     <nav className="flex w-[168px] shrink-0 flex-col gap-0.5 border-e border-foreground/8 pe-3 dark:border-white/8">
       {inGroup("top").map(renderEntry)}
-      {showShared && (
+      {inGroup("shared").length > 0 && (
         <>
           <p className="px-2 pt-3 pb-0.5 text-[10px] font-medium uppercase tracking-wide text-foreground/40">
             {t("dictionary.shared.group")}
           </p>
           {inGroup("shared").map(renderEntry)}
-          <div className="my-2 h-px bg-foreground/8 dark:bg-white/8" />
-          {inGroup("bottom").map(renderEntry)}
+          {inGroup("bottom").length > 0 && (
+            <>
+              <div className="my-2 h-px bg-foreground/8 dark:bg-white/8" />
+              {inGroup("bottom").map(renderEntry)}
+            </>
+          )}
         </>
       )}
     </nav>

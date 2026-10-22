@@ -15,8 +15,10 @@ interface SharedDictionaryArrivalToastListenerProps {
 
 /**
  * Headless. Tells a member once, the first time their workspace's shared words
- * start applying. SyncService raises the event once per workspace, so there is
- * nothing to dedupe here.
+ * start applying. SyncService raises the event once per account and workspace,
+ * so there is nothing to dedupe here. Sync passes run in whichever window holds
+ * the web lock (often the dictation overlay), so the event arrives through the
+ * main process's 'sync-event' rebroadcast, not as a window-local event.
  */
 export default function SharedDictionaryArrivalToastListener({
   onViewWords,
@@ -25,8 +27,7 @@ export default function SharedDictionaryArrivalToastListener({
   const { toast } = useToast();
 
   useEffect(() => {
-    const handleArrival = (event: Event): void => {
-      const detail = (event as CustomEvent<SharedDictionaryArrivedDetail | undefined>).detail;
+    const handleArrival = (detail: SharedDictionaryArrivedDetail | undefined): void => {
       if (!detail || !(detail.count > 0)) return;
 
       // The workspace list may not have loaded yet when sync finishes first.
@@ -54,8 +55,11 @@ export default function SharedDictionaryArrivalToastListener({
       });
     };
 
-    window.addEventListener("shared-dictionary-arrived", handleArrival);
-    return () => window.removeEventListener("shared-dictionary-arrived", handleArrival);
+    return window.electronAPI?.onSyncEvent?.(({ name, payload }) => {
+      if (name === "shared-dictionary-arrived") {
+        handleArrival(payload as SharedDictionaryArrivedDetail | undefined);
+      }
+    });
   }, [toast, t, onViewWords]);
 
   return null;

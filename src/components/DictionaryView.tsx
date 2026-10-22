@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { Download, NotebookPen, PanelRight, Plus, Sparkles } from "./icons";
 import { Textarea } from "./ui/textarea";
@@ -29,8 +29,10 @@ import {
 } from "./dictionary/SharedDictionaryLocked";
 import { SharedListEmpty } from "./dictionary/SharedListEmpty";
 import {
+  allWordsArePersonal,
   buildPicker,
   defaultAddTarget,
+  filterRows,
   resolveSharedAccessState,
   rowsForList,
   shareTargetsFor,
@@ -43,11 +45,14 @@ import { useAuth } from "../hooks/useAuth";
 import { useSharedDictionaryStore, type ListKey } from "../stores/sharedDictionaryStore";
 import { getAgentName } from "../utils/agentName";
 import { parseDictionaryImportText } from "../helpers/dictionaryImport";
-import { getDictionaryHintTiers } from "../utils/snippets";
+import { dictionaryWordKey, getDictionaryHintTiers } from "../utils/snippets";
 import { formatDictionaryPrompt, WHISPER_DECODER_PROMPT_CHARS } from "../utils/dictionaryPromptCap";
+import { canManageWorkspace } from "../lib/spacePermissions";
 
 const SORT_STORAGE_KEY = "dictionarySort";
 const ADD_TARGET_STORAGE_KEY = "dictionaryAddTarget";
+// A burst of changes (a sync pass, a bulk action in the other window) rereads the mirror once.
+const CHANGED_RELOAD_DELAY_MS = 250;
 
 function readStorage(key: string): string | null {
   try {
@@ -85,7 +90,7 @@ function readRememberedTarget(): AddTarget | undefined {
 
 const isSharedList = (list: ListKey): boolean => list !== "all" && list !== "personal";
 const sameWord = (left: string, right: string): boolean =>
-  left.trim().toLowerCase() === right.trim().toLowerCase();
+  dictionaryWordKey(left) === dictionaryWordKey(right);
 
 interface DictionaryViewProps {
   // Opens Plans & Billing from a Shared list's upsell.
@@ -127,7 +132,11 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
   } | null>(null);
   // Bottom padding the list keeps clear for the floating selection bar.
   const [selectionBarClearance, setSelectionBarClearance] = useState(56);
+  // The list whose checkboxes show with nothing ticked yet ("Share from Personal").
+  const [selectModeList, setSelectModeList] = useState<ListKey | null>(null);
   const addInputRef = useRef<HTMLInputElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const getScrollElement = useCallback((): HTMLElement | null => scrollRef.current, []);
 
   // A window's snapshot only refreshes where the last sync pass ran, so the page
   // rereads the local mirror whenever it opens.
@@ -135,9 +144,32 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
     void useSharedDictionaryStore.getState().reload();
   }, []);
 
-  // The arrival toast's "View words" can ask for a list while the page is open.
+  // The other window, or a sync pass, changed the mirror: reread it. Row keys
+  // are stable across the reread, so the selection and an open editor survive.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const dispose = window.electronAPI?.onSyncEvent?.(({ name, payload }) => {
+      if (name !== "shared-dictionary-changed") return;
+      const changed = (payload as { workspaceId?: unknown } | undefined)?.workspaceId;
+      const store = useSharedDictionaryStore.getState();
+      if (changed !== undefined && changed !== store.workspaceId) return;
+      clearTimeout(timer);
+      timer = setTimeout(
+        () => void useSharedDictionaryStore.getState().reload(),
+        CHANGED_RELOAD_DELAY_MS
+      );
+    });
+    return () => {
+      clearTimeout(timer);
+      dispose?.();
+    };
+  }, []);
+
+  // The arrival toast's "View words" can ask for a list while the page is open,
+  // even on the Snippets tab.
   useEffect(() => {
     if (!requestedList) return;
+    setTab("dictionary");
     setList(requestedList);
     useSharedDictionaryStore.getState().setRequestedList(null);
   }, [requestedList]);
@@ -145,7 +177,7 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
   const workspaceId = workspace?.id ?? null;
   const workspaceName = workspace?.name ?? "";
   const access = resolveSharedAccessState({
-    capabilityAvailable: status !== "unavailable",
+    status,
     workspace,
     serverPaused: snapshot?.meta?.paused ?? null,
     hasWords:
@@ -165,10 +197,14 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
     [userWords, movedPersonal, snapshot, workspaceName, access, t]
   );
 
-  // A list the member lost (a space they left, the feature switched off) falls back to All words.
-  const openList: ListKey =
-    pickerEntries.some((entry) => entry.key === list) &&
-    (access !== "unavailable" || !isSharedList(list))
+  const canManage = workspace ? canManageWorkspace(workspace.role) : false;
+  // Without the shared dictionary, All words would only repeat Personal, so the
+  // page shows Personal alone, with no picker.
+  const pickerShown = access !== "unavailable";
+  // A list the member lost (a space they left) falls back to All words.
+  const openList: ListKey = !pickerShown
+    ? "personal"
+    : pickerEntries.some((entry) => entry.key === list)
       ? list
       : "all";
   const openEntry = pickerEntries.find((entry) => entry.key === openList);
@@ -180,7 +216,8 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
   const readOnlyList = lockedAccess === "paused" && singleList;
   const scopes = snapshot?.meta?.scopes ?? [];
 
-  const rows = useMemo(
+  // Sorted once per change to the list; a keystroke in the search only filters.
+  const listRows = useMemo(
     () =>
       rowsForList(openList, {
         personal: userWords,
@@ -188,26 +225,34 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
         snapshot,
         workspaceName,
         currentUserId: user?.id ?? null,
-        search,
+        search: "",
         sort,
         access,
       }),
-    [openList, userWords, movedPersonal, snapshot, workspaceName, user?.id, search, sort, access]
+    [openList, userWords, movedPersonal, snapshot, workspaceName, user?.id, sort, access]
   );
+  const rows = useMemo(() => filterRows(listRows, search), [listRows, search]);
 
-  const selection = useDictionarySelection(rows);
-  const { clear: clearSelection } = selection;
+  const selection = useDictionarySelection(rows, listRows);
+  const { clear: clearTicked } = selection;
   // Hidden words can only be unhidden one by one, so that list has no checkboxes.
   const selectable = !locked && openList !== "hidden";
   const selectedRows = selectable ? selection.selectedRows : [];
   const selectedPersonal = selectedRows.filter((row) => row.kind === "personal");
   const selectedShared = selectedRows.filter((row) => row.kind === "shared");
-  const selectionActive = selectedRows.length > 0;
+  const selectMode = selectable && selectModeList === openList;
+  const selectionActive = selectedRows.length > 0 || selectMode;
+
+  const clearSelection = useCallback((): void => {
+    clearTicked();
+    setSelectModeList(null);
+  }, [clearTicked]);
 
   useEffect(() => {
-    clearSelection();
+    clearTicked();
     setShareRequest(null);
-  }, [openList, clearSelection]);
+    setSelectModeList((current) => (current === openList ? current : null));
+  }, [openList, clearTicked]);
 
   // Esc clears from anywhere on the page. An open dialog or popover handles
   // Esc first and marks it handled, and a text field keeps it for itself.
@@ -306,9 +351,11 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
       }
     : undefined;
 
+  // Delete only removes personal words, so the shared ones stay selected for
+  // their own actions; the deleted rows leave the selection as they leave the list.
   const deleteSelectedPersonal = (): void => {
     actions.deletePersonalWords(selectedPersonal.map((row) => row.word));
-    clearSelection();
+    if (selectedShared.length === 0) clearSelection();
   };
 
   const hideSelected = async (): Promise<void> => {
@@ -331,7 +378,11 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
   };
 
   const personalView = openList === "all" || openList === "personal";
-  const listIsEmpty = rows.length === 0 && search.trim() === "";
+  // Where a list holds only personal words (Personal, or All words without any
+  // shared ones), it gets Personal's Clear all and Export.
+  const personalOnlyList =
+    openList === "personal" || (openList === "all" && allWordsArePersonal(snapshot, access));
+  const listIsEmpty = listRows.length === 0;
   const openScope = singleList
     ? snapshot?.meta?.scopes.find(
         (scope) =>
@@ -381,7 +432,10 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
         listName={openEntry?.label ?? ""}
         memberCount={openScope.member_count}
         onImport={importIntoOpenList}
-        onShareFromPersonal={() => selectList("personal")}
+        onShareFromPersonal={() => {
+          selectList("personal");
+          setSelectModeList("personal");
+        }}
       />
     ) : personalView && listIsEmpty ? (
       <div
@@ -406,7 +460,7 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
             {openEntry?.label} · {headerDetail}
           </h3>
           <div className="flex shrink-0 items-center gap-3">
-            {openList === "personal" && visiblePersonal.length > 0 && (
+            {personalOnlyList && visiblePersonal.length > 0 && (
               <>
                 <button
                   onClick={() => setConfirmClear(true)}
@@ -449,6 +503,7 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
             }
             selection={wordListSelection}
             readOnly={readOnlyList}
+            getScrollElement={getScrollElement}
           />
         )}
       </div>
@@ -519,14 +574,19 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
         )}
       </div>
 
-      <TabsContent value="dictionary" className="flex-1 min-h-0 mt-0 overflow-y-auto">
+      <TabsContent
+        ref={scrollRef}
+        value="dictionary"
+        className="flex-1 min-h-0 mt-0 overflow-y-auto"
+      >
         <div className={cn(PAGE_CONTENT_WIDTH_CLASS, "flex gap-5 px-6 py-5")}>
-          <DictionaryListPicker
-            entries={pickerEntries}
-            selected={openList}
-            onSelect={selectList}
-            showShared={access !== "unavailable"}
-          />
+          {pickerShown && (
+            <DictionaryListPicker
+              entries={pickerEntries}
+              selected={openList}
+              onSelect={selectList}
+            />
+          )}
 
           <div className="flex min-w-0 flex-1 flex-col gap-3">
             {lockedAccess && !readOnlyList ? (
@@ -534,6 +594,7 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
                 access={lockedAccess}
                 workspaceName={workspaceName}
                 scopes={scopes}
+                canManage={canManage}
                 onUpgrade={onUpgrade}
               />
             ) : (
@@ -543,6 +604,7 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
                     access={lockedAccess}
                     workspaceName={workspaceName}
                     scopes={scopes}
+                    canManage={canManage}
                     onUpgrade={onUpgrade}
                   />
                 )}
@@ -629,6 +691,7 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
                   <SelectionActionBar
                     count={selectedRows.length}
                     total={rows.length}
+                    allShownSelected={selection.allShownSelected}
                     onSelectAll={selection.selectAll}
                     onClear={clearSelection}
                     onDelete={selectedPersonal.length > 0 ? deleteSelectedPersonal : undefined}

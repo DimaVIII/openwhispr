@@ -43,6 +43,10 @@ function setup(t, { personal = [], canSync = false } = {}) {
   const personalByLower = new Map(personal.map((row) => [row.word.toLowerCase(), { ...row }]));
   const marks = [];
   const retires = [];
+  const revives = [];
+  const retireOptions = [];
+  const retiredByLower = new Map();
+  const syncEvents = [];
   let broadcasts = 0;
   const requests = [];
   const responders = new Map();
@@ -62,16 +66,34 @@ function setup(t, { personal = [], canSync = false } = {}) {
       }
       return { marked: words };
     },
-    retireMovedDictionaryWords: async (words) => {
+    retireMovedDictionaryWords: async (words, options) => {
       retires.push(words);
+      retireOptions.push(options);
       const retired = [];
       for (const word of words) {
         const row = personalByLower.get(word.toLowerCase());
         if (!row?.sharedAt) continue;
         personalByLower.delete(word.toLowerCase());
+        retiredByLower.set(word.toLowerCase(), row);
         retired.push(row.word);
       }
       return { retired };
+    },
+    reviveRetiredDictionaryWords: async (words) => {
+      revives.push(words);
+      const revived = [];
+      for (const word of words) {
+        const row = retiredByLower.get(word.toLowerCase());
+        if (!row) continue;
+        retiredByLower.delete(word.toLowerCase());
+        personalByLower.set(word.toLowerCase(), row);
+        revived.push(row.word);
+      }
+      return { revived };
+    },
+    emitSyncEvent: async (name, payload) => {
+      syncEvents.push({ name, payload });
+      return { success: true };
     },
     getDictionary: async () => [...personalByLower.values()].map((row) => row.word),
     broadcastDictionaryUpdated: async () => {
@@ -129,7 +151,13 @@ function setup(t, { personal = [], canSync = false } = {}) {
     db,
     marks,
     retires,
+    revives,
+    retireOptions,
     counts,
+    changes: () =>
+      syncEvents
+        .filter((event) => event.name === "shared-dictionary-changed")
+        .map((event) => event.payload),
     on,
     requestsTo,
     personalWords,
@@ -263,9 +291,9 @@ test("share and add never send an empty batch", async (t) => {
 
   assert.equal(ctx.requestsTo(SHARE).length, 0);
   assert.equal(ctx.requestsTo(CREATE).length, 0);
-  assert.deepEqual(shared, { moved: [], alreadyPresent: [], failed: null });
-  assert.deepEqual(added, { added: [], alreadyPresent: [], failed: null });
-  assert.deepEqual(noTargets, { moved: [], alreadyPresent: [], failed: null });
+  assert.deepEqual(shared, { moved: [], alreadyPresent: [], rejected: [], failed: null });
+  assert.deepEqual(added, { added: [], alreadyPresent: [], rejected: [], failed: null });
+  assert.deepEqual(noTargets, { moved: [], alreadyPresent: [], rejected: [], failed: null });
 });
 
 test("add chunks by 200, applies each accepted chunk and stops at the first failure", async (t) => {
@@ -326,7 +354,11 @@ test("error codes map to action reasons", async (t) => {
     [failure(400, "SHARED_DICTIONARY_LIST_FULL"), "listFull"],
     [failure(409, "SHARED_DICTIONARY_ALREADY_IN_LIST"), "alreadyInList"],
     [failure(409, "SHARED_DICTIONARY_PERSONAL_CHANGED"), "personalChanged"],
+    [failure(400, "SHARED_DICTIONARY_INVALID_REQUEST"), "invalid"],
+    [failure(400, undefined), "invalid"],
+    [failure(409, "SHARED_DICTIONARY_RECENTLY_DELETED"), "recentlyDeleted"],
     [failure(404, undefined), "network"],
+    [failure(500, undefined), "network"],
     [failure(undefined, undefined), "network"],
   ];
   for (const [answer, reason] of cases) {
@@ -564,7 +596,8 @@ test("a moved word with another live copy in a second list keeps its fallback", 
   assert.deepEqual(ctx.retires, []);
   assert.deepEqual(ctx.personalWords(), ["Qdrant", "Orukeet", "Parakeet"]);
   assert.equal(ctx.broadcasts(), 0);
-  assert.equal(ctx.counts.personalSyncs, 0);
+  // The server decides across every workspace; the pull brings its answer.
+  assert.equal(ctx.counts.personalSyncs, 1);
 });
 
 test("delete for everyone retires the fallback; unhiding never does", async (t) => {
@@ -582,4 +615,238 @@ test("delete for everyone retires the fallback; unhiding never does", async (t) 
   assert.deepEqual(ctx.retires, [["Orukeet"]]);
   assert.deepEqual(ctx.personalWords(), ["Qdrant", "Parakeet"]);
   assert.deepEqual(ctx.customDictionary(), ["Qdrant", "Parakeet"]);
+});
+
+test("add sends collapsed words and reports the ones the API would refuse", async (t) => {
+  const ctx = setup(t);
+  ctx.on(CREATE, (body) => ({
+    created: body.words.map((word) => entry(word, body.space_id)),
+    alreadyPresent: [],
+  }));
+  const tooLong = "x".repeat(101);
+
+  const result = await ctx.actions.addSharedWords(WS, null, [
+    "Open\tWhispr",
+    tooLong,
+    "Bell\u0007",
+    "Qdrant",
+    "  ",
+  ]);
+
+  const [request] = ctx.requestsTo(CREATE);
+  assert.deepEqual(request.body.words, ["Open Whispr", "Qdrant"]);
+  assert.deepEqual(result.added, ["Open Whispr", "Qdrant"]);
+  assert.deepEqual(result.rejected, [tooLong, "Bell\u0007"]);
+  assert.deepEqual(result.failed, { words: [tooLong, "Bell\u0007"], reason: "invalid" });
+
+  // Only refused words: nothing is sent at all.
+  const none = await ctx.actions.addSharedWords(WS, null, [tooLong]);
+  assert.equal(ctx.requestsTo(CREATE).length, 1);
+  assert.deepEqual(none.failed, { words: [tooLong], reason: "invalid" });
+});
+
+test("a chunk failure outranks the refused words", async (t) => {
+  const ctx = setup(t);
+  ctx.on(CREATE, () => failure(403, "SHARED_DICTIONARY_PLAN_REQUIRED"));
+
+  const result = await ctx.actions.addSharedWords(WS, null, ["Qdrant", "x".repeat(101)]);
+
+  // Both count as not added; the stopping failure names the reason.
+  assert.deepEqual(result.failed, { words: ["Qdrant", "x".repeat(101)], reason: "planRequired" });
+  assert.deepEqual(result.rejected, ["x".repeat(101)]);
+});
+
+test("share refuses more than 20 lists, and sends synced words as stored", async (t) => {
+  const tooLong = "y".repeat(101);
+  const ctx = setup(t, {
+    personal: [
+      { word: "Open  Whispr", cloudId: "bbbbbbbb-bbbb-4bbb-8bbb-000000000001" },
+      { word: "Qdrant", cloudId: "bbbbbbbb-bbbb-4bbb-8bbb-000000000002" },
+      { word: tooLong, cloudId: "bbbbbbbb-bbbb-4bbb-8bbb-000000000003" },
+      { word: "Local\tword", cloudId: null },
+      { word: "Zero\u200Bwidth", cloudId: null },
+    ],
+  });
+  ctx.on(SHARE, acceptShare);
+  const targets = Array.from({ length: 21 }, (_, index) => `space-${index}`);
+
+  const tooMany = await ctx.actions.sharePersonalWords(WS, targets, ["Qdrant"]);
+  assert.deepEqual(tooMany.failed, { words: ["Qdrant"], reason: "invalid" });
+  assert.equal(ctx.requestsTo(SHARE).length, 0);
+
+  const result = await ctx.actions.sharePersonalWords(
+    WS,
+    [null, null],
+    ["Open  Whispr", "Qdrant", tooLong, "Local\tword", "Zero\u200Bwidth"]
+  );
+
+  const [request] = ctx.requestsTo(SHARE);
+  assert.deepEqual(request.body.targets, [null], "duplicate targets go once");
+  // The server compares a synced word's stored spelling (it only trims and NFCs).
+  assert.deepEqual(request.body.personal, [
+    { id: "bbbbbbbb-bbbb-4bbb-8bbb-000000000001", word: "Open  Whispr" },
+    { id: "bbbbbbbb-bbbb-4bbb-8bbb-000000000002", word: "Qdrant" },
+  ]);
+  assert.deepEqual(request.body.words, ["Local word"]);
+  assert.deepEqual(result.moved, ["Open  Whispr", "Qdrant", "Local\tword"]);
+  assert.deepEqual(result.rejected, [tooLong, "Zero\u200Bwidth"]);
+  assert.deepEqual(result.failed, { words: [tooLong, "Zero\u200Bwidth"], reason: "invalid" });
+  assert.deepEqual(ctx.marks[0].words, result.moved, "marked by stored spelling");
+});
+
+test("the client's word check matches the API's", async (t) => {
+  const ctx = setup(t);
+  ctx.on(CREATE, (body) => ({
+    created: body.words.map((word) => entry(word, body.space_id)),
+    alreadyPresent: [],
+  }));
+  const decomposed = "Cafe\u0301";
+
+  const result = await ctx.actions.addSharedWords(WS, null, [
+    decomposed,
+    "\u0645\u06cc\u200c\u062e\u0648\u0627\u0645", // Persian with ZWNJ
+    "Soft\u00ADhyphen",
+    "Bidi\u202Emark",
+    "a".repeat(100),
+  ]);
+
+  assert.deepEqual(ctx.requestsTo(CREATE)[0].body.words, [
+    "Caf\u00e9",
+    "\u0645\u06cc\u200c\u062e\u0648\u0627\u0645",
+    "a".repeat(100),
+  ]);
+  assert.deepEqual(result.rejected, ["Soft\u00ADhyphen", "Bidi\u202Emark"]);
+});
+
+test("words refused by an earlier chunk still count when a later chunk fails", async (t) => {
+  const personal = syncedPersonal(250);
+  const ctx = setup(t, { personal });
+  ctx.on(SHARE, (body, call) =>
+    call === 1
+      ? failure(500, undefined)
+      : { ...acceptShare(body), rejected: [{ id: personal[3].cloudId, word: "Word3" }] }
+  );
+
+  const result = await ctx.actions.sharePersonalWords(
+    WS,
+    [null],
+    personal.map((row) => row.word)
+  );
+
+  assert.equal(result.moved.length, 199);
+  assert.deepEqual(result.rejected, ["Word3"]);
+  assert.equal(result.failed.reason, "network");
+  assert.equal(result.failed.words.length, 51, "50 unsent plus the refused one");
+  assert.ok(result.failed.words.includes("Word3"));
+});
+
+test("an edit the API would refuse throws invalid without a request", async (t) => {
+  const ctx = setup(t);
+  ctx.on("/api/shared-dictionary/update", () => entry("unused"));
+
+  await assert.rejects(
+    () => ctx.actions.editSharedWord(WS, "e-1", "x".repeat(101)),
+    (error) => error.reason === "invalid"
+  );
+  assert.equal(ctx.requestsTo("/api/shared-dictionary/update").length, 0);
+
+  await ctx.actions.editSharedWord(WS, "e-1", " Open\t Whispr ");
+  assert.equal(ctx.requestsTo("/api/shared-dictionary/update")[0].body.word, "Open Whispr");
+});
+
+test("undoing a delete and un-hiding revive the fallbacks they retired", async (t) => {
+  const ctx = setup(t, { personal: movedPersonal() });
+  const rows = [entry("Qdrant"), entry("Orukeet")];
+  ctx.db.seed(WS, { entries: rows });
+  ctx.on(DELETE, (body) => ({ deletedIds: body.ids }));
+  ctx.on(RESTORE, (body) => ({
+    restored: rows.filter((row) => body.ids.includes(row.id)),
+    conflicts: [],
+  }));
+  ctx.on(HIDE, (body) => ({ hides: hideRows(body) }));
+
+  const { undo } = await ctx.actions.deleteSharedWords(WS, [rows[0].id]);
+  assert.deepEqual(ctx.personalWords(), ["Orukeet", "Parakeet"]);
+  await undo();
+  assert.deepEqual(ctx.revives, [["Qdrant"]]);
+  assert.deepEqual(ctx.personalWords().sort(), ["Orukeet", "Parakeet", "Qdrant"]);
+
+  await ctx.actions.setSharedWordsHidden(WS, [rows[1].id], true);
+  assert.equal(ctx.personalWords().includes("Orukeet"), false);
+  await ctx.actions.setSharedWordsHidden(WS, [rows[1].id], false);
+  assert.deepEqual(ctx.revives.at(-1), ["Orukeet"]);
+  assert.ok(ctx.personalWords().includes("Orukeet"));
+  assert.deepEqual(ctx.customDictionary().sort(), ["Orukeet", "Parakeet", "Qdrant"]);
+  assert.equal(ctx.counts.personalSyncs, 4, "every one pulls the server's answer");
+});
+
+test("a write that changed the mirror tells the other windows", async (t) => {
+  const ctx = setup(t);
+  ctx.on(CREATE, (body, call) =>
+    call === 0
+      ? { created: body.words.map((word) => entry(word)), alreadyPresent: [] }
+      : failure(500, undefined)
+  );
+
+  await ctx.actions.addSharedWords(WS, null, ["Qdrant"]);
+  assert.deepEqual(ctx.changes(), [{ workspaceId: WS }]);
+
+  await ctx.actions.addSharedWords(WS, null, ["Orukeet"]);
+  assert.equal(ctx.changes().length, 1, "a refused write changed nothing");
+});
+
+test("words the list refused aren't moved, and the result reports them", async (t) => {
+  const personal = syncedPersonal(2);
+  const ctx = setup(t, { personal: [...personal, { word: "Local", cloudId: null }] });
+  ctx.on(SHARE, (body) => ({
+    ...acceptShare(body),
+    rejected: [
+      { id: personal[1].cloudId, word: "Word1" },
+      { id: null, word: "local" },
+    ],
+  }));
+
+  const result = await ctx.actions.sharePersonalWords(WS, [null], ["Word0", "Word1", "Local"]);
+
+  assert.deepEqual(result.moved, ["Word0"]);
+  assert.deepEqual(result.rejected, ["Word1", "Local"]);
+  assert.deepEqual(result.failed, { words: ["Word1", "Local"], reason: "invalid" });
+  assert.deepEqual(ctx.marks[0].words, ["Word0"], "only moved words get shared_at");
+
+  // An API without the field: everything sent is moved.
+  ctx.on(SHARE, acceptShare);
+  const older = await ctx.actions.sharePersonalWords(WS, [null], ["Word1"]);
+  assert.deepEqual(older.moved, ["Word1"]);
+  assert.deepEqual(older.rejected, []);
+});
+
+test("undoing a delete doesn't revive the fallback of a word the member had hidden", async (t) => {
+  const ctx = setup(t, { personal: movedPersonal() });
+  const rows = [entry("Qdrant"), entry("Orukeet")];
+  ctx.db.seed(WS, { entries: rows, hidden: [rows[1].id] });
+  ctx.on(DELETE, (body) => ({ deletedIds: body.ids }));
+  ctx.on(RESTORE, (body) => ({
+    restored: rows.filter((row) => body.ids.includes(row.id)),
+    conflicts: [],
+  }));
+
+  const { undo } = await ctx.actions.deleteSharedWords(WS, [rows[0].id, rows[1].id]);
+  assert.deepEqual(ctx.personalWords(), ["Parakeet"]);
+  await undo();
+
+  // The API revives the hide with the entry, so Orukeet doesn't reach the member.
+  assert.deepEqual(ctx.revives, [["Qdrant"]]);
+  assert.deepEqual(ctx.personalWords().sort(), ["Parakeet", "Qdrant"]);
+});
+
+test("with sync on, a synced fallback is left for the server to retire", async (t) => {
+  const ctx = setup(t, { personal: movedPersonal(), canSync: true });
+  const rows = [entry("Qdrant")];
+  ctx.db.seed(WS, { entries: rows });
+  ctx.on(HIDE, (body) => ({ hides: hideRows(body) }));
+
+  await ctx.actions.setSharedWordsHidden(WS, [rows[0].id], true);
+
+  assert.deepEqual(ctx.retireOptions, [{ includeSynced: false }]);
+  assert.equal(ctx.counts.personalSyncs, 1, "the pull brings the server's answer");
 });

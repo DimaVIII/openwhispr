@@ -15,6 +15,8 @@ import { syncService } from "../../services/SyncService";
 import { useSharedDictionaryStore } from "../../stores/sharedDictionaryStore";
 import { parseDictionaryImportText } from "../../helpers/dictionaryImport";
 import logger from "../../utils/logger";
+import { isTermLikeSharedWord } from "../../utils/sharedDictionaryHints";
+import { dictionaryWordKey } from "../../utils/snippets";
 import type { SharedDictionarySnapshot } from "../../types/sharedDictionary";
 import type { AddTarget } from "./DictionaryAddField";
 import { visiblePersonalWords, type DictionaryRow } from "./dictionaryViewModel";
@@ -39,6 +41,13 @@ interface PendingSharedDelete {
   onDeleted?: () => void;
 }
 
+// Why an edit didn't save. A refusal can't succeed as typed, so leaving the
+// editor drops it; anything else keeps the typed text for another try.
+export interface EditFailure {
+  message: string;
+  refused: boolean;
+}
+
 interface ShareFailure {
   count: number;
   reason: SharedDictionaryActionReason;
@@ -52,8 +61,8 @@ export interface DictionaryActions {
   wordsInTarget: (target: AddTarget) => string[];
   // Resolves true once nothing is left to add, which clears the field.
   addWords: (text: string, target: AddTarget) => Promise<boolean>;
-  // Resolves an error to show in the open editor, or null to close it.
-  editRow: (row: DictionaryRow, word: string) => Promise<string | null>;
+  // Resolves why the edit failed, to show in the open editor, or null to close it.
+  editRow: (row: DictionaryRow, word: string) => Promise<EditFailure | null>;
   // Resolves true once every row changed.
   setRowsHidden: (rows: DictionaryRow[], hidden: boolean) => Promise<boolean>;
   // Delete for everyone always asks first; the dialog reads `deleteTitle`.
@@ -72,8 +81,11 @@ export interface DictionaryActions {
   clearPersonal: () => void;
 }
 
+// How many left-out words a toast names before it only counts the rest.
+const SKIPPED_NAMES_SHOWN = 3;
+
 const sameWord = (left: string, right: string): boolean =>
-  left.trim().toLowerCase() === right.trim().toLowerCase();
+  dictionaryWordKey(left) === dictionaryWordKey(right);
 const reasonOf = (error: unknown): SharedDictionaryActionReason =>
   error instanceof SharedDictionaryActionError ? error.reason : "network";
 
@@ -110,11 +122,25 @@ export function useDictionaryActions({
     if (store.movedPersonal.length > 0) void store.reload();
   }, [customDictionary]);
 
+  // Only a network failure is worth trying again; every other reason names its fix.
   const errorTitle = useCallback(
-    (reason: SharedDictionaryActionReason, listName: string): string =>
-      reason === "listFull"
-        ? t("dictionary.shared.errors.listFull", { list: listName })
-        : t("dictionary.shared.errors.generic", { list: listName }),
+    (reason: SharedDictionaryActionReason, listName: string): string => {
+      switch (reason) {
+        case "listFull":
+        case "planRequired":
+        case "ssoRequired":
+        case "notMember":
+        case "invalid":
+        case "recentlyDeleted":
+          return t(`dictionary.shared.errors.${reason}`, { list: listName });
+        case "alreadyInList":
+          return t("dictionary.shared.alreadyIn", { list: listName });
+        case "personalChanged":
+          return t("dictionary.shared.share.reasons.personalChanged");
+        default:
+          return t("dictionary.shared.errors.generic", { list: listName });
+      }
+    },
     [t]
   );
 
@@ -134,16 +160,40 @@ export function useDictionaryActions({
       .map((entry) => entry.word);
   };
 
-  const sharedListName = (row: DictionaryRow): string => {
-    const spaceId = snapshot?.entries.find((entry) => entry.cloudId === row.entryId)?.spaceId;
+  const listNameOf = (entryId: string | null): string => {
+    const spaceId = snapshot?.entries.find((entry) => entry.cloudId === entryId)?.spaceId;
     return spaceId === undefined ? workspaceName : listLabel(spaceId);
+  };
+  const sharedListName = (row: DictionaryRow): string => listNameOf(row.entryId);
+  // Every list a row's copies are in: All words shows a word in several lists once.
+  const rowListNames = (row: DictionaryRow): string[] => row.entryIds.map(listNameOf);
+  // A teammate's dictation would leave these out, so they never go to a shared list.
+  const notTermLike = (words: string[]): boolean =>
+    words.some((word) => !isTermLikeSharedWord(word));
+  const splitShareable = (words: string[]): { shareable: string[]; skipped: string[] } => ({
+    shareable: words.filter(isTermLikeSharedWord),
+    skipped: words.filter((word) => !isTermLikeSharedWord(word)),
+  });
+  // Names the first few words left out and counts them all.
+  const reportSkipped = (skipped: string[], nothingSent: boolean): void => {
+    if (skipped.length === 0) return;
+    const named = skipped.slice(0, SKIPPED_NAMES_SHOWN).join(", ");
+    toast({
+      title: t("dictionary.shared.skipped", {
+        count: skipped.length,
+        words: skipped.length > SKIPPED_NAMES_SHOWN ? `${named}, …` : named,
+      }),
+      description: t("dictionary.shared.notTermLike"),
+      variant: nothingSent ? "destructive" : "default",
+    });
   };
 
   const addWords = async (text: string, target: AddTarget): Promise<boolean> => {
-    const existing = new Set(wordsInTarget(target).map((word) => word.toLowerCase()));
+    const existing = new Set(wordsInTarget(target).map(dictionaryWordKey));
     const words = parseDictionaryImportText(text).filter((word) => {
-      if (existing.has(word.toLowerCase())) return false;
-      existing.add(word.toLowerCase());
+      const key = dictionaryWordKey(word);
+      if (existing.has(key)) return false;
+      existing.add(key);
       return true;
     });
     if (words.length === 0) return true;
@@ -152,37 +202,44 @@ export function useDictionaryActions({
       return true;
     }
     if (!workspaceId) return false;
-    const result = await addSharedWords(workspaceId, target, words);
+    const { shareable, skipped } = splitShareable(words);
+    if (shareable.length === 0) {
+      reportSkipped(skipped, true);
+      return false;
+    }
+    const result = await addSharedWords(workspaceId, target, shareable);
     if (result.failed) {
       showActionError(result.failed.reason, listLabel(target));
       return false;
     }
+    // The rest went in, so the field clears; the toast names what was left out.
+    reportSkipped(skipped, false);
     return true;
   };
 
-  const editRow = async (row: DictionaryRow, word: string): Promise<string | null> => {
+  const editRow = async (row: DictionaryRow, word: string): Promise<EditFailure | null> => {
     if (word === row.word) return null;
     if (row.kind === "personal") {
       // Like the add field: a word hidden under a shared copy doesn't block the
       // rename, which makes it personal again.
       const taken = wordsInTarget("personal");
       if (taken.some((other) => other !== row.word && sameWord(other, word))) {
-        return t("dictionary.shared.alreadyIn", { list: t("dictionary.shared.personal") });
+        return {
+          message: t("dictionary.shared.alreadyIn", { list: t("dictionary.shared.personal") }),
+          refused: true,
+        };
       }
       updateCustomDictionary({ add: [word], remove: [row.word] });
       return null;
     }
     if (!workspaceId || !row.entryId) return null;
+    if (notTermLike([word])) return { message: t("dictionary.shared.notTermLike"), refused: true };
     try {
       await editSharedWord(workspaceId, row.entryId, word);
       return null;
     } catch (error) {
       const reason = reasonOf(error);
-      if (reason === "alreadyInList") {
-        return t("dictionary.shared.alreadyIn", { list: sharedListName(row) });
-      }
-      showActionError(reason, sharedListName(row));
-      return null;
+      return { message: errorTitle(reason, sharedListName(row)), refused: reason !== "network" };
     }
   };
 
@@ -190,48 +247,54 @@ export function useDictionaryActions({
   const listNames = (names: string[]): string =>
     new Intl.ListFormat(i18n.language, { type: "conjunction" }).format([...new Set(names)]);
 
-  const entryIdsOf = (rows: DictionaryRow[]): string[] =>
-    rows.flatMap((row) => (row.entryId ? [row.entryId] : []));
+  const entryIdsOf = (rows: DictionaryRow[]): string[] => rows.flatMap((row) => row.entryIds);
 
   const setRowsHidden = async (rows: DictionaryRow[], hidden: boolean): Promise<boolean> => {
-    const shared = rows.filter((row) => row.entryId);
+    const shared = rows.filter((row) => row.entryIds.length > 0);
     if (!workspaceId || shared.length === 0) return false;
     try {
       await setSharedWordsHidden(workspaceId, entryIdsOf(shared), hidden);
       return true;
     } catch (error) {
-      showActionError(reasonOf(error), listNames(shared.map(sharedListName)));
+      showActionError(reasonOf(error), listNames(shared.flatMap(rowListNames)));
       return false;
     }
   };
 
   const requestDeleteForEveryone = (rows: DictionaryRow[], onDeleted?: () => void): void => {
-    const shared = rows.filter((row) => row.entryId);
+    const shared = rows.filter((row) => row.entryIds.length > 0);
     if (shared.length === 0) return;
     setPendingDelete({
       entryIds: entryIdsOf(shared),
       words: shared.map((row) => row.word),
-      listName: listNames(shared.map(sharedListName)),
+      listName: listNames(shared.flatMap(rowListNames)),
       onDeleted,
     });
   };
 
-  const shareFailureLine = ({ reason, target }: ShareFailure): string => {
-    if (reason === "personalChanged") return t("dictionary.shared.share.reasons.personalChanged");
+  const shareFailureLine = ({ reason, target }: ShareFailure, targetNames: string): string => {
     if (reason === "listFull") {
       return target === undefined
         ? t("dictionary.shared.share.reasons.aListFull")
         : t("dictionary.shared.errors.listFull", { list: listLabel(target) });
     }
-    return t("dictionary.shared.share.reasons.network");
+    if (reason === "network") return t("dictionary.shared.share.reasons.network");
+    return errorTitle(reason, targetNames);
   };
 
   const shareWords = async (words: string[], targets: ShareTarget[]): Promise<boolean> => {
     if (!workspaceId || words.length === 0 || targets.length === 0) return false;
+    const targetNames = listNames(targets.map(listLabel));
+    // Words left out stay personal (and selected), so the share reports false.
+    const { shareable, skipped } = splitShareable(words);
+    if (shareable.length === 0) {
+      reportSkipped(skipped, true);
+      return false;
+    }
     let moved = 0;
     let failed: ShareFailure | null;
     try {
-      const result = await sharePersonalWords(workspaceId, targets, words);
+      const result = await sharePersonalWords(workspaceId, targets, shareable);
       moved = result.moved.length;
       failed = result.failed
         ? {
@@ -241,16 +304,17 @@ export function useDictionaryActions({
           }
         : null;
     } catch (error) {
-      failed = { count: words.length, reason: reasonOf(error) };
+      failed = { count: shareable.length, reason: reasonOf(error) };
     }
-    if (!failed) return true;
+    reportSkipped(skipped, moved === 0 && failed !== null);
+    if (!failed) return skipped.length === 0;
     if (moved === 0) {
       // Nothing went, so the reason alone says what happened.
       toast({
         title:
-          failed.reason === "personalChanged" || failed.reason === "listFull"
-            ? shareFailureLine(failed)
-            : t("dictionary.shared.errors.generic", { list: listNames(targets.map(listLabel)) }),
+          failed.reason === "network"
+            ? t("dictionary.shared.errors.generic", { list: targetNames })
+            : shareFailureLine(failed, targetNames),
         variant: "destructive",
       });
       return false;
@@ -262,7 +326,7 @@ export function useDictionaryActions({
         total: moved + failed.count,
         count: failed.count,
       }),
-      description: shareFailureLine(failed),
+      description: shareFailureLine(failed, targetNames),
       variant: "destructive",
     });
     return false;

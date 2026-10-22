@@ -4,7 +4,7 @@ import { Building2, Lock, Users } from "../icons";
 import { SettingsPanel, SettingsPanelRow } from "../ui/SettingsSection";
 import { UpsellBar } from "../integrations/IntegrationsPane";
 import type { SharedScope } from "../../types/sharedDictionary";
-import type { SharedAccessState } from "./dictionaryViewModel";
+import { workspaceListLabel, type SharedAccessState } from "./dictionaryViewModel";
 
 export type LockedAccessState = Exclude<SharedAccessState, "available" | "unavailable">;
 
@@ -13,6 +13,8 @@ interface SharedDictionaryUpsellProps {
   workspaceName: string;
   // The lists the last pass read; empty when none were read for this workspace.
   scopes: SharedScope[];
+  // Whether the member's role can buy a plan; only those who can get View plans.
+  canManage: boolean;
   onUpgrade: () => void;
 }
 
@@ -31,14 +33,27 @@ const workspaceFirst = (scopes: SharedScope[]): SharedScope[] => [
 const WORKSPACE_ICON = <Building2 className="h-4 w-4 text-primary/80" aria-hidden="true" />;
 const SPACE_ICON = <Users className="h-4 w-4 text-primary/80" aria-hidden="true" />;
 
+// Neither a sign-in nor lost access is fixed by a plan, so they get no lists and no button.
+const ACCESS_BLOCKED = new Set<LockedAccessState>(["ssoRequired", "noAccess"]);
+const LOCK_ICON = <Lock size={15} className="shrink-0 text-primary" aria-hidden="true" />;
+
 /** The upsell for a Shared list the member can't use; a member can't buy, so gets no button. */
 export function SharedDictionaryUpsell({
   access,
   workspaceName,
   scopes,
+  canManage,
   onUpgrade,
 }: SharedDictionaryUpsellProps): ReactElement {
   const { t } = useTranslation();
+  if (access === "ssoRequired" || access === "noAccess") {
+    return (
+      <UpsellBar
+        icon={LOCK_ICON}
+        message={t(`dictionary.shared.locked.${access}`, { workspace: workspaceName })}
+      />
+    );
+  }
   if (access === "upgradeMember") {
     return (
       <UpsellBar
@@ -46,15 +61,23 @@ export function SharedDictionaryUpsell({
       />
     );
   }
+  if (access === "paused") {
+    const count = scopes.reduce((total, scope) => total + scope.word_count, 0);
+    return canManage ? (
+      <UpsellBar
+        message={t("dictionary.shared.locked.paused", { workspace: workspaceName, count })}
+        onUpgrade={onUpgrade}
+      />
+    ) : (
+      <UpsellBar
+        message={t("dictionary.shared.locked.pausedMember", { workspace: workspaceName, count })}
+      />
+    );
+  }
   const message =
     access === "noWorkspace"
       ? t("dictionary.shared.locked.noWorkspace")
-      : access === "upgradeAdmin"
-        ? t("dictionary.shared.locked.upgradeAdmin", { workspace: workspaceName })
-        : t("dictionary.shared.locked.paused", {
-            workspace: workspaceName,
-            count: scopes.reduce((total, scope) => total + scope.word_count, 0),
-          });
+      : t("dictionary.shared.locked.upgradeAdmin", { workspace: workspaceName });
   return <UpsellBar message={message} onUpgrade={onUpgrade} />;
 }
 
@@ -79,18 +102,17 @@ export function SharedDictionaryLocked(props: SharedDictionaryUpsellProps): Reac
     },
   ];
 
+  if (ACCESS_BLOCKED.has(access)) return <SharedDictionaryUpsell {...props} />;
+
   const rows: LockedRow[] =
     access === "noWorkspace"
       ? describedRows(t("dictionary.shared.locked.workspaceTitle"))
       : scopes.length === 0
-        ? describedRows(t("dictionary.shared.everyoneAt", { workspace: workspaceName }))
+        ? describedRows(workspaceListLabel(workspaceName, t))
         : workspaceFirst(scopes).map((scope) => ({
             key: scope.space_id ?? "workspace",
             icon: scope.space_id === null ? WORKSPACE_ICON : SPACE_ICON,
-            title:
-              scope.space_id === null
-                ? t("dictionary.shared.everyoneAt", { workspace: workspaceName })
-                : scope.name,
+            title: scope.space_id === null ? workspaceListLabel(workspaceName, t) : scope.name,
             // Paused lists show what was kept; the others who the list would reach.
             subtitle:
               access === "paused"

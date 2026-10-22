@@ -72,3 +72,10 @@ test("retain drops keys and an anchor that left the list", () => {
   // Nothing to drop keeps the same state, so rows changing never loops.
   assert.equal(selectionReducer(pruned, { type: "retain", orderedKeys: KEYS }), pruned);
 });
+
+test("selectAll adds the listed keys to what is already selected", () => {
+  // A search shows c, d and e; a and b, ticked before it, stay ticked.
+  const some = selectionReducer(EMPTY, { type: "selectAll", orderedKeys: ["a", "b"] });
+  const all = selectionReducer(some, { type: "selectAll", orderedKeys: ["c", "d", "e"] });
+  assert.deepEqual(keysOf(all), KEYS);
+});

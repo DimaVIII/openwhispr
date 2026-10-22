@@ -1,4 +1,5 @@
 import logger from "../../utils/logger";
+import { dictionaryWordKey as key } from "../../utils/snippets";
 import type { ToolDefinition, ToolResult } from "./ToolRegistry";
 
 export interface SharedDictionaryWord {
@@ -54,26 +55,41 @@ export function createUpdateDictionaryTool(actions: DictionaryActions): ToolDefi
     readOnly: false,
 
     async execute(args: Record<string, unknown>): Promise<ToolResult> {
-      const personal = new Set(actions.getDictionary().map((word) => word.toLowerCase()));
+      // Stored spellings by key: the store and SQLite match removals by
+      // toLowerCase only, so a removal must name the spelling as stored (an NFD
+      // "Café" is not removed by an NFC one).
+      const storedByKey = new Map<string, string[]>();
+      for (const word of actions.getDictionary()) {
+        const wordKey = key(word);
+        storedByKey.set(wordKey, [...(storedByKey.get(wordKey) ?? []), word]);
+      }
       const sharedEntries = await actions.getSharedWords();
       const sharedIdsByWord = new Map<string, string[]>();
       for (const { id, word } of sharedEntries) {
-        const key = word.toLowerCase();
-        sharedIdsByWord.set(key, [...(sharedIdsByWord.get(key) ?? []), id]);
+        const wordKey = key(word);
+        sharedIdsByWord.set(wordKey, [...(sharedIdsByWord.get(wordKey) ?? []), id]);
       }
-      const inPersonal = (word: string) => personal.has(word.toLowerCase());
-      const inShared = (word: string) => sharedIdsByWord.has(word.toLowerCase());
+      const inPersonal = (word: string) => storedByKey.has(key(word));
+      const inShared = (word: string) => sharedIdsByWord.has(key(word));
       const has = (word: string) => inPersonal(word) || inShared(word);
 
       const requestedAdd = cleanWordList(args.add);
       const requestedRemove = cleanWordList(args.remove);
-      // Added words always land in Personal; one a teammate already shares counts as present.
-      const add = requestedAdd.filter((word) => !has(word));
-      const alreadyPresent = requestedAdd.filter(has);
-      const remove = requestedRemove.filter(inPersonal);
+      const remove = [
+        ...new Set(
+          requestedRemove.filter(inPersonal).flatMap((word) => storedByKey.get(key(word)) ?? [])
+        ),
+      ];
       // Independent of Personal: a shared copy keeps applying after the Personal one goes.
       const hidden = requestedRemove.filter(inShared);
       const notFound = requestedRemove.filter((word) => !has(word));
+      // Removals apply first, so a respelling in one call ("Acme" → "ACME") adds
+      // the new spelling. Added words always land in Personal; one a teammate
+      // still shares counts as present.
+      const removedKeys = new Set(requestedRemove.map(key));
+      const presentAfterRemovals = (word: string) => has(word) && !removedKeys.has(key(word));
+      const add = requestedAdd.filter((word) => !presentAfterRemovals(word));
+      const alreadyPresent = requestedAdd.filter(presentAfterRemovals);
 
       if (add.length === 0 && remove.length === 0 && hidden.length === 0) {
         const reasons = [
@@ -88,7 +104,7 @@ export function createUpdateDictionaryTool(actions: DictionaryActions): ToolDefi
       }
 
       if (hidden.length > 0) {
-        const ids = hidden.flatMap((word) => sharedIdsByWord.get(word.toLowerCase()) ?? []);
+        const ids = hidden.flatMap((word) => sharedIdsByWord.get(key(word)) ?? []);
         try {
           await actions.hideSharedWords(ids);
         } catch (error) {
@@ -111,9 +127,9 @@ export function createUpdateDictionaryTool(actions: DictionaryActions): ToolDefi
       }
 
       if (add.length > 0 || remove.length > 0) actions.updateDictionary({ add, remove });
-      const isHidden = new Set(hidden.map((word) => word.toLowerCase()));
-      const removedAndHidden = remove.filter((word) => isHidden.has(word.toLowerCase()));
-      const removedOnly = remove.filter((word) => !isHidden.has(word.toLowerCase()));
+      const isHidden = new Set(hidden.map(key));
+      const removedAndHidden = remove.filter((word) => isHidden.has(key(word)));
+      const removedOnly = remove.filter((word) => !isHidden.has(key(word)));
       const hiddenOnly = hidden.filter((word) => !inPersonal(word));
       const summary = [
         add.length ? `Added ${quoteList(add)}` : "",

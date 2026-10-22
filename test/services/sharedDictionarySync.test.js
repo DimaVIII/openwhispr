@@ -41,13 +41,14 @@ async function setup(t, { workspaceId = W1, signedIn = true } = {}) {
 
   const db = createSharedDictionaryDb();
   const cloud = createSharedDictionaryCloud();
-  const events = [];
-  harness.window.dispatchEvent = (event) => {
-    events.push(event);
-    return true;
-  };
+  // What the pass rebroadcasts to every window through the main process.
+  const syncEvents = [];
   harness.window.electronAPI = {
     ...db.api,
+    emitSyncEvent: async (name, payload) => {
+      syncEvents.push({ name, payload });
+      return { success: true };
+    },
     cloudApiRequest: cloud.cloudApiRequest,
     authGetTokenState: async () => ({ token: "token-harness", generation: 1 }),
     setSharedDictionaryHints: async () => {},
@@ -63,8 +64,11 @@ async function setup(t, { workspaceId = W1, signedIn = true } = {}) {
   const service = new mods.SyncService();
   t.after(() => harness.stopSyncTimers(service));
   const hints = () => mods.useSettingsStore.getState().sharedDictionaryHints;
-  const arrivals = () => events.filter((event) => event.type === "shared-dictionary-arrived");
-  return { ...mods, db, cloud, service, hints, arrivals };
+  const eventsNamed = (name) =>
+    syncEvents.filter((event) => event.name === name).map((event) => event.payload);
+  const arrivals = () => eventsNamed("shared-dictionary-arrived");
+  const changes = () => eventsNamed("shared-dictionary-changed");
+  return { ...mods, db, cloud, service, hints, arrivals, changes, syncEvents };
 }
 
 const query = (request) => Object.fromEntries(request.query.entries());
@@ -159,7 +163,53 @@ test("NOT_MEMBER clears the workspace and its cursors", async (t) => {
   assert.equal(harness.localStorage.getItem(ENTRIES_CURSOR), null);
   assert.equal(harness.localStorage.getItem(HIDES_CURSOR), null);
   assert.deepEqual(ctx.hints(), { space: [], workspace: [] });
+  assert.equal(ctx.useSharedDictionaryStore.getState().status, "noAccess");
+  assert.deepEqual(ctx.changes().at(-1), { workspaceId: W1 }, "other windows reload");
+  assert.deepEqual(JSON.parse(harness.localStorage.getItem("sharedDictionaryAccess")), {
+    [W1]: "noAccess",
+  });
+
+  // Access comes back: the next pass that succeeds says so.
+  await service.syncSharedDictionaryNow();
   assert.equal(ctx.useSharedDictionaryStore.getState().status, "ready");
+  assert.equal(harness.localStorage.getItem("sharedDictionaryAccess"), null);
+  assert.deepEqual(ctx.hints().workspace, ["Qdrant"]);
+});
+
+test("a member who stays locked out doesn't count as moved work", async (t) => {
+  const ctx = await setup(t);
+  const { cloud, service } = ctx;
+  cloud.add(W1, ["Qdrant"]);
+  await service.syncSharedDictionaryNow();
+
+  cloud.failNext(LIST, { status: 403, code: "SSO_REQUIRED" });
+  service.teamPassMovedWork = false;
+  await service.syncSharedDictionaryNow();
+  assert.equal(service.teamPassMovedWork, true, "the first refusal cleared the mirror");
+  assert.equal(ctx.changes().length, 2);
+
+  cloud.failNext(LIST, { status: 403, code: "SSO_REQUIRED" });
+  service.teamPassMovedWork = false;
+  await service.syncSharedDictionaryNow();
+  assert.equal(service.teamPassMovedWork, false, "nothing was left to clear");
+  assert.equal(ctx.changes().length, 2, "and nothing to reload");
+  assert.equal(ctx.useSharedDictionaryStore.getState().status, "ssoRequired");
+});
+
+test("an access status belongs to the workspace it was refused for", async (t) => {
+  const ctx = await setup(t);
+  const { cloud, service } = ctx;
+  cloud.failNext(LIST, { status: 403, code: "SSO_REQUIRED" });
+  await service.syncSharedDictionaryNow();
+  assert.equal(ctx.useSharedDictionaryStore.getState().status, "ssoRequired");
+
+  ctx.useWorkspaceStore.getState().setActiveWorkspaceId(W2);
+  await flush();
+  assert.equal(ctx.useSharedDictionaryStore.getState().status, "ready");
+
+  ctx.useWorkspaceStore.getState().setActiveWorkspaceId(W1);
+  await flush();
+  assert.equal(ctx.useSharedDictionaryStore.getState().status, "ssoRequired", "until a pass");
 });
 
 test("SSO_REQUIRED clears the workspace like NOT_MEMBER", async (t) => {
@@ -174,6 +224,7 @@ test("SSO_REQUIRED clears the workspace like NOT_MEMBER", async (t) => {
   assert.equal(db.workspaces.has(W1), false);
   assert.equal(harness.localStorage.getItem(ENTRIES_CURSOR), null);
   assert.deepEqual(ctx.hints(), { space: [], workspace: [] });
+  assert.equal(ctx.useSharedDictionaryStore.getState().status, "ssoRequired");
 });
 
 test("plain 404 marks unavailable without throwing", async (t) => {
@@ -207,10 +258,10 @@ test("arrival event fires once", async (t) => {
   cloud.add(W1, ["Piha"]);
   await service.syncSharedDictionaryNow();
 
-  const arrivals = ctx.arrivals();
-  assert.equal(arrivals.length, 1);
-  assert.deepEqual(arrivals[0].detail, { workspaceId: W1, count: 2 });
-  assert.equal(harness.localStorage.getItem(`sharedDictionaryWelcomed.${W1}`), "true");
+  // A sync event, not a window-local one: the pass often runs in the
+  // dictation overlay, where no toast listener is mounted.
+  assert.deepEqual(ctx.arrivals(), [{ workspaceId: W1, count: 2 }]);
+  assert.equal(harness.localStorage.getItem(`sharedDictionaryWelcomed.user-harness.${W1}`), "true");
 });
 
 test("runs when cloud backup is off", async (t) => {
@@ -330,31 +381,70 @@ test("a returning scope triggers a fresh snapshot", async (t) => {
   assert.equal(harness.localStorage.getItem(ENTRIES_CURSOR), "2026-10-20T12:30:00.000Z");
 });
 
-test("no active workspace clears every mirror and cursor", async (t) => {
+test("no active workspace clears only the workspaces the member left", async (t) => {
+  const ctx = await setup(t);
+  const { cloud, db, service } = ctx;
+  cloud.add(W1, ["Qdrant"]);
+  await service.syncSharedDictionaryNow();
+  ctx.useWorkspaceStore.getState().setActiveWorkspaceId(W2);
+  await flush();
+  cloud.add(W2, ["Biscuit"]);
+  await service.syncSharedDictionaryNow();
+  const w2Cursor = `lastSyncedAt.sharedDictionary.${W2}`;
+  assert.ok(harness.localStorage.getItem(w2Cursor));
+
+  // Still a member of W1; W2 is gone from the loaded list.
+  ctx.useWorkspaceStore.setState({
+    loaded: true,
+    error: false,
+    workspaces: [{ id: W1, name: "Acme" }],
+  });
+  ctx.useWorkspaceStore.getState().setActiveWorkspaceId(null);
+  await flush();
+  await service.syncSharedDictionaryNow();
+
+  assert.deepEqual(db.callsNamed("pruneSharedDictionary").at(-1).keepWorkspaceIds, [W1]);
+  assert.equal(db.callsNamed("clearSharedDictionary").length, 0);
+  assert.deepEqual([...db.workspaces.keys()], [W1], "switching back needs no re-download");
+  assert.ok(harness.localStorage.getItem(ENTRIES_CURSOR));
+  assert.ok(harness.localStorage.getItem(HIDES_CURSOR));
+  assert.equal(harness.localStorage.getItem(w2Cursor), null);
+  assert.equal(harness.localStorage.getItem(`lastSyncedAt.sharedDictionaryHides.${W2}`), null);
+  assert.deepEqual(ctx.hints(), { space: [], workspace: [] });
+
+  const listsBefore = cloud.requestsTo(LIST).length;
+  ctx.useWorkspaceStore.getState().setActiveWorkspaceId(W1);
+  await flush();
+  await service.syncSharedDictionaryNow();
+  assert.ok(query(cloud.requestsTo(LIST)[listsBefore]).since, "W1 resumes with a delta");
+});
+
+test("no active workspace and no loaded workspace list keeps every mirror", async (t) => {
   const ctx = await setup(t);
   const { cloud, db, service } = ctx;
   cloud.add(W1, ["Qdrant"]);
   await service.syncSharedDictionaryNow();
 
+  ctx.useWorkspaceStore.setState({ loaded: false, workspaces: [] });
   ctx.useWorkspaceStore.getState().setActiveWorkspaceId(null);
   await flush();
   await service.syncSharedDictionaryNow();
 
-  assert.deepEqual(db.callsNamed("clearSharedDictionary").at(-1).workspaceId, undefined);
-  assert.equal(db.workspaces.size, 0);
-  assert.equal(harness.localStorage.getItem(ENTRIES_CURSOR), null);
-  assert.equal(harness.localStorage.getItem(HIDES_CURSOR), null);
+  assert.equal(db.callsNamed("pruneSharedDictionary").length, 0);
+  assert.equal(db.workspaces.has(W1), true);
+  assert.ok(harness.localStorage.getItem(ENTRIES_CURSOR));
   assert.deepEqual(ctx.hints(), { space: [], workspace: [] });
 });
 
-test("sign-out clears the shared tables, cursors, welcome, capability and hints", async (t) => {
+test("sign-out clears the shared tables, cursors, capability and hints, not the welcome", async (t) => {
   const ctx = await setup(t);
   const { cloud, db, service } = ctx;
   cloud.add(W1, ["Qdrant"]);
   await service.syncSharedDictionaryNow();
   harness.localStorage.setItem("sharedDictionaryCapability", "false");
   const generation = ctx.useSharedDictionaryStore.getState().generation;
-  assert.ok(harness.localStorage.getItem(`sharedDictionaryWelcomed.${W1}`));
+  const welcomed = `sharedDictionaryWelcomed.user-harness.${W1}`;
+  assert.ok(harness.localStorage.getItem(welcomed));
 
   await service.purgeTeamSpacesForSignOut();
 
@@ -362,7 +452,7 @@ test("sign-out clears the shared tables, cursors, welcome, capability and hints"
   assert.equal(db.callsNamed("clearSharedDictionary").at(-1).workspaceId, undefined);
   assert.equal(harness.localStorage.getItem(ENTRIES_CURSOR), null);
   assert.equal(harness.localStorage.getItem(HIDES_CURSOR), null);
-  assert.equal(harness.localStorage.getItem(`sharedDictionaryWelcomed.${W1}`), null);
+  assert.equal(harness.localStorage.getItem(welcomed), "true", "the toast never repeats");
   assert.equal(harness.localStorage.getItem("sharedDictionaryCapability"), null);
   assert.deepEqual(ctx.hints(), { space: [], workspace: [] });
   const state = ctx.useSharedDictionaryStore.getState();
@@ -466,6 +556,24 @@ test("a delta stall throws without corrupting state", async (t) => {
   assert.deepEqual(ctx.hints().workspace, ["Qdrant"]);
 });
 
+test("a hides delta stall throws without moving the hides cursor", async (t) => {
+  const ctx = await setup(t);
+  const { cloud, service } = ctx;
+  const [row] = cloud.add(W1, ["Qdrant"]);
+  await service.syncSharedDictionaryNow();
+  const cursor = harness.localStorage.getItem(HIDES_CURSOR);
+  const errors = t.mock.method(console, "error", () => {});
+  const hide = { entry_id: row.id, workspace_id: W1, updated_at: cursor, deleted_at: null };
+  const stuck = { hides: [hide], hasMore: true, server_time: "2026-10-20T13:00:00.000Z" };
+  cloud.respondNext(HIDES, stuck);
+  cloud.respondNext(HIDES, stuck);
+
+  await service.syncSharedDictionaryNow();
+
+  assert.match(String(errors.mock.calls[0].arguments[1]), /hides delta stopped advancing/);
+  assert.equal(harness.localStorage.getItem(HIDES_CURSOR), cursor);
+});
+
 test("a 410 from /hides restarts as a hides snapshot", async (t) => {
   const ctx = await setup(t);
   const { cloud, db, service } = ctx;
@@ -515,6 +623,73 @@ test("a failed clear after NOT_MEMBER publishes empty hints instead of reloading
   assert.equal(errors.mock.callCount(), 1);
 });
 
+test("the arrival toast doesn't repeat after signing out and back in", async (t) => {
+  const ctx = await setup(t);
+  const { cloud, service } = ctx;
+  cloud.add(W1, ["Qdrant"]);
+  await service.syncSharedDictionaryNow();
+  assert.equal(ctx.arrivals().length, 1);
+
+  await service.purgeTeamSpacesForSignOut();
+  await harness.establishValidatedAuth("user-harness");
+  ctx.useWorkspaceStore.getState().setActiveWorkspaceId(W1);
+  await flush();
+  await service.syncSharedDictionaryNow();
+  assert.deepEqual(ctx.hints().workspace, ["Qdrant"], "the mirror was rebuilt");
+  assert.equal(ctx.arrivals().length, 1, "same account, same workspace, same device");
+
+  // Another account on this device gets its own.
+  await service.purgeTeamSpacesForSignOut();
+  await harness.establishValidatedAuth("user-other");
+  ctx.useWorkspaceStore.getState().setActiveWorkspaceId(W1);
+  await flush();
+  await service.syncSharedDictionaryNow();
+  assert.equal(ctx.arrivals().length, 2);
+});
+
+test("a pass that changes the mirror tells other windows; a no-op pass doesn't", async (t) => {
+  const ctx = await setup(t);
+  const { cloud, service } = ctx;
+  await service.syncSharedDictionaryNow();
+  assert.deepEqual(ctx.changes(), [], "an empty list stays empty");
+
+  const [row] = cloud.add(W1, ["Qdrant"]);
+  await service.syncSharedDictionaryNow();
+  assert.deepEqual(ctx.changes(), [{ workspaceId: W1 }]);
+
+  await service.syncSharedDictionaryNow();
+  assert.equal(ctx.changes().length, 1, "re-read rows change nothing");
+
+  cloud.hide(W1, row.id, "2026-10-20T12:00:01.000Z");
+  await service.syncSharedDictionaryNow();
+  assert.equal(ctx.changes().length, 2, "a hide is a change too");
+});
+
+test("a delta pages through more than 200 rows written at the same instant", async (t) => {
+  const ctx = await setup(t);
+  const { cloud, db, service } = ctx;
+  cloud.add(W1, ["Seed"]);
+  await service.syncSharedDictionaryNow();
+
+  // One batch: every row shares a timestamp, which the API spells without
+  // milliseconds. Postgres compares the instant, not the text.
+  cloud.add(
+    W1,
+    Array.from({ length: 250 }, (_, index) => `Batch${index}`),
+    { created_at: "2026-10-20T12:05:00Z", updated_at: "2026-10-20T12:05:00Z" }
+  );
+  cloud.setServerTime("2026-10-20T12:10:00.000Z");
+  const before = cloud.requestsTo(LIST).length;
+  await service.syncSharedDictionaryNow();
+
+  const pages = cloud.requestsTo(LIST).slice(before).map(query);
+  assert.equal(pages.length, 2);
+  assert.equal(pages[1].since, "2026-10-20T12:05:00Z");
+  assert.ok(pages[1].since_id, "the second page resumes after the last id");
+  assert.equal((await db.api.getSharedDictionary(W1)).entries.length, 251);
+  assert.equal(ctx.hints().workspace.length, 251);
+});
+
 // --- personal shared_at (moved words) ----------------------------------------
 
 function personalRow(overrides = {}) {
@@ -533,22 +708,36 @@ function personalRow(overrides = {}) {
   };
 }
 
-async function setupPersonal(t, { pending = [], local = null, cloudEntries = [] } = {}) {
+// `cloudEntries` answers every personal list request with one page; without
+// it the fake cloud's personal list (cloud.personal) pages like the API.
+async function setupPersonal(
+  t,
+  { pending = [], local = null, locals = null, cloudEntries = null } = {}
+) {
   const ctx = await setup(t);
   harness.enableSync();
   const sent = [];
+  const patched = [];
   const upserted = [];
+  const hardDeleted = [];
+  let broadcasts = 0;
   const sharedCloud = ctx.cloud.cloudApiRequest;
   Object.assign(harness.window.electronAPI, {
     getPendingDictionary: async () => pending,
     getPendingDictionaryDeletes: async () => [],
-    getDictionaryByClientId: async () => local,
+    getDictionaryByClientId: async (clientId) => (locals ? (locals[clientId] ?? null) : local),
     upsertDictionaryFromCloud: async (entry) => upserted.push(entry),
     markDictionarySynced: async () => ({ changes: 1 }),
-    hardDeleteDictionary: async () => {},
+    hardDeleteDictionary: async (id) => hardDeleted.push(id),
     clearDictionaryCloudId: async () => {},
-    broadcastDictionaryUpdated: async () => {},
+    broadcastDictionaryUpdated: async () => {
+      broadcasts += 1;
+    },
     cloudApiRequest: async (request) => {
+      if (request.path === "/api/dictionary/update") {
+        patched.push(request.body);
+        return { success: true, data: request.body };
+      }
       if (request.path === "/api/dictionary/batch-create") {
         sent.push(...request.body.entries);
         const created = request.body.entries.map((entry, index) => ({
@@ -557,13 +746,13 @@ async function setupPersonal(t, { pending = [], local = null, cloudEntries = [] 
         }));
         return { success: true, data: { created } };
       }
-      if (request.path.startsWith("/api/dictionary/list")) {
+      if (cloudEntries && request.path.startsWith("/api/dictionary/list")) {
         return { success: true, data: { entries: cloudEntries, hasMore: false } };
       }
       return sharedCloud(request);
     },
   });
-  return { ...ctx, sent, upserted };
+  return { ...ctx, sent, patched, upserted, hardDeleted, broadcasts: () => broadcasts };
 }
 
 test("a moved word resends shared_at when pushed", async (t) => {
@@ -576,13 +765,45 @@ test("a moved word resends shared_at when pushed", async (t) => {
 
   await ctx.service.syncDictionaryNow();
 
-  assert.deepEqual(
-    ctx.sent.map(({ word, shared_at }) => [word, shared_at]),
-    [
-      ["Piha", "2026-10-20T10:00:00.000Z"],
-      ["Biscuit", null],
-    ]
-  );
+  assert.deepEqual(ctx.sent[0].shared_at, "2026-10-20T10:00:00.000Z");
+  // Absent keeps the server's value: the create may revive a tombstone that
+  // another device had shared.
+  assert.equal(Object.hasOwn(ctx.sent[1], "shared_at"), false);
+});
+
+test("a create sends an explicit null only for a local clear", async (t) => {
+  const ctx = await setupPersonal(t, {
+    pending: [personalRow({ shared_at_dirty: 1 })],
+  });
+
+  await ctx.service.syncDictionaryNow();
+
+  assert.equal(Object.hasOwn(ctx.sent[0], "shared_at"), true);
+  assert.equal(ctx.sent[0].shared_at, null);
+});
+
+test("an update sends shared_at only when it was set or cleared locally", async (t) => {
+  const ctx = await setupPersonal(t, {
+    pending: [
+      // "Add back to Personal" on a moved word.
+      personalRow({ cloud_id: "cloud-piha", shared_at: null, shared_at_dirty: 1 }),
+      // An ordinary edit: the server may have set shared_at from another device.
+      personalRow({
+        id: 2,
+        word: "Biscuit",
+        client_dict_id: "client-biscuit",
+        cloud_id: "cloud-biscuit",
+        shared_at: null,
+      }),
+    ],
+  });
+
+  await ctx.service.syncDictionaryNow();
+
+  assert.deepEqual(ctx.patched, [
+    { id: "cloud-piha", word: "Piha", source: "manual", shared_at: null },
+    { id: "cloud-biscuit", word: "Biscuit", source: "manual" },
+  ]);
 });
 
 test("a pull takes the cloud's shared_at for a row at the same version", async (t) => {
@@ -617,6 +838,136 @@ test("a pull takes the cloud's shared_at for a row at the same version", async (
   const olderCtx = await setupPersonal(t, { local: synced, cloudEntries: [olderApiRow] });
   await olderCtx.service.syncDictionaryNow();
   assert.equal(olderCtx.upserted.length, 0);
+});
+
+function cloudPersonal(index, overrides = {}) {
+  return {
+    id: `dddddddd-dddd-4ddd-8ddd-${String(index).padStart(12, "0")}`,
+    client_dict_id: `client-${index}`,
+    word: `Word${index}`,
+    source: "manual",
+    deleted_at: null,
+    shared_at: null,
+    created_at: "2026-10-01T10:00:00.000Z",
+    updated_at: "2026-10-01T10:00:00.000Z",
+    ...overrides,
+  };
+}
+
+test("the backfill re-reads from the epoch, so tombstones newer than the old cursor apply", async (t) => {
+  // Deleted on another device after this device's last pull.
+  const deletedElsewhere = cloudPersonal(1, {
+    deleted_at: "2026-10-15T00:00:00.000Z",
+    updated_at: "2026-10-15T00:00:00.000Z",
+  });
+  const local = personalRow({
+    id: 7,
+    word: "Word1",
+    client_dict_id: "client-1",
+    cloud_id: deletedElsewhere.id,
+    sync_status: "synced",
+  });
+  const ctx = await setupPersonal(t, { locals: { "client-1": local } });
+  // syncAll's other passes have nothing faked behind them.
+  t.mock.method(console, "error", () => {});
+  ctx.cloud.personal.push(
+    deletedElsewhere,
+    ...Array.from({ length: 250 }, (_, index) =>
+      cloudPersonal(index + 10, { updated_at: "2026-10-20T10:00:00.000Z" })
+    )
+  );
+  harness.localStorage.setItem("lastSyncedAt.dictionary", "2026-10-10T00:00:00.000Z");
+
+  await ctx.service.syncAll(true);
+
+  const lists = ctx.cloud.requestsTo("/api/dictionary/list").map(query);
+  assert.equal(lists[0].since, "1970-01-01T00:00:00.000Z", "a delta, not the live snapshot");
+  assert.equal(lists[1].since, "2026-10-20T10:00:00.000Z");
+  assert.ok(lists[1].since_id, "the same-timestamp batch pages on its ids");
+  assert.deepEqual(ctx.hardDeleted, [7], "the deletion reached this device");
+  assert.equal(ctx.upserted.length, 250);
+  assert.equal(harness.localStorage.getItem("lastSyncedAt.dictionary"), "2026-10-20T10:00:00.000Z");
+  assert.equal(harness.localStorage.getItem("dictionarySharedAtBackfill"), "true");
+});
+
+test("an interrupted backfill starts over from the epoch", async (t) => {
+  const ctx = await setupPersonal(t);
+  t.mock.method(console, "error", () => {});
+  ctx.cloud.personal.push(cloudPersonal(1));
+  harness.localStorage.setItem("lastSyncedAt.dictionary", "2026-10-10T00:00:00.000Z");
+  ctx.cloud.failNext("/api/dictionary/list", { status: 500 });
+
+  await ctx.service.syncAll(true);
+  assert.equal(harness.localStorage.getItem("lastSyncedAt.dictionary"), null);
+
+  await ctx.service.syncDictionaryNow();
+  const lists = ctx.cloud.requestsTo("/api/dictionary/list").map(query);
+  assert.equal(lists.at(-1).since, "1970-01-01T00:00:00.000Z");
+  assert.equal(ctx.upserted.length, 1);
+});
+
+test("an old tombstone doesn't delete a newer pending local edit", async (t) => {
+  const local = personalRow({
+    word: "Word1",
+    client_dict_id: "client-1",
+    cloud_id: "cloud-1",
+    updated_at: "2026-10-20 10:00:00",
+  });
+  const ctx = await setupPersonal(t, { locals: { "client-1": local } });
+  ctx.cloud.personal.push(
+    cloudPersonal(1, {
+      deleted_at: "2026-10-01T00:00:00.000Z",
+      updated_at: "2026-10-01T00:00:00.000Z",
+    })
+  );
+
+  await ctx.service.syncDictionaryNow();
+
+  assert.deepEqual(ctx.hardDeleted, []);
+});
+
+test("a live cloud row wins over a fallback this device retired, whatever its age", async (t) => {
+  const retired = personalRow({
+    word: "Word1",
+    client_dict_id: "client-1",
+    cloud_id: "cloud-1",
+    sync_status: "synced",
+    deleted_at: "2026-10-20 12:00:00",
+    updated_at: "2026-10-20 12:00:00",
+    fallback_retired: 1,
+  });
+  const deliberate = { ...retired, client_dict_id: "client-2", fallback_retired: 0 };
+  const ctx = await setupPersonal(t, { locals: { "client-1": retired, "client-2": deliberate } });
+  // The server kept both: the word still applies through a list never mirrored here.
+  ctx.cloud.personal.push(cloudPersonal(1), cloudPersonal(2));
+
+  await ctx.service.syncDictionaryNow();
+
+  assert.deepEqual(
+    ctx.upserted.map((entry) => entry.client_dict_id),
+    ["client-1"],
+    "only the guessed retirement yields; a newer user delete still wins"
+  );
+});
+
+test("a personal pull that stops advancing fails instead of saving a stuck cursor", async (t) => {
+  const ctx = await setupPersonal(t);
+  const errors = t.mock.method(console, "error", () => {});
+  harness.localStorage.setItem("dictionarySharedAtBackfill", "true");
+  harness.localStorage.setItem("lastSyncedAt.dictionary", "2026-10-10T00:00:00.000Z");
+  harness.localStorage.setItem("lastSyncedAt.dictionary.id", "dict-0");
+  const row = cloudPersonal(1, { updated_at: "2026-10-12T00:00:00.000Z" });
+  const stuck = { entries: [row], hasMore: true };
+  ctx.cloud.respondNext("/api/dictionary/list", stuck);
+  ctx.cloud.respondNext("/api/dictionary/list", stuck);
+
+  await ctx.service.syncDictionaryNow();
+
+  assert.equal(ctx.cloud.requestsTo("/api/dictionary/list").length, 2, "it gives up");
+  assert.match(String(errors.mock.calls[0].arguments[1]), /stopped advancing/);
+  assert.equal(harness.localStorage.getItem("lastSyncedAt.dictionary"), "2026-10-10T00:00:00.000Z");
+  assert.equal(harness.localStorage.getItem("lastSyncedAt.dictionary.id"), "dict-0");
+  assert.equal(ctx.broadcasts(), 1, "the page it did apply still reaches the windows");
 });
 
 // Last: startAutoSync's subscription lives as long as the workspace store, so

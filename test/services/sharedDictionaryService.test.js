@@ -181,3 +181,17 @@ test("API failures surface as CloudApiError with status and code", async (t) => 
     (error) => error.status === 410 && error.code === "SHARED_DICTIONARY_CURSOR_EXPIRED"
   );
 });
+
+test("share refuses more than 20 targets before any request", async (t) => {
+  const requests = installCloudCapture(t, { created: [], alreadyPresent: [] });
+  const targets = Array.from({ length: 21 }, (_, index) => `space-${index}`);
+
+  await assert.rejects(
+    () => loadService().share(WORKSPACE, { targets, personal: [], words: ["Qdrant"] }),
+    RangeError
+  );
+  assert.equal(requests.length, 0);
+
+  await loadService().share(WORKSPACE, { targets: targets.slice(1), personal: [], words: ["Q"] });
+  assert.equal(requests.length, 1);
+});

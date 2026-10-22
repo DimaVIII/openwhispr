@@ -5,6 +5,7 @@ import { Button } from "../ui/button";
 import { cn } from "../lib/utils";
 import type { ShareTarget } from "../../services/sharedDictionaryActions";
 import type { shareTargetsFor } from "./dictionaryViewModel";
+import { isTermLikeSharedWord } from "../../utils/sharedDictionaryHints";
 import { RowCheckbox } from "./RowCheckbox";
 
 export type ShareTargetOption = ReturnType<typeof shareTargetsFor>[number];
@@ -55,8 +56,12 @@ export function ShareWordsPopover({
     .filter((option) => !option.alreadyShared && ticked.has(targetKey(option.target)))
     .map((option) => option.target);
 
+  // A teammate's dictation would leave these out, so they stay in Personal; with
+  // other words beside them, the share goes ahead and reports them by name.
+  const nothingShareable = !words.some((word) => isTermLikeSharedWord(word));
+
   const share = async (): Promise<void> => {
-    if (sharing || chosen.length === 0) return;
+    if (sharing || chosen.length === 0 || nothingShareable) return;
     setSharing(true);
     try {
       await onShare(chosen);
@@ -76,6 +81,12 @@ export function ShareWordsPopover({
       <PopoverContent
         align="end"
         className="w-60 min-w-0 p-1.5"
+        // There's no trigger to return to, so focus goes back to what opened the popover.
+        onCloseAutoFocus={(event) => {
+          if (!anchor?.isConnected) return;
+          event.preventDefault();
+          anchor.focus();
+        }}
         // The anchor toggles the popover itself; an outside click there would reopen it.
         onInteractOutside={(event) => {
           if (anchor && event.target instanceof Node && anchor.contains(event.target)) {
@@ -118,13 +129,19 @@ export function ShareWordsPopover({
           })}
         </div>
         <div className="mt-1 flex items-center justify-between gap-2 border-t border-foreground/8 px-2 pb-0.5 pt-2 dark:border-white/8">
-          <span className="min-w-0 truncate text-[10px] text-foreground/45">
-            {t("dictionary.shared.share.movesOut", { count: words.length })}
-          </span>
+          {nothingShareable ? (
+            <span role="alert" className="min-w-0 text-[10px] leading-snug text-destructive">
+              {t("dictionary.shared.notTermLike")}
+            </span>
+          ) : (
+            <span className="min-w-0 truncate text-[10px] text-foreground/45">
+              {t("dictionary.shared.share.movesOut", { count: words.length })}
+            </span>
+          )}
           <Button
             size="sm"
             className="h-6 shrink-0 rounded-md px-2.5 text-[11px]"
-            disabled={chosen.length === 0 || sharing}
+            disabled={chosen.length === 0 || sharing || nothingShareable}
             onClick={() => void share()}
           >
             {t("dictionary.shared.actions.share")}

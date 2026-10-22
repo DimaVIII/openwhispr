@@ -149,3 +149,53 @@ test("a workspace switch in another window empties the hints", async (t) => {
 
   assert.deepEqual(loaded.useSettingsStore.getState().sharedDictionaryHints, EMPTY);
 });
+
+test("a full localStorage still publishes the hints and drops the stale copy", async (t) => {
+  const sent = [];
+  const loaded = await loadStore(t, {
+    cachePrefix: "openwhispr-shared-hints-quota-",
+    initialStorage: { activeWorkspaceId: WS_A, sharedDictionaryHints: persisted(WS_A, ["Old"]) },
+    electronAPI: {
+      setSharedDictionaryHints: async (hints) => {
+        sent.push(hints);
+      },
+    },
+  });
+  await initialize(loaded);
+  t.mock.method(console, "warn", () => {});
+  const setItem = loaded.storage.setItem;
+  loaded.storage.setItem = (key, value) => {
+    if (key === "sharedDictionaryHints") throw new Error("QuotaExceededError");
+    return setItem(key, value);
+  };
+
+  const hints = { space: [], workspace: ["Acme"] };
+  assert.doesNotThrow(() =>
+    loaded.useSettingsStore.getState().setSharedDictionaryHints(hints, WS_A)
+  );
+
+  assert.deepEqual(loaded.useSettingsStore.getState().sharedDictionaryHints, hints);
+  assert.deepEqual(sent.at(-1), hints);
+  assert.equal(loaded.storage.getItem("sharedDictionaryHints"), null);
+});
+
+test("persisted hints keep the moved words a hide suppresses", async (t) => {
+  const { useSettingsStore } = await loadStore(t, {
+    cachePrefix: "openwhispr-shared-hints-suppressed-",
+    initialStorage: {
+      activeWorkspaceId: WS_A,
+      sharedDictionaryHints: JSON.stringify({
+        workspaceId: WS_A,
+        space: [],
+        workspace: ["Acme"],
+        suppressedPersonal: ["Kube", 7],
+      }),
+    },
+  });
+
+  assert.deepEqual(useSettingsStore.getState().sharedDictionaryHints, {
+    space: [],
+    workspace: ["Acme"],
+    suppressedPersonal: ["Kube"],
+  });
+});

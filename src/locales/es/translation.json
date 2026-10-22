@@ -3570,6 +3570,7 @@
     "importPlaceholder": "Pega palabras separadas por comas o saltos de línea...",
     "separateWithCommas": "Una palabra por línea, o separadas por comas",
     "wordsReady_one": "{{count}} palabra lista",
+    "wordsReady_many": "{{count}} de palabras listas",
     "wordsReady_other": "{{count}} palabras listas",
     "promptLimitNotice": "Tu diccionario tiene {{chars}} caracteres. Los modelos de Groq y Whisper solo leen los últimos cientos de caracteres, así que allí funciona mejor una lista más corta. Los demás modelos reciben la lista completa.",
     "exportDictionary": "Exportar diccionario",
@@ -3654,6 +3655,7 @@
         "oldest": "Más antiguas primero"
       },
       "memberCount_one": "{{count}} miembro",
+      "memberCount_many": "{{count}} de miembros",
       "memberCount_other": "{{count}} miembros",
       "emptyList": "Aún no hay palabras en {{list}}",
       "allHiddenList": "Todas las palabras de {{list}} están ocultas para ti",
@@ -3662,17 +3664,26 @@
       "undo": "Deshacer",
       "errors": {
         "generic": "No se pudo actualizar {{list}}. Inténtalo de nuevo.",
-        "listFull": "{{list}} está llena"
+        "listFull": "{{list}} está llena",
+        "planRequired": "Los diccionarios compartidos requieren Business, así que {{list}} no cambió",
+        "ssoRequired": "Inicia sesión con el SSO de tu empresa para cambiar {{list}}",
+        "notMember": "Ya no tienes acceso a {{list}}",
+        "invalid": "{{list}} solo admite términos cortos: hasta 64 caracteres y 6 palabras, sin comas, signos de puntuación de frase ni símbolos como < > { } [ ] ` |",
+        "recentlyDeleted": "Esa palabra se acaba de eliminar de {{list}}. Añádela de nuevo."
       },
       "deleteOneTitle": "¿Eliminar «{{word}}» para todos en {{list}}?",
       "deleteManyTitle_one": "¿Eliminar {{count}} palabra para todos en {{list}}?",
+      "deleteManyTitle_many": "¿Eliminar {{count}} de palabras para todos en {{list}}?",
       "deleteManyTitle_other": "¿Eliminar {{count}} palabras para todos en {{list}}?",
       "deletedManyForEveryone_one": "{{count}} palabra eliminada para todos",
+      "deletedManyForEveryone_many": "{{count}} de palabras eliminadas para todos",
       "deletedManyForEveryone_other": "{{count}} palabras eliminadas para todos",
       "deletedPersonalMany_one": "Se eliminó {{count}} palabra",
+      "deletedPersonalMany_many": "Se eliminaron {{count}} de palabras",
       "deletedPersonalMany_other": "Se eliminaron {{count}} palabras",
       "selection": {
         "count_one": "{{count}} seleccionada",
+        "count_many": "{{count}} seleccionadas",
         "count_other": "{{count}} seleccionadas",
         "selectAll": "Seleccionar las {{total}}",
         "shareWith": "Compartir con…",
@@ -3683,11 +3694,14 @@
       "share": {
         "titleOne": "Compartir «{{word}}» con",
         "titleMany_one": "Compartir {{count}} palabra con",
+        "titleMany_many": "Compartir {{count}} de palabras con",
         "titleMany_other": "Compartir {{count}} palabras con",
         "alreadyShared": "Ya compartida",
         "movesOut_one": "La saca de Personal",
+        "movesOut_many": "Las saca de Personal",
         "movesOut_other": "Las saca de Personal",
         "partial_one": "Se compartieron {{moved}} de {{total}} palabras. {{count}} no se compartió.",
+        "partial_many": "Se compartieron {{moved}} de {{total}} palabras. {{count}} no se compartieron.",
         "partial_other": "Se compartieron {{moved}} de {{total}} palabras. {{count}} no se compartieron.",
         "reasons": {
           "personalChanged": "Una palabra cambió en otro dispositivo. Inténtalo de nuevo.",
@@ -3700,14 +3714,21 @@
         "upgradeAdmin": "Los diccionarios compartidos están incluidos en Business. Mejora el plan de {{workspace}} para que todos tengan las mismas palabras.",
         "upgradeMember": "Los diccionarios compartidos están incluidos en Business. Pide a un administrador que mejore el plan de {{workspace}}.",
         "paused_one": "La {{count}} palabra compartida de {{workspace}} está en pausa. Cámbiate a Business para volver a usarla al dictar.",
+        "paused_many": "Las {{count}} de palabras compartidas de {{workspace}} están en pausa. Cámbiate a Business para volver a usarlas al dictar.",
         "paused_other": "Las {{count}} palabras compartidas de {{workspace}} están en pausa. Cámbiate a Business para volver a usarlas al dictar.",
         "workspaceTitle": "Todos en tu espacio de trabajo",
         "workspaceDescription": "Palabras para toda la empresa",
         "spaceTitle": "Una lista por espacio",
         "spaceDescription": "Palabras que solo necesita un equipo",
         "wordCount_one": "{{count}} palabra",
+        "wordCount_many": "{{count}} de palabras",
         "wordCount_other": "{{count}} palabras",
-        "lockLabel": "Incluido en Business"
+        "lockLabel": "Incluido en Business",
+        "ssoRequired": "{{workspace}} requiere el SSO de la empresa. Cierra sesión y vuelve a iniciarla con SSO para usar sus palabras compartidas.",
+        "noAccess": "Ya no tienes acceso a las palabras compartidas de {{workspace}}. Pregunta a un administrador si crees que es un error.",
+        "pausedMember_one": "La {{count}} palabra compartida de {{workspace}} está en pausa. Pide a un administrador o al propietario que se cambie a Business para volver a usarla al dictar.",
+        "pausedMember_many": "Las {{count}} de palabras compartidas de {{workspace}} están en pausa. Pide a un administrador o al propietario que se cambie a Business para volver a usarlas al dictar.",
+        "pausedMember_other": "Las {{count}} palabras compartidas de {{workspace}} están en pausa. Pide a un administrador o al propietario que se cambie a Business para volver a usarlas al dictar."
       },
       "empty": {
         "body": "Añade los términos que usa este equipo o comparte algunos de tu lista personal. Todos en {{list}} ({{count}}) los recibirán.",
@@ -3716,11 +3737,20 @@
       },
       "arrival": {
         "title_one": "{{count}} palabra del equipo añadida",
+        "title_many": "{{count}} de palabras del equipo añadidas",
         "title_other": "{{count}} palabras del equipo añadidas",
         "description": "Las palabras compartidas de {{workspace}} ya se aplican a tu dictado y a tus notas de reuniones.",
         "descriptionNoWorkspace": "Las palabras compartidas de tu equipo ya se aplican a tu dictado y a tus notas de reuniones.",
         "viewWords": "Ver palabras"
-      }
+      },
+      "lockedEntry": "Bloqueada",
+      "notTermLike": "Las listas compartidas solo admiten términos cortos: hasta 64 caracteres y 6 palabras, sin comas, signos de puntuación de frase, símbolos como < > { } [ ] ` | ni caracteres ocultos",
+      "notUsed": "No se usa al dictar",
+      "notUsedTooltip": "Al dictar se omiten las palabras compartidas de más de 64 caracteres o 6 palabras, o con comas, signos de puntuación de frase, símbolos como < > { } [ ] ` | o caracteres ocultos",
+      "badgeMore": "{{list}} +{{extra}}",
+      "skipped_one": "Se omitió {{count}} palabra: {{words}}",
+      "skipped_many": "Se omitieron {{count}} de palabras: {{words}}",
+      "skipped_other": "Se omitieron {{count}} palabras: {{words}}"
     }
   },
   "insights": {

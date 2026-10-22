@@ -7,8 +7,11 @@ import { cn } from "../lib/utils";
 const DEFAULT_BAR_HEIGHT = 40;
 
 interface SelectionActionBarProps {
+  // Every selected row, including those a search hides.
   count: number;
+  // The rows shown, which Select all adds.
   total: number;
+  allShownSelected: boolean;
   onSelectAll: () => void;
   onClear: () => void;
   // Personal words in the selection: Delete, and Share once there's a list to share to.
@@ -54,6 +57,7 @@ function QuietButton({
 export function SelectionActionBar({
   count,
   total,
+  allShownSelected,
   onSelectAll,
   onClear,
   onDelete,
@@ -80,7 +84,7 @@ export function SelectionActionBar({
   return (
     <div
       ref={barRef}
-      role="toolbar"
+      role="group"
       aria-label={t("dictionary.shared.selection.label")}
       // Pulled up across the column's 12px gap so it floats inside the list's
       // clearance, 8px above the list's bottom edge.
@@ -88,10 +92,10 @@ export function SelectionActionBar({
       className="sticky bottom-3 z-20 flex min-h-10 w-[min(100%,40rem)] flex-wrap items-center justify-between gap-x-3 gap-y-1 self-center rounded-lg bg-foreground py-1.5 ps-3 pe-2 text-background shadow-lg animate-in fade-in-0 slide-in-from-bottom-2"
     >
       <span className="flex min-w-0 items-center gap-1.5 text-[11px]">
-        <span className="shrink-0 font-medium tabular-nums">
+        <span aria-live="polite" className="shrink-0 font-medium tabular-nums">
           {t("dictionary.shared.selection.count", { count })}
         </span>
-        {count < total && (
+        {!allShownSelected && total > 0 && (
           <>
             <span aria-hidden="true" className="text-background/40">
               ·

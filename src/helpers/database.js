@@ -44,6 +44,12 @@ const { app } = require("electron");
 // trigger can't 400 the whole sync batch.
 const MAX_SNIPPET_TRIGGER_LENGTH = 100;
 
+const SHARED_DICTIONARY_TABLES = [
+  "shared_dictionary_entries",
+  "shared_dictionary_hides",
+  "shared_dictionary_meta",
+];
+
 // Text a local writer creates is the user's: recording it as a set lets
 // conflict Keep tell it from text this device merely pulled. A blank stays
 // unmarked, as it never clears anything.
@@ -1330,6 +1336,24 @@ class DatabaseManager {
       } catch (err) {
         if (!err.message.includes("duplicate column")) throw err;
       }
+      // 1 while a local set or clear of shared_at awaits its push. Only then
+      // does the push send shared_at: another device may have set it meanwhile.
+      try {
+        this.db.exec(
+          "ALTER TABLE custom_dictionary ADD COLUMN shared_at_dirty INTEGER NOT NULL DEFAULT 0"
+        );
+      } catch (err) {
+        if (!err.message.includes("duplicate column")) throw err;
+      }
+      // 1 on a moved word's tombstone written because its shared copy went
+      // (retireMovedDictionaryWords), so a restore or un-hide can revive it.
+      try {
+        this.db.exec(
+          "ALTER TABLE custom_dictionary ADD COLUMN fallback_retired INTEGER NOT NULL DEFAULT 0"
+        );
+      } catch (err) {
+        if (!err.message.includes("duplicate column")) throw err;
+      }
 
       // Local mirror of the workspaces' shared lists. A hides row means the
       // member hid that entry; a visible entry has no row.
@@ -1350,6 +1374,8 @@ class DatabaseManager {
           workspace_id TEXT NOT NULL,
           updated_at TEXT NOT NULL
         );
+        CREATE INDEX IF NOT EXISTS idx_shared_dictionary_hides_workspace
+          ON shared_dictionary_hides(workspace_id);
         CREATE TABLE IF NOT EXISTS shared_dictionary_meta (
           workspace_id TEXT PRIMARY KEY,
           scopes_json TEXT NOT NULL,
@@ -2578,11 +2604,12 @@ class DatabaseManager {
         "DELETE FROM custom_dictionary WHERE id = ? AND cloud_id IS NULL"
       ),
       restore: this.db.prepare(
-        "UPDATE custom_dictionary SET deleted_at = NULL, shared_at = NULL, source = CASE WHEN source = 'learned' AND ? = 'manual' THEN 'manual' ELSE source END, word = ?, updated_at = datetime('now'), sync_status = 'pending' WHERE id = ?"
+        "UPDATE custom_dictionary SET deleted_at = NULL, shared_at = NULL, shared_at_dirty = 1, fallback_retired = 0, source = CASE WHEN source = 'learned' AND ? = 'manual' THEN 'manual' ELSE source END, word = ?, updated_at = datetime('now'), sync_status = 'pending' WHERE id = ?"
       ),
-      // Pending, so the next push tells the server the word is personal again.
+      // Pending and dirty, so the next push tells the server the word is
+      // personal again.
       clearShared: this.db.prepare(
-        "UPDATE custom_dictionary SET shared_at = NULL, updated_at = datetime('now'), sync_status = 'pending' WHERE id = ? AND shared_at IS NOT NULL"
+        "UPDATE custom_dictionary SET shared_at = NULL, shared_at_dirty = 1, updated_at = datetime('now'), sync_status = 'pending' WHERE id = ? AND shared_at IS NOT NULL"
       ),
       promoteSource: this.db.prepare(
         "UPDATE custom_dictionary SET word = ?, source = 'manual', updated_at = datetime('now'), sync_status = 'pending' WHERE id = ? AND source = 'learned'"
@@ -2847,6 +2874,7 @@ class DatabaseManager {
           .prepare(
             `UPDATE custom_dictionary
              SET cloud_id = ?, client_dict_id = ?, word = ?, source = ?, shared_at = ?,
+                 shared_at_dirty = 0, fallback_retired = 0,
                  sync_status = 'synced', deleted_at = NULL, updated_at = ?
              WHERE id = ?`
           )
@@ -2882,17 +2910,34 @@ class DatabaseManager {
     }
   }
 
-  markDictionaryEntrySynced(id, cloudId) {
+  // `pushed` is the row as the push read it ({ word, shared_at, updated_at }).
+  // An edit since then (a rename, an un-share) stays pending and dirty, so the
+  // next push sends it; without `pushed` the row is marked synced as before.
+  markDictionaryEntrySynced(id, cloudId, pushed) {
     try {
       if (!this.db) throw new Error("Database not initialized");
+      const guarded = pushed && typeof pushed === "object";
       // Guard on deleted_at so a delete or tombstone that raced the push isn't
       // flipped back to 'synced' (which would strand the deletion). changes=0
       // signals that race to SyncService, which reconciles the cloud row.
+      const unchanged =
+        "(@guarded = 0 OR (word IS @word AND shared_at IS @sharedAt AND updated_at IS @updatedAt))";
       const result = this.db
         .prepare(
-          "UPDATE custom_dictionary SET sync_status = 'synced', cloud_id = ? WHERE id = ? AND deleted_at IS NULL"
+          `UPDATE custom_dictionary
+           SET cloud_id = @cloudId,
+               sync_status = CASE WHEN ${unchanged} THEN 'synced' ELSE sync_status END,
+               shared_at_dirty = CASE WHEN ${unchanged} THEN 0 ELSE shared_at_dirty END
+           WHERE id = @id AND deleted_at IS NULL`
         )
-        .run(cloudId, id);
+        .run({
+          cloudId,
+          id,
+          guarded: guarded ? 1 : 0,
+          word: guarded ? (pushed.word ?? null) : null,
+          sharedAt: guarded ? (pushed.shared_at ?? null) : null,
+          updatedAt: guarded ? (pushed.updated_at ?? null) : null,
+        });
       return { success: result.changes > 0, changes: result.changes };
     } catch (error) {
       debugLogger.error(
@@ -2951,7 +2996,8 @@ class DatabaseManager {
   }
 
   // The server already recorded the share, so this leaves sync_status and
-  // updated_at alone: a pending push would only echo it back.
+  // updated_at alone, and the marker clean: a pending push would only echo it
+  // back.
   markDictionaryWordsShared(words, sharedAt) {
     try {
       if (!this.db) throw new Error("Database not initialized");
@@ -2959,7 +3005,9 @@ class DatabaseManager {
         throw new Error("sharedAt must be a non-empty string");
       }
       const byLower = this._livePersonalRowsByLower();
-      const mark = this.db.prepare("UPDATE custom_dictionary SET shared_at = ? WHERE id = ?");
+      const mark = this.db.prepare(
+        "UPDATE custom_dictionary SET shared_at = ?, shared_at_dirty = 0 WHERE id = ?"
+      );
       const marked = [];
       this.db.transaction(() => {
         for (const lower of this._normalizeDictionaryWords(words).keys()) {
@@ -2981,26 +3029,35 @@ class DatabaseManager {
   }
 
   // Removes the sharer's fallback once its shared copy was hidden or deleted
-  // for everyone, as the API does. Only moved rows (shared_at set) qualify. A
-  // never-synced row is deleted outright, so a pending create can't bring it
-  // back; a synced one is tombstoned for the usual push.
-  retireMovedDictionaryWords(words) {
+  // for everyone, as the API does. Only moved rows (shared_at set) qualify.
+  // Every row is tombstoned and flagged so a restore or un-hide can revive it;
+  // the tombstone is local only (see `retire`), and a never-synced one is
+  // never re-created either (pending creates skip deleted rows).
+  // `includeSynced: false` leaves synced rows to the personal pull: an
+  // untouched cloud row (the server kept it) never comes back in a delta, so a
+  // local tombstone of it would never be undone.
+  retireMovedDictionaryWords(words, { includeSynced = true } = {}) {
     try {
       if (!this.db) throw new Error("Database not initialized");
       const rows = this.db
         .prepare(
-          "SELECT id, word, cloud_id FROM custom_dictionary WHERE deleted_at IS NULL AND shared_at IS NOT NULL"
+          `SELECT id, word FROM custom_dictionary
+           WHERE deleted_at IS NULL AND shared_at IS NOT NULL ${includeSynced ? "" : "AND cloud_id IS NULL"}`
         )
         .all();
       const byLower = new Map(rows.map((row) => [row.word.toLowerCase(), row]));
-      const { tombstone, hardDelete } = this._dictionaryWriteStatements();
+      // A synced row is never pushed as a delete: the server retires it in the
+      // same request, or keeps it when the word still applies through a list
+      // this device never mirrored. The personal pull then settles it.
+      const retire = this.db.prepare(
+        "UPDATE custom_dictionary SET deleted_at = datetime('now'), updated_at = datetime('now'), sync_status = CASE WHEN cloud_id IS NULL THEN 'pending' ELSE 'synced' END, fallback_retired = 1 WHERE id = ? AND deleted_at IS NULL"
+      );
       const retired = [];
       this.db.transaction(() => {
         for (const lower of this._normalizeDictionaryWords(words).keys()) {
           const row = byLower.get(lower);
           if (!row) continue;
-          if (row.cloud_id) tombstone.run(row.id);
-          else hardDelete.run(row.id);
+          retire.run(row.id);
           retired.push(row.word);
         }
       })();
@@ -3008,6 +3065,45 @@ class DatabaseManager {
     } catch (error) {
       debugLogger.error(
         "Error retiring moved dictionary words",
+        { error: error.message },
+        "database"
+      );
+      throw error;
+    }
+  }
+
+  // Undoes retireMovedDictionaryWords for these words, as the API does when the
+  // shared copy is restored or un-hidden. A tombstone the push already sent is
+  // gone; the personal pull brings the server's revived row back instead. A
+  // synced row comes back as synced: the server owns the revive, and the pull
+  // reconciles whatever it decided.
+  reviveRetiredDictionaryWords(words) {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      const rows = this.db
+        .prepare(
+          "SELECT id, word FROM custom_dictionary WHERE deleted_at IS NOT NULL AND fallback_retired = 1"
+        )
+        .all();
+      const byLower = new Map(rows.map((row) => [row.word.toLowerCase(), row]));
+      const live = this._livePersonalRowsByLower();
+      const revive = this.db.prepare(
+        "UPDATE custom_dictionary SET deleted_at = NULL, fallback_retired = 0, sync_status = CASE WHEN cloud_id IS NULL THEN 'pending' ELSE 'synced' END WHERE id = ?"
+      );
+      const revived = [];
+      this.db.transaction(() => {
+        for (const lower of this._normalizeDictionaryWords(words).keys()) {
+          const row = byLower.get(lower);
+          // A live row with the same word (re-added meanwhile) already covers it.
+          if (!row || live.has(lower)) continue;
+          revive.run(row.id);
+          revived.push(row.word);
+        }
+      })();
+      return { revived };
+    } catch (error) {
+      debugLogger.error(
+        "Error reviving retired dictionary words",
         { error: error.message },
         "database"
       );
@@ -3274,13 +3370,17 @@ class DatabaseManager {
     try {
       if (!this.db) throw new Error("Database not initialized");
       const stmts = this._sharedDictionaryStatements();
+      let changed = 0;
       this.db.transaction(() => {
         const incomingIds = new Set(hidden.map((hide) => hide?.entryId));
         for (const row of stmts.hideIds.all(workspaceId)) {
-          if (!incomingIds.has(row.entry_id)) stmts.deleteHide.run(row.entry_id, workspaceId);
+          if (!incomingIds.has(row.entry_id)) {
+            changed += stmts.deleteHide.run(row.entry_id, workspaceId).changes;
+          }
         }
-        for (const hide of hidden) this._upsertSharedHide(stmts, workspaceId, hide);
+        for (const hide of hidden) changed += this._upsertSharedHide(stmts, workspaceId, hide);
       })();
+      return { changed };
     } catch (error) {
       debugLogger.error(
         "Error replacing shared dictionary hides",
@@ -3292,25 +3392,45 @@ class DatabaseManager {
   }
 
   // With no workspace, clears every workspace (account change, sign-out).
+  // `changed` counts the rows removed, meta rows included.
   clearSharedDictionary(workspaceId) {
     try {
       if (!this.db) throw new Error("Database not initialized");
-      const tables = [
-        "shared_dictionary_entries",
-        "shared_dictionary_hides",
-        "shared_dictionary_meta",
-      ];
+      let changed = 0;
       this.db.transaction(() => {
-        for (const table of tables) {
-          if (workspaceId == null) {
-            this.db.prepare(`DELETE FROM ${table}`).run();
-          } else {
-            this.db.prepare(`DELETE FROM ${table} WHERE workspace_id = ?`).run(workspaceId);
-          }
+        for (const table of SHARED_DICTIONARY_TABLES) {
+          changed +=
+            workspaceId == null
+              ? this.db.prepare(`DELETE FROM ${table}`).run().changes
+              : this.db.prepare(`DELETE FROM ${table} WHERE workspace_id = ?`).run(workspaceId)
+                  .changes;
         }
       })();
+      return { changed };
     } catch (error) {
       debugLogger.error("Error clearing shared dictionary", { error: error.message }, "database");
+      throw error;
+    }
+  }
+
+  // Clears every workspace except the ones the member still belongs to.
+  pruneSharedDictionary(keepWorkspaceIds) {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      const keep = JSON.stringify(keepWorkspaceIds.filter((id) => typeof id === "string"));
+      let changed = 0;
+      this.db.transaction(() => {
+        for (const table of SHARED_DICTIONARY_TABLES) {
+          changed += this.db
+            .prepare(
+              `DELETE FROM ${table} WHERE workspace_id NOT IN (SELECT value FROM json_each(?))`
+            )
+            .run(keep).changes;
+        }
+      })();
+      return { changed };
+    } catch (error) {
+      debugLogger.error("Error pruning shared dictionary", { error: error.message }, "database");
       throw error;
     }
   }

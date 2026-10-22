@@ -7,11 +7,21 @@ import { useWorkspaceStore } from "./workspaceStore";
 
 export type ListKey = "all" | "personal" | "allShared" | "workspace" | `space:${string}` | "hidden";
 
-export type SharedDictionaryStatus = "unavailable" | "ready";
+// ssoRequired and noAccess describe the active workspace: its last pass was
+// refused for company SSO, or the member can no longer read its lists.
+export type SharedDictionaryStatus = "unavailable" | "ready" | "ssoRequired" | "noAccess";
+
+type AccessStatus = Extract<SharedDictionaryStatus, "ssoRequired" | "noAccess">;
 
 // "false" once the API answered the shared dictionary routes with a plain 404
 // (not deployed yet); any successful pass writes "true".
 export const SHARED_DICTIONARY_CAPABILITY_KEY = "sharedDictionaryCapability";
+// { [workspaceId]: status } of each workspace's last refused pass, until a
+// pass for it succeeds. Shared by every window (see the storage listener below).
+export const SHARED_DICTIONARY_ACCESS_KEY = "sharedDictionaryAccess";
+
+const isAccessStatus = (status: unknown): status is AccessStatus =>
+  status === "ssoRequired" || status === "noAccess";
 
 interface SharedDictionaryState {
   workspaceId: string | null;
@@ -35,11 +45,37 @@ interface SharedDictionaryState {
   setSyncing: (syncing: boolean) => void;
 }
 
-function readStatus(): SharedDictionaryStatus {
+function readAccessMap(): Record<string, AccessStatus> {
+  try {
+    const stored: unknown = JSON.parse(localStorage.getItem(SHARED_DICTIONARY_ACCESS_KEY) ?? "{}");
+    if (typeof stored !== "object" || stored === null || Array.isArray(stored)) return {};
+    return Object.fromEntries(
+      Object.entries(stored).filter((entry): entry is [string, AccessStatus] =>
+        isAccessStatus(entry[1])
+      )
+    );
+  } catch {
+    return {};
+  }
+}
+
+function writeAccessStatus(workspaceId: string, status: AccessStatus | null): void {
+  const map = readAccessMap();
+  if (status) map[workspaceId] = status;
+  else delete map[workspaceId];
+  if (Object.keys(map).length === 0) localStorage.removeItem(SHARED_DICTIONARY_ACCESS_KEY);
+  else localStorage.setItem(SHARED_DICTIONARY_ACCESS_KEY, JSON.stringify(map));
+}
+
+function readAccessStatus(workspaceId: string | null): AccessStatus | null {
+  if (!workspaceId || typeof localStorage === "undefined") return null;
+  return readAccessMap()[workspaceId] ?? null;
+}
+
+function readStatus(workspaceId: string | null): SharedDictionaryStatus {
   if (typeof localStorage === "undefined") return "ready";
-  return localStorage.getItem(SHARED_DICTIONARY_CAPABILITY_KEY) === "false"
-    ? "unavailable"
-    : "ready";
+  if (localStorage.getItem(SHARED_DICTIONARY_CAPABILITY_KEY) === "false") return "unavailable";
+  return readAccessStatus(workspaceId) ?? "ready";
 }
 
 export const useSharedDictionaryStore = create<SharedDictionaryState>((set, get) => {
@@ -48,7 +84,7 @@ export const useSharedDictionaryStore = create<SharedDictionaryState>((set, get)
 
   return {
     workspaceId: useWorkspaceStore.getState().activeWorkspaceId,
-    status: readStatus(),
+    status: readStatus(useWorkspaceStore.getState().activeWorkspaceId),
     snapshot: null,
     syncing: false,
     lastSyncedAt: null,
@@ -87,16 +123,22 @@ export const useSharedDictionaryStore = create<SharedDictionaryState>((set, get)
       });
       useSettingsStore
         .getState()
-        .setSharedDictionaryHints(selectSharedHintWords(snapshot), workspaceId);
+        .setSharedDictionaryHints(
+          selectSharedHintWords(snapshot, movedPersonal ?? []),
+          workspaceId
+        );
     },
 
     reload: () => get().load(get().workspaceId, get().generation),
 
     handleScopeChange: (workspaceId) => {
       const generation = get().generation + 1;
+      const { status } = get();
       set({
         workspaceId,
         generation,
+        // An access status belongs to the workspace it was refused for.
+        status: status === "unavailable" ? status : (readAccessStatus(workspaceId) ?? "ready"),
         snapshot: null,
         movedPersonal: [],
         lastSyncedAt: null,
@@ -113,6 +155,9 @@ export const useSharedDictionaryStore = create<SharedDictionaryState>((set, get)
     // workspace stays whatever workspaceStore holds, so a load for it after
     // the reset still publishes.
     resetForAccountChange: () => {
+      if (typeof localStorage !== "undefined") {
+        localStorage.removeItem(SHARED_DICTIONARY_ACCESS_KEY);
+      }
       set((state) => ({
         generation: state.generation + 1,
         status: "ready",
@@ -128,18 +173,44 @@ export const useSharedDictionaryStore = create<SharedDictionaryState>((set, get)
     setRequestedList: (requestedList) => set({ requestedList }),
 
     setStatus: (status) => {
-      if (typeof localStorage !== "undefined") {
+      set({ status });
+      if (typeof localStorage === "undefined") return;
+      try {
         localStorage.setItem(
           SHARED_DICTIONARY_CAPABILITY_KEY,
           status === "unavailable" ? "false" : "true"
         );
+        const { workspaceId } = get();
+        if (workspaceId && status !== "unavailable") {
+          writeAccessStatus(workspaceId, isAccessStatus(status) ? status : null);
+        }
+      } catch {
+        // The status still applies for this session.
       }
-      set({ status });
     },
 
     setSyncing: (syncing) => set({ syncing }),
   };
 });
+
+// A pass in another window (often the dictation overlay) wrote a status:
+// follow it for this window's workspace.
+export function handleSharedDictionaryStatusStorage(event: StorageEvent): void {
+  if (
+    event.key !== SHARED_DICTIONARY_ACCESS_KEY &&
+    event.key !== SHARED_DICTIONARY_CAPABILITY_KEY
+  ) {
+    return;
+  }
+  const state = useSharedDictionaryStore.getState();
+  const status = readStatus(state.workspaceId);
+  if (status !== state.status) useSharedDictionaryStore.setState({ status });
+}
+
+// Registered once for the window's lifetime, like the store itself.
+if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+  window.addEventListener("storage", handleSharedDictionaryStatusStorage);
+}
 
 // Every change of the active workspace (setActiveWorkspaceId, refresh()'s
 // auto-select and clear, resetForAccountChange) switches the shared lists.

@@ -8,8 +8,9 @@ interface DictionaryEntryInput {
   client_dict_id?: string;
   created_at?: string;
   updated_at?: string;
-  // Set once the word was shared into a team list; null makes it plain personal.
-  shared_at: string | null;
+  // Set once the word was shared into a team list; null makes it plain
+  // personal, and leaving it out keeps the server's value.
+  shared_at?: string | null;
 }
 
 export interface CloudDictionaryEntry {
@@ -34,7 +35,8 @@ async function batchCreate(
 
 async function update(
   id: string,
-  updates: { word?: string; source?: DictionarySource }
+  // shared_at as for batchCreate: absent keeps, null clears.
+  updates: { word?: string; source?: DictionarySource; shared_at?: string | null }
 ): Promise<CloudDictionaryEntry> {
   return cloudPatch<CloudDictionaryEntry>("/api/dictionary/update", { id, ...updates });
 }

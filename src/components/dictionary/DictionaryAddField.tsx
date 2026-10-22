@@ -1,4 +1,4 @@
-import { useState, type ReactElement, type Ref } from "react";
+import { useId, useState, type ReactElement, type Ref } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, ChevronDown, CornerDownLeft, Upload } from "../icons";
 import { Input } from "../ui/input";
@@ -10,6 +10,7 @@ import {
 } from "../ui/dropdown-menu";
 import { cn } from "../lib/utils";
 import type { ShareTarget } from "../../services/sharedDictionaryActions";
+import { isTermLikeSharedWord } from "../../utils/sharedDictionaryHints";
 
 export type AddTarget = ShareTarget | "personal";
 
@@ -45,13 +46,26 @@ export function DictionaryAddField({
   const { t } = useTranslation();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const noticeId = useId();
 
   const targetLabel =
     targets.find((option) => option.target === target)?.label ?? t("dictionary.shared.personal");
   const trimmed = text.trim();
   // A comma list adds whatever is new; only a single known word is refused.
   const alreadyAdded = trimmed !== "" && !trimmed.includes(",") && isInTarget(trimmed);
-  const canAdd = trimmed !== "" && !alreadyAdded && !busy && !disabled;
+  // A teammate's dictation leaves these out, so a shared list doesn't take them.
+  // A comma list goes through and reports the words it left out.
+  const notTermLike =
+    target !== "personal" &&
+    !trimmed.includes(",") &&
+    trimmed !== "" &&
+    !isTermLikeSharedWord(trimmed);
+  const notice = alreadyAdded
+    ? t("dictionary.shared.alreadyIn", { list: targetLabel })
+    : notTermLike
+      ? t("dictionary.shared.notTermLike")
+      : null;
+  const canAdd = trimmed !== "" && notice === null && !busy && !disabled;
 
   const submit = async (): Promise<void> => {
     if (!canAdd) return;
@@ -80,12 +94,20 @@ export function DictionaryAddField({
           if (event.key === "Enter") void submit();
         }}
         placeholder={t("dictionary.shared.add.placeholder")}
-        aria-invalid={alreadyAdded || undefined}
+        aria-invalid={notice !== null || undefined}
+        aria-describedby={notice !== null ? noticeId : undefined}
         className="h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-xs shadow-none placeholder:text-foreground/45 hover:border-0 focus-visible:ring-0 dark:bg-transparent"
       />
-      {alreadyAdded ? (
-        <span className="shrink-0 text-[11px] text-foreground/45">
-          {t("dictionary.shared.alreadyIn", { list: targetLabel })}
+      {notice !== null ? (
+        <span
+          id={noticeId}
+          title={notice}
+          className={cn(
+            "min-w-0 truncate text-[11px]",
+            notTermLike && !alreadyAdded ? "text-destructive" : "text-foreground/45"
+          )}
+        >
+          {notice}
         </span>
       ) : (
         trimmed !== "" && (

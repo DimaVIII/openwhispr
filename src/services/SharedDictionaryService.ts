@@ -12,6 +12,8 @@ import type {
 // The API rejects larger batches; chunking and partial results belong to the
 // actions layer, so the client refuses before sending anything.
 export const MAX_SHARED_DICTIONARY_BATCH = 200;
+// Lists one share may target.
+export const MAX_SHARED_DICTIONARY_TARGETS = 20;
 
 function assertBatchSize(count: number, label: string): void {
   if (count > MAX_SHARED_DICTIONARY_BATCH) {
@@ -94,6 +96,11 @@ async function share(
   input: SharedDictionaryShareInput
 ): Promise<SharedDictionaryShareResponse> {
   assertBatchSize(input.personal.length + input.words.length, "words");
+  if (input.targets.length > MAX_SHARED_DICTIONARY_TARGETS) {
+    throw new RangeError(
+      `Shared dictionary shares to at most ${MAX_SHARED_DICTIONARY_TARGETS} lists per request`
+    );
+  }
   return cloudPost<SharedDictionaryShareResponse>("/api/shared-dictionary/share", {
     workspace_id: workspaceId,
     targets: input.targets,

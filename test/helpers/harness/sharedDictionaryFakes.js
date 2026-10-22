@@ -63,6 +63,8 @@ function createSharedDictionaryDb() {
     };
   }
 
+  const rowCount = (ws) => (ws ? ws.entries.size + ws.hides.size + (ws.meta ? 1 : 0) : 0);
+
   function dropOrphanHides(ws) {
     for (const id of ws.hides.keys()) if (!ws.entries.has(id)) ws.hides.delete(id);
   }
@@ -131,12 +133,33 @@ function createSharedDictionaryDb() {
     replaceSharedDictionaryHides: async (workspaceId, hidden = []) => {
       calls.push({ name: "replaceSharedDictionaryHides", workspaceId, hidden });
       const ws = forWorkspace(workspaceId);
-      ws.hides = new Map(hidden.map((hide) => [hide.entryId, hide.updatedAt]));
+      const next = new Map(hidden.map((hide) => [hide.entryId, hide.updatedAt]));
+      let changed = 0;
+      for (const [id, updatedAt] of ws.hides) if (next.get(id) !== updatedAt) changed += 1;
+      for (const id of next.keys()) if (!ws.hides.has(id)) changed += 1;
+      ws.hides = next;
+      return { changed };
     },
+    // Rows removed, meta rows included, as DatabaseManager counts them.
     clearSharedDictionary: async (workspaceId) => {
       calls.push({ name: "clearSharedDictionary", workspaceId });
-      if (workspaceId == null) workspaces.clear();
-      else workspaces.delete(workspaceId);
+      const ids = workspaceId == null ? [...workspaces.keys()] : [workspaceId];
+      let changed = 0;
+      for (const id of ids) {
+        changed += rowCount(workspaces.get(id));
+        workspaces.delete(id);
+      }
+      return { changed };
+    },
+    pruneSharedDictionary: async (keepWorkspaceIds) => {
+      calls.push({ name: "pruneSharedDictionary", keepWorkspaceIds });
+      let changed = 0;
+      for (const id of [...workspaces.keys()]) {
+        if (keepWorkspaceIds.includes(id)) continue;
+        changed += rowCount(workspaces.get(id));
+        workspaces.delete(id);
+      }
+      return { changed };
     },
     getMovedDictionaryWords: async () => [],
   };
@@ -176,8 +199,16 @@ function cloudEntry(workspaceId, word, overrides = {}, after = "2026-10-20T09:00
   };
 }
 
+// Timestamps compare as instants, as Postgres compares timestamptz: the same
+// moment spelled "…00Z" and "…00.000Z" (or "+00:00") is equal.
+const instant = (value) => Date.parse(value);
+const compareInstants = (a, b) => instant(a) - instant(b);
+const sameInstant = (a, b) => compareInstants(a, b) === 0;
+const after = (a, b) => compareInstants(a, b) > 0;
+const atOrAfter = (a, b) => compareInstants(a, b) >= 0;
+
 const byKeys = (a, b, first, second) =>
-  a[first] === b[first] ? a[second].localeCompare(b[second]) : a[first].localeCompare(b[first]);
+  compareInstants(a[first], b[first]) || a[second].localeCompare(b[second]);
 
 function page(rows, limit) {
   return { items: rows.slice(0, limit), hasMore: rows.length > limit };
@@ -185,6 +216,7 @@ function page(rows, limit) {
 
 function createSharedDictionaryCloud() {
   const workspaces = new Map();
+  const personal = [];
   const requests = [];
   // path -> queue of { status, code } failures or deferreds, consumed in order.
   const interceptors = new Map();
@@ -210,8 +242,8 @@ function createSharedDictionaryCloud() {
       rows = ws.entries
         .filter((e) =>
           sinceId
-            ? e.updated_at > since || (e.updated_at === since && e.id > sinceId)
-            : e.updated_at >= since
+            ? after(e.updated_at, since) || (sameInstant(e.updated_at, since) && e.id > sinceId)
+            : atOrAfter(e.updated_at, since)
         )
         .sort((a, b) => byKeys(a, b, "updated_at", "id"));
     } else {
@@ -221,8 +253,9 @@ function createSharedDictionaryCloud() {
           !cursor
             ? true
             : cursorId
-              ? e.created_at > cursor || (e.created_at === cursor && e.id > cursorId)
-              : e.created_at >= cursor
+              ? after(e.created_at, cursor) ||
+                (sameInstant(e.created_at, cursor) && e.id > cursorId)
+              : atOrAfter(e.created_at, cursor)
         )
         .sort((a, b) => byKeys(a, b, "created_at", "id"));
     }
@@ -247,8 +280,8 @@ function createSharedDictionaryCloud() {
     if (since) {
       rows = ws.hides.filter((h) =>
         sinceId
-          ? h.updated_at > since || (h.updated_at === since && h.entry_id > sinceId)
-          : h.updated_at >= since
+          ? after(h.updated_at, since) || (sameInstant(h.updated_at, since) && h.entry_id > sinceId)
+          : atOrAfter(h.updated_at, since)
       );
     } else {
       rows = ws.hides
@@ -257,13 +290,34 @@ function createSharedDictionaryCloud() {
           !cursor
             ? true
             : cursorId
-              ? h.updated_at > cursor || (h.updated_at === cursor && h.entry_id > cursorId)
-              : h.updated_at >= cursor
+              ? after(h.updated_at, cursor) ||
+                (sameInstant(h.updated_at, cursor) && h.entry_id > cursorId)
+              : atOrAfter(h.updated_at, cursor)
         );
     }
     rows.sort((a, b) => byKeys(a, b, "updated_at", "entry_id"));
     const { items, hasMore } = page(rows, limit);
     return { hides: structuredClone(items), hasMore, server_time: serverTime };
+  }
+
+  // The personal list as dictionary-service.ts pages it: `since` streams the
+  // delta on (updated_at, id), tombstones included; no `since` is the live
+  // snapshot's first page by created_at.
+  function listPersonal(query) {
+    const limit = Number(query.get("limit") ?? 200);
+    const since = query.get("since");
+    const sinceId = query.get("since_id");
+    const rows = since
+      ? personal
+          .filter((e) =>
+            sinceId
+              ? after(e.updated_at, since) || (sameInstant(e.updated_at, since) && e.id > sinceId)
+              : atOrAfter(e.updated_at, since)
+          )
+          .sort((a, b) => byKeys(a, b, "updated_at", "id"))
+      : personal.filter((e) => !e.deleted_at).sort((a, b) => byKeys(a, b, "created_at", "id"));
+    const { items, hasMore } = page(rows, limit);
+    return { entries: structuredClone(items), hasMore };
   }
 
   async function cloudApiRequest({ method, path }) {
@@ -285,6 +339,9 @@ function createSharedDictionaryCloud() {
     if (url.pathname === "/api/shared-dictionary/hides") {
       return { success: true, data: listHides(forWorkspace(query.get("workspace_id")), query) };
     }
+    if (url.pathname === "/api/dictionary/list") {
+      return { success: true, data: listPersonal(query) };
+    }
     return { success: false, status: 404, error: "Not found" };
   }
 
@@ -293,6 +350,8 @@ function createSharedDictionaryCloud() {
     cloudApiRequest,
     requests,
     workspace: forWorkspace,
+    // The member's own (personal) dictionary rows on the server.
+    personal,
     // Adds live entries to a workspace's server lists, written after the
     // current server time unless `overrides` says otherwise.
     add(workspaceId, words, overrides = {}) {
