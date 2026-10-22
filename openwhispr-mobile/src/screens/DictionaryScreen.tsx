@@ -156,16 +156,16 @@ function EntryList({
 
 const MAX_NAMED_MOVED_WORDS = 3;
 
-function movedWordsClause(moved: string[]): string {
+// Its own sentence, so one moved word reads as naturally as several.
+function movedWordsSentence(moved: string[], count: number): string {
   if (moved.length === 0) return '';
   if (moved.length > MAX_NAMED_MOVED_WORDS) {
-    return `, including ${moved.length} moved from your list`;
+    const subject = moved.length === count ? `All ${count}` : `${moved.length} of them`;
+    return ` ${subject} were moved from your list.`;
   }
-  const names =
-    moved.length === 1
-      ? moved[0]
-      : `${moved.slice(0, -1).join(', ')} and ${moved[moved.length - 1]}`;
-  return `, including ${names}, moved from your list`;
+  if (moved.length === 1) return ` ${moved[0]} was moved there from your list.`;
+  const names = `${moved.slice(0, -1).join(', ')} and ${moved[moved.length - 1]}`;
+  return ` ${names} were moved there from your list.`;
 }
 
 // Shared words apply to dictation but are managed on desktop, so this is
@@ -174,12 +174,15 @@ function movedWordsClause(moved: string[]): string {
 function SharedDictionaryLine({ moved, className }: { moved: string[]; className?: string }) {
   const summary = useSharedDictionaryStore((s) => s.summary);
   if (!summary) return null;
-  const { count, workspaceName } = summary;
+  const { count } = summary;
+  // A workspace without a name reads as desktop's locked panel does.
+  const workspace = summary.workspaceName.trim() || 'your workspace';
   const subject =
     count === 1
-      ? `1 team word from ${workspaceName} also applies`
-      : `${count} team words from ${workspaceName} also apply`;
-  const text = `${subject}${movedWordsClause(moved)}. Manage them on desktop.`;
+      ? `1 team word from ${workspace} also applies.`
+      : `${count} team words from ${workspace} also apply.`;
+  const manage = count === 1 ? 'Manage it on desktop.' : 'Manage them on desktop.';
+  const text = `${subject}${movedWordsSentence(moved, count)} ${manage}`;
   return <Text className={`text-[12px] text-tertiaryLabel ${className ?? ''}`}>{text}</Text>;
 }
 

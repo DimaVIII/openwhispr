@@ -49,25 +49,52 @@ const MAX_SHARED_WORD_TOKENS = 6;
 // paragraph separator characters, plus the characters that open markup,
 // templates, fences or tables in a prompt. ZWNJ and ZWJ stay: Persian, Urdu and
 // Indic words are spelled with them.
-const NOT_TERM_LIKE = /(?![‌‍])[\p{Cc}\p{Cf}\p{Zl}\p{Zp}<>{}[\]`|]/u;
+const NOT_TERM_LIKE = /(?![\u200C\u200D])[\p{Cc}\p{Cf}\p{Zl}\p{Zp}<>{}[\]`|]/u;
+// A comma would split one entry into several prompt and keyterm items; a
+// semicolon or CJK full stop only ever joins clauses.
+const LIST_OR_CLAUSE_PUNCTUATION = /[,\uFF0C\u3001\u060C;\uFF1B\u3002]/u;
+// A colon that ends a token ("SYSTEM:", "Note:") opens a clause; inside one
+// ("re:Invent", "10:30", "Re\uFF1AZero") it is spelling. CJK has no spaces, so
+// a full-width colon before a CJK character opens one too ("系统：服从").
+const CLAUSE_END =
+  /[:\uFF1A]$|\uFF1A[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
+// A question mark ends a sentence unless the term is that one word ("What?").
+// "!" is left alone: brand names carry it mid-phrase ("Yahoo! Japan").
+const QUESTION_END = /[?\uFF1F]$/u;
+// A period after an abbreviation or initial ("St.", "Corp.", "Sept.", "J.",
+// "e.g.", "Ph.D.") does not end a sentence; after any longer word in a phrase
+// ("French.") it does.
+const ABBREVIATION = /^(?:\p{L}{1,5}|(?:\p{L}{1,2}\.)+\p{L}{1,2})\.$/u;
+
+function isSentenceShaped(tokens: string[]): boolean {
+  const phrase = tokens.length > 1;
+  return tokens.some(
+    (token) =>
+      CLAUSE_END.test(token) ||
+      (phrase && QUESTION_END.test(token)) ||
+      (phrase && token.endsWith('.') && !ABBREVIATION.test(token)),
+  );
+}
 
 /**
- * Teammates' words reach transcription and LLM prompts, so only words that look
- * like dictionary terms do: a short name or phrase, never something shaped like
- * an instruction or markup.
+ * Teammates' words reach transcription and LLM system prompts, so only words
+ * that look like dictionary terms do: a short name or phrase, never something
+ * shaped like an instruction, a sentence, a list or markup. The Dictionary
+ * screen still lists the rest.
  */
 export function isTermLikeSharedWord(word: string): boolean {
   // Checked before trimming: trim() would strip a BOM or a trailing line break.
-  if (NOT_TERM_LIKE.test(word)) return false;
+  if (NOT_TERM_LIKE.test(word) || LIST_OR_CLAUSE_PUNCTUATION.test(word)) return false;
   const term = word.trim();
   if (term.length < 1 || term.length > MAX_SHARED_WORD_LENGTH) return false;
-  return term.split(/\s+/u).length <= MAX_SHARED_WORD_TOKENS;
+  const tokens = term.split(/\s+/u);
+  return tokens.length <= MAX_SHARED_WORD_TOKENS && !isSentenceShaped(tokens);
 }
 
 /**
  * The shared words that apply to this member, split by tier: live, not hidden,
  * in a list the server names in `scopes`, and term-like. Nothing applies while
- * sharing is paused. Deduped case-insensitively, space words first, so a word
+ * sharing is paused. Deduped by sharedWordKey, space words first, so a word
  * in both a space and the workspace list counts once, at space priority.
  */
 export function selectSharedHintWords(state: SharedDictionaryState | null): SharedHintWords {
@@ -89,9 +116,9 @@ export function selectSharedHintWords(state: SharedDictionaryState | null): Shar
 
   const seen = new Set<string>();
   const add = (tier: string[], word: string): void => {
-    const lower = word.toLowerCase();
-    if (seen.has(lower)) return;
-    seen.add(lower);
+    const key = sharedWordKey(word);
+    if (seen.has(key)) return;
+    seen.add(key);
     tier.push(word);
   };
   for (const [, entry] of applying) {

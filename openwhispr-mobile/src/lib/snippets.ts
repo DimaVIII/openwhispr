@@ -2,6 +2,8 @@
 // spoken triggers are replaced with their saved text in the final dictation
 // transcript, and triggers double as dictionary hints so they survive STT/cleanup.
 
+import { sharedWordKey } from './sharedDictionaryHints';
+
 export interface Snippet {
   trigger: string;
   replacement: string;
@@ -63,11 +65,12 @@ export function expandSnippets(text: string, snippets: Snippet[]): string {
 }
 
 // Shared words never repeat a word seen in a higher tier (or earlier in their
-// own); case-insensitive so the user's own spelling wins over a teammate's.
+// own); keyed like desktop's dictionaryWordKey (NFC, trimmed, lowercase) so the
+// user's own spelling wins over a teammate's.
 function dedupeBelow(words: string[], seen: Set<string>): string[] {
   const kept: string[] = [];
   for (const word of words) {
-    const key = word.toLowerCase();
+    const key = sharedWordKey(word);
     if (seen.has(key)) continue;
     seen.add(key);
     kept.push(word);
@@ -91,7 +94,7 @@ export function getDictionaryHintTiers(
   const personal = includeSnippetTriggers
     ? [...customDictionary, ...snippets.map((s) => s.trigger)]
     : customDictionary;
-  const seen = new Set(personal.map((word) => word.toLowerCase()));
+  const seen = new Set(personal.map(sharedWordKey));
   const space = dedupeBelow(shared.space, seen);
   const workspace = dedupeBelow(shared.workspace, seen);
   return [personal, space, workspace];

@@ -1,10 +1,12 @@
 import {
   GROQ_PROMPT_CHARS,
   TRANSCRIBE_PROMPT_CHARS,
+  WHISPER_DECODER_PROMPT_CHARS,
   WHISPER_PROMPT_CHARS,
   dictionaryPromptLimit,
   formatDictionaryPrompt,
   promptLimitKeepingPersonal,
+  sharedDictionaryPromptChars,
 } from '../transcriptionPromptCap';
 
 describe('dictionaryPromptLimit', () => {
@@ -84,7 +86,6 @@ describe('formatDictionaryPrompt', () => {
     expect(formatDictionaryPrompt([['P1'], ['S1'], ['W1']], 100)).toBe('W1, S1, P1');
     // 9 characters fit "S1, P1" and nothing more: W1 is dropped, not truncated.
     expect(formatDictionaryPrompt([['P1'], ['S1'], ['W1']], 9)).toBe('S1, P1');
-    expect(formatDictionaryPrompt([['P1'], ['S1'], ['W1']], 1)).toBe('');
   });
 
   it('stops at the first word that does not fit', (): void => {
@@ -96,14 +97,45 @@ describe('formatDictionaryPrompt', () => {
   });
 
   // BYOK sends formatDictionaryPrompt(tiers, dictionaryPromptLimit(route)) as is. Unlike the
-  // trimDictionaryPrompt it replaced, a word ending exactly on the budget is kept, and a first
-  // word longer than the budget sends no prompt rather than a cut-off fragment of it.
+  // trimDictionaryPrompt it replaced, a word ending exactly on the budget is kept.
   it('keeps a word that ends exactly on the budget', (): void => {
     expect(formatDictionaryPrompt([['P1', 'S1', 'W1'], [], []], 6)).toBe('P1, S1');
   });
 
-  it('sends nothing, not a fragment, when the first word is over the budget', (): void => {
-    expect(formatDictionaryPrompt([['Kubernetes', 'k8s'], [], []], 4)).toBe('');
+  // As trimDictionaryPrompt did: the head of the first entry, cut at its last comma if any.
+  it('sends the first personal entry cut off when it alone is over the budget', (): void => {
+    expect(formatDictionaryPrompt([['Kubernetes', 'k8s'], ['S1'], []], 4)).toBe('Kube');
+    expect(formatDictionaryPrompt([['P1'], ['S1'], ['W1']], 1)).toBe('P');
+    expect(formatDictionaryPrompt([['ab,cdefgh'], [], []], 5)).toBe('ab');
+    // The same cases desktop's dictionaryPromptCap tests pin.
+    expect(formatDictionaryPrompt([['x'.repeat(1000)], [], []], 890)).toBe('x'.repeat(890));
+    expect(formatDictionaryPrompt([['Smith, John, Doe'], [], []], 13)).toBe('Smith, John');
+    // A comma at index 0 is not a cut point.
+    expect(formatDictionaryPrompt([[',abcdef'], [], []], 4)).toBe(',abc');
+    expect(formatDictionaryPrompt([['Kubernetes'], [], []], 0)).toBe('');
+  });
+
+  it('never cuts a shared word', (): void => {
+    expect(formatDictionaryPrompt([[], ['Kubernetes'], []], 4)).toBe('');
+  });
+
+  it('stops the shared fill at sharedChars but keeps personal words to maxChars', (): void => {
+    expect(formatDictionaryPrompt([['P1'], ['S1', 'S2'], ['W1']], 100, 10)).toBe('S1, S2, P1');
+    expect(formatDictionaryPrompt([['P1'], ['S1', 'S2'], ['W1']], 100, 9)).toBe('S1, P1');
+    // Personal words past sharedChars still fit; no shared word joins them.
+    expect(formatDictionaryPrompt([['Piha', 'Biscuit'], ['S1'], []], 100, 5)).toBe('Piha, Biscuit');
+  });
+});
+
+describe('sharedDictionaryPromptChars', () => {
+  it('caps Whisper-style budgets at the decoder window', (): void => {
+    expect(sharedDictionaryPromptChars(WHISPER_PROMPT_CHARS)).toBe(WHISPER_DECODER_PROMPT_CHARS);
+    expect(sharedDictionaryPromptChars(GROQ_PROMPT_CHARS)).toBe(WHISPER_DECODER_PROMPT_CHARS);
+    expect(sharedDictionaryPromptChars(400)).toBe(400);
+  });
+
+  it('keeps budgets the model reads whole', (): void => {
+    expect(sharedDictionaryPromptChars(TRANSCRIBE_PROMPT_CHARS)).toBe(TRANSCRIBE_PROMPT_CHARS);
   });
 });
 

@@ -19,10 +19,23 @@ jest.mock('@/db', () => ({
 jest.mock('@/data/remote/dictionaryApi', () => ({
   fetchDictionary: jest.fn(),
   fetchDictionarySnapshot: jest.fn(),
+  batchCreateDictionary: jest.fn(),
+  updateDictionaryEntry: jest.fn(),
+  deleteDictionaryEntry: jest.fn(),
+}));
+jest.mock('@sentry/react-native', () => ({
+  captureMessage: jest.fn(),
+  captureException: jest.fn(),
 }));
 
 import { pullDictionary } from '../pullDictionary';
-import { fetchDictionary, fetchDictionarySnapshot } from '@/data/remote/dictionaryApi';
+import { pushDictionary } from '../pushDictionary';
+import {
+  batchCreateDictionary,
+  fetchDictionary,
+  fetchDictionarySnapshot,
+  updateDictionaryEntry,
+} from '@/data/remote/dictionaryApi';
 import type { RemoteDictionaryEntry } from '@/data/remote/dictionaryApi';
 import { SyncStalledError } from '../syncContext';
 import {
@@ -176,6 +189,63 @@ describe('pullDictionary shared_at', () => {
     await pullDictionary();
 
     expect(readRow()).toMatchObject({ sharedAt: SHARED_AT, pendingSync: 1 });
+  });
+});
+
+describe('pullDictionary tombstones', () => {
+  const RETIRED_AT = '2026-10-03T00:00:00.000Z';
+  const retired = (): RemoteDictionaryEntry =>
+    remoteEntry({ deleted_at: RETIRED_AT, updated_at: RETIRED_AT, shared_at: SHARED_AT });
+
+  beforeEach(() => {
+    mockRepo.setSyncState(DICTIONARY_CURSOR_KEY, '2026-10-02T00:00:00.000Z');
+  });
+
+  it('a take-back the server retired before its push is kept and pushed as a create', async () => {
+    // applyAddOne's take-back: shared_at cleared locally, remoteId kept.
+    insertLocal({ pendingSync: 1, sharedAt: null, sharedAtCleared: 1 });
+    jest.mocked(fetchDictionary).mockResolvedValueOnce({ entries: [retired()], hasMore: false });
+
+    await pullDictionary();
+
+    expect(readRow()).toMatchObject({
+      remoteId: null,
+      deletedAt: null,
+      sharedAt: null,
+      sharedAtCleared: 1,
+      pendingSync: 1,
+    });
+
+    jest
+      .mocked(batchCreateDictionary)
+      .mockResolvedValueOnce([
+        { ...remoteEntry({ updated_at: '2026-10-04T00:00:00.000Z' }) },
+      ] as never);
+    await pushDictionary();
+
+    expect(updateDictionaryEntry).not.toHaveBeenCalled();
+    expect(batchCreateDictionary).toHaveBeenCalledWith([
+      expect.objectContaining({ client_dict_id: 'client-1', word: 'Kubernetes', shared_at: null }),
+    ]);
+    expect(readRow()).toMatchObject({ remoteId: 'remote-1', sharedAtCleared: 0, pendingSync: 0 });
+  });
+
+  it('a pending edit that takes nothing back still follows the tombstone', async () => {
+    insertLocal({ pendingSync: 1, sharedAtCleared: 0 });
+    jest.mocked(fetchDictionary).mockResolvedValueOnce({ entries: [retired()], hasMore: false });
+
+    await pullDictionary();
+
+    expect(readRow()).toBeUndefined();
+  });
+
+  it('a take-back the user deleted again follows the tombstone', async () => {
+    insertLocal({ pendingSync: 1, sharedAtCleared: 1, deletedAt: '2026-10-02T12:00:00.000Z' });
+    jest.mocked(fetchDictionary).mockResolvedValueOnce({ entries: [retired()], hasMore: false });
+
+    await pullDictionary();
+
+    expect(readRow()).toBeUndefined();
   });
 });
 

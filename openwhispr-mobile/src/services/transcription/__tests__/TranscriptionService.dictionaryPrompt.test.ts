@@ -1,6 +1,7 @@
 /**
  * The dictionary prompt each transcription path actually sends: a long shared
- * list fills the budget, and the user's own words always survive, last.
+ * list fills the Whisper decoder's window, and the user's own words always
+ * survive, last.
  */
 import * as FileSystem from 'expo-file-system/legacy';
 import { BackgroundUploader } from '../../../../modules/background-uploader/src';
@@ -121,30 +122,33 @@ function uploadedParameters(): Record<string, string> {
   return (call[0] as { parameters: Record<string, string> }).parameters;
 }
 
-function expectFilledEndingWithPersonal(prompt: string | undefined, maxChars: number): void {
+// Shared words past the decoder's ~550-character window are never decoded, so
+// every Whisper-style path stops the shared fill there.
+const DECODER_WINDOW = 550;
+
+function expectFilledEndingWithPersonal(prompt: string | undefined): void {
   expect(prompt?.endsWith(PERSONAL.join(', '))).toBe(true);
-  expect(prompt?.length).toBeLessThanOrEqual(maxChars);
+  expect(prompt?.length).toBeLessThanOrEqual(DECODER_WINDOW);
+  expect(prompt?.length).toBeGreaterThan(DECODER_WINDOW - 12);
   expect(prompt?.startsWith(WORKSPACE[0])).toBe(true);
 }
 
 test('cloud request prompt ends with personal words', async (): Promise<void> => {
   await TranscriptionService.transcribe(recording('cloud'));
   const prompt = uploadedParameters().prompt;
-  expectFilledEndingWithPersonal(prompt, 900);
-  // OpenWhispr Cloud's Groq provider keeps only the head of a longer prompt.
-  expect(prompt.length).toBeLessThanOrEqual(890);
+  expectFilledEndingWithPersonal(prompt);
 });
 
 test('local transcription prompt ends with personal words', async (): Promise<void> => {
   await TranscriptionService.transcribe(recording('local'));
   const [, options] = mockLocalTranscribe.mock.calls[0] as unknown as [string, { prompt: string }];
-  expectFilledEndingWithPersonal(options.prompt, 900);
+  expectFilledEndingWithPersonal(options.prompt);
 });
 
 test('BYOK prompt ends with personal words', async (): Promise<void> => {
   await TranscriptionService.transcribe(recording('byok'));
   const [input] = jest.mocked(transcribeWithProvider).mock.calls[0];
-  expectFilledEndingWithPersonal(input.prompt, 890);
+  expectFilledEndingWithPersonal(input.prompt);
 });
 
 test('fused cleanup keeps personal words apart from at most 200 shared ones', async (): Promise<void> => {
@@ -153,7 +157,7 @@ test('fused cleanup keeps personal words apart from at most 200 shared ones', as
   expect(JSON.parse(parameters.customDictionary)).toEqual(PERSONAL);
   // WORKSPACE words are 10 characters, so 200 of them land exactly on the 2,000-character cap.
   expect(JSON.parse(parameters.sharedDictionary)).toEqual(WORKSPACE.slice(0, 200));
-  expectFilledEndingWithPersonal(parameters.prompt, 890);
+  expectFilledEndingWithPersonal(parameters.prompt);
 });
 
 test('a personal-only fused request is what it always was', async (): Promise<void> => {

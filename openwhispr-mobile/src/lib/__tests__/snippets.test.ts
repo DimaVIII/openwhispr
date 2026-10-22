@@ -106,6 +106,18 @@ describe('getDictionaryHintTiers', () => {
       ),
     ).toEqual([['OpenWhispr', 'sig'], ['Gizmo'], ['Acme']]);
   });
+
+  it('drops a shared word that is a personal word in another Unicode form', () => {
+    // Personal "Café" is NFC; the shared copies are NFD and padded.
+    expect(
+      getDictionaryHintTiers(
+        ['Café'],
+        [],
+        { space: ['Café'], workspace: [' café ', 'Acme'] },
+        false,
+      ),
+    ).toEqual([['Café'], [], ['Acme']]);
+  });
 });
 
 describe('splitLlmDictionary', () => {

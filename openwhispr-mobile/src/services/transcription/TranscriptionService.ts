@@ -22,6 +22,7 @@ import {
   dictionaryPromptLimit,
   formatDictionaryPrompt,
   promptLimitKeepingPersonal,
+  sharedDictionaryPromptChars,
 } from '../../lib/transcriptionPromptCap';
 import { BackgroundUploader } from '../../../modules/background-uploader/src';
 import { AudioTools } from '../../../modules/audio-tools/src';
@@ -516,12 +517,14 @@ export class TranscriptionService {
       parameters.clientAudioMimeType = finalMimeType;
       parameters.clientAudioFileName = uploadFileName;
     }
-    // OpenWhispr Cloud's Groq provider keeps only the head 896 characters, so
-    // shared words fill at most GROQ_PROMPT_CHARS; personal words are never cut.
+    // OpenWhispr Cloud's Groq provider keeps only the head 896 characters, and
+    // its Whisper decoder reads only the decoder window, so shared words fill at
+    // most that; personal words are never cut.
     const promptTiers = buildDictationHintTiers(isDictationContext(options.requestContext));
     const prompt = formatDictionaryPrompt(
       promptTiers,
       promptLimitKeepingPersonal(promptTiers, GROQ_PROMPT_CHARS),
+      sharedDictionaryPromptChars(GROQ_PROMPT_CHARS),
     );
     if (prompt) {
       parameters.prompt = prompt;
@@ -863,11 +866,12 @@ export class TranscriptionService {
     // Dictionary words + (dictation-only) snippet triggers as the Whisper initial
     // prompt, so on-device/private transcription recognizes them too. (Parakeet has
     // no prompt input; the facade drops it on that branch.)
-    // Shared words fill at most WHISPER_PROMPT_CHARS; personal words are never cut.
+    // Shared words fill at most the decoder window; personal words are never cut.
     const promptTiers = buildDictationHintTiers(isDictationContext(requestContext));
     const prompt = formatDictionaryPrompt(
       promptTiers,
       promptLimitKeepingPersonal(promptTiers, WHISPER_PROMPT_CHARS),
+      sharedDictionaryPromptChars(WHISPER_PROMPT_CHARS),
     );
     const { getPickedLocalModel } =
       require('@/lib/inferenceRouting') as typeof import('@/lib/inferenceRouting');
@@ -1012,9 +1016,11 @@ export class TranscriptionService {
               },
             })
           : undefined;
+        const promptLimit = dictionaryPromptLimit(route);
         const prompt = formatDictionaryPrompt(
           buildDictationHintTiers(isDictationContext(request.requestContext)),
-          dictionaryPromptLimit(route),
+          promptLimit,
+          sharedDictionaryPromptChars(promptLimit),
         );
         const result = await transcribeWithProvider({
           route,

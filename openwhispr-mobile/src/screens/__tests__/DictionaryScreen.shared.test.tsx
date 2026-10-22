@@ -69,7 +69,7 @@ it('uses the singular form for one team word', () => {
   mockSummary = { count: 1, workspaceName: 'Acme' };
   render(<DictionaryScreen />);
   expect(
-    screen.getByText('1 team word from Acme also applies. Manage them on desktop.'),
+    screen.getByText('1 team word from Acme also applies. Manage it on desktop.'),
   ).toBeOnTheScreen();
 });
 
@@ -121,7 +121,7 @@ it('names the moved words in the shared line, so they can be added back', () => 
   render(<DictionaryScreen />);
   expect(
     screen.getByText(
-      '12 team words from Acme also apply, including Grafana and Loki, moved from your list. Manage them on desktop.',
+      '12 team words from Acme also apply. Grafana and Loki were moved there from your list. Manage them on desktop.',
     ),
   ).toBeOnTheScreen();
 });
@@ -133,8 +133,40 @@ it('counts the moved words when there are many', () => {
   render(<DictionaryScreen />);
   expect(
     screen.getByText(
-      '4 team words from Acme also apply, including 4 moved from your list. Manage them on desktop.',
+      '4 team words from Acme also apply. All 4 were moved from your list. Manage them on desktop.',
     ),
+  ).toBeOnTheScreen();
+});
+
+it('names a single moved word in a sentence of its own', () => {
+  mockEntries = [entry('Kubernetes'), entry('Grafana', 5)];
+  mockSharedWordsLower = new Set(['grafana']);
+  mockSummary = { count: 1, workspaceName: 'Acme' };
+  render(<DictionaryScreen />);
+  expect(
+    screen.getByText(
+      '1 team word from Acme also applies. Grafana was moved there from your list. Manage it on desktop.',
+    ),
+  ).toBeOnTheScreen();
+});
+
+it('counts some of the team words as moved when there are many', () => {
+  mockEntries = ['A1', 'B2', 'C3', 'D4'].map((word) => entry(word, 5));
+  mockSharedWordsLower = new Set(['a1', 'b2', 'c3', 'd4']);
+  mockSummary = { count: 9, workspaceName: 'Acme' };
+  render(<DictionaryScreen />);
+  expect(
+    screen.getByText(
+      '9 team words from Acme also apply. 4 of them were moved from your list. Manage them on desktop.',
+    ),
+  ).toBeOnTheScreen();
+});
+
+it('reads a workspace without a name as "your workspace"', () => {
+  mockSummary = { count: 2, workspaceName: '  ' };
+  render(<DictionaryScreen />);
+  expect(
+    screen.getByText('2 team words from your workspace also apply. Manage them on desktop.'),
   ).toBeOnTheScreen();
 });
 

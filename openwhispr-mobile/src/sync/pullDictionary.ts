@@ -85,6 +85,17 @@ function applyRemote(remote: RemoteDictionaryEntry): void {
   // shouldn't wipe the new one. The fresh create will push and resurrect.
   if (remote.deleted_at) {
     if (!local.remoteId && local.pendingSync === 1) return;
+    // A take-back (the user re-added a word moved into a shared list) is newer
+    // intent too: the server retires a moved word's personal row, and this pull
+    // runs before the take-back's push. Without the remoteId the push sends a
+    // create, which revives the tombstone with shared_at cleared.
+    if (local.pendingSync === 1 && local.sharedAtCleared === 1 && !local.deletedAt) {
+      db.update(dictionaryEntries)
+        .set({ remoteId: null })
+        .where(eq(dictionaryEntries.id, local.id))
+        .run();
+      return;
+    }
     db.delete(dictionaryEntries).where(eq(dictionaryEntries.id, local.id)).run();
     return;
   }
