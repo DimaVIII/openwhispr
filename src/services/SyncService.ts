@@ -46,10 +46,12 @@ import {
 import { usePolicyStore } from "../stores/policyStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import {
+  hasWelcomedSharedDictionary,
+  recordSharedDictionaryArrival,
   SHARED_DICTIONARY_CAPABILITY_KEY,
   useSharedDictionaryStore,
 } from "../stores/sharedDictionaryStore";
-import { useWorkspaceStore } from "../stores/workspaceStore";
+import { readActiveWorkspaceId, useWorkspaceStore } from "../stores/workspaceStore";
 import { EMPTY_SHARED_HINTS, selectSharedHintWords } from "../utils/sharedDictionaryHints";
 import type {
   CloudSharedEntry,
@@ -198,9 +200,6 @@ const SHARED_DICTIONARY_READ_OVERLAP_MS = 10_000;
 // Covers both cursor families: lastSyncedAt.sharedDictionary.<ws> and
 // lastSyncedAt.sharedDictionaryHides.<ws>, each with an `.id` companion.
 const SHARED_DICTIONARY_CURSOR_PREFIX = "lastSyncedAt.sharedDictionary";
-// sharedDictionaryWelcomed.<account>.<workspace>: the arrival toast shows once
-// per account and workspace on each device, so sign-out keeps these.
-const SHARED_DICTIONARY_WELCOMED_PREFIX = "sharedDictionaryWelcomed.";
 // Personal rows pulled before shared_at existed never got it; one re-read of
 // the personal dictionary from the epoch picks it up.
 const DICTIONARY_SHARED_AT_BACKFILL_KEY = "dictionarySharedAtBackfill";
@@ -286,13 +285,27 @@ function hasReturningScope(stored: SharedScope[], incoming: SharedScope[]): bool
   return incoming.some((scope) => !known.has(scopeKey(scope)));
 }
 
-// The API names only the contributors of the page it returns; later pages win.
+// Later lists win, so a page's is_member and name replace older ones.
 function mergeContributors(lists: SharedContributor[][]): SharedContributor[] {
   const byUser = new Map<string, SharedContributor>();
   for (const list of lists) {
     for (const contributor of list) byUser.set(contributor.user_id, contributor);
   }
   return [...byUser.values()];
+}
+
+// The first page of a pass names every adder across the member's lists, so it
+// replaces what a delta stored; a teammate whose words are all gone drops out.
+// An API from before that names only its own page's adders, so a stored
+// contributor who may still have words in the mirror (`adderIds`) is kept,
+// overridden by any page that names them.
+function deltaPassContributors(
+  stored: SharedContributor[],
+  adderIds: ReadonlySet<string>,
+  pages: SharedContributor[][]
+): SharedContributor[] {
+  const stillAdding = stored.filter((contributor) => adderIds.has(contributor.user_id));
+  return mergeContributors([stillAdding, ...pages]);
 }
 
 function countApplyingSharedWords(snapshot: SharedDictionarySnapshot | null | undefined): number {
@@ -2923,10 +2936,17 @@ export class SyncService {
 
         if (!hasMore) break;
         const last = entries[entries.length - 1];
-        // Stall guard: a page that ends where it started would loop forever,
-        // and saving its cursor would freeze every later pull at that row.
+        // Stall guard: a page that ends where it started would loop forever.
+        // An API whose timestamps are finer than the cursor it accepts repeats
+        // a batch written at one instant, so this keeps what the applied pages
+        // reached and ends the pass rather than failing: a pull that saved
+        // nothing would download everything again on every pass.
         if (last.updated_at === cursor && last.id === cursorId) {
-          throw new Error("Dictionary pull stopped advancing");
+          console.warn("Dictionary pull stopped advancing; resuming next pass", {
+            cursor,
+            cursorId,
+          });
+          break;
         }
         cursor = last.updated_at;
         cursorId = last.id;
@@ -2961,7 +2981,9 @@ export class SyncService {
     this.sharedDictionaryPassChanged = false;
     const store = useSharedDictionaryStore.getState();
     const generation = store.generation;
-    const workspaceId = useWorkspaceStore.getState().activeWorkspaceId;
+    // Not this window's store: it follows a switch made in another window a
+    // task later, and a pass for the old workspace must not publish.
+    const workspaceId = readActiveWorkspaceId();
     const isCurrent = (): boolean => {
       const current = useSharedDictionaryStore.getState();
       return current.generation === generation && current.workspaceId === workspaceId;
@@ -2985,17 +3007,20 @@ export class SyncService {
         );
       }
 
+      // Only the workspaces the member left go: a switch back to one they
+      // still belong to then needs no full re-download. Without a loaded list
+      // nobody can tell, so every mirror stays until one loads.
+      const { loaded, error, workspaces } = useWorkspaceStore.getState();
+      if (loaded && !error) {
+        const keep = workspaces.map((workspace) => workspace.id);
+        // A list loaded before the switch may not name the active one yet.
+        if (workspaceId && !keep.includes(workspaceId)) keep.push(workspaceId);
+        const result = await api.pruneSharedDictionary!(keep);
+        this.noteSharedDictionaryChange(result?.changed);
+        clearSharedCursorsExcept(keep);
+      }
+
       if (!workspaceId) {
-        // Only the workspaces the member left go: a switch back to one they
-        // still belong to then needs no full re-download. Without a loaded
-        // list nobody can tell, so every mirror stays until one loads.
-        const { loaded, error, workspaces } = useWorkspaceStore.getState();
-        if (loaded && !error) {
-          const keep = workspaces.map((workspace) => workspace.id);
-          const result = await api.pruneSharedDictionary!(keep);
-          this.noteSharedDictionaryChange(result?.changed);
-          clearSharedCursorsExcept(keep);
-        }
         if (isCurrent()) {
           useSettingsStore.getState().setSharedDictionaryHints(EMPTY_SHARED_HINTS, null);
         }
@@ -3004,12 +3029,10 @@ export class SyncService {
 
       if (isCurrent()) store.setSyncing(true);
       const before = await api.getSharedDictionary!(workspaceId);
-      await this.pullSharedDictionary(workspaceId, before.meta, authGeneration);
-      // A stale pass still proves the routes exist, but its workspace's access
-      // says nothing about the current one's.
-      if (isCurrent() || useSharedDictionaryStore.getState().status === "unavailable") {
-        store.setStatus("ready");
-      }
+      await this.pullSharedDictionary(workspaceId, before, authGeneration);
+      // Recorded for the pass's workspace: a stale pass still proves the
+      // routes exist, but says nothing about the current workspace's access.
+      store.setStatus("ready", workspaceId);
 
       if (!isCurrent()) return;
       await store.load(workspaceId, generation);
@@ -3030,8 +3053,8 @@ export class SyncService {
           cleared = false;
           console.error("Shared dictionary cleanup failed:", clearErr);
         }
+        store.setStatus(lostAccess, workspaceId);
         if (!isCurrent()) return;
-        store.setStatus(lostAccess);
         // A load after a failed clear would republish the lost lists' words.
         if (cleared) await store.load(workspaceId, generation);
         else useSettingsStore.getState().setSharedDictionaryHints(EMPTY_SHARED_HINTS, workspaceId);
@@ -3040,7 +3063,7 @@ export class SyncService {
       // A plain 404 is an API without the shared dictionary routes: nothing
       // to sync, nothing to tell the user.
       if (isHttpStatus(err, 404)) {
-        store.setStatus("unavailable");
+        store.setStatus("unavailable", workspaceId);
         return;
       }
       console.error("Shared dictionary sync failed:", err);
@@ -3060,21 +3083,25 @@ export class SyncService {
     this.sharedDictionaryPassChanged = true;
   }
 
+  // Recorded, not marked welcomed: the toast lives in the control panel, which
+  // may be closed or in the tray. It takes the arrival when it's shown (see
+  // SharedDictionaryArrivalToastListener); the event only tells an open one.
   private announceSharedDictionaryArrival(workspaceId: string, applyingBefore: number): void {
     const accountId = getAuthRequestContextSnapshot().sessionUserId;
     if (!accountId) return;
-    const welcomedKey = `${SHARED_DICTIONARY_WELCOMED_PREFIX}${accountId}.${workspaceId}`;
     const count = countApplyingSharedWords(useSharedDictionaryStore.getState().snapshot);
-    if (applyingBefore > 0 || count === 0 || localStorage.getItem(welcomedKey) != null) return;
-    localStorage.setItem(welcomedKey, "true");
-    this.emitSyncUiEvent("shared-dictionary-arrived", { workspaceId, count });
+    if (applyingBefore > 0 || count === 0) return;
+    if (hasWelcomedSharedDictionary(accountId, workspaceId)) return;
+    const arrival = { accountId, workspaceId, count };
+    recordSharedDictionaryArrival(arrival);
+    this.emitSyncUiEvent("shared-dictionary-arrived", arrival);
   }
 
   // An expired cursor or a returning list re-runs the whole pass as a snapshot,
   // once; a snapshot can neither expire nor bring a list back.
   private async pullSharedDictionary(
     workspaceId: string,
-    storedMeta: SharedDictionaryMeta | null,
+    before: SharedDictionarySnapshot,
     authGeneration: number
   ): Promise<void> {
     let forceSnapshot = false;
@@ -3082,7 +3109,7 @@ export class SyncService {
       try {
         const entries = await this.pullSharedEntries(
           workspaceId,
-          forceSnapshot ? null : storedMeta,
+          forceSnapshot ? null : before,
           authGeneration
         );
         if (entries === "scopesReturned") {
@@ -3100,14 +3127,16 @@ export class SyncService {
     }
   }
 
+  // `mirror` is the workspace's mirror before the pass; null forces a snapshot.
   private async pullSharedEntries(
     workspaceId: string,
-    storedMeta: SharedDictionaryMeta | null,
+    mirror: SharedDictionarySnapshot | null,
     authGeneration: number
   ): Promise<SharedEntriesPull> {
     const api = window.electronAPI;
     const key = sharedEntriesCursorKey(workspaceId);
     const stored = readSharedCursor(key);
+    const storedMeta = mirror?.meta ?? null;
     const limit = SHARED_DICTIONARY_PAGE_LIMIT;
 
     // No cursor, or no mirror to apply a delta to: page the whole snapshot
@@ -3145,7 +3174,10 @@ export class SyncService {
 
     // Starts before the stored cursor (see SHARED_DICTIONARY_READ_OVERLAP_MS),
     // with no since_id, and re-applies the overlap idempotently.
-    const contributors: SharedContributor[][] = [storedMeta.contributors];
+    const contributors: SharedContributor[][] = [];
+    const adderIds = new Set(
+      (mirror?.entries ?? []).flatMap((entry) => (entry.addedByUserId ? [entry.addedByUserId] : []))
+    );
     let page: SharedDictionaryPage = { since: overlappedSince(stored), limit };
     let lastId: string | null = null;
     let passStartedAt: string | undefined;
@@ -3155,6 +3187,9 @@ export class SyncService {
       passStartedAt ??= response.server_time;
       contributors.push(response.contributors);
       const upserts = response.entries.filter((entry) => !entry.deleted_at);
+      for (const entry of upserts) {
+        if (entry.added_by_user_id) adderIds.add(entry.added_by_user_id);
+      }
       const deletedIds = response.entries
         .filter((entry) => entry.deleted_at)
         .map((entry) => entry.id);
@@ -3175,7 +3210,7 @@ export class SyncService {
       if (hasReturningScope(storedMeta.scopes, response.scopes)) return "scopesReturned";
       const meta: SharedDictionaryMeta = {
         scopes: response.scopes,
-        contributors: mergeContributors(contributors),
+        contributors: deltaPassContributors(storedMeta.contributors, adderIds, contributors),
         paused: response.paused,
       };
       const result = await api.applySharedDictionaryPull!(workspaceId, {

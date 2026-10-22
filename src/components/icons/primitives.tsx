@@ -176,8 +176,23 @@ const TableMark = glyph(
   </>
 );
 
-// The Dictionary page's "Hide for me": Nucleo has an eye but no crossed-out one
-// (Lucide's eye-off shape; Lucide is ISC licensed, https://lucide.dev/license).
+// The Dictionary page's "Hide for me": Nucleo has an eye but no crossed-out one,
+// so these are the paths of Lucide's eye-off icon (https://lucide.dev), used
+// under Lucide's ISC License:
+//
+//   Copyright (c) 2026 Lucide Icons and Contributors
+//
+//   Permission to use, copy, modify, and/or distribute this software for any
+//   purpose with or without fee is hereby granted, provided that the above
+//   copyright notice and this permission notice appear in all copies.
+//
+//   THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+//   WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+//   MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+//   ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+//   WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+//   ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+//   OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 const EyeOffMark = glyph(
   <>
     <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />

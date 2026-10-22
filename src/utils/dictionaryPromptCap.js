@@ -97,6 +97,16 @@ export function selectDictionaryPromptTiers(
       kept[tier].push(word);
     }
   }
+  // A first personal entry longer than the whole budget would otherwise leave
+  // no dictionary at all, so it is sent cut down instead, as trimDictionaryPrompt
+  // did: to the budget, then back to its last comma when it holds one.
+  const first = tiers[0]?.[0];
+  if (count === 0 && first && first.length > maxChars) {
+    const head = first.slice(0, Math.max(0, maxChars));
+    const lastComma = head.lastIndexOf(",");
+    const cut = lastComma > 0 ? head.slice(0, lastComma) : head;
+    if (cut) kept[0].push(cut);
+  }
   return kept;
 }
 

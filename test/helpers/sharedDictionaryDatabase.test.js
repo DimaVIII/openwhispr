@@ -259,6 +259,43 @@ test("markDictionaryWordsShared keeps the word live", (t) => {
   );
 });
 
+// Backup off and the personal row changed elsewhere: the word went as a plain
+// word, so the server's personal row never got shared_at.
+test("markDictionaryWordsShared leaves words that went plain pending and dirty", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+
+  for (const [id, word] of [
+    ["cloud-1", "Qdrant"],
+    ["cloud-2", "Orukeet"],
+  ]) {
+    db.upsertDictionaryFromCloud({
+      id,
+      client_dict_id: `client-${id}`,
+      word,
+      source: "manual",
+      created_at: "2026-10-20T09:00:00.000Z",
+      updated_at: "2026-10-20T09:00:00.000Z",
+    });
+  }
+
+  db.markDictionaryWordsShared(["Qdrant", "Orukeet"], "2026-10-20T12:00:00.000Z", {
+    pendingWords: ["orukeet"],
+  });
+
+  const plain = db.getDictionaryEntryByClientId("client-cloud-2");
+  assert.equal(plain.shared_at, "2026-10-20T12:00:00.000Z");
+  assert.equal(plain.shared_at_dirty, 1);
+  assert.equal(plain.sync_status, "pending");
+  const linked = db.getDictionaryEntryByClientId("client-cloud-1");
+  assert.equal(linked.shared_at_dirty, 0);
+  assert.equal(linked.sync_status, "synced");
+  assert.deepEqual(
+    db.getPendingDictionary().map((row) => [row.word, row.shared_at_dirty]),
+    [["Orukeet", 1]]
+  );
+});
+
 test("retireMovedDictionaryWords removes only moved rows", (t) => {
   const db = createDb(t);
   if (!db) return;

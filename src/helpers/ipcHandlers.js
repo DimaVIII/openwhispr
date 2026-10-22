@@ -1265,9 +1265,11 @@ class IPCHandlers {
     return folder?.name || "Personal";
   }
 
-  // Every word that already applies: personal plus the active workspace's shared
-  // words. A hidden, paused or other workspace's word is not in the hints, so
-  // auto-learn can still add it to Personal.
+  // Every word that already reaches the transcription prompt: personal plus the
+  // active workspace's shared words that fit beside them. The renderer sends
+  // only those (sharedWordsReachingPrompt in settingsStore), so a team word cut
+  // from the prompt, or a hidden, paused or other workspace's word, can still
+  // be learned into Personal.
   _getDictionarySafe() {
     let personal;
     try {
@@ -2178,9 +2180,11 @@ class IPCHandlers {
       return this.databaseManager.getDictionaryEntriesByWords(words);
     });
 
-    ipcMain.handle("db-mark-dictionary-words-shared", async (_event, words, sharedAt) => {
+    ipcMain.handle("db-mark-dictionary-words-shared", async (_event, words, sharedAt, options) => {
       if (!Array.isArray(words)) throw new Error("words must be an array");
-      return this.databaseManager.markDictionaryWordsShared(words, sharedAt);
+      const pendingWords = options?.pendingWords ?? [];
+      if (!Array.isArray(pendingWords)) throw new Error("pendingWords must be an array");
+      return this.databaseManager.markDictionaryWordsShared(words, sharedAt, { pendingWords });
     });
 
     ipcMain.handle("db-retire-moved-dictionary-words", async (_event, words, options) => {

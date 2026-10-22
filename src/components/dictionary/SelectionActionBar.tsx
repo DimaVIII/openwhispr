@@ -20,6 +20,8 @@ interface SelectionActionBarProps {
   shareOpen?: boolean;
   // Shared words in the selection.
   onHide?: () => void;
+  // While a Hide for me is in flight, so a second click doesn't send it again.
+  hideBusy?: boolean;
   onDeleteForEveryone?: () => void;
   // The bottom padding the list needs while the bar floats over it: the bar
   // plus 8px on each side, so it never covers the last row.
@@ -27,7 +29,7 @@ interface SelectionActionBarProps {
 }
 
 const QUIET_BUTTON_CLASS =
-  "rounded-[5px] px-1 text-[11px] text-background/70 transition-colors hover:text-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-background/40";
+  "rounded-[5px] px-1 text-[11px] text-background/70 transition-colors enabled:hover:text-background disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-background/40";
 const SOLID_BUTTON_CLASS =
   "flex h-6 items-center gap-1 rounded-md bg-background px-2.5 text-[11px] font-medium transition-colors hover:bg-background/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-background/40";
 
@@ -36,17 +38,20 @@ function QuietButton({
   children,
   ariaLabel,
   className,
+  disabled = false,
 }: {
   onClick: () => void;
   children: ReactNode;
   ariaLabel?: string;
   className?: string;
+  disabled?: boolean;
 }): ReactElement {
   return (
     <button
       type="button"
       aria-label={ariaLabel}
       onClick={onClick}
+      disabled={disabled}
       className={cn(QUIET_BUTTON_CLASS, className)}
     >
       {children}
@@ -64,6 +69,7 @@ export function SelectionActionBar({
   onShare,
   shareOpen = false,
   onHide,
+  hideBusy = false,
   onDeleteForEveryone,
   onClearanceChange,
 }: SelectionActionBarProps): ReactElement {
@@ -110,7 +116,9 @@ export function SelectionActionBar({
       </span>
       <span className="ms-auto flex min-w-0 flex-wrap items-center justify-end gap-x-2.5 gap-y-1">
         {onHide && (
-          <QuietButton onClick={onHide}>{t("dictionary.shared.actions.hide")}</QuietButton>
+          <QuietButton onClick={onHide} disabled={hideBusy}>
+            {t("dictionary.shared.actions.hide")}
+          </QuietButton>
         )}
         {onDelete && (
           <QuietButton onClick={onDelete}>{t("dictionary.shared.actions.delete")}</QuietButton>

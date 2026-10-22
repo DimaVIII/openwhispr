@@ -1287,8 +1287,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   broadcastDictionaryUpdated: () => ipcRenderer.invoke("db-broadcast-dictionary-updated"),
   getDictionaryEntriesByWords: (words) =>
     ipcRenderer.invoke("db-get-dictionary-entries-by-words", words),
-  markDictionaryWordsShared: (words, sharedAt) =>
-    ipcRenderer.invoke("db-mark-dictionary-words-shared", words, sharedAt),
+  markDictionaryWordsShared: (words, sharedAt, options) =>
+    ipcRenderer.invoke("db-mark-dictionary-words-shared", words, sharedAt, options),
   getMovedDictionaryWords: () => ipcRenderer.invoke("db-get-moved-dictionary-words"),
   retireMovedDictionaryWords: (words, options) =>
     ipcRenderer.invoke("db-retire-moved-dictionary-words", words, options),

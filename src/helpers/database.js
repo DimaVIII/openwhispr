@@ -2997,23 +2997,29 @@ class DatabaseManager {
 
   // The server already recorded the share, so this leaves sync_status and
   // updated_at alone, and the marker clean: a pending push would only echo it
-  // back.
-  markDictionaryWordsShared(words, sharedAt) {
+  // back. `pendingWords` went as plain words (cloud backup off, the personal
+  // row changed elsewhere), so the server's personal row never got shared_at:
+  // those stay pending and dirty, and the push sends it once backup is on.
+  markDictionaryWordsShared(words, sharedAt, { pendingWords = [] } = {}) {
     try {
       if (!this.db) throw new Error("Database not initialized");
       if (typeof sharedAt !== "string" || !sharedAt) {
         throw new Error("sharedAt must be a non-empty string");
       }
       const byLower = this._livePersonalRowsByLower();
+      const pending = new Set(this._normalizeDictionaryWords(pendingWords).keys());
       const mark = this.db.prepare(
         "UPDATE custom_dictionary SET shared_at = ?, shared_at_dirty = 0 WHERE id = ?"
+      );
+      const markPending = this.db.prepare(
+        "UPDATE custom_dictionary SET shared_at = ?, shared_at_dirty = 1, updated_at = datetime('now'), sync_status = 'pending' WHERE id = ?"
       );
       const marked = [];
       this.db.transaction(() => {
         for (const lower of this._normalizeDictionaryWords(words).keys()) {
           const row = byLower.get(lower);
           if (!row) continue;
-          mark.run(sharedAt, row.id);
+          (pending.has(lower) ? markPending : mark).run(sharedAt, row.id);
           marked.push(row.word);
         }
       })();

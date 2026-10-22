@@ -9,7 +9,7 @@ interface RowCheckboxProps {
   label?: string;
   disabled?: boolean;
   className?: string;
-  // A visible label makes the whole row the checkbox, as in onboarding's use-case list.
+  // A visible label makes the whole row the checkbox, as in the share popover's list rows.
   children?: ReactNode;
 }
 

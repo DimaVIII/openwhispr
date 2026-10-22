@@ -3490,9 +3490,10 @@
       "everyoneAt": "{{workspace}} の全員",
       "hidden": "非表示",
       "add": {
-        "placeholder": "単語を追加…",
+        "placeholder": "カンマ区切りで単語を追加",
         "to": "{{list}} に追加",
-        "chooseList": "追加先のリストを選択"
+        "chooseList": "追加先のリストを選択",
+        "hiddenForYou": "{{list}} で非表示にしています"
       },
       "alreadyIn": "{{list}} に追加済み",
       "importTo": "{{list}} にインポート",
@@ -3566,8 +3567,8 @@
         "titleMany_one": "{{count}} 個の単語の共有先",
         "titleMany_other": "{{count}} 個の単語の共有先",
         "alreadyShared": "共有済み",
-        "movesOut_one": "個人から移動します",
-        "movesOut_other": "個人から移動します",
+        "movesOutOne": "個人から移動します",
+        "movesOutMany": "個人から移動します",
         "partial_one": "{{total}} 個中 {{moved}} 個の単語を共有しました。{{count}} 個は共有されませんでした。",
         "partial_other": "{{total}} 個中 {{moved}} 個の単語を共有しました。{{count}} 個は共有されませんでした。",
         "reasons": {

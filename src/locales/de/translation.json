@@ -3913,9 +3913,10 @@
       "everyoneAt": "Alle bei {{workspace}}",
       "hidden": "Ausgeblendet",
       "add": {
-        "placeholder": "Wort hinzufügen…",
+        "placeholder": "Wörter durch Kommas getrennt hinzufügen",
         "to": "zu {{list}}",
-        "chooseList": "Liste zum Hinzufügen wählen"
+        "chooseList": "Liste zum Hinzufügen wählen",
+        "hiddenForYou": "In {{list}} für dich ausgeblendet"
       },
       "alreadyIn": "Bereits in {{list}}",
       "importTo": "In {{list}} importieren",
@@ -3989,8 +3990,8 @@
         "titleMany_one": "{{count}} Wort teilen mit",
         "titleMany_other": "{{count}} Wörter teilen mit",
         "alreadyShared": "Bereits geteilt",
-        "movesOut_one": "Verschiebt es aus Persönlich",
-        "movesOut_other": "Verschiebt sie aus Persönlich",
+        "movesOutOne": "Verschiebt es aus Persönlich",
+        "movesOutMany": "Verschiebt sie aus Persönlich",
         "partial_one": "{{moved}} von {{total}} Wörtern geteilt. {{count}} wurde nicht geteilt.",
         "partial_other": "{{moved}} von {{total}} Wörtern geteilt. {{count}} wurden nicht geteilt.",
         "reasons": {

@@ -75,14 +75,28 @@ function readSort(): SortKey {
   return stored !== null && Object.hasOwn(SORT_LABEL_KEYS, stored) ? (stored as SortKey) : "az";
 }
 
-// "personal", null (the workspace list) or a space id; undefined when nothing valid is stored.
-function readRememberedTarget(): AddTarget | undefined {
+// The list last added to, and the workspace it was picked in: null (the
+// workspace list) means a different list in every workspace, so it must never
+// carry over to another one and share a word company-wide by accident.
+interface RememberedTarget {
+  workspaceId: string | null;
+  target: AddTarget;
+}
+
+const isStringOrNull = (value: unknown): value is string | null =>
+  value === null || typeof value === "string";
+
+// undefined when nothing valid is stored.
+function readRememberedTarget(): RememberedTarget | undefined {
   const stored = readStorage(ADD_TARGET_STORAGE_KEY);
   if (stored === null) return undefined;
   try {
     const parsed: unknown = JSON.parse(stored);
-    if (parsed === null) return null;
-    return typeof parsed === "string" ? parsed : undefined;
+    if (typeof parsed !== "object" || parsed === null) return undefined;
+    const { workspaceId, target } = parsed as Record<string, unknown>;
+    return isStringOrNull(workspaceId) && isStringOrNull(target)
+      ? { workspaceId, target }
+      : undefined;
   } catch {
     return undefined;
   }
@@ -115,15 +129,19 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
   const [list, setList] = useState<ListKey>(requestedList ?? "all");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortKey>(readSort);
-  const [rememberedTarget, setRememberedTarget] = useState<AddTarget | undefined>(
+  const [rememberedTarget, setRememberedTarget] = useState<RememberedTarget | undefined>(
     readRememberedTarget
   );
-  // A target picked from the chip holds for the list it was picked on.
-  const [pickedTarget, setPickedTarget] = useState<{ list: ListKey; target: AddTarget } | null>(
-    null
-  );
+  // A target picked from the chip holds for the list (and workspace) it was picked on.
+  const [pickedTarget, setPickedTarget] = useState<{
+    list: ListKey;
+    target: AddTarget;
+    workspaceId: string | null;
+  } | null>(null);
   const [bulkText, setBulkText] = useState("");
   const [showBulkImport, setShowBulkImport] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [hidingSelected, setHidingSelected] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   // The words the share popover is open for, and the control it opened from.
   const [shareRequest, setShareRequest] = useState<{
@@ -171,6 +189,8 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
     if (!requestedList) return;
     setTab("dictionary");
     setList(requestedList);
+    // A search left over from before would filter out the words it asked to show.
+    setSearch("");
     useSharedDictionaryStore.getState().setRequestedList(null);
   }, [requestedList]);
 
@@ -289,18 +309,22 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
 
   const isWritable = (target: AddTarget | undefined): target is AddTarget =>
     target !== undefined && addTargets.some((option) => option.target === target);
+  // Another workspace's choice reads as nothing remembered, which is Personal.
+  const lastUsed =
+    rememberedTarget?.workspaceId === workspaceId ? rememberedTarget.target : undefined;
   const preferredTarget =
-    pickedTarget?.list === openList
+    pickedTarget?.list === openList && pickedTarget.workspaceId === workspaceId
       ? pickedTarget.target
-      : defaultAddTarget(openList, isWritable(rememberedTarget) ? rememberedTarget : undefined);
+      : defaultAddTarget(openList, isWritable(lastUsed) ? lastUsed : undefined);
   const addTarget: AddTarget = isWritable(preferredTarget) ? preferredTarget : "personal";
 
   const listLabel = (target: AddTarget): string =>
     addTargets.find((option) => option.target === target)?.label ?? t("dictionary.shared.personal");
 
   const rememberTarget = (target: AddTarget): void => {
-    setRememberedTarget(target);
-    writeStorage(ADD_TARGET_STORAGE_KEY, JSON.stringify(target));
+    const remembered: RememberedTarget = { workspaceId, target };
+    setRememberedTarget(remembered);
+    writeStorage(ADD_TARGET_STORAGE_KEY, JSON.stringify(remembered));
   };
 
   // Length of the user's own part of the STT prompt (words + snippet triggers,
@@ -335,9 +359,15 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
   };
 
   const handleImport = async (): Promise<void> => {
-    if (await addWords(bulkText)) {
-      setBulkText("");
-      setShowBulkImport(false);
+    if (importing) return;
+    setImporting(true);
+    try {
+      if (await addWords(bulkText)) {
+        setBulkText("");
+        setShowBulkImport(false);
+      }
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -359,7 +389,13 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
   };
 
   const hideSelected = async (): Promise<void> => {
-    if (await actions.setRowsHidden(selectedShared, true)) clearSelection();
+    if (hidingSelected) return;
+    setHidingSelected(true);
+    try {
+      if (await actions.setRowsHidden(selectedShared, true)) clearSelection();
+    } finally {
+      setHidingSelected(false);
+    }
   };
 
   const shareRequested = async (
@@ -422,7 +458,7 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
   );
 
   const importIntoOpenList = (): void => {
-    if (openScope) setPickedTarget({ list: openList, target: openScope.space_id });
+    if (openScope) setPickedTarget({ list: openList, target: openScope.space_id, workspaceId });
     setShowBulkImport(true);
   };
 
@@ -516,6 +552,8 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
         onOpenChange={setConfirmClear}
         title={t("dictionary.clearTitle")}
         description={t("dictionary.clearDescription")}
+        confirmText={t("dictionary.clearAll")}
+        cancelText={t("common.cancel")}
         onConfirm={actions.clearPersonal}
         variant="destructive"
       />
@@ -526,6 +564,7 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
         }}
         title={actions.deleteTitle ?? lastDeleteTitle.current}
         confirmText={t("dictionary.shared.actions.deleteForEveryone")}
+        cancelText={t("common.cancel")}
         onConfirm={actions.confirmDelete}
         variant="destructive"
       />
@@ -614,13 +653,15 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
                   targets={readOnlyTarget ? [readOnlyTarget] : addTargets}
                   disabled={readOnlyList}
                   onTargetChange={(target) => {
-                    setPickedTarget({ list: openList, target });
+                    setPickedTarget({ list: openList, target, workspaceId });
                     rememberTarget(target);
                   }}
                   onAdd={addWords}
                   isInTarget={(word) =>
                     actions.wordsInTarget(addTarget).some((existing) => sameWord(existing, word))
                   }
+                  isHiddenInTarget={(word) => actions.isHiddenInTarget(addTarget, word)}
+                  onUnhide={(word) => actions.unhideInTarget(addTarget, word)}
                   onImport={() => setShowBulkImport(true)}
                   inputRef={addInputRef}
                 />
@@ -661,7 +702,7 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
                         <Button
                           size="sm"
                           onClick={() => void handleImport()}
-                          disabled={pendingImportCount === 0}
+                          disabled={pendingImportCount === 0 || importing}
                         >
                           {t("dictionary.shared.importTo", { list: listLabel(addTarget) })}
                         </Button>
@@ -707,6 +748,7 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
                     }
                     shareOpen={shareRequest !== null}
                     onHide={selectedShared.length > 0 ? () => void hideSelected() : undefined}
+                    hideBusy={hidingSelected}
                     onClearanceChange={setSelectionBarClearance}
                     onDeleteForEveryone={
                       selectedShared.length > 0

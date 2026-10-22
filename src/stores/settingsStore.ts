@@ -64,8 +64,17 @@ import type {
   ThemeSettings,
   ChatAgentSettings,
 } from "../hooks/useSettings";
-import type { Snippet } from "../utils/snippets";
-import { EMPTY_SHARED_HINTS, type SharedHintWords } from "../utils/sharedDictionaryHints";
+import { getDictionaryHintTiers, MAX_SHARED_KEYTERMS, type Snippet } from "../utils/snippets";
+import {
+  EMPTY_SHARED_HINTS,
+  isTermLikeSharedWord,
+  type SharedHintWords,
+} from "../utils/sharedDictionaryHints";
+import {
+  PROMPT_HEAD_TERMS,
+  selectDictionaryPromptTiers,
+  WHISPER_DECODER_PROMPT_CHARS,
+} from "../utils/dictionaryPromptCap";
 import type { EnterpriseSetupMode } from "../types/enterpriseIdentity";
 import { getManagedScopeResolution } from "./enterpriseIdentityStore";
 
@@ -231,10 +240,15 @@ const SHARED_HINTS_KEY = "sharedDictionaryHints";
 // the workspace service's import graph.
 const ACTIVE_WORKSPACE_STORAGE_KEY = "activeWorkspaceId";
 
+function readStoredActiveWorkspaceId(): string | null {
+  return isBrowser ? localStorage.getItem(ACTIVE_WORKSPACE_STORAGE_KEY) : null;
+}
+
 // Hints are persisted with the workspace they were built for. The key is shared
 // between windows and survives restarts, so hints written under another
 // workspace (or account) never apply, and a stale or hand-edited value never
-// breaks the dictionary prompt.
+// breaks the dictionary prompt. Words are checked again, since a build with
+// looser rules may have written them.
 function parseSharedHints(raw: string | null, activeWorkspaceId: string | null): SharedHintWords {
   if (raw === null) return EMPTY_SHARED_HINTS;
   try {
@@ -246,10 +260,16 @@ function parseSharedHints(raw: string | null, activeWorkspaceId: string | null):
     if (!Array.isArray(space) || !Array.isArray(workspace)) return EMPTY_SHARED_HINTS;
     const words = (value: unknown[]): string[] =>
       value.filter((w): w is string => typeof w === "string");
+    const sharedWords = (value: unknown[]): string[] => words(value).filter(isTermLikeSharedWord);
+    // Moved personal words, not teammates': they only ever remove words.
     const suppressed = Array.isArray(suppressedPersonal) ? words(suppressedPersonal) : [];
     return suppressed.length > 0
-      ? { space: words(space), workspace: words(workspace), suppressedPersonal: suppressed }
-      : { space: words(space), workspace: words(workspace) };
+      ? {
+          space: sharedWords(space),
+          workspace: sharedWords(workspace),
+          suppressedPersonal: suppressed,
+        }
+      : { space: sharedWords(space), workspace: sharedWords(workspace) };
   } catch {
     return EMPTY_SHARED_HINTS;
   }
@@ -257,16 +277,47 @@ function parseSharedHints(raw: string | null, activeWorkspaceId: string | null):
 
 function readPersistedSharedHints(): SharedHintWords {
   if (!isBrowser) return EMPTY_SHARED_HINTS;
-  return parseSharedHints(
-    localStorage.getItem(SHARED_HINTS_KEY),
-    localStorage.getItem(ACTIVE_WORKSPACE_STORAGE_KEY)
-  );
+  return parseSharedHints(localStorage.getItem(SHARED_HINTS_KEY), readStoredActiveWorkspaceId());
 }
+
+interface PromptDictionarySettings {
+  customDictionary: string[];
+  snippets: Snippet[];
+  sharedDictionaryHints: SharedHintWords;
+}
+
+// The shared words that reach the transcription prompt beside the personal
+// words and snippet triggers. Auto-learn treats these as already applying, so
+// they follow the tightest STT path (the Whisper decoder's window that local
+// engines and OpenWhispr Cloud get, see audioManager's
+// getCustomDictionaryPromptTiers, less the script bias): a team word cut from
+// it is learned into Personal, where it is always sent.
+function sharedWordsReachingPrompt(settings: PromptDictionarySettings): SharedHintWords {
+  const [, space = [], workspace = []] = selectDictionaryPromptTiers(
+    getDictionaryHintTiers(settings),
+    Infinity,
+    {
+      sharedChars: WHISPER_DECODER_PROMPT_CHARS,
+      sharedWords: MAX_SHARED_KEYTERMS,
+      totalTerms: PROMPT_HEAD_TERMS,
+    }
+  );
+  return { space, workspace };
+}
+
+// The last list this window sent; every dictionary edit re-derives it, and
+// most change nothing in it.
+let lastSentSharedHints: string | null = null;
 
 // Main keeps the hints in memory only, for auto-learn; a failed send just
 // leaves its previous copy in place.
-function sendSharedHintsToMain(hints: SharedHintWords): void {
+function sendSharedHintsToMain(settings: PromptDictionarySettings): void {
+  const hints = sharedWordsReachingPrompt(settings);
+  const serialized = JSON.stringify(hints);
+  if (serialized === lastSentSharedHints) return;
+  lastSentSharedHints = serialized;
   window.electronAPI?.setSharedDictionaryHints?.(hints)?.catch((err: unknown) => {
+    lastSentSharedHints = null;
     logger.warn(
       "Failed to send shared dictionary hints to main",
       { error: (err as Error)?.message },
@@ -2181,12 +2232,23 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   setCleanupModel: createStringSetter("cleanupModel"),
 
   // A derived cache of the shared dictionary for the prompt path; main owns the
-  // data, so nothing is written back. Main gets a copy so auto-learn never adds a
-  // word the workspace already applies. Cleared hints are EMPTY with no workspace.
+  // data, so nothing is written back. Main gets a copy (see the subscription
+  // below) so auto-learn never adds a word the workspace already applies.
+  // Cleared hints are EMPTY with no workspace.
   setSharedDictionaryHints: (hints: SharedHintWords, workspaceId: string | null) => {
+    if (!isBrowser) {
+      set({ sharedDictionaryHints: hints });
+      return;
+    }
+    // A window that hasn't heard of a workspace switch yet (storage events
+    // arrive a task later) must not overwrite the hints every window reads,
+    // and main's copy, with the old workspace's words or with none. It takes
+    // what the current workspace has instead.
+    if (workspaceId !== readStoredActiveWorkspaceId()) {
+      set({ sharedDictionaryHints: readPersistedSharedHints() });
+      return;
+    }
     set({ sharedDictionaryHints: hints });
-    if (!isBrowser) return;
-    sendSharedHintsToMain(hints);
     try {
       localStorage.setItem(SHARED_HINTS_KEY, JSON.stringify({ workspaceId, ...hints }));
     } catch (err) {
@@ -2843,6 +2905,20 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   },
 }));
 
+// Which shared words reach the prompt also depends on the personal words and
+// snippet triggers ahead of them, so main's copy is re-derived on any of the three.
+if (isBrowser) {
+  useSettingsStore.subscribe((state, previous) => {
+    if (
+      state.sharedDictionaryHints !== previous.sharedDictionaryHints ||
+      state.customDictionary !== previous.customDictionary ||
+      state.snippets !== previous.snippets
+    ) {
+      sendSharedHintsToMain(state);
+    }
+  });
+}
+
 // --- Selectors (derived state, not stored) ---
 
 // Route cleanup to Cloud on this, never on cleanupCloudMode alone: picking a local
@@ -3456,7 +3532,7 @@ export async function initializeSettings(): Promise<void> {
     }
 
     // Main starts every launch with no hints; prime it with the persisted ones.
-    sendSharedHintsToMain(useSettingsStore.getState().sharedDictionaryHints);
+    sendSharedHintsToMain(useSettingsStore.getState());
 
     try {
       const [
@@ -3872,8 +3948,13 @@ export async function initializeSettings(): Promise<void> {
   // Sync Zustand store when another window writes to localStorage
   window.addEventListener("storage", (event) => {
     // Another window switched or cleared the workspace: the persisted hints
-    // belong to the old one now.
-    if (event.storageArea === localStorage && event.key === ACTIVE_WORKSPACE_STORAGE_KEY) {
+    // belong to the old one now. A removed hints key (another window's quota
+    // fallback) empties them too, before removals are skipped below.
+    if (
+      event.storageArea === localStorage &&
+      (event.key === ACTIVE_WORKSPACE_STORAGE_KEY ||
+        (event.key === SHARED_HINTS_KEY && event.newValue === null))
+    ) {
       useSettingsStore.setState({ sharedDictionaryHints: readPersistedSharedHints() });
       return;
     }

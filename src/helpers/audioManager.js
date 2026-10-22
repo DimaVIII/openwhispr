@@ -552,6 +552,8 @@ const MANAGED_TRANSCRIPTION_SPEC = {
   }),
 };
 
+// `echoPrompt` gives the dictionary in the order the payload carries it, for
+// the trailing-echo strip; without one it's the Whisper-order `prompt`.
 const PROXY_TRANSCRIPTION_PROVIDERS = {
   tinfoil: {
     displayName: "Tinfoil",
@@ -577,6 +579,7 @@ const PROXY_TRANSCRIPTION_PROVIDERS = {
       if (tokens.length > 0) payload.contextBias = tokens;
       return payload;
     },
+    echoPrompt: ({ priorityDictionaryPrompt }) => priorityDictionaryPrompt,
   },
   gemini: {
     displayName: "Gemini",
@@ -587,6 +590,7 @@ const PROXY_TRANSCRIPTION_PROVIDERS = {
       language,
       keyterms: keyterms.length > 0 ? keyterms : undefined,
     }),
+    echoPrompt: ({ keyterms }) => keyterms.join(", "),
   },
   xai: {
     displayName: "xAI",
@@ -596,6 +600,7 @@ const PROXY_TRANSCRIPTION_PROVIDERS = {
       if (keyterms.length > 0) payload.keyterms = keyterms;
       return payload;
     },
+    echoPrompt: ({ keyterms }) => keyterms.join(", "),
   },
   corti: {
     displayName: "Corti",
@@ -4008,7 +4013,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
         }
         const apiCallStart = performance.now();
         const proxyDictionaryPrompt = this.getWhisperPrompt(apiSettings);
-        const proxyPayload = proxySpec.buildPayload({
+        const proxyArgs = {
           audioBuffer: await optimizedAudio.arrayBuffer(),
           model,
           language,
@@ -4024,7 +4029,8 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
             .map((t) => t.trim().slice(0, 50))
             .filter(Boolean)
             .slice(0, 100),
-        });
+        };
+        const proxyPayload = proxySpec.buildPayload(proxyArgs);
         // Managed Azure is enterprise: its failures keep their own shape.
         const classifyProxyFailure = (err) =>
           managedResolution
@@ -4042,9 +4048,12 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
           throw classifyProxyFailure(errorFromIpcResult(result));
         }
         const sendsDictionaryBias = payloadSendsDictionaryBias(proxyPayload);
+        // A recital follows the order the list was sent in, which for
+        // contextBias and keyterms is personal words first, not Whisper order.
+        const proxyEchoPrompt = proxySpec.echoPrompt?.(proxyArgs) ?? proxyDictionaryPrompt;
         const proxyText = this.stripTrailingDictionaryEcho(
           result?.text,
-          sendsDictionaryBias ? proxyDictionaryPrompt : null
+          sendsDictionaryBias ? proxyEchoPrompt : null
         );
         if (!proxyText?.trim()) {
           throw new Error(`No text transcribed - ${proxySpec.displayName} response was empty`);

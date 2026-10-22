@@ -40,7 +40,6 @@ const ARABIC_PLURAL_BASES = [
   "dictionary.shared.deletedManyForEveryone",
   "dictionary.shared.selection.count",
   "dictionary.shared.share.titleMany",
-  "dictionary.shared.share.movesOut",
   "dictionary.shared.share.partial",
   "dictionary.shared.deletedPersonalMany",
   "dictionary.shared.locked.paused",

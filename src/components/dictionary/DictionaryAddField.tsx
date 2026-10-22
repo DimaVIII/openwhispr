@@ -27,6 +27,10 @@ interface DictionaryAddFieldProps {
   onAdd: (text: string) => Promise<boolean>;
   // Whether one typed word is already in the target list.
   isInTarget: (word: string) => boolean;
+  // Whether that copy is one the member hid, so the list doesn't show it.
+  isHiddenInTarget: (word: string) => boolean;
+  // Resolves true once the hidden copy is back, which clears the field.
+  onUnhide: (word: string) => Promise<boolean>;
   onImport: () => void;
   inputRef?: Ref<HTMLInputElement>;
   // A list that takes no new words (paused) keeps the field, dimmed and inert.
@@ -39,6 +43,8 @@ export function DictionaryAddField({
   onTargetChange,
   onAdd,
   isInTarget,
+  isHiddenInTarget,
+  onUnhide,
   onImport,
   inputRef,
   disabled = false,
@@ -53,6 +59,9 @@ export function DictionaryAddField({
   const trimmed = text.trim();
   // A comma list adds whatever is new; only a single known word is refused.
   const alreadyAdded = trimmed !== "" && !trimmed.includes(",") && isInTarget(trimmed);
+  // "Already in" would point at a word the list doesn't show, so a hidden copy
+  // says so and offers to bring it back instead.
+  const hiddenForYou = alreadyAdded && isHiddenInTarget(trimmed);
   // A teammate's dictation leaves these out, so a shared list doesn't take them.
   // A comma list goes through and reports the words it left out.
   const notTermLike =
@@ -60,21 +69,32 @@ export function DictionaryAddField({
     !trimmed.includes(",") &&
     trimmed !== "" &&
     !isTermLikeSharedWord(trimmed);
-  const notice = alreadyAdded
-    ? t("dictionary.shared.alreadyIn", { list: targetLabel })
-    : notTermLike
-      ? t("dictionary.shared.notTermLike")
-      : null;
+  const notice = hiddenForYou
+    ? t("dictionary.shared.add.hiddenForYou", { list: targetLabel })
+    : alreadyAdded
+      ? t("dictionary.shared.alreadyIn", { list: targetLabel })
+      : notTermLike
+        ? t("dictionary.shared.notTermLike")
+        : null;
   const canAdd = trimmed !== "" && notice === null && !busy && !disabled;
 
-  const submit = async (): Promise<void> => {
-    if (!canAdd) return;
+  const runBusy = async (action: () => Promise<boolean>): Promise<void> => {
     setBusy(true);
     try {
-      if (await onAdd(text)) setText("");
+      if (await action()) setText("");
     } finally {
       setBusy(false);
     }
+  };
+
+  const submit = async (): Promise<void> => {
+    if (!canAdd) return;
+    await runBusy(() => onAdd(text));
+  };
+
+  const unhide = async (): Promise<void> => {
+    if (!hiddenForYou || busy || disabled) return;
+    await runBusy(() => onUnhide(trimmed));
   };
 
   return (
@@ -99,16 +119,29 @@ export function DictionaryAddField({
         className="h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-xs shadow-none placeholder:text-foreground/45 hover:border-0 focus-visible:ring-0 dark:bg-transparent"
       />
       {notice !== null ? (
-        <span
-          id={noticeId}
-          title={notice}
-          className={cn(
-            "min-w-0 truncate text-[11px]",
-            notTermLike && !alreadyAdded ? "text-destructive" : "text-foreground/45"
+        <>
+          <span
+            id={noticeId}
+            title={notice}
+            className={cn(
+              "min-w-0 truncate text-[11px]",
+              notTermLike && !alreadyAdded ? "text-destructive" : "text-foreground/45"
+            )}
+          >
+            {notice}
+          </span>
+          {hiddenForYou && (
+            <button
+              type="button"
+              onClick={() => void unhide()}
+              disabled={busy || disabled}
+              aria-label={t("dictionary.shared.actions.unhideWord", { word: trimmed })}
+              className="shrink-0 text-[11px] text-primary transition-colors enabled:hover:text-primary/80"
+            >
+              {t("dictionary.shared.actions.unhide")}
+            </button>
           )}
-        >
-          {notice}
-        </span>
+        </>
       ) : (
         trimmed !== "" && (
           <button

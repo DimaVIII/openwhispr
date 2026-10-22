@@ -161,3 +161,30 @@ test("⌘A selects all by physical key, whatever the layout types", async (t) =>
   assert.deepEqual(calls, ["selectAll", "selectAll"]);
   assert.notEqual(quit.defaultPrevented, true);
 });
+
+test("⌘A in the Hidden list, which has no selection, doesn't select the page's text", async (t) => {
+  const { container } = await renderList(t, {
+    rows: [personalRow(0)],
+    hiddenList: true,
+  });
+  const keyDown = (node) =>
+    React.act(async () => {
+      const event = {
+        type: "keydown",
+        bubbles: true,
+        metaKey: true,
+        key: "a",
+        code: "KeyA",
+        target: node,
+        preventDefault() {
+          this.defaultPrevented = true;
+        },
+        stopPropagation() {},
+      };
+      node.dispatchEvent(event);
+      return event;
+    });
+  const list = container.querySelector("ul");
+  const onList = await keyDown(list);
+  assert.equal(onList.defaultPrevented, true);
+});

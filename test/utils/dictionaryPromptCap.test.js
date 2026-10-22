@@ -26,7 +26,36 @@ test("formatDictionaryPrompt keeps the higher tier last and drops whole words on
   assert.equal(formatDictionaryPrompt([["P1"], ["S1"], ["W1"]], 100), "W1, S1, P1");
   // 9 chars fits "S1, P1" (6) plus nothing more; W1 is dropped, not truncated.
   assert.equal(formatDictionaryPrompt([["P1"], ["S1"], ["W1"]], 9), "S1, P1");
-  assert.equal(formatDictionaryPrompt([["P1"], ["S1"], ["W1"]], 1), "");
+  // A budget below the first personal entry still sends its head (see below).
+  assert.equal(formatDictionaryPrompt([["P1"], ["S1"], ["W1"]], 1), "P");
+});
+
+test("a first personal entry longer than the budget is cut down, not dropped", async () => {
+  const { formatDictionaryPrompt, selectDictionaryPromptTiers, GROQ_PROMPT_CHARS } = await load();
+  const long = "x".repeat(1000);
+  const prompt = formatDictionaryPrompt([[long, "P2"], ["S1"], ["W1"]], GROQ_PROMPT_CHARS);
+  assert.equal(prompt, "x".repeat(GROQ_PROMPT_CHARS), "the head of the entry, to the budget");
+  assert.deepEqual(selectDictionaryPromptTiers([[long, "P2"], ["S1"], []], 10), [
+    ["x".repeat(10)],
+    [],
+    [],
+  ]);
+  // An entry holding commas is cut back to its last comma inside the budget.
+  assert.equal(formatDictionaryPrompt([["Smith, John, Doe"], [], []], 13), "Smith, John");
+  // A comma at the very start is no cut point, as in trimDictionaryPrompt.
+  assert.equal(formatDictionaryPrompt([[",abcdef"], [], []], 4), ",abc");
+  // Shared words are never cut: only the first personal entry is.
+  assert.equal(formatDictionaryPrompt([[], ["S".repeat(20)], []], 10), "");
+  assert.equal(formatDictionaryPrompt([["P".repeat(20)], [], []], 0), "");
+});
+
+test("whole entries are kept up to the budget, an exact fit included", async () => {
+  const { formatDictionaryPrompt } = await load();
+  // "P1, P2" is exactly 6 characters.
+  assert.equal(formatDictionaryPrompt([["P1", "P2", "P3"], [], []], 6), "P1, P2");
+  // A later entry that doesn't fit is dropped whole, never cut.
+  assert.equal(formatDictionaryPrompt([["P1", "P2", "P3"], [], []], 9), "P1, P2");
+  assert.equal(formatDictionaryPrompt([["P1", "x".repeat(50)], [], []], 20), "P1");
 });
 
 test("formatDictionaryPrompt returns an empty string for empty tiers", async () => {

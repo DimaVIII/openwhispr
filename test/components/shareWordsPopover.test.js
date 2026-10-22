@@ -111,6 +111,7 @@ const shareButton = (container) =>
 test("popover disables a list that already has the word", async (t_) => {
   const { container } = await renderPopover(t_, ["Qdrant"]);
   assert.ok(container.textContent.includes('dictionary.shared.share.titleOne{"word":"Qdrant"}'));
+  assert.ok(container.textContent.includes("dictionary.shared.share.movesOutOne"));
 
   const sales = option(container, "Sales");
   assert.equal(isDisabled(sales), true);
@@ -129,7 +130,7 @@ test("popover disables a list that already has the word", async (t_) => {
 test("Share button disabled with no target", async (t_) => {
   const { container, shared } = await renderPopover(t_, ["Biscuit", "Piha"]);
   assert.ok(container.textContent.includes('dictionary.shared.share.titleMany{"count":2}'));
-  assert.ok(container.textContent.includes('dictionary.shared.share.movesOut{"count":2}'));
+  assert.ok(container.textContent.includes("dictionary.shared.share.movesOutMany"));
   assert.equal(isDisabled(shareButton(container)), true);
 
   const engineering = option(container, "Engineering");

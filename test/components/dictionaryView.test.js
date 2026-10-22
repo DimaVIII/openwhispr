@@ -40,10 +40,12 @@ const MOCKS = {
         this.reason = reason;
       }
     }
-    // A result of "throw:<reason>" makes the call fail with that reason.
+    // A result of "throw:<reason>" makes the call fail with that reason; a
+    // function result is called with the arguments and gives the result.
     const record = (name) => async (...args) => {
       globalThis.__calls.push([name, ...args]);
-      const result = globalThis.__results?.[name];
+      const stored = globalThis.__results?.[name];
+      const result = typeof stored === "function" ? await stored(...args) : stored;
       if (typeof result === "string" && result.startsWith("throw:")) {
         throw new SharedDictionaryActionError(result.slice("throw:".length));
       }
@@ -97,11 +99,11 @@ const MOCKS = {
   `,
   "/ui/dialog": `
     import { createElement } from "react";
-    export const ConfirmDialog = ({ open, title, onConfirm, onOpenChange }) =>
+    export const ConfirmDialog = ({ open, title, onConfirm, onOpenChange, confirmText, cancelText }) =>
       open
         ? createElement(
             "div",
-            { "data-dialog": title },
+            { "data-dialog": title, "data-confirm-text": confirmText, "data-cancel-text": cancelText },
             createElement("button", {
               "data-confirm": "",
               onClick: () => {
@@ -436,7 +438,7 @@ const targetChip = (container) =>
 
 test("add target defaults to the open list", async (t) => {
   const { container, storage } = await renderView(t, {
-    initialStorage: { dictionaryAddTarget: JSON.stringify(SALES) },
+    initialStorage: { dictionaryAddTarget: JSON.stringify({ workspaceId: "ws", target: SALES }) },
   });
   await openList(container, `space:${ENGINEERING}`);
   assert.equal(targetChip(container).textContent, 'dictionary.shared.add.to{"list":"Engineering"}');
@@ -463,7 +465,10 @@ test("add target defaults to the open list", async (t) => {
     (node) => node.getAttribute?.("data-menu-item") === "" && node.textContent === "Engineering"
   );
   await click(engineering);
-  assert.equal(storage.getItem("dictionaryAddTarget"), JSON.stringify(ENGINEERING));
+  assert.equal(
+    storage.getItem("dictionaryAddTarget"),
+    JSON.stringify({ workspaceId: "ws", target: ENGINEERING })
+  );
   assert.equal(targetChip(container).textContent, 'dictionary.shared.add.to{"list":"Engineering"}');
 });
 
@@ -1342,4 +1347,205 @@ test("sharing a selection moves the words a shared list takes and keeps the rest
     'dictionary.shared.skipped{"count":1,"words":"x<y>"}'
   );
   assert.ok(checkedWords(container).includes("x<y>"), "the word left out stays selected");
+});
+
+const deferred = () => {
+  let resolve;
+  const promise = new Promise((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+};
+
+test("renaming a word All words shows once renames its copy in every list", async (t) => {
+  const snapshot = {
+    ...SNAPSHOT,
+    entries: [...SNAPSHOT.entries, entry("e-qdrant-ws", "qdrant", null)],
+  };
+  const { container, calls } = await renderView(t, { shared: { snapshot } });
+  const editor = () => findElement(rowFor(container, "Qdrant"), (node) => node.tagName === "INPUT");
+  await click(byAttribute(container, "aria-label", named("dictionary.editWord", "Qdrant")));
+  await type(editor(), "Qdrant DB");
+  await pressEnter(editor());
+  assert.deepEqual(
+    calls.filter(([name]) => name === "editSharedWord"),
+    [
+      ["editSharedWord", "ws", "e-qdrant", "Qdrant DB"],
+      ["editSharedWord", "ws", "e-qdrant-ws", "Qdrant DB"],
+    ]
+  );
+  assert.equal(editor(), null, "the editor closes once every copy is renamed");
+
+  // One copy failing still renames the other, and the editor names the list that failed.
+  calls.length = 0;
+  globalThis.__results.editSharedWord = (_workspaceId, entryId) =>
+    entryId === "e-qdrant-ws" ? "throw:recentlyDeleted" : undefined;
+  await click(byAttribute(container, "aria-label", named("dictionary.editWord", "Qdrant")));
+  await type(editor(), "Qdrant DB");
+  await pressEnter(editor());
+  assert.equal(calls.filter(([name]) => name === "editSharedWord").length, 2);
+  assert.ok(editor(), "a failed copy keeps the editor open");
+  assert.ok(
+    rowFor(container, "Qdrant").textContent.includes(
+      'dictionary.shared.errors.recentlyDeleted{"list":"dictionary.shared.everyoneAt{\\"workspace\\":\\"Acme\\"}"}'
+    )
+  );
+});
+
+test("the confirm dialogs' buttons are translated", async (t) => {
+  const { container } = await renderView(t);
+  await openList(container, `space:${ENGINEERING}`);
+  await click(
+    byAttribute(
+      container,
+      "aria-label",
+      named("dictionary.shared.actions.deleteForEveryoneWord", "Qdrant")
+    )
+  );
+  const deleteDialog = findElement(container, (node) =>
+    node.getAttribute?.("data-dialog")?.includes("deleteOneTitle")
+  );
+  assert.equal(
+    deleteDialog.getAttribute("data-confirm-text"),
+    "dictionary.shared.actions.deleteForEveryone"
+  );
+  assert.equal(deleteDialog.getAttribute("data-cancel-text"), "common.cancel");
+  await click(byAttribute(deleteDialog, "data-cancel"));
+
+  await openList(container, "personal");
+  await click(byAttribute(container, "aria-label", "dictionary.clearAll"));
+  const clearDialog = byAttribute(container, "data-dialog", "dictionary.clearTitle");
+  assert.equal(clearDialog.getAttribute("data-confirm-text"), "dictionary.clearAll");
+  assert.equal(clearDialog.getAttribute("data-cancel-text"), "common.cancel");
+});
+
+test("a Delete for everyone left open is withdrawn when the workspace changes", async (t) => {
+  const { container, calls, rerender } = await renderView(t);
+  await openList(container, `space:${ENGINEERING}`);
+  await click(
+    byAttribute(
+      container,
+      "aria-label",
+      named("dictionary.shared.actions.deleteForEveryoneWord", "Qdrant")
+    )
+  );
+  const dialog = () =>
+    findElement(container, (node) =>
+      node.getAttribute?.("data-dialog")?.includes("deleteOneTitle")
+    );
+  assert.ok(dialog());
+
+  globalThis.__workspace = { ...globalThis.__workspace, id: "ws-b", name: "Beta" };
+  await rerender();
+  assert.equal(dialog(), null);
+  // Coming back doesn't bring it back either.
+  globalThis.__workspace = { ...globalThis.__workspace, id: "ws", name: "Acme" };
+  await rerender();
+  assert.equal(dialog(), null);
+  assert.equal(
+    calls.find(([name]) => name === "deleteSharedWords"),
+    undefined
+  );
+});
+
+test("the remembered add target only applies in the workspace it was picked in", async (t) => {
+  const { container, rerender } = await renderView(t, {
+    initialStorage: { dictionaryAddTarget: JSON.stringify({ workspaceId: "ws", target: null }) },
+  });
+  assert.equal(
+    targetChip(container).textContent,
+    'dictionary.shared.add.to{"list":"dictionary.shared.everyoneAt{\\"workspace\\":\\"Acme\\"}"}'
+  );
+
+  globalThis.__workspace = { ...globalThis.__workspace, id: "ws-b", name: "Beta" };
+  await rerender();
+  assert.equal(
+    targetChip(container).textContent,
+    'dictionary.shared.add.to{"list":"dictionary.shared.personal"}',
+    "another workspace's list starts on Personal, not on everyone there"
+  );
+});
+
+test("a word only hidden for the member offers Unhide instead of Already in", async (t) => {
+  const { container, calls } = await renderView(t, {
+    shared: { snapshot: { ...SNAPSHOT, hiddenIds: ["e-qdrant"] } },
+  });
+  await openList(container, `space:${ENGINEERING}`);
+  await type(addInput(container), "qdrant");
+  assert.ok(
+    container.textContent.includes('dictionary.shared.add.hiddenForYou{"list":"Engineering"}')
+  );
+  assert.ok(!container.textContent.includes("dictionary.shared.alreadyIn"));
+  await pressEnter(addInput(container));
+  assert.equal(
+    calls.find(([name]) => name === "addSharedWords"),
+    undefined
+  );
+
+  await click(
+    byAttribute(container, "aria-label", named("dictionary.shared.actions.unhideWord", "qdrant"))
+  );
+  assert.deepEqual(
+    calls.find(([name]) => name === "setSharedWordsHidden"),
+    ["setSharedWordsHidden", "ws", ["e-qdrant"], false]
+  );
+  assert.equal(addInput(container).value, "", "the word is back, so the field clears");
+
+  // A word the member can see is still just Already in.
+  await type(addInput(container), "sherpa-onnx");
+  assert.ok(container.textContent.includes('dictionary.shared.alreadyIn{"list":"Engineering"}'));
+  assert.ok(!container.textContent.includes("dictionary.shared.add.hiddenForYou"));
+});
+
+test("View words clears a search that would hide the asked-for words", async (t) => {
+  const { container, rerender } = await renderView(t);
+  await click(byAttribute(container, "aria-label", "dictionary.shared.toolbar.search"));
+  const search = findElement(
+    container,
+    (node) =>
+      node.tagName === "INPUT" &&
+      node.getAttribute("aria-label") === "dictionary.shared.toolbar.search"
+  );
+  await type(search, "zzz");
+  assert.equal(rowFor(container, "MEDDICC"), null);
+
+  globalThis.__shared.requestedList = `space:${SALES}`;
+  await rerender();
+  assert.ok(rowFor(container, "MEDDICC"));
+});
+
+test("a bulk import or Hide for me in flight ignores a second click", async (t) => {
+  const { container, calls } = await renderView(t);
+  await openList(container, "workspace");
+  const importing = deferred();
+  globalThis.__results.addSharedWords = () => importing.promise;
+  await click(byAttribute(container, "aria-label", "dictionary.importWords"));
+  await type(
+    findElement(container, (node) => node.tagName === "TEXTAREA"),
+    "Helm, Argo"
+  );
+  const importButton = () =>
+    buttonWithText(
+      container,
+      'dictionary.shared.importTo{"list":"dictionary.shared.everyoneAt{\\"workspace\\":\\"Acme\\"}"}'
+    );
+  await click(importButton());
+  await click(importButton());
+  assert.equal(calls.filter(([name]) => name === "addSharedWords").length, 1);
+  assert.ok(isDisabled(importButton()));
+  await React.act(async () => importing.resolve({}));
+  assert.equal(
+    findElement(container, (node) => node.tagName === "TEXTAREA"),
+    null
+  );
+
+  await openList(container, `space:${ENGINEERING}`);
+  const hiding = deferred();
+  globalThis.__results.setSharedWordsHidden = () => hiding.promise;
+  await click(checkboxFor(container, "Qdrant"));
+  await click(barButton(container, "dictionary.shared.actions.hide"));
+  await click(barButton(container, "dictionary.shared.actions.hide"));
+  assert.equal(calls.filter(([name]) => name === "setSharedWordsHidden").length, 1);
+  await React.act(async () => hiding.resolve());
+  assert.equal(toolbar(container), null);
 });

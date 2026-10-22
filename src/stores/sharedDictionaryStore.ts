@@ -20,6 +20,82 @@ export const SHARED_DICTIONARY_CAPABILITY_KEY = "sharedDictionaryCapability";
 // pass for it succeeds. Shared by every window (see the storage listener below).
 export const SHARED_DICTIONARY_ACCESS_KEY = "sharedDictionaryAccess";
 
+// sharedDictionaryWelcomed.<account>.<workspace>: the arrival toast shows once
+// per account and workspace on each device, so sign-out keeps these.
+const SHARED_DICTIONARY_WELCOMED_PREFIX = "sharedDictionaryWelcomed.";
+// { accountId, workspaceId, count } of an arrival no control panel has shown
+// yet: passes often run while it's hidden in the tray, or before it opens.
+export const SHARED_DICTIONARY_PENDING_ARRIVAL_KEY = "sharedDictionaryPendingArrival";
+
+export interface SharedDictionaryArrival {
+  accountId: string;
+  workspaceId: string;
+  count: number;
+}
+
+const welcomedKey = (accountId: string, workspaceId: string): string =>
+  `${SHARED_DICTIONARY_WELCOMED_PREFIX}${accountId}.${workspaceId}`;
+
+function isArrival(value: unknown): value is SharedDictionaryArrival {
+  const arrival = value as Partial<SharedDictionaryArrival> | null;
+  return (
+    typeof arrival?.accountId === "string" &&
+    typeof arrival.workspaceId === "string" &&
+    typeof arrival.count === "number" &&
+    arrival.count > 0
+  );
+}
+
+export function hasWelcomedSharedDictionary(accountId: string, workspaceId: string): boolean {
+  return localStorage.getItem(welcomedKey(accountId, workspaceId)) != null;
+}
+
+// Kept until a control panel shows it; a newer arrival replaces it.
+export function recordSharedDictionaryArrival(arrival: SharedDictionaryArrival): void {
+  if (hasWelcomedSharedDictionary(arrival.accountId, arrival.workspaceId)) return;
+  try {
+    localStorage.setItem(SHARED_DICTIONARY_PENDING_ARRIVAL_KEY, JSON.stringify(arrival));
+  } catch {
+    // Quota: this arrival goes untold.
+  }
+}
+
+/**
+ * The pending arrival, for the account and workspace this window shows, once:
+ * it is marked welcomed as it is taken, so no other window (or a later launch)
+ * shows it again. One for another account or workspace is dropped; with no
+ * account resolved yet it waits.
+ */
+export function takeSharedDictionaryArrival(
+  accountId: string | null,
+  workspaceId: string | null
+): SharedDictionaryArrival | null {
+  const raw = localStorage.getItem(SHARED_DICTIONARY_PENDING_ARRIVAL_KEY);
+  if (raw === null) return null;
+  let arrival: unknown = null;
+  try {
+    arrival = JSON.parse(raw);
+  } catch {
+    // Dropped below.
+  }
+  if (isArrival(arrival) && !accountId) return null;
+  localStorage.removeItem(SHARED_DICTIONARY_PENDING_ARRIVAL_KEY);
+  if (
+    !isArrival(arrival) ||
+    arrival.accountId !== accountId ||
+    arrival.workspaceId !== workspaceId ||
+    hasWelcomedSharedDictionary(arrival.accountId, arrival.workspaceId)
+  ) {
+    return null;
+  }
+  try {
+    localStorage.setItem(welcomedKey(arrival.accountId, arrival.workspaceId), "true");
+  } catch {
+    // Shown anyway.
+  }
+  return arrival;
+}
+
 const isAccessStatus = (status: unknown): status is AccessStatus =>
   status === "ssoRequired" || status === "noAccess";
 
@@ -41,7 +117,8 @@ interface SharedDictionaryState {
   handleScopeChange: (workspaceId: string | null) => void;
   resetForAccountChange: () => void;
   setRequestedList: (list: ListKey | null) => void;
-  setStatus: (status: SharedDictionaryStatus) => void;
+  // `workspaceId` is the workspace the pass ran for; the current one by default.
+  setStatus: (status: SharedDictionaryStatus, workspaceId?: string | null) => void;
   setSyncing: (syncing: boolean) => void;
 }
 
@@ -172,21 +249,26 @@ export const useSharedDictionaryStore = create<SharedDictionaryState>((set, get)
 
     setRequestedList: (requestedList) => set({ requestedList }),
 
-    setStatus: (status) => {
-      set({ status });
-      if (typeof localStorage === "undefined") return;
+    setStatus: (status, workspaceId = get().workspaceId) => {
+      const isCurrentWorkspace = workspaceId === get().workspaceId;
+      if (typeof localStorage === "undefined") {
+        if (isCurrentWorkspace) set({ status });
+        return;
+      }
       try {
         localStorage.setItem(
           SHARED_DICTIONARY_CAPABILITY_KEY,
           status === "unavailable" ? "false" : "true"
         );
-        const { workspaceId } = get();
         if (workspaceId && status !== "unavailable") {
           writeAccessStatus(workspaceId, isAccessStatus(status) ? status : null);
         }
       } catch {
         // The status still applies for this session.
       }
+      // A pass for a workspace this window has left still says whether the
+      // routes exist, but its access says nothing about the current one's.
+      set({ status: isCurrentWorkspace ? status : readStatus(get().workspaceId) });
     },
 
     setSyncing: (syncing) => set({ syncing }),

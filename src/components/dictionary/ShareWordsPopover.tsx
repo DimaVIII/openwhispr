@@ -135,7 +135,12 @@ export function ShareWordsPopover({
             </span>
           ) : (
             <span className="min-w-0 truncate text-[10px] text-foreground/45">
-              {t("dictionary.shared.share.movesOut", { count: words.length })}
+              {/* A pronoun, not a count: "it" for one word, "them" for several. */}
+              {t(
+                words.length === 1
+                  ? "dictionary.shared.share.movesOutOne"
+                  : "dictionary.shared.share.movesOutMany"
+              )}
             </span>
           )}
           <Button

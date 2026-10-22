@@ -3913,9 +3913,10 @@
       "everyoneAt": "Everyone at {{workspace}}",
       "hidden": "Hidden",
       "add": {
-        "placeholder": "Add a word…",
+        "placeholder": "Add words separated by commas",
         "to": "to {{list}}",
-        "chooseList": "Choose the list to add to"
+        "chooseList": "Choose the list to add to",
+        "hiddenForYou": "Hidden for you in {{list}}"
       },
       "alreadyIn": "Already in {{list}}",
       "importTo": "Import to {{list}}",
@@ -3989,8 +3990,8 @@
         "titleMany_one": "Share {{count}} word with",
         "titleMany_other": "Share {{count}} words with",
         "alreadyShared": "Already shared",
-        "movesOut_one": "Moves it out of Personal",
-        "movesOut_other": "Moves them out of Personal",
+        "movesOutOne": "Moves it out of Personal",
+        "movesOutMany": "Moves them out of Personal",
         "partial_one": "Shared {{moved}} of {{total}} words. {{count}} wasn't shared.",
         "partial_other": "Shared {{moved}} of {{total}} words. {{count}} weren't shared.",
         "reasons": {

@@ -3562,9 +3562,10 @@
       "everyoneAt": "{{workspace}} 全員",
       "hidden": "已隱藏",
       "add": {
-        "placeholder": "新增詞語…",
+        "placeholder": "用逗號分隔新增多個詞",
         "to": "新增到 {{list}}",
-        "chooseList": "選擇要新增到的清單"
+        "chooseList": "選擇要新增到的清單",
+        "hiddenForYou": "在 {{list}} 中已對你隱藏"
       },
       "alreadyIn": "已在 {{list}} 中",
       "importTo": "匯入到 {{list}}",
@@ -3638,8 +3639,8 @@
         "titleMany_one": "將 {{count}} 個詞語共用給",
         "titleMany_other": "將 {{count}} 個詞語共用給",
         "alreadyShared": "已共用",
-        "movesOut_one": "將其移出個人",
-        "movesOut_other": "將其移出個人",
+        "movesOutOne": "將其移出個人",
+        "movesOutMany": "將其移出個人",
         "partial_one": "已共用 {{moved}}/{{total}} 個詞語，{{count}} 個未共用。",
         "partial_other": "已共用 {{moved}}/{{total}} 個詞語，{{count}} 個未共用。",
         "reasons": {
@@ -3652,15 +3653,18 @@
         "noWorkspace": "共享字典包含在 Business 方案中。與所有人共享團隊的術語、產品名稱和縮寫。",
         "upgradeAdmin": "共享字典包含在 Business 方案中。升級 {{workspace}}，讓每個人都使用相同的詞語。",
         "upgradeMember": "共享字典包含在 Business 方案中。請管理員升級 {{workspace}}。",
+        "paused_one": "{{workspace}} 的 {{count}} 個共享詞語已暫停。升級到 Business 即可在聽寫中再次使用。",
         "paused_other": "{{workspace}} 的 {{count}} 個共享詞語已暫停。升級到 Business 即可在聽寫中再次使用。",
         "workspaceTitle": "工作區中的所有人",
         "workspaceDescription": "適用於整個公司的詞語",
         "spaceTitle": "每個空間一個清單",
         "spaceDescription": "只有一個團隊需要的詞語",
+        "wordCount_one": "{{count}} 個詞語",
         "wordCount_other": "{{count}} 個詞語",
         "lockLabel": "包含在 Business 方案中",
         "ssoRequired": "{{workspace}} 要求使用公司 SSO。請登出後使用 SSO 重新登入，以使用其共享詞語。",
         "noAccess": "你已無法存取 {{workspace}} 的共享詞語。如有疑問，請聯絡管理員。",
+        "pausedMember_one": "{{workspace}} 的 {{count}} 個共享詞語已暫停。請管理員或擁有者升級到 Business，即可在聽寫中再次使用。",
         "pausedMember_other": "{{workspace}} 的 {{count}} 個共享詞語已暫停。請管理員或擁有者升級到 Business，即可在聽寫中再次使用。"
       },
       "empty": {
@@ -3680,6 +3684,7 @@
       "notUsed": "聽寫中不使用",
       "notUsedTooltip": "超過 64 個字元或 6 個詞，或包含逗號、句末標點、< > { } [ ] ` | 等符號或不可見字元的共享詞語不會用於聽寫",
       "badgeMore": "{{list}} +{{extra}}",
+      "skipped_one": "已略過 {{count}} 個詞語：{{words}}",
       "skipped_other": "已略過 {{count}} 個詞語：{{words}}"
     }
   },

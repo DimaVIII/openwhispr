@@ -3615,9 +3615,10 @@
       "everyoneAt": "Todos en {{workspace}}",
       "hidden": "Ocultas",
       "add": {
-        "placeholder": "Añade una palabra…",
+        "placeholder": "Añade palabras separadas por comas",
         "to": "a {{list}}",
-        "chooseList": "Elige la lista a la que añadir"
+        "chooseList": "Elige la lista a la que añadir",
+        "hiddenForYou": "Oculta para ti en {{list}}"
       },
       "alreadyIn": "Ya está en {{list}}",
       "importTo": "Importar a {{list}}",
@@ -3697,9 +3698,8 @@
         "titleMany_many": "Compartir {{count}} de palabras con",
         "titleMany_other": "Compartir {{count}} palabras con",
         "alreadyShared": "Ya compartida",
-        "movesOut_one": "La saca de Personal",
-        "movesOut_many": "Las saca de Personal",
-        "movesOut_other": "Las saca de Personal",
+        "movesOutOne": "La saca de Personal",
+        "movesOutMany": "Las saca de Personal",
         "partial_one": "Se compartieron {{moved}} de {{total}} palabras. {{count}} no se compartió.",
         "partial_many": "Se compartieron {{moved}} de {{total}} palabras. {{count}} no se compartieron.",
         "partial_other": "Se compartieron {{moved}} de {{total}} palabras. {{count}} no se compartieron.",

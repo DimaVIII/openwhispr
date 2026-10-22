@@ -41,7 +41,7 @@ import { FULL_TRANSCRIPT_MAX_TOKENS } from "../../utils/transcriptEvidence";
 import { createToolRegistry } from "../../services/tools";
 import type { SharedDictionaryWord } from "../../services/tools/dictionaryTool";
 import { setSharedWordsHidden } from "../../services/sharedDictionaryActions";
-import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { readActiveWorkspaceId } from "../../stores/workspaceStore";
 import { selectAppliedSharedWords } from "../../utils/sharedDictionaryHints";
 import {
   executeTool,
@@ -67,9 +67,9 @@ const STREAM_FLUSH_INTERVAL_MS = 32;
 const LOCAL_TOOL_MIN_PARAMS_B = 4;
 
 // The tool reads the DB mirror over IPC (not the control panel's store), so it
-// also works from the dictation window.
+// also works from the dictation window, for the workspace every window uses now.
 async function readAppliedSharedWords(): Promise<SharedDictionaryWord[]> {
-  const workspaceId = useWorkspaceStore.getState().activeWorkspaceId;
+  const workspaceId = readActiveWorkspaceId();
   if (!workspaceId) return [];
   try {
     const snapshot = await window.electronAPI?.getSharedDictionary?.(workspaceId);
@@ -87,7 +87,7 @@ async function readAppliedSharedWords(): Promise<SharedDictionaryWord[]> {
 }
 
 async function hideAppliedSharedWords(ids: string[]): Promise<void> {
-  const workspaceId = useWorkspaceStore.getState().activeWorkspaceId;
+  const workspaceId = readActiveWorkspaceId();
   if (!workspaceId) throw new Error("No active workspace");
   await setSharedWordsHidden(workspaceId, ids, true);
 }

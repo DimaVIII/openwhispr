@@ -207,11 +207,17 @@ test("the OpenAI transcription request carries the formatted prompt", async (t) 
     assert.equal(requests[2].prompt, null);
   });
 
-  await t.test("a personal word longer than the budget is dropped, never cut", async (st) => {
-    const long = "x".repeat(950);
-    setSettings(dictionarySettings({ personal: [long], workspace: ["Team"] }));
+  await t.test("a personal word longer than the budget is sent cut to it", async (st) => {
+    const long = "x".repeat(1000);
+    setSettings(
+      dictionarySettings({
+        cloudTranscriptionProvider: "groq",
+        personal: [long, "Piha"],
+        workspace: ["Team"],
+      })
+    );
     const requests = captureRequests(st);
-    const manager = openAIManager({});
+    const manager = openAIManager({ model: "whisper-large-v3-turbo", endpoint: GROQ_ENDPOINT });
     let echoPrompts = null;
     manager.isDictionaryEcho = (_text, prompt, personalPrompt) => {
       echoPrompts = [prompt, personalPrompt];
@@ -220,8 +226,9 @@ test("the OpenAI transcription request carries the formatted prompt", async (t) 
 
     await manager.processWithOpenAIAPI(audioBlob(), {});
 
-    assert.equal(requests[0].prompt, null, "no fragment of the word is sent");
-    assert.deepEqual(echoPrompts, [null, null], "echo checks read the capped (empty) prompt");
+    const head = "x".repeat(890);
+    assert.equal(requests[0].prompt, head, "the head of the word, nothing after it");
+    assert.deepEqual(echoPrompts, [head, head], "echo checks read the prompt that was sent");
   });
 });
 

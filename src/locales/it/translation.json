@@ -3563,9 +3563,10 @@
       "everyoneAt": "Tutti in {{workspace}}",
       "hidden": "Nascoste",
       "add": {
-        "placeholder": "Aggiungi una parola…",
+        "placeholder": "Aggiungi parole separate da virgole",
         "to": "a {{list}}",
-        "chooseList": "Scegli la lista a cui aggiungere"
+        "chooseList": "Scegli la lista a cui aggiungere",
+        "hiddenForYou": "Nascosta per te in {{list}}"
       },
       "alreadyIn": "Già in {{list}}",
       "importTo": "Importa in {{list}}",
@@ -3645,9 +3646,8 @@
         "titleMany_many": "Condividi {{count}} di parole con",
         "titleMany_other": "Condividi {{count}} parole con",
         "alreadyShared": "Già condivisa",
-        "movesOut_one": "La sposta fuori da Personali",
-        "movesOut_many": "Le sposta fuori da Personali",
-        "movesOut_other": "Le sposta fuori da Personali",
+        "movesOutOne": "La sposta fuori da Personali",
+        "movesOutMany": "Le sposta fuori da Personali",
         "partial_one": "Condivise {{moved}} parole su {{total}}. {{count}} non è stata condivisa.",
         "partial_many": "Condivise {{moved}} parole su {{total}}. {{count}} non sono state condivise.",
         "partial_other": "Condivise {{moved}} parole su {{total}}. {{count}} non sono state condivise.",

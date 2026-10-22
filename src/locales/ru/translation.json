@@ -3588,9 +3588,10 @@
       "everyoneAt": "Все в {{workspace}}",
       "hidden": "Скрытые",
       "add": {
-        "placeholder": "Добавить слово…",
+        "placeholder": "Добавьте слова через запятую",
         "to": "в {{list}}",
-        "chooseList": "Выберите список для добавления"
+        "chooseList": "Выберите список для добавления",
+        "hiddenForYou": "Скрыто для вас в {{list}}"
       },
       "alreadyIn": "Уже есть в {{list}}",
       "importTo": "Импортировать в {{list}}",
@@ -3676,10 +3677,8 @@
         "titleMany_many": "Поделиться {{count}} словами с",
         "titleMany_other": "Поделиться {{count}} словами с",
         "alreadyShared": "Уже добавлено",
-        "movesOut_one": "Убирает его из «Личных»",
-        "movesOut_few": "Убирает их из «Личных»",
-        "movesOut_many": "Убирает их из «Личных»",
-        "movesOut_other": "Убирает их из «Личных»",
+        "movesOutOne": "Убирает его из «Личных»",
+        "movesOutMany": "Убирает их из «Личных»",
         "partial_one": "Поделились {{moved}} из {{total}} слов. Не удалось поделиться: {{count}}.",
         "partial_few": "Поделились {{moved}} из {{total}} слов. Не удалось поделиться: {{count}}.",
         "partial_many": "Поделились {{moved}} из {{total}} слов. Не удалось поделиться: {{count}}.",

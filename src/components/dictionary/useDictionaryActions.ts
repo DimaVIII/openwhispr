@@ -35,6 +35,8 @@ interface DictionaryActionsInput {
 }
 
 interface PendingSharedDelete {
+  // The workspace the words were picked in; the delete never runs in another one.
+  workspaceId: string;
   entryIds: string[];
   words: string[];
   listName: string;
@@ -59,6 +61,11 @@ export interface DictionaryActions {
   // Personal words the member can see; clear-all removes exactly these.
   visiblePersonal: string[];
   wordsInTarget: (target: AddTarget) => string[];
+  // Whether a typed word is in a shared list only as a copy the member hid,
+  // which the list doesn't show them.
+  isHiddenInTarget: (target: AddTarget, word: string) => boolean;
+  // Unhides that copy; resolves true once it's back.
+  unhideInTarget: (target: AddTarget, word: string) => Promise<boolean>;
   // Resolves true once nothing is left to add, which clears the field.
   addWords: (text: string, target: AddTarget) => Promise<boolean>;
   // Resolves why the edit failed, to show in the open editor, or null to close it.
@@ -104,6 +111,14 @@ export function useDictionaryActions({
   const { toast } = useToast();
   const [syncing, setSyncing] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<PendingSharedDelete | null>(null);
+
+  // A confirm dialog left open across a workspace switch would name words the
+  // new workspace doesn't have, so the switch withdraws it.
+  useEffect(() => {
+    setPendingDelete((pending) =>
+      pending && pending.workspaceId !== workspaceId ? null : pending
+    );
+  }, [workspaceId]);
 
   // Ruling 4: clear-all and export leave out words moved into a team list,
   // which stay under the shared copy as the member's fallback.
@@ -160,11 +175,21 @@ export function useDictionaryActions({
       .map((entry) => entry.word);
   };
 
+  const hiddenCopiesIn = (target: AddTarget, word: string): string[] => {
+    if (target === "personal" || !snapshot) return [];
+    const hidden = new Set(snapshot.hiddenIds);
+    return snapshot.entries
+      .filter(
+        (entry) =>
+          entry.spaceId === target && hidden.has(entry.cloudId) && sameWord(entry.word, word)
+      )
+      .map((entry) => entry.cloudId);
+  };
+
   const listNameOf = (entryId: string | null): string => {
     const spaceId = snapshot?.entries.find((entry) => entry.cloudId === entryId)?.spaceId;
     return spaceId === undefined ? workspaceName : listLabel(spaceId);
   };
-  const sharedListName = (row: DictionaryRow): string => listNameOf(row.entryId);
   // Every list a row's copies are in: All words shows a word in several lists once.
   const rowListNames = (row: DictionaryRow): string[] => row.entryIds.map(listNameOf);
   // A teammate's dictation would leave these out, so they never go to a shared list.
@@ -232,15 +257,24 @@ export function useDictionaryActions({
       updateCustomDictionary({ add: [word], remove: [row.word] });
       return null;
     }
-    if (!workspaceId || !row.entryId) return null;
+    if (!workspaceId || row.entryIds.length === 0) return null;
     if (notTermLike([word])) return { message: t("dictionary.shared.notTermLike"), refused: true };
-    try {
-      await editSharedWord(workspaceId, row.entryId, word);
-      return null;
-    } catch (error) {
-      const reason = reasonOf(error);
-      return { message: errorTitle(reason, sharedListName(row)), refused: reason !== "network" };
+    // All words shows a word in several lists once, so the rename goes to every
+    // copy; renaming one would leave the old spelling beside the new one. A copy
+    // that fails doesn't stop the others, and the first failure is the one shown.
+    let failure: EditFailure | null = null;
+    for (const entryId of row.entryIds) {
+      try {
+        await editSharedWord(workspaceId, entryId, word);
+      } catch (error) {
+        const reason = reasonOf(error);
+        failure ??= {
+          message: errorTitle(reason, listNameOf(entryId)),
+          refused: reason !== "network",
+        };
+      }
     }
+    return failure;
   };
 
   // A selection in All shared can span lists; name each of them once.
@@ -249,22 +283,36 @@ export function useDictionaryActions({
 
   const entryIdsOf = (rows: DictionaryRow[]): string[] => rows.flatMap((row) => row.entryIds);
 
-  const setRowsHidden = async (rows: DictionaryRow[], hidden: boolean): Promise<boolean> => {
-    const shared = rows.filter((row) => row.entryIds.length > 0);
-    if (!workspaceId || shared.length === 0) return false;
+  const setEntriesHidden = async (
+    entryIds: string[],
+    hidden: boolean,
+    listName: () => string
+  ): Promise<boolean> => {
+    if (!workspaceId || entryIds.length === 0) return false;
     try {
-      await setSharedWordsHidden(workspaceId, entryIdsOf(shared), hidden);
+      await setSharedWordsHidden(workspaceId, entryIds, hidden);
       return true;
     } catch (error) {
-      showActionError(reasonOf(error), listNames(shared.flatMap(rowListNames)));
+      showActionError(reasonOf(error), listName());
       return false;
     }
   };
 
+  const setRowsHidden = (rows: DictionaryRow[], hidden: boolean): Promise<boolean> => {
+    const shared = rows.filter((row) => row.entryIds.length > 0);
+    return setEntriesHidden(entryIdsOf(shared), hidden, () =>
+      listNames(shared.flatMap(rowListNames))
+    );
+  };
+
+  const unhideInTarget = (target: AddTarget, word: string): Promise<boolean> =>
+    setEntriesHidden(hiddenCopiesIn(target, word), false, () => listLabel(target));
+
   const requestDeleteForEveryone = (rows: DictionaryRow[], onDeleted?: () => void): void => {
     const shared = rows.filter((row) => row.entryIds.length > 0);
-    if (shared.length === 0) return;
+    if (!workspaceId || shared.length === 0) return;
     setPendingDelete({
+      workspaceId,
       entryIds: entryIdsOf(shared),
       words: shared.map((row) => row.word),
       listName: listNames(shared.flatMap(rowListNames)),
@@ -363,14 +411,14 @@ export function useDictionaryActions({
   });
 
   const runDelete = async ({
+    workspaceId: deleteWorkspaceId,
     entryIds,
     words,
     listName,
     onDeleted,
   }: PendingSharedDelete): Promise<void> => {
-    if (!workspaceId) return;
     try {
-      const { undo } = await deleteSharedWords(workspaceId, entryIds);
+      const { undo } = await deleteSharedWords(deleteWorkspaceId, entryIds);
       onDeleted?.();
       toast({
         title:
@@ -390,21 +438,24 @@ export function useDictionaryActions({
     }
   };
 
-  const deleteTitle = pendingDelete
-    ? pendingDelete.words.length === 1
+  // Read through the workspace check, so the render that switches workspaces
+  // already shows no dialog, before the effect above clears it.
+  const liveDelete = pendingDelete?.workspaceId === workspaceId ? pendingDelete : null;
+  const deleteTitle = liveDelete
+    ? liveDelete.words.length === 1
       ? t("dictionary.shared.deleteOneTitle", {
-          word: pendingDelete.words[0],
-          list: pendingDelete.listName,
+          word: liveDelete.words[0],
+          list: liveDelete.listName,
         })
       : t("dictionary.shared.deleteManyTitle", {
-          count: pendingDelete.words.length,
-          list: pendingDelete.listName,
+          count: liveDelete.words.length,
+          list: liveDelete.listName,
         })
     : null;
 
   const confirmDelete = (): void => {
-    if (!pendingDelete) return;
-    const request = pendingDelete;
+    if (!liveDelete) return;
+    const request = liveDelete;
     setPendingDelete(null);
     void runDelete(request);
   };
@@ -441,6 +492,8 @@ export function useDictionaryActions({
   return {
     visiblePersonal,
     wordsInTarget,
+    isHiddenInTarget: (target, word) => hiddenCopiesIn(target, word).length > 0,
+    unhideInTarget,
     addWords,
     editRow,
     setRowsHidden,

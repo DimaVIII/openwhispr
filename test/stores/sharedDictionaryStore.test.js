@@ -214,3 +214,95 @@ test("a status another window writes reaches this window's workspace only", asyn
   assert.equal(store().status, "ready");
   otherWindowWrites(null);
 });
+
+test("a workspace switch in another window moves this window's stores with it", async (t) => {
+  const ctx = await setup(t);
+  const { handleActiveWorkspaceStorage } = require("../../src/stores/workspaceStore.ts");
+  ctx.useWorkspaceStore.getState().setActiveWorkspaceId(W1);
+  await flush();
+  ctx.useWorkspaceStore.setState({ members: [{ user_id: "user-w1" }] });
+
+  // Another window wrote the key and published W2's hints first.
+  harness.localStorage.setItem("activeWorkspaceId", W2);
+  handleActiveWorkspaceStorage({ key: "activeWorkspaceId", newValue: W2 });
+
+  assert.equal(ctx.useWorkspaceStore.getState().activeWorkspaceId, W2);
+  assert.deepEqual(ctx.useWorkspaceStore.getState().members, [], "W1's roster is dropped");
+  assert.equal(ctx.useSharedDictionaryStore.getState().workspaceId, W2);
+  await flush();
+  assert.deepEqual(ctx.hints(), { space: [], workspace: ["Biscuit"] });
+
+  handleActiveWorkspaceStorage({ key: "unrelated", newValue: W1 });
+  assert.equal(ctx.useWorkspaceStore.getState().activeWorkspaceId, W2);
+
+  harness.localStorage.removeItem("activeWorkspaceId");
+  handleActiveWorkspaceStorage({ key: "activeWorkspaceId", newValue: null });
+  assert.equal(ctx.useSharedDictionaryStore.getState().workspaceId, null);
+  assert.deepEqual(ctx.hints(), EMPTY);
+});
+
+test("hints for a workspace localStorage no longer names are never published", async (t) => {
+  const ctx = await setup(t);
+  const { useSettingsStore } = require("../../src/stores/settingsStore.ts");
+  ctx.useWorkspaceStore.getState().setActiveWorkspaceId(W2);
+  await flush();
+  const sent = ctx.sentToMain.length;
+
+  // A window whose store still says W1 (its storage event hasn't landed).
+  useSettingsStore.getState().setSharedDictionaryHints({ space: [], workspace: ["Qdrant"] }, W1);
+  useSettingsStore.getState().setSharedDictionaryHints(EMPTY, null);
+
+  assert.deepEqual(ctx.persisted(), { workspaceId: W2, space: [], workspace: ["Biscuit"] });
+  assert.deepEqual(ctx.hints(), { space: [], workspace: ["Biscuit"] }, "it takes W2's instead");
+  assert.equal(ctx.sentToMain.length, sent, "main keeps W2's");
+});
+
+test("a status for another workspace is recorded there, not on this one", async (t) => {
+  const ctx = await setup(t);
+  const store = () => ctx.useSharedDictionaryStore.getState();
+  const stored = () => JSON.parse(harness.localStorage.getItem("sharedDictionaryAccess"));
+  ctx.useWorkspaceStore.getState().setActiveWorkspaceId(W2);
+  await flush();
+  store().setStatus("ssoRequired");
+
+  store().setStatus("noAccess", W1);
+  assert.deepEqual(stored(), { [W1]: "noAccess", [W2]: "ssoRequired" });
+  assert.equal(store().status, "ssoRequired");
+
+  store().setStatus("ready", W1);
+  assert.deepEqual(stored(), { [W2]: "ssoRequired" }, "W2's refusal stays");
+  assert.equal(store().status, "ssoRequired");
+  store().resetForAccountChange();
+});
+
+test("a pending arrival is taken once, by its own account and workspace", async (t) => {
+  await setup(t);
+  const {
+    recordSharedDictionaryArrival,
+    takeSharedDictionaryArrival,
+  } = require("../../src/stores/sharedDictionaryStore.ts");
+  const arrival = { accountId: "user-a", workspaceId: W1, count: 3 };
+  const pending = () => harness.localStorage.getItem("sharedDictionaryPendingArrival");
+
+  recordSharedDictionaryArrival(arrival);
+  assert.equal(takeSharedDictionaryArrival(null, W1), null, "waits for the account");
+  assert.ok(pending());
+  assert.deepEqual(takeSharedDictionaryArrival("user-a", W1), arrival);
+  assert.equal(takeSharedDictionaryArrival("user-a", W1), null);
+  assert.equal(harness.localStorage.getItem(`sharedDictionaryWelcomed.user-a.${W1}`), "true");
+
+  recordSharedDictionaryArrival(arrival);
+  assert.equal(pending(), null, "a welcomed workspace records nothing");
+
+  recordSharedDictionaryArrival({ ...arrival, workspaceId: W2 });
+  assert.equal(takeSharedDictionaryArrival("user-b", W2), null, "another account's");
+  assert.equal(pending(), null, "is dropped");
+  recordSharedDictionaryArrival({ ...arrival, workspaceId: W2 });
+  assert.equal(takeSharedDictionaryArrival("user-a", W3), null, "another workspace's too");
+  assert.equal(pending(), null);
+  assert.equal(harness.localStorage.getItem(`sharedDictionaryWelcomed.user-a.${W2}`), null);
+
+  harness.localStorage.setItem("sharedDictionaryPendingArrival", "{not json");
+  assert.equal(takeSharedDictionaryArrival("user-a", W1), null);
+  assert.equal(pending(), null);
+});

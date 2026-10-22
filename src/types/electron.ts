@@ -3762,10 +3762,14 @@ declare global {
       getDictionaryEntriesByWords?: (
         words: string[]
       ) => Promise<Array<{ word: string; cloudId: string | null }>>;
-      /** Records a share the server accepted; sync state is left unchanged. */
+      /**
+       * Records a share the server accepted; sync state is left unchanged, except
+       * for `pendingWords`, which went as plain words and still need shared_at pushed.
+       */
       markDictionaryWordsShared?: (
         words: string[],
-        sharedAt: string
+        sharedAt: string,
+        options?: { pendingWords?: string[] }
       ) => Promise<{ marked: string[] }>;
       /** Live personal words that were shared into a team list. */
       getMovedDictionaryWords?: () => Promise<string[]>;

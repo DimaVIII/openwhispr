@@ -31,6 +31,8 @@ function modules() {
     useSharedDictionaryStore: require("../../src/stores/sharedDictionaryStore.ts")
       .useSharedDictionaryStore,
     useSettingsStore: require("../../src/stores/settingsStore.ts").useSettingsStore,
+    takeSharedDictionaryArrival: require("../../src/stores/sharedDictionaryStore.ts")
+      .takeSharedDictionaryArrival,
   };
 }
 
@@ -57,7 +59,12 @@ async function setup(t, { workspaceId = W1, signedIn = true } = {}) {
 
   const mods = modules();
   mods.useSharedDictionaryStore.setState({ status: "ready" });
-  mods.useWorkspaceStore.setState({ activeWorkspaceId: null });
+  mods.useWorkspaceStore.setState({
+    activeWorkspaceId: null,
+    loaded: false,
+    error: false,
+    workspaces: [],
+  });
   if (workspaceId) mods.useWorkspaceStore.getState().setActiveWorkspaceId(workspaceId);
   await flush();
 
@@ -260,8 +267,36 @@ test("arrival event fires once", async (t) => {
 
   // A sync event, not a window-local one: the pass often runs in the
   // dictation overlay, where no toast listener is mounted.
-  assert.deepEqual(ctx.arrivals(), [{ workspaceId: W1, count: 2 }]);
-  assert.equal(harness.localStorage.getItem(`sharedDictionaryWelcomed.user-harness.${W1}`), "true");
+  const arrival = { accountId: "user-harness", workspaceId: W1, count: 2 };
+  assert.deepEqual(ctx.arrivals(), [arrival]);
+  // Recorded until a control panel shows it, which marks it welcomed.
+  const welcomed = `sharedDictionaryWelcomed.user-harness.${W1}`;
+  assert.equal(harness.localStorage.getItem(welcomed), null);
+  assert.deepEqual(
+    JSON.parse(harness.localStorage.getItem("sharedDictionaryPendingArrival")),
+    arrival
+  );
+  assert.deepEqual(ctx.takeSharedDictionaryArrival("user-harness", W1), arrival);
+  assert.equal(harness.localStorage.getItem(welcomed), "true");
+  assert.equal(harness.localStorage.getItem("sharedDictionaryPendingArrival"), null);
+});
+
+test("an arrival no control panel showed yet is announced again, not lost", async (t) => {
+  const ctx = await setup(t);
+  ctx.cloud.add(W1, ["Qdrant"]);
+  await ctx.service.syncSharedDictionaryNow();
+  assert.equal(ctx.arrivals().length, 1);
+
+  // The mirror is rebuilt after a sign-out while the panel stayed in the tray.
+  await ctx.service.purgeTeamSpacesForSignOut();
+  await harness.establishValidatedAuth("user-harness");
+  ctx.useWorkspaceStore.getState().setActiveWorkspaceId(W1);
+  await flush();
+  await ctx.service.syncSharedDictionaryNow();
+
+  assert.equal(ctx.arrivals().length, 2);
+  assert.ok(ctx.takeSharedDictionaryArrival("user-harness", W1));
+  assert.equal(ctx.takeSharedDictionaryArrival("user-harness", W1), null, "shown once");
 });
 
 test("runs when cloud backup is off", async (t) => {
@@ -444,6 +479,7 @@ test("sign-out clears the shared tables, cursors, capability and hints, not the 
   harness.localStorage.setItem("sharedDictionaryCapability", "false");
   const generation = ctx.useSharedDictionaryStore.getState().generation;
   const welcomed = `sharedDictionaryWelcomed.user-harness.${W1}`;
+  assert.ok(ctx.takeSharedDictionaryArrival("user-harness", W1), "the control panel showed it");
   assert.ok(harness.localStorage.getItem(welcomed));
 
   await service.purgeTeamSpacesForSignOut();
@@ -629,6 +665,7 @@ test("the arrival toast doesn't repeat after signing out and back in", async (t)
   cloud.add(W1, ["Qdrant"]);
   await service.syncSharedDictionaryNow();
   assert.equal(ctx.arrivals().length, 1);
+  assert.ok(ctx.takeSharedDictionaryArrival("user-harness", W1));
 
   await service.purgeTeamSpacesForSignOut();
   await harness.establishValidatedAuth("user-harness");
@@ -688,6 +725,136 @@ test("a delta pages through more than 200 rows written at the same instant", asy
   assert.ok(pages[1].since_id, "the second page resumes after the last id");
   assert.equal((await db.api.getSharedDictionary(W1)).entries.length, 251);
   assert.equal(ctx.hints().workspace.length, 251);
+});
+
+// --- windows that missed a workspace switch ---------------------------------
+
+// What another window's setActiveWorkspaceId leaves in localStorage before this
+// window's storage event arrives: the new active workspace, and the hints it
+// published for it.
+function otherWindowSwitchesTo(workspaceId, workspaceWords) {
+  harness.localStorage.setItem("activeWorkspaceId", workspaceId);
+  harness.localStorage.setItem(
+    "sharedDictionaryHints",
+    JSON.stringify({ workspaceId, space: [], workspace: workspaceWords })
+  );
+}
+
+test("a pass in a window that missed a switch syncs the new workspace and publishes nothing", async (t) => {
+  const ctx = await setup(t);
+  const { cloud, db, service } = ctx;
+  cloud.add(W1, ["Qdrant"]);
+  cloud.add(W2, ["Biscuit"]);
+  await service.syncSharedDictionaryNow();
+  const sentToMain = [];
+  harness.window.electronAPI.setSharedDictionaryHints = async (hints) => sentToMain.push(hints);
+
+  otherWindowSwitchesTo(W2, ["Biscuit"]);
+  await service.syncSharedDictionaryNow();
+
+  assert.equal(cloud.requestsTo(LIST).at(-1).query.get("workspace_id"), W2);
+  assert.ok(db.workspaces.get(W2), "W2's mirror is written");
+  assert.deepEqual(JSON.parse(harness.localStorage.getItem("sharedDictionaryHints")), {
+    workspaceId: W2,
+    space: [],
+    workspace: ["Biscuit"],
+  });
+  assert.equal(ctx.arrivals().length, 1, "only W1's own arrival");
+  assert.ok(sentToMain.every((hints) => !hints.workspace.includes("Qdrant")));
+
+  // The storage event lands: this window follows, and publishes W2's words.
+  const { handleActiveWorkspaceStorage } = require("../../src/stores/workspaceStore.ts");
+  handleActiveWorkspaceStorage({ key: "activeWorkspaceId", newValue: W2 });
+  for (let i = 0; i < 10 && ctx.hints().workspace.length === 0; i++) await flush();
+  assert.equal(ctx.useWorkspaceStore.getState().activeWorkspaceId, W2);
+  assert.equal(ctx.useSharedDictionaryStore.getState().workspaceId, W2);
+  assert.deepEqual(ctx.hints().workspace, ["Biscuit"]);
+});
+
+test("a window launched before a workspace was picked never publishes empty hints over it", async (t) => {
+  const ctx = await setup(t, { workspaceId: null });
+  const { cloud, service } = ctx;
+  cloud.add(W1, ["Qdrant"]);
+  otherWindowSwitchesTo(W1, ["Qdrant"]);
+
+  await service.syncSharedDictionaryNow();
+
+  assert.equal(cloud.requestsTo(LIST).at(-1).query.get("workspace_id"), W1);
+  assert.deepEqual(JSON.parse(harness.localStorage.getItem("sharedDictionaryHints")), {
+    workspaceId: W1,
+    space: [],
+    workspace: ["Qdrant"],
+  });
+});
+
+test("every pass prunes the workspaces the member left, keeping the active one", async (t) => {
+  const ctx = await setup(t);
+  const { cloud, db, service } = ctx;
+  cloud.add(W1, ["Qdrant"]);
+  db.seed(W2, { entries: [cloud.add(W2, ["Biscuit"])[0]] });
+  harness.localStorage.setItem(`lastSyncedAt.sharedDictionary.${W2}`, "2026-10-20T12:00:00.000Z");
+
+  // A list loaded before the switch to W1 finished: W1 is kept all the same.
+  ctx.useWorkspaceStore.setState({ loaded: true, error: false, workspaces: [] });
+  await service.syncSharedDictionaryNow();
+
+  assert.deepEqual(db.callsNamed("pruneSharedDictionary").at(-1).keepWorkspaceIds, [W1]);
+  assert.deepEqual([...db.workspaces.keys()], [W1]);
+  assert.equal(harness.localStorage.getItem(`lastSyncedAt.sharedDictionary.${W2}`), null);
+  assert.ok(harness.localStorage.getItem(ENTRIES_CURSOR));
+  assert.deepEqual(ctx.hints().workspace, ["Qdrant"]);
+});
+
+test("a stale pass records its status for its own workspace", async (t) => {
+  const ctx = await setup(t);
+  const { cloud, service } = ctx;
+  const store = () => ctx.useSharedDictionaryStore.getState();
+  cloud.add(W1, ["Qdrant"]);
+  harness.localStorage.setItem("sharedDictionaryAccess", JSON.stringify({ [W2]: "ssoRequired" }));
+  store().setStatus("unavailable");
+  const release = cloud.holdNext(LIST);
+
+  const pass = service.syncSharedDictionaryNow();
+  await flush();
+  ctx.useWorkspaceStore.getState().setActiveWorkspaceId(W2);
+  await flush();
+  release();
+  await pass;
+
+  assert.deepEqual(JSON.parse(harness.localStorage.getItem("sharedDictionaryAccess")), {
+    [W2]: "ssoRequired",
+  });
+  assert.equal(harness.localStorage.getItem("sharedDictionaryCapability"), "true");
+  assert.equal(store().status, "ssoRequired", "W2 is still refused; the routes exist");
+});
+
+test("a delta pass replaces stored contributors with the ones its pages name", async (t) => {
+  const ctx = await setup(t);
+  const { cloud, db, service } = ctx;
+  cloud.add(W1, ["Qdrant"]);
+  await service.syncSharedDictionaryNow();
+  const contributors = () => db.workspaces.get(W1).meta.contributors;
+  db.workspaces.get(W1).meta.contributors = [
+    { user_id: "user-teammate", name: "Tee", is_member: true },
+    { user_id: "user-gone", name: "Gone", is_member: true },
+  ];
+
+  // An older API names only its pages' adders, here none: the teammate whose
+  // word is still mirrored stays, the one with no words left goes.
+  await service.syncSharedDictionaryNow();
+  assert.deepEqual(contributors(), [{ user_id: "user-teammate", name: "Tee", is_member: true }]);
+
+  // The current API names every adder on the first page, membership included.
+  cloud.respondNext(LIST, {
+    entries: [],
+    hasMore: false,
+    scopes: [WORKSPACE_SCOPE],
+    contributors: [{ user_id: "user-teammate", name: null, is_member: false }],
+    paused: false,
+    server_time: "2026-10-20T12:00:00.000Z",
+  });
+  await service.syncSharedDictionaryNow();
+  assert.deepEqual(contributors(), [{ user_id: "user-teammate", name: null, is_member: false }]);
 });
 
 // --- personal shared_at (moved words) ----------------------------------------
@@ -950,9 +1117,12 @@ test("a live cloud row wins over a fallback this device retired, whatever its ag
   );
 });
 
-test("a personal pull that stops advancing fails instead of saving a stuck cursor", async (t) => {
+// An API whose timestamps are finer than the millisecond cursor it accepts
+// repeats a batch written at one instant: the pass keeps what it applied.
+test("a personal pull that stops advancing saves the applied pages and ends the pass", async (t) => {
   const ctx = await setupPersonal(t);
   const errors = t.mock.method(console, "error", () => {});
+  const warnings = t.mock.method(console, "warn", () => {});
   harness.localStorage.setItem("dictionarySharedAtBackfill", "true");
   harness.localStorage.setItem("lastSyncedAt.dictionary", "2026-10-10T00:00:00.000Z");
   harness.localStorage.setItem("lastSyncedAt.dictionary.id", "dict-0");
@@ -964,10 +1134,16 @@ test("a personal pull that stops advancing fails instead of saving a stuck curso
   await ctx.service.syncDictionaryNow();
 
   assert.equal(ctx.cloud.requestsTo("/api/dictionary/list").length, 2, "it gives up");
-  assert.match(String(errors.mock.calls[0].arguments[1]), /stopped advancing/);
-  assert.equal(harness.localStorage.getItem("lastSyncedAt.dictionary"), "2026-10-10T00:00:00.000Z");
-  assert.equal(harness.localStorage.getItem("lastSyncedAt.dictionary.id"), "dict-0");
+  assert.equal(errors.mock.callCount(), 0, "not a failure");
+  assert.match(String(warnings.mock.calls[0].arguments[0]), /stopped advancing/);
+  assert.equal(harness.localStorage.getItem("lastSyncedAt.dictionary"), "2026-10-12T00:00:00.000Z");
+  assert.equal(harness.localStorage.getItem("lastSyncedAt.dictionary.id"), row.id);
   assert.equal(ctx.broadcasts(), 1, "the page it did apply still reaches the windows");
+
+  // The next pass resumes there instead of re-reading everything.
+  await ctx.service.syncDictionaryNow();
+  const next = query(ctx.cloud.requestsTo("/api/dictionary/list").at(-1));
+  assert.equal(next.since, "2026-10-12T00:00:00.000Z");
 });
 
 // Last: startAutoSync's subscription lives as long as the workspace store, so

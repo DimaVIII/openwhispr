@@ -5,7 +5,9 @@ const Module = require("node:module");
 // Auto-learn must not add a word the active workspace already applies, but a
 // word that is only hidden, paused or from another workspace never reaches the
 // renderer's hints, so it is still learned. Main only knows the hints the
-// renderer last sent over dictionary-set-shared-hints.
+// renderer last sent over dictionary-set-shared-hints, which carry only the
+// shared words that fit the transcription prompt (settingsStore's
+// sharedWordsReachingPrompt, tested in settingsStoreSharedDictionaryHints).
 
 const handlersModulePath = require.resolve("../../src/helpers/ipcHandlers");
 const originalLoad = Module._load;
@@ -137,4 +139,14 @@ test("a malformed hints payload is ignored and keeps the last good one", async (
   const added = learnFrom("We store vectors in Quadrant now", "We store vectors in Qdrant now");
 
   assert.deepEqual(added, []);
+});
+
+test("a team word the prompt had no room for is learned", async () => {
+  // The renderer sent only the words that fit; Qdrant applies in the
+  // workspace but was cut, so dictation never hears of it.
+  await setHints({ space: [], workspace: ["Parakeet"] });
+
+  const added = learnFrom("We store vectors in Quadrant now", "We store vectors in Qdrant now");
+
+  assert.deepEqual(added, ["Qdrant"]);
 });

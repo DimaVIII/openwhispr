@@ -5,15 +5,17 @@ import {
   SharedDictionaryService,
 } from "./SharedDictionaryService";
 import { syncService } from "./SyncService";
+import { getValidatedAuthGeneration } from "../lib/authRequestContext";
 import { useSettingsStore } from "../stores/settingsStore";
 import { useSharedDictionaryStore } from "../stores/sharedDictionaryStore";
-import { useWorkspaceStore } from "../stores/workspaceStore";
+import { readActiveWorkspaceId, useWorkspaceStore } from "../stores/workspaceStore";
 import type {
   CloudSharedEntry,
   CloudSharedHide,
   SharedDictionaryShareResponse,
 } from "../types/sharedDictionary";
 import logger from "../utils/logger";
+import { isTermLikeSharedWord } from "../utils/sharedDictionaryHints";
 
 // Writes to shared lists go online first and then apply the server's answer to
 // the local mirror, so they work from any window (control panel or dictation)
@@ -104,19 +106,22 @@ export function toSharedDictionaryActionError(error: unknown): SharedDictionaryA
   return new SharedDictionaryActionError("network", message);
 }
 
-// The API's rule for a shared word (sharedWordError in openwhispr-api's
-// schemas.ts): NFC, trimmed, 1-100 characters, no control characters, line
-// breaks or invisible format characters (ZWNJ and ZWJ allowed).
+// The API's rule for a shared word (checkSharedWord in openwhispr-api's
+// schemas.ts): NFC, trimmed, no control characters, line breaks or invisible
+// format characters (ZWNJ and ZWJ allowed), and term-like, which caps it at 64
+// characters and 6 words. 100 is the request's hard cap: a longer word fails the
+// whole request rather than being refused on its own.
 const MAX_SHARED_WORD_LENGTH = 100;
 const FORBIDDEN_SHARED_WORD = /[\p{Cc}\u2028\u2029]|(?![\u200C\u200D])\p{Cf}/u;
 
-// The spelling the API stores, or null when it would refuse the word.
+// The spelling the API stores, or null when it would refuse the word. Create
+// and update refuse a whole chunk for one such word, so it never goes out.
 function toSharedWord(raw: string): string | null {
   const word = raw.normalize("NFC").trim();
   if (!word || word.length > MAX_SHARED_WORD_LENGTH || FORBIDDEN_SHARED_WORD.test(word)) {
     return null;
   }
-  return word;
+  return isTermLikeSharedWord(word) ? word : null;
 }
 
 // A word the client types or adds: a whitespace run (a pasted tab) becomes
@@ -185,9 +190,41 @@ async function applyHides(workspaceId: string, hides: CloudSharedHide[]): Promis
   return result?.changed ?? 0;
 }
 
-// The server already holds the write, so a failed local apply only delays it
-// until the next pass; it never turns an accepted write into a failure.
-async function applyAccepted(label: string, apply: () => Promise<number | void>): Promise<number> {
+// The account and workspace an action started under. A sign-out or account
+// switch clears the mirror (and a workspace switch moves the store on) while
+// its request is in flight; writing the old account's rows into the cleared
+// tables would publish them, so its local apply is left to the next pass.
+interface ActionScope {
+  isCurrent: () => boolean;
+}
+
+function captureActionScope(): ActionScope {
+  const authGeneration = getValidatedAuthGeneration();
+  const { generation } = useSharedDictionaryStore.getState();
+  const workspaceId = readActiveWorkspaceId();
+  return {
+    isCurrent: () =>
+      getValidatedAuthGeneration() === authGeneration &&
+      useSharedDictionaryStore.getState().generation === generation &&
+      readActiveWorkspaceId() === workspaceId,
+  };
+}
+
+// The server already holds the write, so a failed or skipped local apply only
+// delays it until the next pass; it never turns an accepted write into a failure.
+async function applyAccepted(
+  scope: ActionScope,
+  label: string,
+  apply: () => Promise<number | void>
+): Promise<number> {
+  if (!scope.isCurrent()) {
+    logger.debug(
+      `Skipped applying an accepted shared dictionary ${label}: the account or workspace changed`,
+      undefined,
+      "dictionary"
+    );
+    return 0;
+  }
   try {
     const changed = await apply();
     return typeof changed === "number" ? changed : 0;
@@ -217,9 +254,13 @@ async function reconcilePersonal(changedLocally: boolean): Promise<void> {
 // Mirrors the API: once the sharer hides a shared word or deletes it for
 // everyone, their moved personal fallback goes too, unless another live copy
 // they can see still carries the word. Reads the mirror after the local apply.
-async function retireFallbacks(workspaceId: string, words: string[]): Promise<void> {
+async function retireFallbacks(
+  scope: ActionScope,
+  workspaceId: string,
+  words: string[]
+): Promise<void> {
   if (words.length === 0) return;
-  await applyAccepted("fallback retirement", async () => {
+  await applyAccepted(scope, "fallback retirement", async () => {
     const api = requireApi();
     if (!api.retireMovedDictionaryWords || !api.getSharedDictionary) return;
     const workspaces = new Set([
@@ -250,9 +291,9 @@ async function retireFallbacks(workspaceId: string, words: string[]): Promise<vo
 
 // The other half: a restore or un-hide brings back the fallbacks the delete or
 // hide retired here, as the API does.
-async function reviveFallbacks(words: string[]): Promise<void> {
+async function reviveFallbacks(scope: ActionScope, words: string[]): Promise<void> {
   if (words.length === 0) return;
-  await applyAccepted("fallback revival", async () => {
+  await applyAccepted(scope, "fallback revival", async () => {
     const api = requireApi();
     const { revived } = (await api.reviveRetiredDictionaryWords?.(words)) ?? { revived: [] };
     await reconcilePersonal(revived.length > 0);
@@ -330,12 +371,13 @@ export async function addSharedWords(
     return { added, alreadyPresent, rejected, failed: failureOrRejected(null, rejected) };
   }
 
+  const scope = captureActionScope();
   let failed: ActionFailure | null = null;
   let mirrorChanged = 0;
   for (const [index, batch] of chunks.entries()) {
     try {
       const response = await SharedDictionaryService.create(workspaceId, target, batch);
-      mirrorChanged += await applyAccepted("add", () =>
+      mirrorChanged += await applyAccepted(scope, "add", () =>
         applyEntries(workspaceId, response.created)
       );
       added.push(...response.created.map((entry) => entry.word));
@@ -361,10 +403,11 @@ export async function editSharedWord(
   if (!sendable) {
     throw new SharedDictionaryActionError("invalid", "The API would refuse this word");
   }
+  const scope = captureActionScope();
   let mirrorChanged = 0;
   try {
     const entry = await SharedDictionaryService.update(workspaceId, entryId, sendable);
-    mirrorChanged = await applyAccepted("edit", () => applyEntries(workspaceId, [entry]));
+    mirrorChanged = await applyAccepted(scope, "edit", () => applyEntries(workspaceId, [entry]));
   } catch (error) {
     throw toSharedDictionaryActionError(error);
   } finally {
@@ -374,21 +417,33 @@ export async function editSharedWord(
 
 // `hiddenIds`: entries the member had hidden before the delete. The API revives
 // their hides with them, so those words don't reach the member again and their
-// fallback stays retired.
+// fallback stays retired. The delete removed the local hides, so they are put
+// back beside the entries; otherwise the words would apply until the next
+// hides pass.
 async function restoreSharedWords(
   workspaceId: string,
   entryIds: string[],
   hiddenIds: Set<string>
 ): Promise<void> {
+  const scope = captureActionScope();
   let mirrorChanged = 0;
   const restoredWords: string[] = [];
   try {
     for (const batch of chunk(entryIds)) {
       const response = await SharedDictionaryService.restore(workspaceId, batch);
       // A conflict is a word someone re-added meanwhile; the list already has it.
-      mirrorChanged += await applyAccepted("restore", () =>
-        applyEntries(workspaceId, response.restored)
-      );
+      mirrorChanged += await applyAccepted(scope, "restore", async () => {
+        const changed = await applyEntries(workspaceId, response.restored);
+        const rehidden = response.restored
+          .filter((entry) => hiddenIds.has(entry.id))
+          .map((entry) => ({
+            entry_id: entry.id,
+            workspace_id: workspaceId,
+            updated_at: entry.updated_at,
+            deleted_at: null,
+          }));
+        return changed + (await applyHides(workspaceId, rehidden));
+      });
       restoredWords.push(
         ...response.restored.filter((entry) => !hiddenIds.has(entry.id)).map((entry) => entry.word)
       );
@@ -396,7 +451,7 @@ async function restoreSharedWords(
   } catch (error) {
     throw toSharedDictionaryActionError(error);
   } finally {
-    await reviveFallbacks(restoredWords);
+    await reviveFallbacks(scope, restoredWords);
     await refreshAfterWrite(workspaceId, mirrorChanged);
   }
 }
@@ -410,6 +465,7 @@ export async function deleteSharedWords(
   const ids = [...new Set(entryIds)];
   if (ids.length === 0) return { undo: async () => {} };
 
+  const scope = captureActionScope();
   const { words, hidden } = await mirrorWords(workspaceId, ids);
   const deleted: string[] = [];
   let failure: SharedDictionaryActionError | null = null;
@@ -417,7 +473,7 @@ export async function deleteSharedWords(
   try {
     for (const batch of chunk(ids)) {
       const response = await SharedDictionaryService.remove(workspaceId, batch);
-      mirrorChanged += await applyAccepted("delete", () =>
+      mirrorChanged += await applyAccepted(scope, "delete", () =>
         applyEntries(workspaceId, [], response.deletedIds)
       );
       deleted.push(...response.deletedIds);
@@ -425,7 +481,7 @@ export async function deleteSharedWords(
   } catch (error) {
     failure = toSharedDictionaryActionError(error);
   }
-  await retireFallbacks(workspaceId, wordsOf(words, deleted));
+  await retireFallbacks(scope, workspaceId, wordsOf(words, deleted));
   await refreshAfterWrite(workspaceId, mirrorChanged);
 
   // Only ids the server actually deleted come back; ones already gone stay gone.
@@ -446,6 +502,7 @@ export async function setSharedWordsHidden(
   const ids = [...new Set(entryIds)];
   if (ids.length === 0) return;
 
+  const scope = captureActionScope();
   const { words } = await mirrorWords(workspaceId, ids);
   const changed: string[] = [];
   let failure: SharedDictionaryActionError | null = null;
@@ -453,14 +510,16 @@ export async function setSharedWordsHidden(
   try {
     for (const batch of chunk(ids)) {
       const response = await SharedDictionaryService.hide(workspaceId, batch, hidden);
-      mirrorChanged += await applyAccepted("hide", () => applyHides(workspaceId, response.hides));
+      mirrorChanged += await applyAccepted(scope, "hide", () =>
+        applyHides(workspaceId, response.hides)
+      );
       changed.push(...response.hides.map((hide) => hide.entry_id));
     }
   } catch (error) {
     failure = toSharedDictionaryActionError(error);
   }
-  if (hidden) await retireFallbacks(workspaceId, wordsOf(words, changed));
-  else await reviveFallbacks(wordsOf(words, changed));
+  if (hidden) await retireFallbacks(scope, workspaceId, wordsOf(words, changed));
+  else await reviveFallbacks(scope, wordsOf(words, changed));
   await refreshAfterWrite(workspaceId, mirrorChanged);
 
   if (failure) {
@@ -483,27 +542,35 @@ function readShareRejections(
 
 // With cloud backup off the personal list never syncs, so a PERSONAL_CHANGED
 // can't be resolved by pulling: the conflicting words go once more as plain
-// words, carrying no personal id for the server to compare.
+// words, carrying no personal id for the server to compare. `demotedIds` are
+// the personal ids that went that way: the server never marked their rows.
 async function shareChunk(
   workspaceId: string,
   targets: ShareTarget[],
   personal: Array<{ id: string; word: string }>,
   plain: string[]
-): Promise<SharedDictionaryShareResponse> {
+): Promise<{ response: SharedDictionaryShareResponse; demotedIds: Set<string> }> {
   try {
-    return await SharedDictionaryService.share(workspaceId, { targets, personal, words: plain });
+    const response = await SharedDictionaryService.share(workspaceId, {
+      targets,
+      personal,
+      words: plain,
+    });
+    return { response, demotedIds: new Set() };
   } catch (error) {
     const actionError = toSharedDictionaryActionError(error);
     if (actionError.reason !== "personalChanged" || syncService.canSync()) throw actionError;
     const conflictIds = new Set(actionError.conflicts.map((conflict) => conflict.id));
     const conflicting = (row: { id: string }): boolean =>
       conflictIds.size === 0 || conflictIds.has(row.id);
+    const demoted = personal.filter(conflicting);
     try {
-      return await SharedDictionaryService.share(workspaceId, {
+      const response = await SharedDictionaryService.share(workspaceId, {
         targets,
         personal: personal.filter((row) => !conflicting(row)),
-        words: [...plain, ...personal.filter(conflicting).map((row) => row.word)],
+        words: [...plain, ...demoted.map((row) => row.word)],
       });
+      return { response, demotedIds: new Set(demoted.map((row) => row.id)) };
     } catch (retryError) {
       throw toSharedDictionaryActionError(retryError);
     }
@@ -542,6 +609,7 @@ export async function sharePersonalWords(
     };
   }
 
+  const scope = captureActionScope();
   let failed: ActionFailure | null = null;
   let mirrorChanged = 0;
   for (const [index, batch] of chunks.entries()) {
@@ -583,7 +651,12 @@ export async function sharePersonalWords(
       }
       if (sent.length === 0) continue;
 
-      const response = await shareChunk(workspaceId, uniqueTargets, personal, plain);
+      const { response, demotedIds } = await shareChunk(
+        workspaceId,
+        uniqueTargets,
+        personal,
+        plain
+      );
       // Words the list refused aren't moved: no shared_at for them.
       const refusedHere = new Set(
         readShareRejections(response).flatMap((item) => {
@@ -596,13 +669,18 @@ export async function sharePersonalWords(
       );
       rejected.push(...refusedHere);
       const accepted = sent.filter((word) => !refusedHere.has(word));
+      const demotedWords = new Set(
+        [...demotedIds].flatMap((id) => (sentById.has(id) ? [sentById.get(id)!] : []))
+      );
       const sharedAt = new Date().toISOString();
       if (accepted.length > 0) {
-        await applyAccepted("share mark", async () => {
-          await api.markDictionaryWordsShared?.(accepted, sharedAt);
+        await applyAccepted(scope, "share mark", async () => {
+          await api.markDictionaryWordsShared?.(accepted, sharedAt, {
+            pendingWords: accepted.filter((word) => demotedWords.has(word)),
+          });
         });
       }
-      mirrorChanged += await applyAccepted("share", () =>
+      mirrorChanged += await applyAccepted(scope, "share", () =>
         applyEntries(workspaceId, response.created)
       );
       moved.push(...accepted);

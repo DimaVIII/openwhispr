@@ -281,15 +281,14 @@ export function DictionaryWordList({
 
   // Only while the list itself has focus: the add field and the row editor keep
   // ⌘A for their text. preventDefault also keeps Edit → Select All from
-  // selecting the page's text.
+  // selecting the page's text, in the Hidden list too, which has no selection.
   const handleKeyDown = (event: KeyboardEvent<HTMLUListElement>): void => {
-    if (!selection) return;
     const target = event.target as HTMLElement;
     if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
     if ((event.metaKey || event.ctrlKey) && isSelectAllKey(event)) {
       event.preventDefault();
-      selection.onSelectAll();
-    } else if (event.key === "Escape" && selection.active) {
+      selection?.onSelectAll();
+    } else if (event.key === "Escape" && selection?.active) {
       event.preventDefault();
       selection.onClear();
     }
