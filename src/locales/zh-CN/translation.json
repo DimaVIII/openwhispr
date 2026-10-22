@@ -3694,7 +3694,6 @@
     "upload": "上传",
     "dictionary": "词典",
     "referral": "获取免费一个月",
-    "inviteTeam": "邀请你的团队",
     "settings": "设置",
     "support": "支持",
     "limitReached": "已达本周云端上限",
@@ -4756,7 +4755,9 @@
   "workspaces": {
     "switcher": {
       "workspaces": "工作区",
-      "create": "创建工作区…"
+      "create": "创建工作区…",
+      "add": "添加工作区",
+      "invitePeople": "邀请成员"
     },
     "create": {
       "title": "创建工作区",

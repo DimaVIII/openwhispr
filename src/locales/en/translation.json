@@ -2876,7 +2876,6 @@
     "upload": "Upload",
     "dictionary": "Dictionary",
     "referral": "Get a free month",
-    "inviteTeam": "Invite your team",
     "settings": "Settings",
     "support": "Support",
     "limitReached": "Weekly Cloud limit reached",
@@ -3024,7 +3023,9 @@
   "workspaces": {
     "switcher": {
       "workspaces": "Workspaces",
-      "create": "Create workspace…"
+      "create": "Create workspace…",
+      "add": "Add workspace",
+      "invitePeople": "Invite people"
     },
     "create": {
       "title": "Create workspace",

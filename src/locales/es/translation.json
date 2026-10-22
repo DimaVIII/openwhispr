@@ -3746,7 +3746,6 @@
     "upload": "Subir",
     "dictionary": "Diccionario",
     "referral": "Obtener un mes gratis",
-    "inviteTeam": "Invita a tu equipo",
     "settings": "Configuración",
     "support": "Soporte",
     "limitReached": "Límite semanal de la nube alcanzado",
@@ -4756,7 +4755,9 @@
   "workspaces": {
     "switcher": {
       "workspaces": "Espacios de trabajo",
-      "create": "Crear espacio de trabajo…"
+      "create": "Crear espacio de trabajo…",
+      "add": "Añadir espacio de trabajo",
+      "invitePeople": "Invitar personas"
     },
     "create": {
       "title": "Crear espacio de trabajo",

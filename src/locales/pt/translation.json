@@ -3694,7 +3694,6 @@
     "upload": "Enviar",
     "dictionary": "Dicionário",
     "referral": "Ganhe um mês grátis",
-    "inviteTeam": "Convide sua equipe",
     "settings": "Configurações",
     "support": "Suporte",
     "limitReached": "Limite semanal da nuvem atingido",
@@ -4756,7 +4755,9 @@
   "workspaces": {
     "switcher": {
       "workspaces": "Espaços de trabalho",
-      "create": "Criar espaço de trabalho…"
+      "create": "Criar espaço de trabalho…",
+      "add": "Adicionar espaço de trabalho",
+      "invitePeople": "Convidar pessoas"
     },
     "create": {
       "title": "Criar espaço de trabalho",

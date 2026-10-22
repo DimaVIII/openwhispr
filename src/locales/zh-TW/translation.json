@@ -3694,7 +3694,6 @@
     "upload": "上傳",
     "dictionary": "字典",
     "referral": "獲得一個月免費",
-    "inviteTeam": "邀請你的團隊",
     "settings": "設定",
     "support": "支援",
     "limitReached": "已達本週雲端上限",
@@ -4756,7 +4755,9 @@
   "workspaces": {
     "switcher": {
       "workspaces": "工作區",
-      "create": "建立工作區…"
+      "create": "建立工作區…",
+      "add": "新增工作區",
+      "invitePeople": "邀請成員"
     },
     "create": {
       "title": "建立工作區",

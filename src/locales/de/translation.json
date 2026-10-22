@@ -3002,7 +3002,6 @@
     "upload": "Hochladen",
     "dictionary": "Wörterbuch",
     "referral": "Gratis-Monat erhalten",
-    "inviteTeam": "Team einladen",
     "settings": "Einstellungen",
     "support": "Support",
     "limitReached": "Wöchentliches Cloud-Limit erreicht",
@@ -3024,7 +3023,9 @@
   "workspaces": {
     "switcher": {
       "workspaces": "Workspaces",
-      "create": "Workspace erstellen…"
+      "create": "Workspace erstellen…",
+      "add": "Workspace hinzufügen",
+      "invitePeople": "Personen einladen"
     },
     "create": {
       "title": "Workspace erstellen",

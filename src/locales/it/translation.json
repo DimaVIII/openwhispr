@@ -3694,7 +3694,6 @@
     "upload": "Carica",
     "dictionary": "Dizionario",
     "referral": "Ottieni un mese gratis",
-    "inviteTeam": "Invita il tuo team",
     "settings": "Impostazioni",
     "support": "Assistenza",
     "limitReached": "Limite cloud settimanale raggiunto",
@@ -4756,7 +4755,9 @@
   "workspaces": {
     "switcher": {
       "workspaces": "Aree di lavoro",
-      "create": "Crea area di lavoro…"
+      "create": "Crea area di lavoro…",
+      "add": "Aggiungi area di lavoro",
+      "invitePeople": "Invita persone"
     },
     "create": {
       "title": "Crea area di lavoro",

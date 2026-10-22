@@ -1298,7 +1298,9 @@
   "workspaces": {
     "switcher": {
       "workspaces": "مساحات العمل",
-      "create": "إنشاء مساحة عمل…"
+      "create": "إنشاء مساحة عمل…",
+      "add": "إضافة مساحة عمل",
+      "invitePeople": "دعوة أشخاص"
     },
     "create": {
       "title": "إنشاء مساحة عمل",
@@ -4596,7 +4598,6 @@
     "upload": "رفع",
     "dictionary": "القاموس",
     "referral": "احصل على شهر مجاني",
-    "inviteTeam": "ادعُ فريقك",
     "settings": "الإعدادات",
     "support": "الدعم",
     "limitReached": "تم بلوغ الحد السحابي الأسبوعي",

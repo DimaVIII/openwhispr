@@ -3694,7 +3694,6 @@
     "upload": "アップロード",
     "dictionary": "辞書",
     "referral": "1か月無料を取得",
-    "inviteTeam": "チームを招待",
     "settings": "設定",
     "support": "サポート",
     "limitReached": "週間のクラウド上限に達しました",
@@ -4756,7 +4755,9 @@
   "workspaces": {
     "switcher": {
       "workspaces": "ワークスペース",
-      "create": "ワークスペースを作成…"
+      "create": "ワークスペースを作成…",
+      "add": "ワークスペースを追加",
+      "invitePeople": "メンバーを招待"
     },
     "create": {
       "title": "ワークスペースを作成",

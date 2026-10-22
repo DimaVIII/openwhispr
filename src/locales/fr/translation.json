@@ -3002,7 +3002,6 @@
     "upload": "Importer",
     "dictionary": "Dictionnaire",
     "referral": "Obtenir un mois gratuit",
-    "inviteTeam": "Invitez votre équipe",
     "settings": "Paramètres",
     "support": "Assistance",
     "limitReached": "Limite cloud hebdomadaire atteinte",
@@ -3024,7 +3023,9 @@
   "workspaces": {
     "switcher": {
       "workspaces": "Espaces de travail",
-      "create": "Créer un espace de travail…"
+      "create": "Créer un espace de travail…",
+      "add": "Ajouter un espace de travail",
+      "invitePeople": "Inviter des personnes"
     },
     "create": {
       "title": "Créer un espace de travail",
