@@ -2,6 +2,12 @@
 
 This is a requirements audit against the 15 October 2026 goal brief, including the Android-only correction. It is not a completion certificate. The [implementation plan](premium-experience-plan.md) preserves the chronological checkpoints; [acceptance](acceptance.md) distinguishes baseline checks from later builds. A checked implementation item does not establish physical-device or provider acceptance.
 
+## 22 October — default-folder restart repair
+
+The Play-installed code19 local workspace displayed duplicate empty Personal and Meetings folders. A reproduction running the actual migration against SQLite showed that account-switch deletion followed by remote-folder inserts assigns new local IDs; the next launch then recreated fixed IDs 1 and 2. The migration now reuses existing private defaults and retires only empty, unchanged legacy seeds that have a synced counterpart. It preserves custom names/order, sync identities, team folders, deletion tombstones, recovery records and all note references, including deleted notes. It no longer resets whichever folder happens to have ID 1 to sort order zero.
+
+The original regression failed before the repair; the final full mobile suite passes 307 suites / 3,696 tests, with TypeScript, scoped ESLint and changed-file formatting passing. This is source and temporary-database evidence. The exact history of the installed database was not inspected, and the installed duplicates have not been repaired or deleted manually. Code20 finished from `af3fc81c6a4f483044ef3b88eaed0b979ddddb3d` before this change; its download is pending and it does not contain this repair. Current-source artifact, Play update and restart/account-switch acceptance remain required, alongside the broader open work below.
+
 ## 21 October — code19 installed evidence and profile navigation repair
 
 Google Play installed version1.2.4/code19 from source `8f32830b30c3de171135394d67fd36252ee58bd6`. Its retained AAB SHA-256 is `fef65680c4bc453ccd69bd7385c2158ad14541c1cc7ee5cd196592f7881a3822`; bundle/signature/package and all50 CPU-library16KiB checks passed. Both owned-host Moonshine models now retain “tomorrow” on the unchanged synthetic file through installed speech plus cleanup. This is emulator file-input evidence, not physical speech or broader quality acceptance.
