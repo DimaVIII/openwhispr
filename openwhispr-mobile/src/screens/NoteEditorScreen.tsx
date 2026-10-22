@@ -83,8 +83,10 @@ import {
   getLocalReasoningUnavailableMessage,
   isLocalContextLimitError,
   isLocalReasoningRequired,
+  LocalReasoningError,
   shouldUseLocalReasoning,
 } from '@/lib/localReasoning';
+import { toChatErrorMessage } from '@/lib/chat/chatErrorMessage';
 import { providerDisplayName } from '@/lib/mobileProviders';
 import { promptLocalReasoningFallback } from '@/lib/localReasoningFallback';
 import { confirmCloudOnce, confirmDestructive } from '@/lib/alerts';
@@ -1030,7 +1032,15 @@ export default function NoteEditorScreen({
         ]);
       } catch (error) {
         if (controller.signal.aborted) return;
-        setChatError(error instanceof Error ? error.message : 'Chat failed');
+        // An on-device error's text comes from the native layer, so it gets the same worded copy as
+        // the Chat tab.
+        setChatError(
+          error instanceof LocalReasoningError
+            ? toChatErrorMessage(error)
+            : error instanceof Error
+              ? error.message
+              : 'Chat failed',
+        );
       } finally {
         if (chatAbortRef.current === controller) {
           chatAbortRef.current = null;
