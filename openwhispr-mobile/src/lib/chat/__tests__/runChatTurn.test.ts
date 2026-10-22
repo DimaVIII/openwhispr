@@ -1,7 +1,15 @@
 import type { GoogleCalendarAccount, GoogleCalendarEvent, Note } from '@/data';
 import { LocalReasoningError } from '@/lib/localReasoning';
-import { runChatTurn, type ChatTurnDeps, type ChatTurnInput } from '../runChatTurn';
+import {
+  createDefaultChatTurnDeps,
+  runChatTurn,
+  type ChatTurnDeps,
+  type ChatTurnInput,
+} from '../runChatTurn';
 import type { ChatMessage, ChatStep } from '../types';
+
+const mockGetNoteById = jest.fn();
+jest.mock('@/data', () => ({ notesRepository: { getNoteById: mockGetNoteById } }));
 
 // Built with local-time constructors so assertions don't depend on the machine's timezone.
 const NOW = new Date(2026, 9, 22, 9, 0, 0);
@@ -265,17 +273,51 @@ describe('runChatTurn', () => {
     );
   });
 
-  it('drops history answers built from private notes on a cloud route', async () => {
+  it('sends no history on a cloud route once an answer used a private note', async () => {
     const isNotePrivate = jest.fn((noteId: number) => noteId === 7);
     const deps = makeDeps({ isNotePrivate });
 
     await runChatTurn(makeInput({ history: PRIVATE_HISTORY }), deps);
 
     const text = sentText(deps.chat);
-    expect(text).not.toContain('What was the launch date?');
+    expect(text).toContain('RECENT CHAT:\nNo prior chat messages.');
     expect(text).not.toContain('Launch is June 3.');
-    expect(text).toContain('And the price?');
-    expect(text).toContain('Price stays at $12.');
+    expect(text).not.toContain('Price stays at $12.');
+  });
+
+  it('treats a missing source note as private on a cloud route', async () => {
+    mockGetNoteById.mockImplementation((noteId: number) => (noteId === 1 ? PRICING : null));
+    const deps = makeDeps({ isNotePrivate: createDefaultChatTurnDeps().isNotePrivate });
+
+    await runChatTurn(makeInput({ history: PRIVATE_HISTORY }), deps);
+
+    expect(mockGetNoteById).toHaveBeenCalledWith(7);
+    expect(sentText(deps.chat)).toContain('RECENT CHAT:\nNo prior chat messages.');
+  });
+
+  it('keeps history whose source notes are all present and shared', async () => {
+    mockGetNoteById.mockImplementation((noteId: number) => makeNote({ id: noteId }));
+    const deps = makeDeps({ isNotePrivate: createDefaultChatTurnDeps().isNotePrivate });
+
+    await runChatTurn(makeInput({ history: PRIVATE_HISTORY }), deps);
+
+    expect(sentText(deps.chat)).toContain('Launch is June 3.');
+  });
+
+  it('drops all history once any answer used a private note', async () => {
+    const history = [
+      makeMessage('m1', 'user', 'What was the launch date?'),
+      makeMessage('m2', 'assistant', 'Launch is June 3.', [{ noteId: 7, title: 'Launch plan' }]),
+      makeMessage('m3', 'user', 'Repeat that?'),
+      makeMessage('m4', 'assistant', 'As I said, launch is June 3.'),
+    ];
+    const deps = makeDeps({ isNotePrivate: jest.fn((noteId: number) => noteId === 7) });
+
+    await runChatTurn(makeInput({ history }), deps);
+
+    const text = sentText(deps.chat);
+    expect(text).toContain('RECENT CHAT:\nNo prior chat messages.');
+    expect(text).not.toContain('As I said, launch is June 3.');
   });
 
   it('keeps history answers built from private notes on a local route', async () => {

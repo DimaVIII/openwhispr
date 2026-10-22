@@ -55,14 +55,16 @@ export interface ChatTurnDeps {
 
 // Required lazily, as ReasoningService does, so importing this module doesn't pull SQLite and the
 // stores into the chat store's import graph.
-const createDefaultChatTurnDeps = (): ChatTurnDeps => ({
+export const createDefaultChatTurnDeps = (): ChatTurnDeps => ({
   getCandidateNotes: (terms, options) => {
     const { notesRepository } = require('@/data') as typeof import('@/data');
     return notesRepository.getChatCandidateNotes(terms, options);
   },
   isNotePrivate: (noteId) => {
     const { notesRepository } = require('@/data') as typeof import('@/data');
-    return notesRepository.getNoteById(noteId)?.isPrivate === 1;
+    // A note that can't be found may have been private when it was deleted, so it counts as private.
+    const note = notesRepository.getNoteById(noteId);
+    return note == null || note.isPrivate === 1;
   },
   getConnectedCalendarAccounts: () => {
     const { useGoogleCalendarStore } =
@@ -110,21 +112,17 @@ const toChatRoute = (selection: InferenceSelection | undefined): InferenceRoute 
   };
 };
 
-// An answer built from a note that is private now carries that note's content, so it leaves the
-// history together with the question that asked for it.
-const withoutPrivateAnswers = (
+// A later answer can quote one built from a private note without listing that note (one made on
+// a local route, say), so a single such answer keeps the whole conversation out of the request.
+const usedPrivateNote = (
   history: ChatMessage[],
   isNotePrivate: (noteId: number) => boolean,
-): ChatMessage[] => {
-  const dropped = new Set<number>();
-  history.forEach((message, index) => {
-    if (message.role !== 'assistant') return;
-    if (!message.sources.some((source) => isNotePrivate(source.noteId))) return;
-    dropped.add(index);
-    if (history[index - 1]?.role === 'user') dropped.add(index - 1);
-  });
-  return history.filter((_, index) => !dropped.has(index));
-};
+): boolean =>
+  history.some(
+    (message) =>
+      message.role === 'assistant' &&
+      message.sources.some((source) => isNotePrivate(source.noteId)),
+  );
 
 // A calendar that can't be read counts as none connected, so the notes can still answer.
 const readAccounts = (deps: ChatTurnDeps): GoogleCalendarAccount[] => {
@@ -196,9 +194,8 @@ export async function runChatTurn(
   // The repository already filters private notes; this keeps them out whatever it returns.
   const allowed = (notes: Note[]): Note[] =>
     includePrivate ? notes : notes.filter((note) => note.isPrivate !== 1);
-  const history = includePrivate
-    ? input.history
-    : withoutPrivateAnswers(input.history, deps.isNotePrivate);
+  const history =
+    includePrivate || !usedPrivateNote(input.history, deps.isNotePrivate) ? input.history : [];
 
   let calendar: GoogleCalendarEvent[] | null = null;
   const accounts = readAccounts(deps);
