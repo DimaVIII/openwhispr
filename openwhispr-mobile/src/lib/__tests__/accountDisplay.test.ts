@@ -63,4 +63,10 @@ describe('getAccountFirstName', () => {
     expect(getAccountFirstName(user({ name: '   ' }))).toBeNull();
     expect(getAccountFirstName(user({ name: 'Anonymous', isAnonymous: true }))).toBeNull();
   });
+
+  it('has none when the name is only the email address or its handle', () => {
+    expect(getAccountFirstName(user({ name: 'Ada' }))).toBe('Ada');
+    expect(getAccountFirstName(user({ name: 'ada' }))).toBeNull();
+    expect(getAccountFirstName(user({ name: 'ada@example.com' }))).toBeNull();
+  });
 });

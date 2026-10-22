@@ -54,5 +54,5 @@ const styles = StyleSheet.create({
   },
   // A long meeting name is cut short rather than filling the row.
   label: { maxWidth: 260 },
-  disabled: { opacity: 0.5 },
+  disabled: { opacity: 0.4 },
 });
