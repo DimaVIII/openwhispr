@@ -383,6 +383,15 @@ describe('buildChatPayload', () => {
       },
     );
 
+    it('lets a follow-up with no topic be answered from the chat so far', () => {
+      const { text } = buildPayload({
+        question: 'Who decided that?',
+        history: [makeMessage(0), makeMessage(1)],
+      });
+      expect(text).toContain('If the recent chat already shows what they mean, answer from it.');
+      expect(text).toContain('message 1');
+    });
+
     it('keeps the usual notes for a topic, a period or notes sent', () => {
       const scope = parseChatQuery('What did we decide this week?', NOW).scope;
       if (!scope) throw new Error('No period');
