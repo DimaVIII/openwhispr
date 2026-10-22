@@ -25,6 +25,7 @@ import { OnboardingFlow } from '@/screens/onboarding/OnboardingFlow';
 import { AnimatedSplash } from '@/components/features/AnimatedSplash';
 import { useKeyboardHandoff } from '@/hooks/useKeyboardHandoff';
 import { useRevenueCatIdentity } from '@/hooks/useRevenueCatIdentity';
+import { useAffiliateAttribution } from '@/hooks/useAffiliateAttribution';
 import { useAnonymousOnboardingSession } from '@/hooks/useAnonymousOnboardingSession';
 import { useGuestPrivateMode } from '@/hooks/useGuestPrivateMode';
 import { runMigrations } from '@/db/migrate';
@@ -35,7 +36,6 @@ import { PermissionAlertMount } from '@/components/ui/PermissionAlert';
 import { startKeyboardToneSync } from '@/lib/keyboardToneSync';
 import { startKeyboardAgentSync } from '@/lib/keyboardAgentSync';
 import { startKeyboardFullAccessProbe } from '@/lib/keyboardFullAccessProbe';
-import { applyPendingOnDeviceCleanup } from '@/lib/onboardingMode';
 import { OpenWhisprSuperwallProvider } from '@/components/superwall/OpenWhisprSuperwallProvider';
 import { eraseProviderCredentialsFromPreviousInstall } from '@/services/providers/ProviderCredentials';
 
@@ -49,6 +49,7 @@ function RootLayout() {
   useKeyboardHandoff();
   useRevenueCatIdentity();
   useAnonymousOnboardingSession();
+  useAffiliateAttribution();
   useGuestPrivateMode();
 
   const [fontsLoaded] = useFonts({
@@ -104,8 +105,6 @@ function RootLayout() {
         stopTone = startKeyboardToneSync();
         stopAgent = startKeyboardAgentSync();
         stopFullAccessProbe = startKeyboardFullAccessProbe();
-        // Launch is where an iOS update shows up, so cleanup setup couldn't save is saved here.
-        applyPendingOnDeviceCleanup().catch(() => undefined);
       }
     };
 
