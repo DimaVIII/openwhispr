@@ -832,6 +832,10 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
     static let recordingWaveformBarWidth: CGFloat = 3
     static let recordingWaveformBarSpacing: CGFloat = 4
     static let recordingActionButtonSize: CGFloat = 36
+    /// The keyboard grows by this while the agent review card shows: at Apple's height its
+    /// text gets about three lines in landscape. Back to 299pt on a 17 Pro, as before the
+    /// keys were rebuilt to Apple's.
+    static let agentReviewExtraHeight: CGFloat = 40
   }
 
   private enum KeyboardSize {
@@ -917,11 +921,21 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
       searchShortcutKeys: 0.785, narrowReturnKeys: 1.435, narrowReturnGaps: 0, keycaps: .landscape
     )
 
-    static func current(forWidth width: CGFloat, landscape: Bool, homeButton: Bool) -> KeyboardMetrics {
-      if landscape { return .landscape }
+    // iPad, docked across the screen: Apple's iPad keyboard isn't modelled, so the phone
+    // layout keeps the 309pt height and the gap above the strip it had before this rebuild
+    // (the iOS 26 glass above the view is unverified on iPad).
+    static let tablet = KeyboardMetrics(
+      stripTop: 7, stripHeight: 40, stripGapBelow: 11, stripSideInset: 4,
+      sideMargin: 6.5, keyGap: 6, keyHeight: 53, rowGap: 11, bottomPadding: 6,
+      keyCornerRadius: 8
+    )
+
+    static func current(for inputs: LayoutInputs) -> KeyboardMetrics {
+      if inputs.tablet { return .tablet }
+      if inputs.landscape { return .landscape }
       var metrics: KeyboardMetrics
-      let size = KeyboardSize.detect(width: width)
-      if homeButton, size != .large {
+      let size = KeyboardSize.detect(width: inputs.width)
+      if inputs.homeButton, size != .large {
         metrics = .homeButton
       } else {
         switch size {
@@ -954,8 +968,11 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
     /// Apple draws email's and web search's "." 4pt higher than a typed period (17 Pro).
     var raisesPeriod = false
 
-    static func forKeyboardType(_ type: UIKeyboardType?) -> BottomRowLayout {
+    /// `letters`: the page showing. Twitter's @ and # replace return on letters only; its
+    /// 123 and #+= pages have Apple's usual space and return (iOS 26.5).
+    static func forKeyboardType(_ type: UIKeyboardType?, letters: Bool) -> BottomRowLayout {
       switch type {
+      case .twitter? where !letters: return BottomRowLayout()
       case .URL?: return BottomRowLayout(shortcuts: [".", "/", ".com"], shortcutWidth: .shared, showsSpace: false)
       case .emailAddress?: return BottomRowLayout(shortcuts: ["@", "."], raisesPeriod: true)
       case .webSearch?:
@@ -1009,8 +1026,30 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
     }
   }
 
+  private struct ReturnKeyState: Equatable {
+    let style: ReturnKeyStyle
+    /// Greyed while the field is empty and asks for that (enablesReturnKeyAutomatically).
+    let isDisabled: Bool
+  }
+
+  /// What the key metrics and the built keys depend on.
+  private struct LayoutInputs: Equatable {
+    var width: CGFloat
+    var landscape: Bool
+    /// needsInputModeSwitchKey: the globe key shows, on Home-button iPhones.
+    var homeButton: Bool
+    var tablet: Bool
+
+    /// Equal but for a sub-point width change, which is only pixel rounding.
+    func matches(_ other: LayoutInputs) -> Bool {
+      var widthAligned = other
+      widthAligned.width = width
+      return abs(width - other.width) <= 1 && widthAligned == self
+    }
+  }
+
   private var metrics: KeyboardMetrics = .current(
-    forWidth: UIScreen.main.bounds.width, landscape: false, homeButton: false
+    for: LayoutInputs(width: UIScreen.main.bounds.width, landscape: false, homeButton: false, tablet: false)
   )
 
   private let rootStack = UIStackView()
@@ -1087,6 +1126,8 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
   private var shortcutButtons: [KeyButton] = []
   private var bottomRowConstraints = BottomRowConstraints()
   private var appliedBottomRowLayout: BottomRowLayout?
+  /// What the return key last drew, so a keystroke that doesn't change it skips the redraw.
+  private var appliedReturnKeyState: ReturnKeyState?
   private var dictationLinkHosting: UIHostingController<DictationLinkView>?
   // Detected once at setup (the host is fixed for the extension's lifetime).
   // Avoids calling the heavy private-API host detection on every button refresh.
@@ -1109,6 +1150,8 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
   private var isObservingHandoffNotifications = false
   private var didBuildKeyboard = false
   private var lastMetricsWidth: CGFloat = 0
+  private var appliedLayoutInputs: LayoutInputs?
+  private var keysBuiltWithGlobe = false
   private var rootHeightConstraint: NSLayoutConstraint?
   private var topBarHeightConstraint: NSLayoutConstraint?
   private var keyboardHeightConstraint: NSLayoutConstraint?
@@ -1205,13 +1248,21 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
     }
   }
 
+  private func layoutInputs(width: CGFloat) -> LayoutInputs {
+    LayoutInputs(
+      width: width,
+      landscape: isLandscapeLayout,
+      homeButton: needsInputModeSwitchKey,
+      // A floating iPad keyboard is phone-sized and takes the phone layout.
+      tablet: UIDevice.current.userInterfaceIdiom == .pad && width >= 600
+    )
+  }
+
   override func viewDidLoad() {
     super.viewDidLoad()
     KeyboardLog.ui.info("Keyboard loaded. hasFullAccess=\(self.hasFullAccess, privacy: .public)")
     KeyboardLog.echo("Keyboard loaded. hasFullAccess=\(self.hasFullAccess)")
-    metrics = KeyboardMetrics.current(
-      forWidth: layoutWidth, landscape: isLandscapeLayout, homeButton: needsInputModeSwitchKey
-    )
+    metrics = KeyboardMetrics.current(for: layoutInputs(width: layoutWidth))
     setupLayout()
     applyKeyboardHeight()
     refreshRecordButton()
@@ -1225,7 +1276,8 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
   }
 
   private func applyKeyboardHeight() {
-    let keyboardHeight = metrics.keyboardHeight
+    // The keys keep their height at the bottom; the card above them takes the extra.
+    let keyboardHeight = metrics.keyboardHeight + (isAgentReviewShown ? Metrics.agentReviewExtraHeight : 0)
 
     if let keyboardHeightConstraint {
       keyboardHeightConstraint.constant = keyboardHeight
@@ -1243,6 +1295,14 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
     syncShiftWithContextIfNeeded()
     refreshFieldAwareKeys()
     _ = consumePendingTranscriptIfAvailable(trigger: "textDidChange")
+  }
+
+  // The field's text and traits may not be known at viewDidLoad, and iOS needn't send
+  // textDidChange when the keyboard opens: shift and the return key follow the field here.
+  override func viewWillAppear(_ animated: Bool) {
+    super.viewWillAppear(animated)
+    syncShiftWithContextIfNeeded()
+    refreshFieldAwareKeys()
   }
 
   override func viewDidAppear(_ animated: Bool) {
@@ -1320,8 +1380,15 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
     }
 
     // Shift ends after one letter unless the field capitalizes the next one too (all
-    // characters); iOS doesn't report the keyboard's own inserts back in time to rely on.
-    syncShiftWithContextIfNeeded()
+    // characters). Decided from the field, not the text before the cursor: iOS doesn't
+    // report the keyboard's own inserts back in time, and some hosts never report text.
+    if layoutMode == .letters && !isCapsLocked {
+      let shiftStaysOn = fieldCapitalization == .allCharacters
+      if shiftStaysOn != isShiftEnabled {
+        isShiftEnabled = shiftStaysOn
+        refreshShiftState()
+      }
+    }
     refreshAfterEdit()
   }
 
@@ -1371,6 +1438,8 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
   @objc private func handleBackspaceTapped() {
     playKeyClick()
     textDocumentProxy.deleteBackward()
+    // "Hello. W" ⌫ starts a sentence again.
+    syncShiftWithContextIfNeeded()
     refreshAfterEdit()
   }
 
@@ -1382,6 +1451,7 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
     case .ended, .cancelled, .failed:
       (gesture.view as? KeyButton)?.isLongPressed = false
       stopDeleteRepeating()
+      syncShiftWithContextIfNeeded()
       refreshAfterEdit()
     default:
       break
@@ -1459,13 +1529,28 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
   }
 
   private func smartQuoteSubstitution(for character: String) -> String? {
-    guard character == "\"" || character == "'" else { return nil }
+    guard character == "\"" || character == "'", usesSmartQuotes else { return nil }
     let context = textDocumentProxy.documentContextBeforeInput ?? ""
     let opening = shouldUseOpeningQuote(context: context)
     if character == "\"" {
       return opening ? "\u{201C}" : "\u{201D}"
     }
     return opening ? "\u{2018}" : "\u{2019}"
+  }
+
+  /// The field's smart-quotes setting; by default off where a curly quote breaks the text
+  /// (addresses, URLs, passwords), as UIKit's default depends on the keyboard type.
+  private var usesSmartQuotes: Bool {
+    switch textDocumentProxy.smartQuotesType ?? .default {
+    case .no: return false
+    case .yes: return true
+    default: break
+    }
+    if textDocumentProxy.isSecureTextEntry == true { return false }
+    switch textDocumentProxy.keyboardType ?? .default {
+    case .URL, .emailAddress: return false
+    default: return true
+    }
   }
 
   private func shouldUseOpeningQuote(context: String) -> Bool {
@@ -1476,6 +1561,8 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
   }
 
   @objc private func handleReturnTapped() {
+    // Greyed: Apple's does nothing. Asked fresh, as hasText may have changed since the redraw.
+    guard !isReturnKeyDisabled else { return }
     playKeyClick()
     textDocumentProxy.insertText("\n")
     syncShiftWithContextIfNeeded()
@@ -1515,6 +1602,9 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
       rootStack.trailingAnchor.constraint(equalTo: view.trailingAnchor),
       rootStack.bottomAnchor.constraint(equalTo: view.bottomAnchor),
       rootTopConstraint,
+      // A view shorter than the keyboard squeezes the rows (their heights yield) rather
+      // than pushing the toolbar off the top, where it can't be tapped.
+      rootStack.topAnchor.constraint(greaterThanOrEqualTo: view.topAnchor),
       rootHeightConstraint,
     ].compactMap { $0 })
     applyRootPadding()
@@ -2525,6 +2615,8 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
     shortcutButtons.removeAll()
     bottomRowConstraints = BottomRowConstraints()
     appliedBottomRowLayout = nil
+    appliedReturnKeyState = nil
+    keysBuiltWithGlobe = needsInputModeSwitchKey
     shiftButton = nil
     modeButton = nil
     spaceButton = nil
@@ -2548,6 +2640,8 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
 
   private func constrainRowHeight(_ row: UIView) {
     let constraint = row.heightAnchor.constraint(equalToConstant: metrics.keyHeight)
+    // Below required so a view shorter than the keyboard squeezes the rows, not the toolbar.
+    constraint.priority = UILayoutPriority(999)
     constraint.isActive = true
     rowHeightConstraints.append(constraint)
   }
@@ -2592,27 +2686,52 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
 
   private func refreshMetricsIfNeeded() {
     let width = view.bounds.width
-    guard width.isFinite, width > 0, abs(width - lastMetricsWidth) > 1 else { return }
+    guard width.isFinite, width > 0 else { return }
+    // Orientation and the globe key count as well as width: a rotation can lay out at the
+    // new width before the size class flips, and needsInputModeSwitchKey can settle late.
+    let inputs = layoutInputs(width: width)
+    if let appliedLayoutInputs, appliedLayoutInputs.matches(inputs) { return }
+    appliedLayoutInputs = inputs
+    let widthChanged = abs(width - lastMetricsWidth) > 1
     lastMetricsWidth = width
 
-    let nextMetrics = KeyboardMetrics.current(
-      forWidth: width, landscape: isLandscapeLayout, homeButton: needsInputModeSwitchKey
-    )
-    guard nextMetrics != metrics else { return }
-    metrics = nextMetrics
-
-    applyRootPadding()
-    rootHeightConstraint?.constant = metrics.keyboardHeight
-    [keyboardRowsStack, lettersRowsStack, numbersRowsStack, symbolsRowsStack].forEach {
-      $0.spacing = metrics.rowGap
+    let nextMetrics = KeyboardMetrics.current(for: inputs)
+    let metricsChanged = nextMetrics != metrics
+    if metricsChanged {
+      metrics = nextMetrics
+      applyRootPadding()
+      rootHeightConstraint?.constant = metrics.keyboardHeight
+      [keyboardRowsStack, lettersRowsStack, numbersRowsStack, symbolsRowsStack].forEach {
+        $0.spacing = metrics.rowGap
+      }
+      keyWidthGuideConstraint?.constant = -0.9 * metrics.keyGap
+      topBarHeightConstraint?.constant = metrics.stripTop + metrics.stripHeight
+      updateStripConstraints()
     }
-    keyWidthGuideConstraint?.constant = -0.9 * metrics.keyGap
-    topBarHeightConstraint?.constant = metrics.stripTop + metrics.stripHeight
-    updateStripConstraints()
 
-    if didBuildKeyboard {
+    guard didBuildKeyboard else { return }
+    if metricsChanged || keysBuiltWithGlobe != inputs.homeButton {
       rebuildKeyboard()
+    } else if widthChanged {
+      // The keys were built against an estimated width (the screen's, before the first
+      // layout); their touch targets reach a key's width across the gaps.
+      refreshKeyTouchOutsets()
     }
+  }
+
+  private var keyTouchOutsets: UIEdgeInsets {
+    UIEdgeInsets(top: metrics.rowGap, left: estimatedKeyWidth, bottom: metrics.rowGap, right: estimatedKeyWidth)
+  }
+
+  private func refreshKeyTouchOutsets() {
+    func visit(_ view: UIView) {
+      if let key = view as? KeyButton {
+        key.hitTestOutsets = keyTouchOutsets
+        return
+      }
+      view.subviews.forEach(visit)
+    }
+    visit(keyboardRowsStack)
   }
 
   private func refreshVisibleKeyboardMode() {
@@ -2623,6 +2742,7 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
     symbolsRowsStack.isHidden = layoutMode != .symbols
     let modeLabel = layoutMode == .letters ? metrics.keycaps.label123 : metrics.keycaps.labelABC
     modeButton?.setTitle(layoutMode == .letters ? "123" : "ABC", for: .normal)
+    modeButton?.accessibilityLabel = layoutMode == .letters ? "numbers" : "letters"
     modeButton?.titleLabel?.font = modeLabel.font
     modeButton?.titleBaselineFromCenter = modeLabel.baseline
     refreshFieldAwareKeys()
@@ -2650,15 +2770,24 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
     refreshBottomRow()
   }
 
+  private var isReturnKeyDisabled: Bool {
+    textDocumentProxy.enablesReturnKeyAutomatically == true && !textDocumentProxy.hasText
+  }
+
   private func refreshReturnKey() {
     guard let returnButton else { return }
     let style = ReturnKeyStyle.forReturnKeyType(textDocumentProxy.returnKeyType)
-    let isDisabled = textDocumentProxy.enablesReturnKeyAutomatically == true && !textDocumentProxy.hasText
+    let isDisabled = isReturnKeyDisabled
+    let state = ReturnKeyState(style: style, isDisabled: isDisabled)
+    guard state != appliedReturnKeyState else { return }
+    appliedReturnKeyState = state
     returnButton.setImage(UIImage(systemName: style.symbolName)?.withRenderingMode(.alwaysTemplate), for: .normal)
     returnButton.imageOffsetY = style.glyphOffsetY
     returnButton.accessibilityLabel = style.accessibilityLabel
-    // Not isEnabled: UIKit would dim the glyph on top of Apple's disabled colours.
-    returnButton.isUserInteractionEnabled = !isDisabled
+    // Neither isEnabled (UIKit would dim the glyph on top of Apple's disabled colours) nor
+    // isUserInteractionEnabled: KeyboardRowsStack would pass the key over and give its taps
+    // to the space or ".com" key beside it. The key keeps its taps; handleReturnTapped
+    // ignores them while it's greyed.
     returnButton.accessibilityTraits = isDisabled ? [.button, .notEnabled] : .button
     if isDisabled {
       returnButton.normalBackground = Palette.keyDisabledBackground
@@ -2679,7 +2808,7 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
   }
 
   private func refreshBottomRow() {
-    let layout = BottomRowLayout.forKeyboardType(textDocumentProxy.keyboardType)
+    let layout = BottomRowLayout.forKeyboardType(textDocumentProxy.keyboardType, letters: layoutMode == .letters)
     guard layout != appliedBottomRowLayout, shortcutButtons.count == 3, let spaceButton, let returnButton
     else { return }
     appliedBottomRowLayout = layout
@@ -2754,6 +2883,12 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
     stack.translatesAutoresizingMaskIntoConstraints = false
     for key in keys {
       let button = makeKeyButton(display: key.display, output: key.output, role: .character)
+      // The face is a closing quote; what it types depends on the text before it.
+      switch key.output {
+      case "\"": button.accessibilityLabel = "quotation mark"
+      case "'": button.accessibilityLabel = "apostrophe"
+      default: break
+      }
       button.addTarget(self, action: #selector(handleCharacterKeyTapped(_:)), for: .touchUpInside)
       button.addTarget(self, action: #selector(handleCharacterKeyDown(_:)), for: .touchDown)
       button.addTarget(
@@ -2779,6 +2914,7 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
 
   private func addPunctuationThirdRow(pageKeyTitle: String, to stack: UIStackView) {
     let pageKey = makeKeyButton(display: pageKeyTitle, role: .utility)
+    pageKey.accessibilityLabel = pageKeyTitle == "#+=" ? "more symbols" : "numbers"
     if pageKeyTitle == "#+=" {
       pageKey.titleLabel?.font = KeyFont.moreSymbolsLabel
       pageKey.titleBaselineFromCenter = KeyFont.moreSymbolsBaseline
@@ -2798,6 +2934,7 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
 
     let backspace = makeKeyButton(display: nil, imageSystemName: "delete.left", role: .utility)
     backspace.imageOffsetY = metrics.keycaps.edgeGlyphOffset
+    backspace.accessibilityLabel = "delete"
     backspace.addTarget(self, action: #selector(handleBackspaceTapped), for: .touchUpInside)
     let longPress = UILongPressGestureRecognizer(
       target: self,
@@ -2915,9 +3052,7 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
     // Each key's target reaches across the gaps, Apple's half-key indent on the A row and
     // the keyboard's padding, so no gap or pixel-rounding sliver is dead;
     // KeyboardRowsStack gives every touch to the nearest key.
-    button.hitTestOutsets = UIEdgeInsets(
-      top: metrics.rowGap, left: estimatedKeyWidth, bottom: metrics.rowGap, right: estimatedKeyWidth
-    )
+    button.hitTestOutsets = keyTouchOutsets
     button.layer.cornerRadius = metrics.keyCornerRadius
     button.layer.cornerCurve = .continuous
 
@@ -2963,6 +3098,8 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
       : (isShiftEnabled ? CachedImages.shiftFill : CachedImages.shift)
     shiftButton?.setImage(shiftImage, for: .normal)
     shiftButton?.imageOffsetY = isCapsLocked ? KeyFont.capsLockGlyphOffset : metrics.keycaps.edgeGlyphOffset
+    shiftButton?.accessibilityLabel = isCapsLocked ? "caps lock" : "shift"
+    shiftButton?.accessibilityTraits = isShiftEnabled ? [.button, .selected] : .button
   }
 
   private func syncShiftWithContextIfNeeded() {
@@ -2978,14 +3115,16 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
   /// Follows the field's autocapitalization type, as Apple's keyboard does (URL and email
   /// fields start lowercase).
   private func shouldAutoCapitalize() -> Bool {
-    let capitalization: AutoCapitalization
+    fieldCapitalization.capitalizesNext(after: textDocumentProxy.documentContextBeforeInput)
+  }
+
+  private var fieldCapitalization: AutoCapitalization {
     switch textDocumentProxy.autocapitalizationType ?? .sentences {
-    case .none: capitalization = .none
-    case .words: capitalization = .words
-    case .allCharacters: capitalization = .allCharacters
-    default: capitalization = .sentences
+    case .none: return .none
+    case .words: return .words
+    case .allCharacters: return .allCharacters
+    default: return .sentences
     }
-    return capitalization.capitalizesNext(after: textDocumentProxy.documentContextBeforeInput)
   }
 
   private func startDeleteRepeating() {
@@ -4320,6 +4459,7 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
   /// active index. Seeds the local pager/session state the middle controls act on.
   private func showAgentReviewCard(_ result: AgentResult) {
     isAgentReviewShown = true
+    applyKeyboardHeight()
     agentReviewVersions = result.versions
     agentReviewActiveIndex = result.activeIndex
     agentReviewSessionId = result.sessionId
@@ -4380,6 +4520,7 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
   /// the card without a re-read (clearState: false).
   private func hideAgentReviewCard(clearState: Bool = true) {
     isAgentReviewShown = false
+    applyKeyboardHeight()
     agentReviewCanvas.isUserInteractionEnabled = false
     if clearState {
       agentReviewTextView.text = ""
@@ -4398,6 +4539,7 @@ final class KeyboardViewController: UIInputViewController, UIGestureRecognizerDe
   private func restoreAgentReviewCard() {
     guard !agentReviewVersions.isEmpty else { return }
     isAgentReviewShown = true
+    applyKeyboardHeight()
     displayActiveAgentVersion()
     refreshAgentReviewControls()
     processingCancelButton.isHidden = true
