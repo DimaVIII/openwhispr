@@ -1,9 +1,5 @@
 import type { GoogleCalendarEvent, Note } from '@/data';
-import {
-  boundChatContext,
-  buildNoteChatContext,
-  formatChatHistory,
-} from '@/lib/notes/chatOverNote';
+import { boundChatContext, formatChatHistory } from '@/lib/notes/chatOverNote';
 import { tryParseNoteTimestamp } from '@/lib/parseNoteTimestamp';
 import type { ChatMessage, ChatSource } from './types';
 
@@ -14,9 +10,10 @@ const CALENDAR_WINDOW_MS = 48 * 60 * 60 * 1000;
 const NOTE_CUT_MARKER = '\n\n[...rest of the note omitted...]';
 const MAX_SEARCH_TERMS = 6;
 const MIN_TERM_LENGTH = 3;
-// A two-character term matches inside longer words ("ai" in "said"), so one is kept only when it is
-// clearly a name or code: "Q3", "AI", "HR".
-const SHORT_TERM = /^(?=.*\p{N})[\p{L}\p{N}]{2}$|^\p{Lu}{2}$/u;
+// Most two-character words are filler ("he", "go"), so one is kept only when it is clearly a name or
+// code ("Q3", "AI", "HR") or from a script without letter case, where two syllables make a word
+// (Korean "회의", "예산").
+const SHORT_TERM = /^(?=.*\p{N})[\p{L}\p{N}]{2}$|^\p{Lu}{2}$|^\p{Lo}{2}$/u;
 // Chinese and Japanese don't put spaces between words, so their runs are searched as bigrams.
 const UNSPACED_SCRIPT_RUN = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]+/gu;
 
@@ -241,6 +238,15 @@ const formatCalendarSection = (calendar: ChatCalendar, now: Date): string => {
   return lines.length > 0 ? lines.join('\n') : 'No meetings in the next 48 hours.';
 };
 
+const formatNoteText = (note: Note): string => {
+  const generated = note.enhancedContent?.trim();
+  const source = note.content.trim();
+  if (!generated) return source;
+  return [`Generated notes:\n${generated}`, source ? `Note content:\n${source}` : '']
+    .filter(Boolean)
+    .join('\n\n');
+};
+
 const formatNotesSection = (
   notes: Note[],
   budget: number,
@@ -252,13 +258,11 @@ const formatNotesSection = (
 
   for (const note of notes) {
     // A meeting whose summary never ran is sent as its transcript, cut as the note's own chat cuts
-    // one: its start and its end.
+    // one: its start and its end. Otherwise the AI summary leads, so a long note loses the end of
+    // its own text rather than the summary.
     const body = lacksNoteText(note)
       ? boundChatContext(transcripts?.get(note.id) ?? '', CHAT_NOTE_CHAR_CAP).text
-      : buildNoteChatContext({
-          generatedNotes: note.enhancedContent,
-          sourceText: note.content,
-        }).slice(0, CHAT_NOTE_CHAR_CAP);
+      : formatNoteText(note).slice(0, CHAT_NOTE_CHAR_CAP);
     // A note with nothing to read (a failed recording) would be sent and listed as read for nothing.
     if (!body) continue;
     // The top note is cut to fit rather than dropped, so a tight budget still sends one note. Any

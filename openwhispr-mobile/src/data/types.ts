@@ -149,6 +149,12 @@ export interface ConflictedNote {
   conflictServerNote: RemoteNote | null;
 }
 
+/** The notes picked to answer a chat question, and how many matched before the cap. */
+export interface ChatCandidateNotes {
+  notes: Note[];
+  total: number;
+}
+
 export interface NotesRepository {
   // Existing methods
   getFolders(): Folder[];
@@ -217,12 +223,13 @@ export interface NotesRepository {
   searchNotes(query: string, folderId?: number): Note[];
   /**
    * Notes for answering a chat question: any term matches title, content, AI summary or
-   * transcript. With no terms, the most recent notes. Newest first, capped at `limit`.
+   * transcript, the notes matching the most terms first. With no terms, the most recent notes.
+   * Capped at `limit`; `total` counts every note that matched.
    */
   getChatCandidateNotes(
     terms: string[],
     options: { includePrivate: boolean; limit: number },
-  ): Note[];
+  ): ChatCandidateNotes;
   getActions(): Action[];
   getActionById(id: number): Action | null;
   createAction(name: string, description: string, prompt: string): Action;

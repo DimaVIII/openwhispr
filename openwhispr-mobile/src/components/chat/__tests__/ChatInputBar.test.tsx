@@ -16,6 +16,7 @@ const makeVoice = (overrides: Partial<ChatVoiceInput> = {}): ChatVoiceInput => (
   state: 'idle',
   elapsedSeconds: 0,
   isSettling: false,
+  noSpeechHeard: false,
   audioRecorder: {} as ChatVoiceInput['audioRecorder'],
   start: jest.fn(async () => true),
   finish: jest.fn(async () => undefined),
@@ -43,6 +44,18 @@ const baseProps = (voice: ChatVoiceInput, overrides: Partial<Props> = {}): Props
 beforeEach(() => jest.clearAllMocks());
 
 describe('ChatInputBar', () => {
+  it('says when no speech was heard, unless something else holds the composer', () => {
+    const voice = makeVoice({ noSpeechHeard: true });
+    const screen = render(<ChatInputBar {...baseProps(voice)} />);
+    expect(screen.getByText('No speech detected')).toBeTruthy();
+
+    screen.rerender(
+      <ChatInputBar {...baseProps(voice, { notice: <Text>Chat is turned off</Text> })} />,
+    );
+    expect(screen.queryByText('No speech detected')).toBeNull();
+    expect(screen.getByText('Chat is turned off')).toBeTruthy();
+  });
+
   it('shows the voice panel in place of the composer while listening', () => {
     const voice = makeVoice({ state: 'listening' });
     const screen = render(<ChatInputBar {...baseProps(voice)} />);

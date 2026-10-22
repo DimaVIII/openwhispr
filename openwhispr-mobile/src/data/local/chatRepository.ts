@@ -67,22 +67,24 @@ export class LocalChatRepository {
   }
 
   listConversations(limit?: number): ChatConversationSummary[] {
+    // The latest message is read in the same query, so the list costs one query, not one per chat.
+    // Drizzle leaves a column unqualified here, so the outer id is named with its table.
+    const lastText = sql<string | null>`(
+      SELECT ${chatMessages.text} FROM ${chatMessages}
+      WHERE ${chatMessages.conversationId} = ${chatConversations}.${sql.identifier(chatConversations.id.name)}
+      ORDER BY ${chatMessages.createdAt} DESC, ${chatMessages}.rowid DESC
+      LIMIT 1
+    )`;
     const query = this.database
-      .select()
+      .select({ conversation: chatConversations, lastText })
       .from(chatConversations)
       .orderBy(desc(chatConversations.updatedAt), desc(sql`${chatConversations}.rowid`));
     const rows = limit === undefined ? query.all() : query.limit(limit).all();
 
-    return rows.map((row) => {
-      const last = this.database
-        .select({ text: chatMessages.text })
-        .from(chatMessages)
-        .where(eq(chatMessages.conversationId, row.id))
-        .orderBy(desc(chatMessages.createdAt), desc(sql`${chatMessages}.rowid`))
-        .limit(1)
-        .get();
-      return { ...toConversation(row), preview: toPreview(last?.text ?? null) };
-    });
+    return rows.map((row) => ({
+      ...toConversation(row.conversation),
+      preview: toPreview(row.lastText),
+    }));
   }
 
   getConversation(id: string): ChatConversation | null {

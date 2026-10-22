@@ -13,7 +13,7 @@ describe('clearChatHistory', () => {
   it('resets the store and clears the saved chats', () => {
     useChatStore.setState({ activeConversationId: 'c1' });
 
-    clearChatHistory();
+    expect(clearChatHistory()).toBe(true);
 
     expect(useChatStore.getState().activeConversationId).toBeNull();
     expect(mockClearAll).toHaveBeenCalledTimes(1);
@@ -25,7 +25,7 @@ describe('clearChatHistory', () => {
       throw new Error('database is locked');
     });
 
-    expect(() => clearChatHistory()).not.toThrow();
+    expect(clearChatHistory()).toBe(false);
     expect(warn).toHaveBeenCalledWith('[chat] chat history was not cleared:', expect.any(Error));
     expect(Sentry.captureException).toHaveBeenCalledWith(expect.any(Error), {
       level: 'warning',

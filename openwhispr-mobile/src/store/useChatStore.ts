@@ -95,6 +95,57 @@ const abortTurn = (): void => {
   turn.controller = null;
 };
 
+// A wipe that failed (the chats of an account signed out or switched away from) is finished before
+// any chat is read again, and nothing shows while it still fails. The flag is persisted, since the
+// next launch reads chats before anything else would retry it. localStorage is expo-sqlite's,
+// installed at launch by the database migration; the in-memory copy covers a storage failure.
+const WIPE_PENDING_KEY = '@openwhispr:chat_wipe_pending';
+let wipePending: boolean | undefined;
+
+const isWipePending = (): boolean => {
+  if (wipePending === undefined) {
+    try {
+      wipePending = localStorage.getItem(WIPE_PENDING_KEY) !== null;
+    } catch {
+      wipePending = false;
+    }
+  }
+  return wipePending;
+};
+
+const setWipePending = (pending: boolean): void => {
+  wipePending = pending;
+  try {
+    if (pending) localStorage.setItem(WIPE_PENDING_KEY, '1');
+    else localStorage.removeItem(WIPE_PENDING_KEY);
+  } catch {
+    // The in-memory flag still holds the chats back for this session.
+  }
+};
+
+/** Deletes every saved chat. Throws when it fails, and the wipe is retried before the next read. */
+export const wipeSavedChats = (): void => {
+  setWipePending(true);
+  chatRepository.clearAll();
+  setWipePending(false);
+};
+
+const savedChatsReadable = (): boolean => {
+  if (!isWipePending()) return true;
+  try {
+    wipeSavedChats();
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const readConversations = (): ChatConversationSummary[] =>
+  savedChatsReadable() ? chatRepository.listConversations() : [];
+
+const readMessages = (conversationId: string): ChatMessage[] =>
+  savedChatsReadable() ? chatRepository.getMessages(conversationId) : [];
+
 const toConversationTitle = (question: string): string => {
   const collapsed = question.replace(/\s+/g, ' ').trim();
   // Counted by code point, so the cut never splits an emoji's surrogate pair.
@@ -143,7 +194,7 @@ export const useChatStore = create<ChatState>((set, get) => {
       });
       set((state) => ({
         pending: null,
-        conversations: chatRepository.listConversations(),
+        conversations: readConversations(),
         messages:
           state.activeConversationId === request.conversationId
             ? [...state.messages, saved]
@@ -173,11 +224,11 @@ export const useChatStore = create<ChatState>((set, get) => {
     ...INITIAL_STATE,
 
     loadConversations: () => {
-      set({ conversations: chatRepository.listConversations() });
+      set({ conversations: readConversations() });
     },
 
     openConversation: (id) => {
-      set({ activeConversationId: id, messages: chatRepository.getMessages(id) });
+      set({ activeConversationId: id, messages: readMessages(id) });
     },
 
     closeConversation: (id) => {
@@ -196,7 +247,11 @@ export const useChatStore = create<ChatState>((set, get) => {
 
     send: (question, options) => {
       const text = question.trim();
-      if (!text || get().pending?.phase === 'working') return null;
+      // A spoken question's own slot is released before it sends, so any pending entry is a turn or
+      // a transcription this send would race.
+      if (!text || get().pending) return null;
+      // Nothing is written beside chats a failed wipe still holds back.
+      if (!savedChatsReadable()) return null;
       // A screen can still hold the id of a conversation deleted under it.
       if (options.conversationId && !chatRepository.getConversation(options.conversationId)) {
         return null;
@@ -204,11 +259,11 @@ export const useChatStore = create<ChatState>((set, get) => {
 
       const conversationId =
         options.conversationId ?? chatRepository.createConversation(toConversationTitle(text)).id;
-      const history = chatRepository.getMessages(conversationId);
+      const history = readMessages(conversationId);
       const userMessage = chatRepository.appendMessage({ conversationId, role: 'user', text });
       set((state) => ({
         failures: withoutFailure(state.failures, conversationId),
-        conversations: chatRepository.listConversations(),
+        conversations: readConversations(),
         messages:
           state.activeConversationId === conversationId
             ? [...state.messages, userMessage]
@@ -230,7 +285,7 @@ export const useChatStore = create<ChatState>((set, get) => {
       const failure = failures[conversationId];
       if (!failure || pending) return;
 
-      const stored = chatRepository.getMessages(conversationId);
+      const stored = readMessages(conversationId);
       const index = stored.findIndex((message) => message.id === failure.messageId);
       set((state) => ({ failures: withoutFailure(state.failures, conversationId) }));
       if (index === -1) return;
@@ -255,7 +310,7 @@ export const useChatStore = create<ChatState>((set, get) => {
       if (emptied) chatRepository.deleteConversation(failure.conversationId);
       set((state) => ({
         failures: withoutFailure(state.failures, conversationId),
-        conversations: chatRepository.listConversations(),
+        conversations: readConversations(),
         ...(emptied && state.activeConversationId === failure.conversationId
           ? { activeConversationId: null, messages: [] }
           : { messages: state.messages.filter((message) => message.id !== failure.messageId) }),
@@ -272,7 +327,7 @@ export const useChatStore = create<ChatState>((set, get) => {
       if (get().pending?.conversationId === id) get().cancel();
       chatRepository.deleteConversation(id);
       set((state) => ({
-        conversations: chatRepository.listConversations(),
+        conversations: readConversations(),
         failures: withoutFailure(state.failures, id),
         ...(state.activeConversationId === id ? { activeConversationId: null, messages: [] } : {}),
       }));

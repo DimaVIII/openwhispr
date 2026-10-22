@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react-native';
-import { Alert } from 'react-native';
+import { AccessibilityInfo, Alert } from 'react-native';
 import type { UseAudioRecordingOptions } from '../useAudioRecording';
 
 jest.mock('@/data', () => ({ chatRepository: {} }));
@@ -290,6 +290,108 @@ it('sends nothing when no speech was heard', async () => {
   expect(mockSend).not.toHaveBeenCalled();
   expect(Alert.alert).not.toHaveBeenCalled();
   expect(useChatStore.getState().pending).toBeNull();
+});
+
+it('says no speech was heard until the next question', async () => {
+  const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility');
+  mockStopBehavior = async () => {
+    const error = new Error('No speech detected');
+    mockRecordingOptions.onError?.(error);
+    throw error;
+  };
+  const { result, rerender } = renderVoiceInput('conv-1');
+  await act(async () => {
+    await result.current.start(false);
+  });
+  rerender({});
+  expect(result.current.noSpeechHeard).toBe(false);
+
+  await act(async () => {
+    await result.current.finish();
+  });
+
+  expect(result.current.noSpeechHeard).toBe(true);
+  expect(announce).toHaveBeenCalledWith('No speech detected');
+  await act(async () => {
+    await result.current.start(false);
+  });
+  expect(result.current.noSpeechHeard).toBe(false);
+});
+
+// Stops a question while it transcribes, then lets its transcription report `report`.
+const stopWhileTranscribing = async (report: () => Promise<void> | void): Promise<void> => {
+  const transcription = deferred();
+  mockStopBehavior = async () => {
+    await transcription.promise;
+    await report();
+  };
+  const { result, rerender } = renderVoiceInput('conv-1');
+  await act(async () => {
+    await result.current.start(false);
+  });
+  rerender({});
+  let finishing: Promise<void> = Promise.resolve();
+  await act(async () => {
+    finishing = result.current.finish();
+  });
+  await act(async () => {
+    await result.current.cancel();
+  });
+  await act(async () => {
+    transcription.resolve();
+    await finishing.catch(() => undefined);
+  });
+};
+
+it('drops a stopped question instead of offering the cloud for it', async () => {
+  const discard = jest.fn(async () => undefined);
+
+  await stopWhileTranscribing(() => mockRecordingOptions.onLocalModelMissing?.(jest.fn(), discard));
+
+  expect(promptLocalModelFallback).not.toHaveBeenCalled();
+  expect(discard).toHaveBeenCalled();
+  expect(mockSend).not.toHaveBeenCalled();
+});
+
+it('shows no paywall for a stopped question', async () => {
+  await stopWhileTranscribing(() =>
+    mockRecordingOptions.onUsageLimitReached?.(
+      Object.assign(new Error('limit'), { source: 'dictation' }) as never,
+      async () => undefined,
+    ),
+  );
+
+  expect(mockHandleUsageLimitReached).not.toHaveBeenCalled();
+});
+
+it('shows no error for a stopped question', async () => {
+  await stopWhileTranscribing(() => {
+    const error = new Error('Network down');
+    mockRecordingOptions.onError?.(error);
+    throw error;
+  });
+
+  expect(Alert.alert).not.toHaveBeenCalled();
+});
+
+it('stops showing a cloud retry whose entry was cleared under it', async () => {
+  const { result, rerender } = renderVoiceInput('conv-1');
+  mockRecordingOptions.onLocalModelMissing?.(
+    jest.fn(),
+    jest.fn(async () => undefined),
+  );
+  const [onUseCloud] = jest.mocked(promptLocalModelFallback).mock.calls[0];
+  act(() => onUseCloud());
+  rerender({});
+  expect(result.current.state).toBe('transcribing');
+
+  // A sign-out resets the store while the retry transcribes.
+  act(() => useChatStore.getState().reset());
+  act(() => mockRecordingOptions.onComplete?.('Too late'));
+  rerender({});
+
+  expect(result.current.state).toBe('idle');
+  expect(mockSend).not.toHaveBeenCalled();
 });
 
 it('reports other failures and releases the transcribing slot', async () => {

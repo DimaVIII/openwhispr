@@ -70,7 +70,7 @@ const loadSuggestions = (now: Date): ChatSuggestion[] => {
   const recentMeetingNote =
     notesRepository
       .getChatCandidateNotes([], { includePrivate: false, limit: RECENT_NOTE_POOL })
-      .find(
+      .notes.find(
         (note) =>
           isAskableMeeting(note) &&
           (tryParseNoteTimestamp(note.updatedAt)?.getTime() ?? 0) >= cutoff,

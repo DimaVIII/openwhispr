@@ -464,7 +464,7 @@ describe('useChatStore', () => {
     expect(mockRun).not.toHaveBeenCalled();
   });
 
-  it('holds one transcribing slot and lets send take it over', async () => {
+  it('holds one transcribing slot and refuses a send until it is released', async () => {
     mockRun.mockResolvedValueOnce(answer('ok'));
 
     expect(useChatStore.getState().beginTranscribing(null)).toBe(true);
@@ -473,7 +473,12 @@ describe('useChatStore', () => {
       conversationId: null,
       phase: 'transcribing',
     });
+    expect(
+      useChatStore.getState().send('typed', { conversationId: null, ...sendOptions }),
+    ).toBeNull();
+    expect(mockRepo.listConversations()).toEqual([]);
 
+    useChatStore.getState().endTranscribing();
     const sent = useChatStore.getState().send('spoken', { conversationId: null, ...sendOptions });
 
     expect(sent).not.toBeNull();
@@ -509,5 +514,95 @@ describe('useChatStore', () => {
       messages: [],
       pending: null,
     });
+  });
+});
+
+describe('a failed chat wipe', () => {
+  const WIPE_PENDING_KEY = '@openwhispr:chat_wipe_pending';
+  let stored: Map<string, string>;
+
+  beforeEach(() => {
+    stored = new Map();
+    globalThis.localStorage = {
+      getItem: (key: string) => stored.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        stored.set(key, value);
+      },
+      removeItem: (key: string) => {
+        stored.delete(key);
+      },
+    } as Storage;
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    Reflect.deleteProperty(globalThis, 'localStorage');
+  });
+
+  const seedPreviousAccount = (): string => {
+    const conversation = mockRepo.createConversation('Previous account');
+    mockRepo.appendMessage({ conversationId: conversation.id, role: 'user', text: 'secret' });
+    return conversation.id;
+  };
+
+  const failClearAll = (times: number): void => {
+    const clearAll = jest.spyOn(mockRepo, 'clearAll');
+    for (let attempt = 0; attempt < times; attempt += 1) {
+      clearAll.mockImplementationOnce(() => {
+        throw new Error('database is locked');
+      });
+    }
+  };
+
+  it('shows no saved chat until the wipe is finished, then finishes it before reading', () => {
+    const previousId = seedPreviousAccount();
+    failClearAll(3);
+
+    expect(clearChatHistory()).toBe(false);
+    useChatStore.getState().loadConversations();
+    expect(useChatStore.getState().conversations).toEqual([]);
+    expect(
+      useChatStore.getState().send('new question', { conversationId: null, ...sendOptions }),
+    ).toBeNull();
+
+    useChatStore.getState().openConversation(previousId);
+
+    expect(useChatStore.getState().messages).toEqual([]);
+    expect(mockRepo.getConversation(previousId)).toBeNull();
+    expect(stored.has(WIPE_PENDING_KEY)).toBe(false);
+  });
+
+  it('finishes the wipe on the next launch before any chat is read', () => {
+    const previousId = seedPreviousAccount();
+    failClearAll(1);
+    expect(clearChatHistory()).toBe(false);
+    expect(stored.has(WIPE_PENDING_KEY)).toBe(true);
+
+    jest.isolateModules(() => {
+      const relaunched = require('@/store/useChatStore') as typeof import('@/store/useChatStore');
+      relaunched.useChatStore.getState().loadConversations();
+      expect(relaunched.useChatStore.getState().conversations).toEqual([]);
+    });
+
+    expect(mockRepo.getConversation(previousId)).toBeNull();
+    expect(stored.has(WIPE_PENDING_KEY)).toBe(false);
+    // This module's own copy of the flag is still set; a read settles it.
+    useChatStore.getState().loadConversations();
+  });
+
+  it('still wipes the saved chats when the store reset fails', () => {
+    const previousId = seedPreviousAccount();
+    const reset = useChatStore.getState().reset;
+    useChatStore.setState({
+      reset: () => {
+        throw new Error('reset failed');
+      },
+    });
+
+    expect(clearChatHistory()).toBe(false);
+
+    useChatStore.setState({ reset });
+    expect(mockRepo.getConversation(previousId)).toBeNull();
   });
 });

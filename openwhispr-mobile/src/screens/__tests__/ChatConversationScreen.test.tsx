@@ -1,5 +1,5 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
-import { AccessibilityInfo, ScrollView } from 'react-native';
+import { AccessibilityInfo, Keyboard, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { chatRepository } from '@/data';
 import { useChatStore } from '@/store/useChatStore';
@@ -233,6 +233,9 @@ describe('ChatConversationScreen', () => {
   });
 
   it('starts over as a new chat when Edit question empties this one', () => {
+    mockRunFocusEffects = true;
+    mockDb.conversations = [{ id: 'c1', title: 'Pricing decisions', createdAt: 1, updatedAt: 1 }];
+    mockDb.messages = [question];
     useChatStore.setState({
       failures: {
         c1: {
@@ -467,6 +470,89 @@ describe('ChatConversationScreen', () => {
 
     screen.unmount();
     expect(useChatStore.getState().activeConversationId).toBeNull();
+    scrollToEnd.mockRestore();
+  });
+
+  it('drops its rows when its chat is wiped while another chat is open', () => {
+    const screen = render(<ChatConversationScreen />);
+    act(() => {
+      useChatStore.setState({ activeConversationId: 'c2', messages: [] });
+    });
+    expect(screen.getByText(question.text)).toBeTruthy();
+
+    act(() => {
+      useChatStore.getState().reset();
+    });
+
+    expect(screen.queryByText(question.text)).toBeNull();
+  });
+
+  it('becomes a new chat when its chat goes while it is showing', () => {
+    mockRunFocusEffects = true;
+    mockDb.conversations = [{ id: 'c1', title: 'Pricing decisions', createdAt: 1, updatedAt: 1 }];
+    mockDb.messages = [question];
+    const screen = render(<ChatConversationScreen />);
+    expect(router.setParams).not.toHaveBeenCalled();
+
+    act(() => {
+      useChatStore.getState().reset();
+    });
+
+    expect(screen.queryByText(question.text)).toBeNull();
+    expect(router.setParams).toHaveBeenCalledWith({ id: 'new' });
+  });
+
+  it('becomes a new chat when it comes back to a chat that went while covered', () => {
+    mockRunFocusEffects = true;
+    mockFocused = false;
+    const screen = render(<ChatConversationScreen />);
+
+    mockFocused = true;
+    screen.rerender(<ChatConversationScreen />);
+
+    expect(router.setParams).toHaveBeenCalledWith({ id: 'new' });
+  });
+
+  it('jumps to the end of a chat as it opens, then animates later growth', () => {
+    const scrollToEnd = jest.spyOn(ScrollView.prototype, 'scrollToEnd');
+    const screen = render(<ChatConversationScreen />);
+    const list = screen.UNSAFE_getByType(ScrollView);
+    scrollToEnd.mockClear();
+
+    fireEvent(list, 'contentSizeChange', 400, 2_000);
+    fireEvent(list, 'contentSizeChange', 400, 2_200);
+
+    expect(scrollToEnd.mock.calls).toEqual([[{ animated: false }], [{ animated: true }]]);
+    scrollToEnd.mockRestore();
+  });
+
+  it('scrolls to the end for the keyboard only while showing', () => {
+    mockRunFocusEffects = true;
+    mockDb.conversations = [{ id: 'c1', title: 'Pricing decisions', createdAt: 1, updatedAt: 1 }];
+    mockDb.messages = [question];
+    const listeners: (() => void)[] = [];
+    const addListener = jest
+      .spyOn(Keyboard, 'addListener')
+      .mockImplementation((event, listener) => {
+        if (event === 'keyboardDidShow') listeners.push(listener as () => void);
+        return { remove: jest.fn() } as unknown as ReturnType<typeof Keyboard.addListener>;
+      });
+    const scrollToEnd = jest.spyOn(ScrollView.prototype, 'scrollToEnd');
+    const screen = render(<ChatConversationScreen />);
+
+    mockFocused = false;
+    screen.rerender(<ChatConversationScreen />);
+    scrollToEnd.mockClear();
+    listeners.forEach((listener) => listener());
+    expect(scrollToEnd).not.toHaveBeenCalled();
+
+    mockFocused = true;
+    screen.rerender(<ChatConversationScreen />);
+    scrollToEnd.mockClear();
+    listeners.forEach((listener) => listener());
+    expect(scrollToEnd).toHaveBeenCalledWith({ animated: true });
+
+    addListener.mockRestore();
     scrollToEnd.mockRestore();
   });
 

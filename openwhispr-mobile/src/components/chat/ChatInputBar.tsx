@@ -2,8 +2,10 @@ import { useRef, useState } from 'react';
 import { View } from 'react-native';
 import type { ChatVoiceInput } from '@/hooks/useChatVoiceInput';
 import { useKeyboardHeight } from '@/hooks/useKeyboardHeight';
+import { NO_SPEECH_ERROR_MESSAGE } from '@/lib/permissions';
 import { safeHaptics } from '@/lib/utils';
 import { ChatComposer } from './ChatComposer';
+import { ChatComposerNotice } from './ChatComposerNotice';
 import { ChatVoicePanel } from './ChatVoicePanel';
 
 const COMPOSER_KEYBOARD_GAP = 10;
@@ -85,7 +87,8 @@ export function ChatInputBar({
           keyboardHeight > 0 ? keyboardHeight + COMPOSER_KEYBOARD_GAP : restingBottomPadding,
       }}
     >
-      {notice}
+      {notice ??
+        (voice.noSpeechHeard ? <ChatComposerNotice label={NO_SPEECH_ERROR_MESSAGE} /> : null)}
       {voice.state === 'listening' ? (
         <ChatVoicePanel
           elapsedSeconds={voice.elapsedSeconds}

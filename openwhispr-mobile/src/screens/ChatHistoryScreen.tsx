@@ -16,21 +16,24 @@ export function ChatHistoryScreen(): React.JSX.Element {
   // SwipeableCard slides a row away before asking, so a cancelled delete remounts the rows at rest.
   const [rowsVersion, setRowsVersion] = useState(0);
 
-  const confirmDelete = (conversationId: string): void => {
-    const restoreRows = (): void => setRowsVersion((version) => version + 1);
+  const restoreRows = (): void => setRowsVersion((version) => version + 1);
+
+  // A screen reader deletes without swiping, so nothing needs restoring, and a remount would move
+  // its focus.
+  const confirmDelete = (conversationId: string, onCancel?: () => void): void => {
     safeHaptics('warning');
     Alert.alert(
       'Delete this chat?',
       undefined,
       [
-        { text: 'Cancel', style: 'cancel', onPress: restoreRows },
+        { text: 'Cancel', style: 'cancel', onPress: onCancel },
         {
           text: 'Delete',
           style: 'destructive',
           onPress: () => useChatStore.getState().deleteConversation(conversationId),
         },
       ],
-      { onDismiss: restoreRows },
+      { onDismiss: onCancel },
     );
   };
 
@@ -55,11 +58,12 @@ export function ChatHistoryScreen(): React.JSX.Element {
           {conversations.map((conversation) => (
             <SwipeableCard
               key={`${conversation.id}:${rowsVersion}`}
-              onDelete={() => confirmDelete(conversation.id)}
+              onDelete={() => confirmDelete(conversation.id, restoreRows)}
             >
               <ChatConversationRow
                 conversation={conversation}
                 onPress={() => router.push(chatConversationRoute(conversation.id))}
+                onDelete={() => confirmDelete(conversation.id)}
               />
             </SwipeableCard>
           ))}

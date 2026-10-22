@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import { Alert } from 'react-native';
+import { AccessibilityInfo, Alert } from 'react-native';
 import type { AudioRecorder } from 'expo-audio';
 import { useAudioRecording } from '@/hooks/useAudioRecording';
 import { useUsageLimitRecovery } from '@/hooks/useUsageLimitRecovery';
-import { isNoteChatEnabled } from '@/lib/dictationAgent';
-import { isMicPermissionError, isNoSpeechError, showMicPermissionAlert } from '@/lib/permissions';
+import { isChatEnabled } from '@/lib/dictationAgent';
+import {
+  isMicPermissionError,
+  isNoSpeechError,
+  NO_SPEECH_ERROR_MESSAGE,
+  showMicPermissionAlert,
+} from '@/lib/permissions';
 import { promptLocalModelFallback } from '@/lib/privateMode';
 import { safeHaptics } from '@/lib/utils';
 import { useChatStore, type ChatPending } from '@/store/useChatStore';
@@ -18,6 +23,8 @@ export interface ChatVoiceInput {
   elapsedSeconds: number;
   // A cancelled question is still being transcribed in the background, so the mic refuses.
   isSettling: boolean;
+  // Briefly true after a question in which no speech was heard, so the screen can say so.
+  noSpeechHeard: boolean;
   audioRecorder: AudioRecorder;
   // Resolves false when it refused (a turn is pending, or a cancelled transcription is still
   // settling) or the recorder failed to start.
@@ -35,6 +42,9 @@ interface UseChatVoiceInputOptions {
   isFocused: () => boolean;
 }
 
+// Long enough to read the notice, short enough that it's gone before the next question.
+const NO_SPEECH_NOTICE_MS = 3_000;
+
 interface TranscribingSlot {
   generation: number;
   pending: ChatPending | null;
@@ -44,8 +54,7 @@ interface TranscribingSlot {
 // so a question is sent only on the route they were run for, and only while Chat is still on.
 const currentGateRoute = (): string => {
   const { config } = useConfigStore.getState();
-  const enabled = config ? isNoteChatEnabled(config) : true;
-  return `${enabled}:${config?.inference?.noteChat?.mode ?? ''}:${
+  return `${isChatEnabled(config)}:${config?.inference?.noteChat?.mode ?? ''}:${
     useProcessingModeStore.getState().activeMode
   }`;
 };
@@ -58,6 +67,7 @@ export function useChatVoiceInput({
 }: UseChatVoiceInputOptions): ChatVoiceInput {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [noSpeechHeard, setNoSpeechHeard] = useState(false);
   const conversationIdRef = useRef(conversationId);
   conversationIdRef.current = conversationId;
   const onSentRef = useRef(onSent);
@@ -72,6 +82,10 @@ export function useChatVoiceInput({
   const startingRef = useRef(false);
   // Bumped by cancel, so a transcript that lands afterwards is ignored.
   const generationRef = useRef(0);
+  // The generation of the question being transcribed. It no longer matches once that question is
+  // stopped, and whatever its transcription reports afterwards (a prompt, a paywall, an error) is
+  // dropped unseen.
+  const questionGenerationRef = useRef(0);
   const slotRef = useRef<TranscribingSlot | null>(null);
   const { handleUsageLimitReached } = useUsageLimitRecovery();
 
@@ -89,6 +103,7 @@ export function useChatVoiceInput({
   const takeSlot = (): boolean => {
     if (!useChatStore.getState().beginTranscribing(conversationIdRef.current)) return false;
     generationRef.current += 1;
+    questionGenerationRef.current = generationRef.current;
     slotRef.current = {
       generation: generationRef.current,
       pending: useChatStore.getState().pending,
@@ -103,8 +118,14 @@ export function useChatVoiceInput({
     setIsTranscribing(false);
   };
 
+  const isStopped = (): boolean => questionGenerationRef.current !== generationRef.current;
+
   const sendTranscript = (text: string): void => {
-    if (!ownsSlot()) return;
+    if (!ownsSlot()) {
+      // A delete or sign-out cleared the store's entry, so this screen stops showing it too.
+      if (slotRef.current?.generation === generationRef.current) releaseSlot();
+      return;
+    }
     const targetId = conversationIdRef.current;
     // The screen moved to another conversation while this question was transcribing.
     const movedAway = useChatStore.getState().pending?.conversationId !== targetId;
@@ -131,13 +152,20 @@ export function useChatVoiceInput({
       sendTranscript(text);
     },
     onError: (error) => {
+      if (isStopped()) return;
       releaseSlot();
       if (isMicPermissionError(error)) {
         // iOS already showed its own prompt; only point to Settings when it couldn't.
         if (!error.nativePromptShown) showMicPermissionAlert();
         return;
       }
-      if (isNoSpeechError(error)) return;
+      if (isNoSpeechError(error)) {
+        setNoSpeechHeard(true);
+        if (isFocusedRef.current()) {
+          AccessibilityInfo.announceForAccessibility(NO_SPEECH_ERROR_MESSAGE);
+        }
+        return;
+      }
       Alert.alert('Couldn’t hear that', error.message);
     },
     // The slot is released while the prompt is up (finish releases it) and taken again only if
@@ -146,6 +174,10 @@ export function useChatVoiceInput({
       const drop = (): void => {
         discard().catch(() => undefined);
       };
+      if (isStopped()) {
+        drop();
+        return;
+      }
       promptLocalModelFallback(() => {
         if (takeSlot()) retryWithCloud();
         else drop();
@@ -155,6 +187,8 @@ export function useChatVoiceInput({
       error: UsageLimitError,
       retryWithCloud: () => Promise<void>,
     ): Promise<void> => {
+      // The recording is discarded once this returns without a retry.
+      if (isStopped()) return;
       await handleUsageLimitReached(error, retryWithCloud);
       releaseSlot();
     },
@@ -166,6 +200,12 @@ export function useChatVoiceInput({
     : recording.isRecording
       ? 'listening'
       : 'idle';
+
+  useEffect(() => {
+    if (!noSpeechHeard) return undefined;
+    const timer = setTimeout(() => setNoSpeechHeard(false), NO_SPEECH_NOTICE_MS);
+    return () => clearTimeout(timer);
+  }, [noSpeechHeard]);
 
   useEffect(() => {
     if (state !== 'listening') return undefined;
@@ -185,6 +225,9 @@ export function useChatVoiceInput({
       return false;
     }
     startingRef.current = true;
+    // A new question: whatever stopped one left behind has settled, since start refuses until then.
+    questionGenerationRef.current = generationRef.current;
+    setNoSpeechHeard(false);
     allowCloudFallbackRef.current = allowCloudFallback;
     gateRouteRef.current = currentGateRoute();
     try {
@@ -237,6 +280,7 @@ export function useChatVoiceInput({
     state,
     elapsedSeconds,
     isSettling: recording.isProcessing && state === 'idle',
+    noSpeechHeard,
     audioRecorder: recording.audioRecorder,
     start,
     finish,

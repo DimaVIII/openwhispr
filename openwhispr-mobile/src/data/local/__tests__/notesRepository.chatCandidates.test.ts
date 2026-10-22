@@ -37,7 +37,7 @@ describe('LocalNotesRepository.getChatCandidateNotes', () => {
     });
     seed(repo, db, { title: 'Other', content: 'nothing', updatedAt: '2026-10-02 10:00:00' });
 
-    const result = repo.getChatCandidateNotes(['$12'], { includePrivate: false, limit: 10 });
+    const result = repo.getChatCandidateNotes(['$12'], { includePrivate: false, limit: 10 }).notes;
 
     expect(result.map((note) => note.id)).toEqual([id]);
   });
@@ -52,7 +52,10 @@ describe('LocalNotesRepository.getChatCandidateNotes', () => {
       { noteId: id, startMs: 1000, endMs: 2000, text: 'we agreed on the roadmap' },
     ]);
 
-    const result = repo.getChatCandidateNotes(['roadmap'], { includePrivate: false, limit: 10 });
+    const result = repo.getChatCandidateNotes(['roadmap'], {
+      includePrivate: false,
+      limit: 10,
+    }).notes;
 
     expect(result.map((note) => note.id)).toEqual([id]);
   });
@@ -66,7 +69,9 @@ describe('LocalNotesRepository.getChatCandidateNotes', () => {
     });
 
     for (const term of ['source', 'system', 'text', 'user']) {
-      expect(repo.getChatCandidateNotes([term], { includePrivate: false, limit: 10 })).toEqual([]);
+      expect(
+        repo.getChatCandidateNotes([term], { includePrivate: false, limit: 10 }).notes,
+      ).toEqual([]);
     }
   });
 
@@ -76,9 +81,9 @@ describe('LocalNotesRepository.getChatCandidateNotes', () => {
     repo.replaceSegments(id, [{ noteId: id, startMs: 0, endMs: 1000, text: 'roadmap' }]);
     db.update(transcriptSegments).set({ deletedAt: '2026-10-01 10:00:00' }).run();
 
-    expect(repo.getChatCandidateNotes(['roadmap'], { includePrivate: false, limit: 10 })).toEqual(
-      [],
-    );
+    expect(
+      repo.getChatCandidateNotes(['roadmap'], { includePrivate: false, limit: 10 }).notes,
+    ).toEqual([]);
   });
 
   it('keeps the notes matching the most terms when the pool is cut', () => {
@@ -99,7 +104,7 @@ describe('LocalNotesRepository.getChatCandidateNotes', () => {
     const result = repo.getChatCandidateNotes(['acme', 'kickoff'], {
       includePrivate: false,
       limit: 2,
-    });
+    }).notes;
 
     expect(result.map((note) => note.id)).toEqual([acme, bodyOnly]);
   });
@@ -117,7 +122,7 @@ describe('LocalNotesRepository.getChatCandidateNotes', () => {
     const result = repo.getChatCandidateNotes(['hiring', 'freeze'], {
       includePrivate: false,
       limit: 4,
-    });
+    }).notes;
 
     expect(result[0].id).toBe(meeting);
     expect(result).toHaveLength(4);
@@ -128,7 +133,7 @@ describe('LocalNotesRepository.getChatCandidateNotes', () => {
     const id = seed(repo, db, { content: 'grew 50% this year', updatedAt: '2026-10-01 10:00:00' });
     seed(repo, db, { content: 'grew 500 this year', updatedAt: '2026-10-02 10:00:00' });
 
-    const result = repo.getChatCandidateNotes(['50%'], { includePrivate: false, limit: 10 });
+    const result = repo.getChatCandidateNotes(['50%'], { includePrivate: false, limit: 10 }).notes;
 
     expect(result.map((note) => note.id)).toEqual([id]);
   });
@@ -141,11 +146,13 @@ describe('LocalNotesRepository.getChatCandidateNotes', () => {
       updatedAt: '2026-10-01 10:00:00',
     });
 
-    expect(repo.getChatCandidateNotes(['secret'], { includePrivate: false, limit: 10 })).toEqual(
-      [],
-    );
     expect(
-      repo.getChatCandidateNotes(['secret'], { includePrivate: true, limit: 10 }).map((n) => n.id),
+      repo.getChatCandidateNotes(['secret'], { includePrivate: false, limit: 10 }).notes,
+    ).toEqual([]);
+    expect(
+      repo
+        .getChatCandidateNotes(['secret'], { includePrivate: true, limit: 10 })
+        .notes.map((n) => n.id),
     ).toEqual([id]);
   });
 
@@ -159,7 +166,7 @@ describe('LocalNotesRepository.getChatCandidateNotes', () => {
     seed(repo, db, { content: 'match left', leftTeam: 1, updatedAt: '2026-10-01 11:00:00' });
     const keptId = seed(repo, db, { content: 'match kept', updatedAt: '2026-10-01 12:00:00' });
 
-    const result = repo.getChatCandidateNotes(['match'], { includePrivate: true, limit: 10 });
+    const result = repo.getChatCandidateNotes(['match'], { includePrivate: true, limit: 10 }).notes;
 
     expect(result.map((note) => note.id)).toEqual([keptId]);
   });
@@ -172,7 +179,55 @@ describe('LocalNotesRepository.getChatCandidateNotes', () => {
 
     const result = repo.getChatCandidateNotes(['alpha'], { includePrivate: false, limit: 2 });
 
-    expect(result.map((note) => note.id)).toEqual([newest, middle]);
+    expect(result.notes.map((note) => note.id)).toEqual([newest, middle]);
+    // The step detail says how many notes matched, not how many were kept.
+    expect(result.total).toBe(3);
+  });
+
+  it('matches a short Latin term as a whole word only', () => {
+    const { repo, db } = createMemoryRepository();
+    const ai = seed(repo, db, { content: 'Our AI plan.', updatedAt: '2026-10-01 10:00:00' });
+    const q3 = seed(repo, db, { title: 'Q3', updatedAt: '2026-10-02 10:00:00' });
+    const ten = seed(repo, db, { content: 'Ship 10 seats', updatedAt: '2026-10-03 10:00:00' });
+    seed(repo, db, {
+      content: 'She said to email Q30 in 2010, 100 times',
+      updatedAt: '2026-10-04 10:00:00',
+    });
+
+    const ids = (term: string): number[] =>
+      repo
+        .getChatCandidateNotes([term], { includePrivate: false, limit: 10 })
+        .notes.map((note) => note.id);
+
+    expect(ids('ai')).toEqual([ai]);
+    expect(ids('q3')).toEqual([q3]);
+    expect(ids('10')).toEqual([ten]);
+  });
+
+  it('matches a Korean term inside a longer word', () => {
+    const { repo, db } = createMemoryRepository();
+    const id = seed(repo, db, {
+      content: '예산 회의록을 공유했어요',
+      updatedAt: '2026-10-01 10:00:00',
+    });
+
+    expect(
+      repo
+        .getChatCandidateNotes(['회의'], { includePrivate: false, limit: 10 })
+        .notes.map((note) => note.id),
+    ).toEqual([id]);
+  });
+
+  it('matches a non-ASCII term capitalised in the note', () => {
+    const { repo, db } = createMemoryRepository();
+    const id = seed(repo, db, { title: 'Übergabe Projekt', updatedAt: '2026-10-01 10:00:00' });
+
+    const result = repo.getChatCandidateNotes(['übergabe', 'status'], {
+      includePrivate: false,
+      limit: 10,
+    });
+
+    expect(result.notes.map((note) => note.id)).toEqual([id]);
   });
 
   it('returns recent notes when there are no terms', () => {
@@ -182,7 +237,7 @@ describe('LocalNotesRepository.getChatCandidateNotes', () => {
     const middle = seed(repo, db, { content: 'middle', updatedAt: '2026-10-02 10:00:00' });
     seed(repo, db, { content: 'gone', leftTeam: 1, updatedAt: '2026-10-04 10:00:00' });
 
-    const result = repo.getChatCandidateNotes([], { includePrivate: false, limit: 2 });
+    const result = repo.getChatCandidateNotes([], { includePrivate: false, limit: 2 }).notes;
 
     expect(result.map((note) => note.id)).toEqual([newest, middle]);
   });

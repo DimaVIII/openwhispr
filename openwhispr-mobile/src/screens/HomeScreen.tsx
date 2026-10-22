@@ -207,7 +207,7 @@ export default function HomeScreen() {
       }
     },
     onError: (error) => Alert.alert('Error', error.message),
-    onLocalModelMissing: promptLocalModelFallback,
+    onLocalModelMissing: (retryWithCloud) => promptLocalModelFallback(retryWithCloud),
     onUsageLimitReached: handleUsageLimitReached,
   });
 

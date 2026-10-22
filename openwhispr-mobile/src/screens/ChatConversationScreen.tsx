@@ -24,12 +24,15 @@ import {
   chatNoteRoute,
   NEW_CHAT_ID,
 } from '@/lib/chat/chatRoutes';
-import type { ChatMessage } from '@/lib/chat/types';
+import type { ChatConversationSummary, ChatMessage } from '@/lib/chat/types';
 import { useChatStore } from '@/store/useChatStore';
 import { useProcessingModeStore } from '@/store/useProcessingModeStore';
 
 // How close to the end counts as reading the latest message, so new content keeps it in view.
 const NEAR_BOTTOM_PX = 80;
+
+const isListed = (conversations: ChatConversationSummary[], id: string): boolean =>
+  conversations.some((conversation) => conversation.id === id);
 
 export function ChatConversationScreen(): React.JSX.Element {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -40,14 +43,22 @@ export function ChatConversationScreen(): React.JSX.Element {
   const focusedRef = useRef(false);
   const nearBottomRef = useRef(true);
   const wasWorkingRef = useRef(false);
+  // Set once rows have been shown, so only later growth animates the scroll to the end.
+  const settledRef = useRef(false);
 
   const openMessages = useChatStore((s) =>
     s.activeConversationId === conversationId ? s.messages : null,
   );
+  const listed = useChatStore(
+    (s) => conversationId !== null && isListed(s.conversations, conversationId),
+  );
   // The store holds the open chat's messages only, so a chat pushed over this one takes them; this
-  // screen keeps its own rows until it's open again, and a swipe back never shows the other chat.
-  const [messages, setMessages] = useState<ChatMessage[]>(openMessages ?? []);
-  if (openMessages && openMessages !== messages) setMessages(openMessages);
+  // screen keeps its own rows while its chat is listed, and a swipe back never shows the other
+  // chat. A chat deleted or wiped with its account takes its rows with it.
+  const keptRowsRef = useRef<ChatMessage[]>([]);
+  if (openMessages) keptRowsRef.current = openMessages;
+  else if (!listed) keptRowsRef.current = [];
+  const messages = keptRowsRef.current;
   const pending = useChatStore((s) => s.pending);
   const failureHere = useChatStore((s) =>
     conversationId ? s.failures[conversationId] : undefined,
@@ -82,7 +93,14 @@ export function ChatConversationScreen(): React.JSX.Element {
       focusedRef.current = true;
       const store = useChatStore.getState();
       store.loadConversations();
-      if (conversationId) store.openConversation(conversationId);
+      if (conversationId) {
+        // A chat deleted, or wiped with its account, while this screen was covered.
+        if (isListed(useChatStore.getState().conversations, conversationId)) {
+          store.openConversation(conversationId);
+        } else {
+          router.setParams({ id: NEW_CHAT_ID });
+        }
+      }
       return () => {
         focusedRef.current = false;
         // A question still being spoken is dropped; one already transcribing may still send.
@@ -92,6 +110,19 @@ export function ChatConversationScreen(): React.JSX.Element {
     }, [conversationId]),
   );
 
+  // A chat that goes while it's showing leaves a new chat, so the composer still works. The store is
+  // read afresh, since on mount the focus effect has only just loaded the list.
+  useEffect(() => {
+    if (
+      conversationId &&
+      !listed &&
+      focusedRef.current &&
+      !isListed(useChatStore.getState().conversations, conversationId)
+    ) {
+      router.setParams({ id: NEW_CHAT_ID });
+    }
+  }, [conversationId, listed]);
+
   // Closed only once this chat goes away, since a note or chat pushed over it leaves it underneath.
   // A chat opened over this one has already taken its place, so only this one is closed.
   useEffect(
@@ -100,10 +131,11 @@ export function ChatConversationScreen(): React.JSX.Element {
   );
 
   // The bar's padding grows with the keyboard, which shrinks the list without changing its content.
+  // A keyboard opened on another screen leaves a covered chat where it was.
   useEffect(() => {
-    const subscription = Keyboard.addListener('keyboardDidShow', () =>
-      scrollRef.current?.scrollToEnd({ animated: true }),
-    );
+    const subscription = Keyboard.addListener('keyboardDidShow', () => {
+      if (focusedRef.current) scrollRef.current?.scrollToEnd({ animated: true });
+    });
     return () => subscription.remove();
   }, []);
 
@@ -160,14 +192,9 @@ export function ChatConversationScreen(): React.JSX.Element {
   const handleEditQuestion = (): void => {
     // A question still being spoken belongs to this chat, which the edit may delete.
     if (!conversationId || voice.state !== 'idle') return;
+    // Editing the only question deletes the chat, which leaves a new chat for the next send.
     const question = useChatStore.getState().editFailedQuestion(conversationId);
-    if (question === null) return;
-    setDraft(question);
-    // Editing the only question deletes the chat, so the next send starts a new one.
-    const deleted = !useChatStore
-      .getState()
-      .conversations.some((conversation) => conversation.id === conversationId);
-    if (deleted) router.setParams({ id: NEW_CHAT_ID });
+    if (question !== null) setDraft(question);
   };
 
   const openNote = (noteId: number): void => {
@@ -212,9 +239,12 @@ export function ChatConversationScreen(): React.JSX.Element {
             nativeEvent.contentSize.height - NEAR_BOTTOM_PX;
         }}
         // Opening an earlier answer's steps grows the content too, which mustn't pull the reader
-        // away from it.
+        // away from it. A chat opening lands on its end at once; animating would sweep through a
+        // long one.
         onContentSizeChange={() => {
-          if (nearBottomRef.current) scrollRef.current?.scrollToEnd({ animated: true });
+          if (!nearBottomRef.current) return;
+          scrollRef.current?.scrollToEnd({ animated: settledRef.current });
+          if (messages.length > 0) settledRef.current = true;
         }}
       >
         {messages.map((message) =>

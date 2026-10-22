@@ -1,4 +1,4 @@
-import type { GoogleCalendarAccount, GoogleCalendarEvent, Note } from '@/data';
+import type { ChatCandidateNotes, GoogleCalendarAccount, GoogleCalendarEvent, Note } from '@/data';
 import { LocalReasoningError } from '@/lib/localReasoning';
 import {
   createDefaultChatTurnDeps,
@@ -72,8 +72,21 @@ const PRIVATE_HISTORY: ChatMessage[] = [
   makeMessage('m4', 'assistant', 'Price stays at $12.', [{ noteId: 1, title: 'Pricing call' }]),
 ];
 
+// Stands in for the repository: the matches for any terms, the recent notes for none, capped at
+// the limit and counted before it.
+const candidatesFrom = (matched: Note[], recent: Note[] = []) =>
+  jest.fn(
+    (
+      terms: string[],
+      { limit }: { includePrivate: boolean; limit: number },
+    ): ChatCandidateNotes => {
+      const notes = terms.length > 0 ? matched : recent;
+      return { notes: notes.slice(0, limit), total: notes.length };
+    },
+  );
+
 const makeDeps = (overrides: Partial<ChatTurnDeps> = {}): ChatTurnDeps => ({
-  getCandidateNotes: jest.fn((terms: string[]) => (terms.length > 0 ? [PRICING, ROADMAP] : [])),
+  getCandidateNotes: candidatesFrom([PRICING, ROADMAP]),
   getConnectedCalendarAccounts: jest.fn(() => [CONNECTED_ACCOUNT]),
   getCalendarEvents: jest.fn(() => []),
   isNotePrivate: jest.fn(() => false),
@@ -224,7 +237,7 @@ describe('runChatTurn', () => {
 
   it('fills up to two notes with recent ones when nothing matches', async () => {
     const recent = makeNote({ id: 9, title: 'Weekly sync', content: 'Status updates.' });
-    const getCandidateNotes = jest.fn((terms: string[]) => (terms.length > 0 ? [] : [recent]));
+    const getCandidateNotes = candidatesFrom([], [recent]);
     const input = makeInput({ question: 'Anything new?' });
 
     const result = await runChatTurn(input, makeDeps({ getCandidateNotes }));
@@ -239,8 +252,45 @@ describe('runChatTurn', () => {
     expect(result.sources).toEqual([{ noteId: 9, title: 'Weekly sync' }]);
   });
 
+  it('reads only the notes it sends, and says how many matched in all', async () => {
+    const matched = [3, 4, 5, 6, 7, 8, 9].map((id) =>
+      makeNote({ id, title: `Pricing ${id}`, content: 'Pricing notes.' }),
+    );
+    const getCandidateNotes = candidatesFrom(matched);
+    const input = makeInput();
+
+    const result = await runChatTurn(input, makeDeps({ getCandidateNotes }));
+
+    expect(getCandidateNotes).toHaveBeenCalledWith(
+      expect.arrayContaining(['pricing']),
+      expect.objectContaining({ limit: 4 }),
+    );
+    expect(result.sources.map((source) => source.noteId)).toEqual([3, 4, 5, 6]);
+    expect(lastSteps(input.onSteps).find((step) => step.id === 'search')?.detail).toBe(
+      '7 notes match',
+    );
+  });
+
+  it('passes over empty recent notes when filling', async () => {
+    const failed = makeNote({ id: 8, title: 'Failed recording' });
+    const recent = [
+      failed,
+      makeNote({ id: 9, title: 'Weekly sync', content: 'Status updates.' }),
+      makeNote({ id: 10, title: 'Standup', content: 'Blockers.' }),
+    ];
+    const getNoteTranscript = jest.fn(() => '');
+
+    const result = await runChatTurn(
+      makeInput({ question: 'Anything new?' }),
+      makeDeps({ getCandidateNotes: candidatesFrom([], recent), getNoteTranscript }),
+    );
+
+    expect(getNoteTranscript).toHaveBeenCalledWith(8);
+    expect(result.sources.map((source) => source.noteId)).toEqual([9, 10]);
+  });
+
   it('never queries with a blank term and reads no notes when there are none', async () => {
-    const getCandidateNotes = jest.fn((_terms: string[]): Note[] => []);
+    const getCandidateNotes = candidatesFrom([]);
     const input = makeInput({ question: 'Is it?' });
 
     await runChatTurn(input, makeDeps({ getCandidateNotes }));
@@ -261,7 +311,7 @@ describe('runChatTurn', () => {
       content: 'Pricing',
       isPrivate: 1,
     });
-    const getCandidateNotes = jest.fn(() => [secret, PRICING]);
+    const getCandidateNotes = candidatesFrom([secret, PRICING], [secret, PRICING]);
     const deps = makeDeps({ getCandidateNotes });
 
     const result = await runChatTurn(makeInput(), deps);
@@ -283,7 +333,7 @@ describe('runChatTurn', () => {
       content: 'Pricing',
       isPrivate: 1,
     });
-    const getCandidateNotes = jest.fn(() => [secret]);
+    const getCandidateNotes = candidatesFrom([secret], [secret]);
     const deps = makeDeps({ getCandidateNotes, getChatSelection: LOCAL_SELECTION });
 
     await runChatTurn(makeInput(), deps);
@@ -364,7 +414,7 @@ describe('runChatTurn', () => {
     const meeting = makeNote({ id: 3, title: 'Weekly sync', noteType: 'meeting' });
     const getNoteTranscript = jest.fn(() => 'Meeting transcript:\n[00:00] Priya: Pricing holds.');
     const deps = makeDeps({
-      getCandidateNotes: jest.fn((terms: string[]) => (terms.length > 0 ? [meeting, PRICING] : [])),
+      getCandidateNotes: candidatesFrom([meeting, PRICING]),
       getNoteTranscript,
     });
 
@@ -382,9 +432,7 @@ describe('runChatTurn', () => {
       makeNote({ id, title: `Update ${id}`, content: 'A hiring update.' }),
     );
     const deps = makeDeps({
-      getCandidateNotes: jest.fn((terms: string[]) =>
-        terms.length > 0 ? [meeting, ...bodyHits] : [],
-      ),
+      getCandidateNotes: candidatesFrom([meeting, ...bodyHits]),
       getNoteTranscript: jest.fn(
         () => 'Meeting transcript:\n[0:00] Priya: The hiring freeze holds.',
       ),
@@ -482,7 +530,7 @@ describe('runChatTurn', () => {
     const deps = makeDeps({
       chat,
       getChatSelection: LOCAL_SELECTION,
-      getCandidateNotes: jest.fn((terms: string[]) => (terms.length > 0 ? [PRICING] : [])),
+      getCandidateNotes: candidatesFrom([PRICING]),
     });
 
     await expect(runChatTurn(makeInput(), deps)).rejects.toBe(error);
@@ -504,7 +552,7 @@ describe('runChatTurn', () => {
     const deps = makeDeps({
       chat,
       getChatSelection: LOCAL_SELECTION,
-      getCandidateNotes: jest.fn((terms: string[]) => (terms.length > 0 ? [long, PRICING] : [])),
+      getCandidateNotes: candidatesFrom([long, PRICING]),
     });
 
     const result = await runChatTurn(input, deps);
@@ -624,7 +672,7 @@ describe('runChatTurn', () => {
     const controller = new AbortController();
     const getCandidateNotes = jest.fn(() => {
       controller.abort();
-      return [PRICING];
+      return { notes: [PRICING], total: 1 };
     });
     const deps = makeDeps({ getCandidateNotes });
 

@@ -1,4 +1,4 @@
-import type { GoogleCalendarAccount, GoogleCalendarEvent, Note } from '@/data';
+import type { ChatCandidateNotes, GoogleCalendarAccount, GoogleCalendarEvent, Note } from '@/data';
 import type { InferenceRoute, InferenceSelection } from '@/lib/mobileProviders';
 import { isLocalContextLimitError } from '@/lib/localReasoning';
 import { tryParseNoteTimestamp } from '@/lib/parseNoteTimestamp';
@@ -14,9 +14,11 @@ import {
 } from './chatContext';
 import type { ChatMessage, ChatSource, ChatStep, ChatStepId } from './types';
 
-const CANDIDATE_POOL_LIMIT = 50;
 const MAX_MATCHED_NOTES = 4;
 const MIN_CHAT_NOTES = 2;
+// Recent notes topping up a thin match can be empty (a recording that failed), so the fill reads a
+// few more than it needs and passes over those.
+const RECENT_FILL_POOL = 10;
 const CONTEXT_LIMIT_NOTE_CHAR_BUDGET = 3_000;
 // The read spans the day looked back as well as the 48 hours sent, so 72 hours share it: about 16
 // events a day, more than a busy calendar holds, so tomorrow isn't pushed out of the request.
@@ -52,7 +54,7 @@ export interface ChatTurnDeps {
   getCandidateNotes: (
     terms: string[],
     options: { includePrivate: boolean; limit: number },
-  ) => Note[];
+  ) => ChatCandidateNotes;
   isNotePrivate: (noteId: number) => boolean;
   /** The note's transcript, formatted for a model, or '' when it has none. */
   getNoteTranscript: (noteId: number) => string;
@@ -254,32 +256,40 @@ export async function runChatTurn(
   const terms = extractSearchTerms(question);
   const matches =
     terms.length > 0
-      ? allowed(deps.getCandidateNotes(terms, { includePrivate, limit: CANDIDATE_POOL_LIMIT }))
-      : [];
+      ? deps.getCandidateNotes(terms, { includePrivate, limit: MAX_MATCHED_NOTES })
+      : { notes: [], total: 0 };
+  // Transcripts of the notes with no text of their own, read once whether a note is sent or passed
+  // over for having nothing in it.
+  const transcripts = new Map<number, string>();
+  const hasContent = (note: Note): boolean => {
+    if (!lacksNoteText(note)) return true;
+    const transcript = transcripts.get(note.id) ?? deps.getNoteTranscript(note.id);
+    transcripts.set(note.id, transcript);
+    return transcript.trim() !== '';
+  };
   // The repository ranks by matched terms across the title, the text, the summary and the
   // transcript, so its order stands.
-  const notes = matches.slice(0, MAX_MATCHED_NOTES);
+  const notes = allowed(matches.notes).filter(hasContent);
   if (notes.length < MIN_CHAT_NOTES) {
     const matchedIds = new Set(notes.map((note) => note.id));
-    // Asking for enough to cover the matches already held still leaves room for the fill.
     const recent = allowed(
-      deps.getCandidateNotes([], { includePrivate, limit: MIN_CHAT_NOTES + notes.length }),
-    ).filter((note) => !matchedIds.has(note.id));
-    notes.push(...recent.slice(0, MIN_CHAT_NOTES - notes.length));
+      deps.getCandidateNotes([], { includePrivate, limit: RECENT_FILL_POOL }).notes,
+    );
+    for (const note of recent) {
+      if (notes.length >= MIN_CHAT_NOTES) break;
+      if (!matchedIds.has(note.id) && hasContent(note)) notes.push(note);
+    }
   }
   setStep({
     id: 'search',
     status: 'done',
     label: 'Searched your notes',
-    detail: describeMatches(matches.length),
+    detail: describeMatches(matches.total),
   });
   throwIfAborted(signal);
 
   const privateNoteIds = new Set(
     notes.filter((note) => note.isPrivate === 1).map((note) => note.id),
-  );
-  const transcripts = new Map(
-    notes.filter(lacksNoteText).map((note) => [note.id, deps.getNoteTranscript(note.id)]),
   );
   const buildPayload = (
     payloadNotes: Note[],

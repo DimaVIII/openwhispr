@@ -3,18 +3,15 @@ import { customHeaderStackOptions, glassStackOptions } from '@/config/navigation
 
 export default function ChatLayout(): React.JSX.Element {
   return (
-    <Stack screenOptions={customHeaderStackOptions}>
-      <Stack.Screen name="index" />
-      <Stack.Screen name="[id]" />
-      <Stack.Screen name="history" />
-      <Stack.Screen name="note/[id]" />
-      <Stack.Screen
-        name="note/actions"
-        options={{ ...glassStackOptions, title: 'Actions', headerLargeTitle: false }}
-      />
+    <Stack screenOptions={glassStackOptions}>
+      <Stack.Screen name="index" options={customHeaderStackOptions} />
+      <Stack.Screen name="[id]" options={customHeaderStackOptions} />
+      <Stack.Screen name="history" options={customHeaderStackOptions} />
+      <Stack.Screen name="note/[id]" options={customHeaderStackOptions} />
+      <Stack.Screen name="note/actions" options={{ title: 'Actions', headerLargeTitle: false }} />
       <Stack.Screen
         name="note/voice-enrollment"
-        options={{ ...glassStackOptions, title: 'Voice Sample', headerLargeTitle: false }}
+        options={{ title: 'Voice Sample', headerLargeTitle: false }}
       />
     </Stack>
   );

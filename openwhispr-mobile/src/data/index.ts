@@ -23,6 +23,7 @@ export type {
   RemoteNote,
   RemoteNoteCreateResult,
   ConflictedNote,
+  ChatCandidateNotes,
 } from './types';
 export type {
   CalendarParticipant,

@@ -91,6 +91,10 @@ describe('extractSearchTerms', () => {
     expect(extractSearchTerms('Ask HR about 2x pay')).toEqual(['ask', 'hr', '2x', 'pay']);
   });
 
+  it('keeps two-syllable Korean words', () => {
+    expect(extractSearchTerms('회의 예산 어때?')).toEqual(['회의', '예산', '어때']);
+  });
+
   it('splits Chinese and Japanese runs into bigrams', () => {
     expect(extractSearchTerms('预算会议')).toEqual(['预算', '算会', '会议']);
     expect(extractSearchTerms('Acme 会議')).toEqual(['acme', '会議']);
@@ -145,6 +149,22 @@ describe('buildChatPayload', () => {
     const { sources } = buildPayload({ notes, noteCharBudget: 6_000 });
 
     expect(sources.map((source) => source.noteId)).toEqual([1, 3]);
+  });
+
+  it('puts the AI summary first, so a long note loses the end of its own text', () => {
+    const notes = [
+      makeNote({
+        id: 1,
+        title: 'Planning',
+        content: `TYPED ${'a'.repeat(CHAT_NOTE_CHAR_CAP)} TYPED_END`,
+        enhancedContent: 'SUMMARY: we ship Friday.',
+      }),
+    ];
+
+    const { text } = buildPayload({ notes });
+
+    expect(text).toContain('Generated notes:\nSUMMARY: we ship Friday.\n\nNote content:\nTYPED');
+    expect(text).not.toContain('TYPED_END');
   });
 
   it('sends the transcript of a note with no text or summary', () => {

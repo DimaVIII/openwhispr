@@ -26,7 +26,9 @@ jest.mock('expo-router', () => ({
 }));
 jest.mock('@/data', () => ({
   chatRepository: { listConversations: () => [] },
-  notesRepository: { getChatCandidateNotes: () => mockCandidateNotes },
+  notesRepository: {
+    getChatCandidateNotes: () => ({ notes: mockCandidateNotes, total: mockCandidateNotes.length }),
+  },
   calendarRepository: {},
 }));
 jest.mock('@/lib/chat/runChatTurn', () => ({ runChatTurn: jest.fn() }));

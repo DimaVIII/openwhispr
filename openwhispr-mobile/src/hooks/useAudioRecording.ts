@@ -418,7 +418,7 @@ export function useAudioRecording(options: UseAudioRecordingOptions = {}) {
   // A cancelled recording is discarded, so the file it was writing goes too. A recording another
   // stop already claimed is left to it, file and processing state alike. The claim is held until
   // the recording is gone, so a send landing meanwhile can't stop it again and read the deleted file.
-  const cancelRecording = async () => {
+  const cancelRecording = async (): Promise<void> => {
     if (stoppingRef.current) return;
     if (!audioRecorder?.isRecording) {
       setIsRecording(false);
