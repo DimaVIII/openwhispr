@@ -1,3 +1,5 @@
+const { i18nMain } = require("./i18nMain");
+
 const FEATURE_BY_PURPOSE = {
   meeting: "meetingRecordingEnabled",
   upload: "audioUploadEnabled",
@@ -8,7 +10,7 @@ function audioFeatureFailure(snapshot, purpose) {
     return {
       success: false,
       code: "POLICY_UNRESOLVABLE",
-      error: "Organization policy is unavailable.",
+      error: i18nMain.t("common.policyUnresolved"),
     };
   }
   if (!snapshot.managed || snapshot.policy?.features?.[FEATURE_BY_PURPOSE[purpose]] !== false) {
@@ -18,7 +20,11 @@ function audioFeatureFailure(snapshot, purpose) {
     success: false,
     code:
       purpose === "meeting" ? "POLICY_MEETING_RECORDING_DISABLED" : "POLICY_AUDIO_UPLOAD_DISABLED",
-    error: `${purpose === "meeting" ? "Meeting recording" : "Audio upload"} is turned off by your organization.`,
+    error: i18nMain.t(
+      purpose === "meeting"
+        ? "notes.meeting.restrictedByOrg"
+        : "common.policyTranscriptionRestricted"
+    ),
   };
 }
 

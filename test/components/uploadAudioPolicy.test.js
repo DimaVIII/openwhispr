@@ -5,6 +5,9 @@ const path = require("node:path");
 const vm = require("node:vm");
 const ts = require("typescript");
 const { deferred } = require("../helpers/harness/deferred");
+const { audioFeatureFailure } = require("../../src/helpers/audioFeaturePolicy");
+const { i18nMain, changeLanguage } = require("../../src/helpers/i18nMain");
+const esTranslation = require("../../src/locales/es/translation.json");
 
 const source = ts.createSourceFile(
   "UploadAudioView.tsx",
@@ -107,3 +110,55 @@ for (const phase of ["title", "save"]) {
     assert.equal(saved.length, phase === "save" ? 1 : 0);
   });
 }
+
+test("main policy refusals appear in Spanish upload errors", async (t) => {
+  const previousLanguage = i18nMain.language;
+  changeLanguage("es");
+  t.after(() => changeLanguage(previousLanguage));
+
+  for (const [snapshot, expected] of [
+    [
+      { success: true, managed: true, policy: { features: { audioUploadEnabled: false } } },
+      esTranslation.common.policyTranscriptionRestricted,
+    ],
+    [null, esTranslation.common.policyUnresolved],
+  ]) {
+    const errors = [];
+    const states = [];
+    const noop = () => {};
+    const context = {
+      file: { path: "/tmp/audio.wav" },
+      batch: { isProcessing: false },
+      usePolicyStore: { getState: () => ({}) },
+      isAudioFeatureAllowed: () => true,
+      isManagedTranscriptionActive: () => false,
+      isTranscriptionContextAllowed: () => true,
+      getSettings: () => ({}),
+      downloadedTempPath: null,
+      runIdRef: { current: 0 },
+      activeRequestIdRef: { current: null },
+      crypto: { randomUUID: () => "upload-request" },
+      setState: (state) => states.push(state),
+      setError: (error) => errors.push(error),
+      setProgress: noop,
+      setChunkProgress: noop,
+      setDiarizationWarning: noop,
+      isOpenWhisprCloud: false,
+      progressRef: { current: null },
+      progressCleanupRef: { current: null },
+      setInterval: () => 1,
+      clearInterval: noop,
+      buildDiarizationSettings: async () => ({ enabled: false }),
+      buildTranscriptionConfig: () => ({}),
+      transcribeFileWithSpeakers: async () => audioFeatureFailure(snapshot, "upload"),
+      transcriptionErrorKey: () => undefined,
+      t: (key) => key,
+    };
+
+    await vm.runInNewContext(callbacks, context).transcribe();
+
+    assert.equal(states.at(-1), "error");
+    assert.equal(errors.at(-1), expected);
+    assert.equal(context.activeRequestIdRef.current, null);
+  }
+});
