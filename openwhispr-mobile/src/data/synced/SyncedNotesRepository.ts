@@ -65,6 +65,12 @@ export class SyncedNotesRepository implements NotesRepository {
   searchNotes(query: string, folderId?: number): Note[] {
     return this.local.searchNotes(query, folderId);
   }
+  getChatCandidateNotes(
+    terms: string[],
+    options: { includePrivate: boolean; limit: number },
+  ): Note[] {
+    return this.local.getChatCandidateNotes(terms, options);
+  }
   getActions(): Action[] {
     return this.local.getActions();
   }

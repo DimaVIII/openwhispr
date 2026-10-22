@@ -215,6 +215,14 @@ export interface NotesRepository {
    */
   moveNoteToSpace(noteId: number, spaceId: number): void;
   searchNotes(query: string, folderId?: number): Note[];
+  /**
+   * Notes for answering a chat question: any term matches title, content, AI summary or
+   * transcript. With no terms, the most recent notes. Newest first, capped at `limit`.
+   */
+  getChatCandidateNotes(
+    terms: string[],
+    options: { includePrivate: boolean; limit: number },
+  ): Note[];
   getActions(): Action[];
   getActionById(id: number): Action | null;
   createAction(name: string, description: string, prompt: string): Action;

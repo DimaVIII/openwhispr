@@ -561,6 +561,34 @@ export class LocalNotesRepository implements NotesRepository {
     return this.database.select().from(notes).where(condition).orderBy(desc(notes.updatedAt)).all();
   }
 
+  getChatCandidateNotes(
+    terms: string[],
+    options: { includePrivate: boolean; limit: number },
+  ): Note[] {
+    // Escape LIKE wildcards so a term such as "50%" matches literally.
+    const termMatches = terms.map((term) => {
+      const pattern = `%${term.replace(/[\\%_]/g, '\\$&')}%`;
+      return or(
+        ...[notes.title, notes.content, notes.enhancedContent, notes.transcript].map(
+          (column) => sql`${column} LIKE ${pattern} ESCAPE '\\'`,
+        ),
+      );
+    });
+    const conditions = [
+      isNull(notes.deletedAt),
+      eq(notes.leftTeam, 0),
+      options.includePrivate ? undefined : eq(notes.isPrivate, 0),
+      termMatches.length > 0 ? or(...termMatches) : undefined,
+    ];
+    return this.database
+      .select()
+      .from(notes)
+      .where(and(...conditions))
+      .orderBy(desc(notes.updatedAt))
+      .limit(options.limit)
+      .all();
+  }
+
   getActions(): Action[] {
     return this.database
       .select()
