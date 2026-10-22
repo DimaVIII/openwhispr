@@ -1,8 +1,15 @@
-import type { GoogleCalendarEvent, Note } from '@/data';
+import type { GoogleCalendarEvent } from '@/data';
 import { buildChatSuggestions } from '../chatSuggestions';
 
 // Built with local-time constructors so assertions don't depend on the machine's timezone.
 const NOW = new Date(2026, 9, 22, 9, 0, 0);
+
+const STATIC_LABELS = [
+  'Summarize my meetings this week',
+  'What are my open action items?',
+  'Who have I promised to follow up with?',
+  'What did I decide recently?',
+];
 
 const makeEvent = (summary: string, start: Date): GoogleCalendarEvent =>
   ({
@@ -12,107 +19,62 @@ const makeEvent = (summary: string, start: Date): GoogleCalendarEvent =>
     endAt: new Date(start.getTime() + 30 * 60_000).toISOString(),
   }) as GoogleCalendarEvent;
 
-const makeNote = (title: string, updatedAt: Date): Note =>
-  ({ id: 7, title, updatedAt: updatedAt.toISOString() }) as Note;
-
 const time = (date: Date): string =>
   date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
+const labels = (events: GoogleCalendarEvent[]): string[] =>
+  buildChatSuggestions({ events, now: NOW }).map((suggestion) => suggestion.label);
+
 describe('buildChatSuggestions', () => {
-  it('suggests the next meeting, a recent meeting note, then action items', () => {
+  it('leads with the next meeting today, then the standing questions', () => {
     const start = new Date(2026, 9, 22, 11, 0);
 
     const suggestions = buildChatSuggestions({
       events: [makeEvent('Design review', start)],
-      recentMeetingNote: makeNote('Roadmap sync', new Date(2026, 9, 21, 15, 0)),
       now: NOW,
     });
 
-    expect(suggestions.map((suggestion) => suggestion.kind)).toEqual([
-      'calendar',
-      'note',
-      'actions',
-    ]);
     expect(suggestions[0]).toEqual({
-      kind: 'calendar',
-      meta: `Design review · ${time(start)}`,
-      label: 'Prep me for this meeting',
+      label: 'Prep me for Design review',
       prompt: `Prep me for "Design review" at ${time(start)}.`,
     });
-    expect(suggestions[1]).toEqual({
-      kind: 'note',
-      meta: 'Roadmap sync · Yesterday',
-      label: 'What did we decide, and who owns what?',
-      prompt: 'What did we decide in "Roadmap sync", and who owns what?',
-    });
-    expect(suggestions[2]).toEqual({
-      kind: 'actions',
-      meta: 'This week',
-      label: 'List my open action items',
-      prompt: "List my open action items from this week's notes.",
-    });
+    expect(suggestions.slice(1).map((suggestion) => suggestion.label)).toEqual(STATIC_LABELS);
+    // A standing question is sent as it reads.
+    expect(suggestions[1].prompt).toBe(suggestions[1].label);
+  });
+
+  it('offers only the standing questions with no meeting today', () => {
+    expect(labels([])).toEqual(STATIC_LABELS);
+    expect(labels([makeEvent('Tomorrow sync', new Date(2026, 9, 23, 10, 0))])).toEqual(
+      STATIC_LABELS,
+    );
   });
 
   it('skips a meeting that started more than 15 minutes ago', () => {
-    const suggestions = buildChatSuggestions({
-      events: [makeEvent('Standup', new Date(2026, 9, 22, 8, 40))],
-      recentMeetingNote: null,
-      now: NOW,
-    });
-
-    expect(suggestions.map((suggestion) => suggestion.kind)).toEqual(['actions']);
+    expect(labels([makeEvent('Standup', new Date(2026, 9, 22, 8, 40))])).toEqual(STATIC_LABELS);
   });
 
   it('keeps a meeting that started within the last 15 minutes', () => {
-    const suggestions = buildChatSuggestions({
-      events: [makeEvent('Standup', new Date(2026, 9, 22, 8, 50))],
-      recentMeetingNote: null,
-      now: NOW,
-    });
-
-    expect(suggestions.map((suggestion) => suggestion.kind)).toEqual(['calendar', 'actions']);
+    expect(labels([makeEvent('Standup', new Date(2026, 9, 22, 8, 50))])[0]).toBe(
+      'Prep me for Standup',
+    );
   });
 
   it('suggests a later meeting when the first has been running a while', () => {
-    const later = new Date(2026, 9, 22, 14, 0);
     const allDay = { ...makeEvent('Offsite', new Date(Date.UTC(2026, 9, 22))), allDay: 1 };
 
-    const suggestions = buildChatSuggestions({
-      events: [
+    expect(
+      labels([
         allDay,
         makeEvent('Standup', new Date(2026, 9, 22, 8, 30)),
-        makeEvent('Design review', later),
-      ],
-      recentMeetingNote: null,
-      now: NOW,
-    });
-
-    expect(suggestions[0].meta).toBe(`Design review · ${time(later)}`);
+        makeEvent('Design review', new Date(2026, 9, 22, 14, 0)),
+      ])[0],
+    ).toBe('Prep me for Design review');
   });
 
-  it('skips a meeting that starts on another day', () => {
-    const suggestions = buildChatSuggestions({
-      events: [makeEvent('Tomorrow sync', new Date(2026, 9, 23, 10, 0))],
-      recentMeetingNote: null,
-      now: NOW,
-    });
-
-    expect(suggestions.map((suggestion) => suggestion.kind)).toEqual(['actions']);
-  });
-
-  it('labels a note updated today and one from an earlier day', () => {
-    const today = buildChatSuggestions({
-      events: [],
-      recentMeetingNote: makeNote('Kickoff', new Date(2026, 9, 22, 8, 0)),
-      now: NOW,
-    });
-    const earlier = buildChatSuggestions({
-      events: [],
-      recentMeetingNote: makeNote('Kickoff', new Date(2026, 9, 18, 8, 0)),
-      now: NOW,
-    });
-
-    expect(today[0].meta).toBe('Kickoff · Today');
-    expect(earlier[0].meta).toBe('Kickoff · Oct 18');
+  it('names an untitled meeting', () => {
+    expect(labels([makeEvent('  ', new Date(2026, 9, 22, 11, 0))])[0]).toBe(
+      'Prep me for Untitled meeting',
+    );
   });
 });

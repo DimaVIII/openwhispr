@@ -39,13 +39,13 @@ export default function TabsLayout() {
         <NativeTabs.Trigger.Label>Record</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="mic.fill" />
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="(chat)">
-        <NativeTabs.Trigger.Label>Chat</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="bubble.left.and.bubble.right.fill" />
-      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="(notes)">
         <NativeTabs.Trigger.Label>Notes</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="note.text" />
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="(chat)">
+        <NativeTabs.Trigger.Label>Chat</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="bubble.left.and.bubble.right.fill" />
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="(dictionary)">
         <NativeTabs.Trigger.Label>Dictionary</NativeTabs.Trigger.Label>

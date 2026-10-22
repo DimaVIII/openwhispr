@@ -1,6 +1,7 @@
 import { fireEvent, render } from '@testing-library/react-native';
 import { ChatComposer } from '../ChatComposer';
 
+jest.mock('@/components/ui/Text', () => ({ Text: require('react-native').Text }));
 jest.mock('@/components/ui/SystemIcon', () => ({ SystemIcon: () => null }));
 
 const renderComposer = (
@@ -65,5 +66,15 @@ describe('ChatComposer', () => {
     expect(
       renderComposer({ disabled: true }).getByPlaceholderText('Ask anything').props.editable,
     ).toBe(false);
+  });
+
+  it('names the input apart from an example placeholder', () => {
+    const screen = renderComposer({
+      placeholder: 'Summarize my meetings this week',
+      inputLabel: 'Ask anything',
+    });
+    expect(screen.getByLabelText('Ask anything').props.placeholder).toBe(
+      'Summarize my meetings this week',
+    );
   });
 });

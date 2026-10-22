@@ -56,16 +56,26 @@ describe('ChatInputBar', () => {
     expect(screen.getByText('Chat is turned off')).toBeTruthy();
   });
 
-  it('shows the voice panel in place of the composer while listening', () => {
+  it('listens in the composer: the mic finishes and × cancels', () => {
     const voice = makeVoice({ state: 'listening' });
     const screen = render(<ChatInputBar {...baseProps(voice)} />);
-    expect(screen.getByText('Listening')).toBeTruthy();
+    expect(screen.getByText('Listening…')).toBeTruthy();
     expect(screen.queryByPlaceholderText('Reply')).toBeNull();
+    expect(screen.queryByLabelText('Speak your question')).toBeNull();
 
-    fireEvent.press(screen.getByLabelText('Send'));
-    fireEvent.press(screen.getByLabelText('Cancel'));
+    fireEvent.press(screen.getByLabelText('Send question'));
+    fireEvent.press(screen.getByLabelText('Cancel recording'));
     expect(voice.finish).toHaveBeenCalledTimes(1);
     expect(voice.cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('says it is transcribing in place of the input', () => {
+    const screen = render(
+      <ChatInputBar {...baseProps(makeVoice({ state: 'transcribing' }), { busy: true })} />,
+    );
+    expect(screen.getByText('Transcribing…')).toBeTruthy();
+    expect(screen.queryByPlaceholderText('Reply')).toBeNull();
+    expect(screen.getByLabelText('Stop')).toBeTruthy();
   });
 
   it('stops a transcribing question, or else the working turn', () => {
@@ -82,11 +92,11 @@ describe('ChatInputBar', () => {
     expect(idle.cancel).not.toHaveBeenCalled();
   });
 
-  it('ignores a Stop that lands right after the voice panel’s Send', () => {
+  it('ignores a Stop that lands right after the listening mic’s tap', () => {
     const now = jest.spyOn(Date, 'now').mockReturnValue(10_000);
     const voice = makeVoice({ state: 'listening' });
     const screen = render(<ChatInputBar {...baseProps(voice, { busy: true })} />);
-    fireEvent.press(screen.getByLabelText('Send'));
+    fireEvent.press(screen.getByLabelText('Send question'));
 
     screen.rerender(
       <ChatInputBar {...baseProps({ ...voice, state: 'transcribing' }, { busy: true })} />,
@@ -106,7 +116,7 @@ describe('ChatInputBar', () => {
     const onCancelTurn = jest.fn();
     const voice = makeVoice({ state: 'listening' });
     const screen = render(<ChatInputBar {...baseProps(voice, { busy: true, onCancelTurn })} />);
-    fireEvent.press(screen.getByLabelText('Send'));
+    fireEvent.press(screen.getByLabelText('Send question'));
 
     screen.rerender(
       <ChatInputBar {...baseProps({ ...voice, state: 'idle' }, { busy: true, onCancelTurn })} />,
@@ -158,15 +168,5 @@ describe('ChatInputBar', () => {
     expect(onMicPress).toHaveBeenCalledTimes(1);
     expect(voice.start).toHaveBeenCalledWith(true);
     expect(safeHaptics).toHaveBeenCalledWith('light');
-  });
-
-  it('focuses the composer after Switch to typing', () => {
-    const listening = makeVoice({ state: 'listening' });
-    const screen = render(<ChatInputBar {...baseProps(listening)} />);
-    fireEvent.press(screen.getByLabelText('Switch to typing'));
-    expect(listening.cancel).toHaveBeenCalledTimes(1);
-
-    screen.rerender(<ChatInputBar {...baseProps(makeVoice())} />);
-    expect(screen.getByPlaceholderText('Reply').props.autoFocus).toBe(true);
   });
 });

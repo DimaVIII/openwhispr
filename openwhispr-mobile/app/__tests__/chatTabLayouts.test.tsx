@@ -8,6 +8,7 @@ let mockStackOptions: NativeStackNavigationOptions = {};
 const mockScreens: ScreenProps[] = [];
 let mockSegments: string[] = [];
 let mockTabsHidden: boolean | undefined;
+const mockTabNames: string[] = [];
 
 jest.mock('expo-router', () => {
   const Stack = ({
@@ -37,7 +38,16 @@ jest.mock('expo-router/unstable-native-tabs', () => {
     mockTabsHidden = hidden;
     return children;
   };
-  const Trigger = ({ children }: { children: React.ReactNode }): React.ReactNode => children;
+  const Trigger = ({
+    name,
+    children,
+  }: {
+    name: string;
+    children: React.ReactNode;
+  }): React.ReactNode => {
+    mockTabNames.push(name);
+    return children;
+  };
   Trigger.Label = (): null => null;
   Trigger.Icon = (): null => null;
   NativeTabs.Trigger = Trigger;
@@ -57,6 +67,7 @@ const resolvedOptions = (name: string): NativeStackNavigationOptions => {
 beforeEach(() => {
   mockScreens.length = 0;
   mockTabsHidden = undefined;
+  mockTabNames.length = 0;
 });
 
 describe('Chat stack', () => {
@@ -80,6 +91,14 @@ describe('Chat stack', () => {
 });
 
 describe('Tab bar on the Chat tab', () => {
+  it('puts Chat third, after Notes', () => {
+    mockSegments = ['(tabs)', '(record)'];
+
+    render(<TabsLayout />);
+
+    expect(mockTabNames).toEqual(['(record)', '(notes)', '(chat)', '(dictionary)']);
+  });
+
   it.each([
     [['(tabs)', '(chat)'], false],
     [['(tabs)', '(chat)', 'index'], false],

@@ -279,7 +279,7 @@ export function ChatConversationScreen(): React.JSX.Element {
         voice={voice}
         value={draft}
         onChangeText={setDraft}
-        placeholder="Reply"
+        placeholder={conversationId ? 'Reply' : 'Ask anything'}
         busy={busy}
         canStop={pendingHere !== null || voice.state === 'transcribing'}
         disabled={!chatEnabled}

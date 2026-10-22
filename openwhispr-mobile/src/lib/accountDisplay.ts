@@ -30,3 +30,10 @@ export function getAccountDisplay(
 
   return { initials, name, subtitle };
 }
+
+/** The first word of the account's name, or null when there is no name of the user's own. */
+export function getAccountFirstName(user: AuthUser | null): string | null {
+  // An anonymous session's "Anonymous" is the server's placeholder, not the user's name.
+  if (!user || user.isAnonymous) return null;
+  return user.name?.trim().split(/\s+/)[0] || null;
+}

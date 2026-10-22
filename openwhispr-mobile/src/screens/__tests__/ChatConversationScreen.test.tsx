@@ -608,7 +608,9 @@ describe('ChatConversationScreen', () => {
     mockParams = { id: 'new' };
     const screen = render(<ChatConversationScreen />);
 
-    fireEvent.changeText(screen.getByPlaceholderText('Reply'), 'First question');
+    // Nothing to reply to yet.
+    expect(screen.queryByPlaceholderText('Reply')).toBeNull();
+    fireEvent.changeText(screen.getByPlaceholderText('Ask anything'), 'First question');
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Send'));
     });

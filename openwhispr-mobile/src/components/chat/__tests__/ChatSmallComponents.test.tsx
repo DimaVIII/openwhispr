@@ -2,10 +2,9 @@ import { fireEvent, render } from '@testing-library/react-native';
 import type { ChatSuggestion } from '@/lib/chat/chatSuggestions';
 import { ChatConversationRow } from '../ChatConversationRow';
 import { ChatErrorRow } from '../ChatErrorRow';
-import { ChatSuggestionCards } from '../ChatSuggestionCards';
+import { ChatSuggestionChips } from '../ChatSuggestionChips';
 import { ChatTranscribingBubble } from '../ChatTranscribingBubble';
 import { ChatUserBubble } from '../ChatUserBubble';
-import { ChatVoicePanel } from '../ChatVoicePanel';
 import { ChatWatermark } from '../ChatWatermark';
 
 jest.mock('react-native-reanimated', () => ({
@@ -22,7 +21,6 @@ jest.mock('react-native-reanimated', () => ({
 jest.mock('@/components/ui/Text', () => ({ Text: require('react-native').Text }));
 jest.mock('@/components/ui/SystemIcon', () => ({ SystemIcon: () => null }));
 jest.mock('@/components/ui/OpenWhisprMark', () => ({ OpenWhisprMark: () => null }));
-jest.mock('@/components/features/WaveformVisualizer', () => ({ RecordingBars: () => null }));
 
 describe('chat components', () => {
   it('ChatErrorRow wires Retry and Edit question', () => {
@@ -57,49 +55,23 @@ describe('chat components', () => {
     expect(getByText('Transcribing 1:23 of audio')).toBeTruthy();
   });
 
-  it('ChatVoicePanel wires its three buttons and shows the timer', () => {
-    const onCancel = jest.fn();
-    const onSwitchToTyping = jest.fn();
-    const onSend = jest.fn();
-    const { getByText, getByLabelText } = render(
-      <ChatVoicePanel
-        elapsedSeconds={7}
-        audioRecorder={null}
-        onCancel={onCancel}
-        onSwitchToTyping={onSwitchToTyping}
-        onSend={onSend}
-      />,
-    );
-    expect(getByText('Listening')).toBeTruthy();
-    expect(getByText('0:07')).toBeTruthy();
-    fireEvent.press(getByLabelText('Cancel'));
-    fireEvent.press(getByLabelText('Switch to typing'));
-    fireEvent.press(getByLabelText('Send'));
-    expect(onCancel).toHaveBeenCalledTimes(1);
-    expect(onSwitchToTyping).toHaveBeenCalledTimes(1);
-    expect(onSend).toHaveBeenCalledTimes(1);
-  });
-
-  it('ChatSuggestionCards passes the pressed suggestion and honours disabled', () => {
+  it('ChatSuggestionChips sends the pressed suggestion and honours disabled', () => {
     const suggestion: ChatSuggestion = {
-      kind: 'actions',
-      meta: 'This week',
-      label: 'List my open action items',
-      prompt: 'List them',
+      label: 'Prep me for Design review',
+      prompt: 'Prep me for "Design review" at 11:00 AM.',
     };
     const onPress = jest.fn();
     const enabled = render(
-      <ChatSuggestionCards suggestions={[suggestion]} onPress={onPress} disabled={false} />,
+      <ChatSuggestionChips suggestions={[suggestion]} onPress={onPress} disabled={false} />,
     );
-    expect(enabled.getByText('This week')).toBeTruthy();
-    fireEvent.press(enabled.getByText('List my open action items'));
+    fireEvent.press(enabled.getByText('Prep me for Design review'));
     expect(onPress).toHaveBeenCalledWith(suggestion);
 
     onPress.mockClear();
     const disabled = render(
-      <ChatSuggestionCards suggestions={[suggestion]} onPress={onPress} disabled />,
+      <ChatSuggestionChips suggestions={[suggestion]} onPress={onPress} disabled />,
     );
-    fireEvent.press(disabled.getByText('List my open action items'));
+    fireEvent.press(disabled.getByText('Prep me for Design review'));
     expect(onPress).not.toHaveBeenCalled();
   });
 

@@ -1,6 +1,7 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
 import { router } from 'expo-router';
-import type { GoogleCalendarEvent, Note } from '@/data';
+import type { GoogleCalendarEvent } from '@/data';
+import type { AuthUser } from '@/lib/authClient';
 import { useChatStore } from '@/store/useChatStore';
 import { ChatHomeScreen } from '../ChatHomeScreen';
 
@@ -14,7 +15,7 @@ const mockVoice = {
 };
 let mockOnSent: ((conversationId: string) => void) | undefined;
 let mockChatEnabled = true;
-let mockCandidateNotes: Partial<Note>[] = [];
+let mockUser: AuthUser | null = null;
 let mockEvents: Partial<GoogleCalendarEvent>[] = [];
 
 jest.mock('expo-router', () => ({
@@ -26,10 +27,11 @@ jest.mock('expo-router', () => ({
 }));
 jest.mock('@/data', () => ({
   chatRepository: { listConversations: () => [] },
-  notesRepository: {
-    getChatCandidateNotes: () => ({ notes: mockCandidateNotes, total: mockCandidateNotes.length }),
-  },
   calendarRepository: {},
+}));
+jest.mock('@/store/useAuthStore', () => ({
+  useAuthStore: (selector: (state: { user: AuthUser | null }) => unknown) =>
+    selector({ user: mockUser }),
 }));
 jest.mock('@/lib/chat/runChatTurn', () => ({ runChatTurn: jest.fn() }));
 jest.mock('@/lib/calendar/meetingSuggestions', () => ({
@@ -79,7 +81,8 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 
 const mockSend = jest.fn(() => ({ conversationId: 'c9', done: Promise.resolve() }));
-const ACTION_ITEMS = 'List my open action items';
+const ACTION_ITEMS = 'What are my open action items?';
+const COMPOSER = 'Summarize my meetings this week';
 
 const renderHome = async (): Promise<ReturnType<typeof render>> => {
   const screen = render(<ChatHomeScreen />);
@@ -92,10 +95,10 @@ beforeEach(() => {
   mockVoice.state = 'idle';
   mockOnSent = undefined;
   mockChatEnabled = true;
-  mockCandidateNotes = [];
   mockEvents = [];
   jest.clearAllMocks();
   useChatStore.setState({ conversations: [], pending: null, failures: {}, send: mockSend });
+  mockUser = null;
 });
 
 describe('ChatHomeScreen', () => {
@@ -106,19 +109,19 @@ describe('ChatHomeScreen', () => {
   it('sends a suggestion and opens its chat', async () => {
     const screen = await renderHome();
     fireEvent.press(screen.getByText(ACTION_ITEMS));
-    expect(mockSend).toHaveBeenCalledWith("List my open action items from this week's notes.", {
+    expect(mockSend).toHaveBeenCalledWith(ACTION_ITEMS, {
       conversationId: null,
       allowCloudFallback: false,
     });
     expect(router.push).toHaveBeenCalledWith('/(tabs)/(chat)/c9');
   });
 
-  it('offers no New chat while Chat is off', async () => {
+  it('shows Chat turned off, keeping All chats', async () => {
     mockChatEnabled = false;
     const screen = await renderHome();
 
     expect(screen.getByText('Chat is turned off')).toBeTruthy();
-    expect(screen.queryByLabelText('New chat')).toBeNull();
+    expect(screen.queryByPlaceholderText(COMPOSER)).toBeNull();
     expect(screen.getByLabelText('All chats')).toBeTruthy();
 
     fireEvent.press(screen.getByText('Open Chat settings'));
@@ -136,49 +139,50 @@ describe('ChatHomeScreen', () => {
     ];
     const screen = await renderHome();
 
-    expect(screen.getByText(/^Design review · /)).toBeTruthy();
-    expect(screen.queryByText(/^Standup · /)).toBeNull();
+    fireEvent.press(screen.getByText('Prep me for Design review'));
+    expect(screen.queryByText('Prep me for Standup')).toBeNull();
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.stringMatching(/^Prep me for "Design review" at /),
+      {
+        conversationId: null,
+        allowCloudFallback: false,
+      },
+    );
   });
 
-  it('skips a meeting note that is still transcribing or has nothing in it', async () => {
-    const updatedAt = new Date().toISOString();
-    mockCandidateNotes = [
-      {
-        id: 1,
-        title: 'Recording now',
-        noteType: 'meeting',
-        transcriptionStatus: 'recording',
-        content: 'typed',
-        updatedAt,
-      },
-      {
-        id: 2,
-        title: 'Failed empty',
-        noteType: 'meeting',
-        transcriptionStatus: 'failed',
-        content: '',
-        updatedAt,
-      },
-      {
-        id: 3,
-        title: 'Weekly sync',
-        noteType: 'meeting',
-        transcriptionStatus: 'done',
-        content: '',
-        updatedAt,
-      },
-    ];
-    const screen = await renderHome();
+  it('greets a signed-in user by first name, and anyone else plainly', async () => {
+    const guest = await renderHome();
+    expect(guest.getByText('Ask anything')).toBeTruthy();
+    guest.unmount();
 
-    expect(screen.getByText('Weekly sync · Today')).toBeTruthy();
-    expect(screen.queryByText(/Recording now|Failed empty/)).toBeNull();
+    mockUser = {
+      id: 'u',
+      email: 'ada@example.com',
+      name: 'Ada Lovelace',
+      emailVerified: true,
+      isAnonymous: false,
+    };
+    const signedIn = await renderHome();
+    expect(signedIn.getByText('Hi Ada, ask anything')).toBeTruthy();
+  });
+
+  it('sends a typed question and opens its chat', async () => {
+    const screen = await renderHome();
+    fireEvent.changeText(screen.getByLabelText('Ask anything'), 'What changed?');
+    fireEvent.press(screen.getByLabelText('Send'));
+
+    expect(mockSend).toHaveBeenCalledWith('What changed?', {
+      conversationId: null,
+      allowCloudFallback: false,
+    });
+    expect(router.push).toHaveBeenCalledWith('/(tabs)/(chat)/c9');
+    expect(screen.getByPlaceholderText(COMPOSER).props.value).toBe('');
   });
 
   it('ignores a suggestion tap while listening', async () => {
     mockVoice.state = 'listening';
     const screen = await renderHome();
     fireEvent.press(screen.getByText(ACTION_ITEMS));
-    fireEvent.press(screen.getByLabelText('New chat'));
     fireEvent.press(screen.getByLabelText('All chats'));
     expect(mockSend).not.toHaveBeenCalled();
     expect(router.push).not.toHaveBeenCalled();
@@ -205,7 +209,7 @@ describe('ChatHomeScreen', () => {
     });
 
     expect(screen.queryByLabelText('Stop')).toBeNull();
-    expect(screen.getByPlaceholderText('Ask anything').props.editable).toBe(false);
+    expect(screen.getByPlaceholderText(COMPOSER).props.editable).toBe(false);
     fireEvent.press(screen.getByLabelText('Working on “Pricing decisions”…'));
     expect(router.push).toHaveBeenCalledWith('/(tabs)/(chat)/c4');
   });
