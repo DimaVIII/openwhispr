@@ -815,9 +815,7 @@ class ReasoningService extends BaseReasoningService {
     } catch (error) {
       if ((error as Error).name === "AbortError" && abortController.signal.aborted) {
         if (!timeoutTriggered) return;
-        throw route.kind === "self-hosted"
-          ? providerError(PROVIDER_ERROR_CODES.TIMEOUT, selfHostedErrorContext)
-          : new Error("Streaming request timed out");
+        throw timeoutError();
       }
       throw error;
     } finally {
