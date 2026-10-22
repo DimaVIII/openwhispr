@@ -68,8 +68,20 @@ export const formatChatTime = (date: Date): string =>
 export const formatChatDate = (date: Date): string =>
   date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
-// The 3-character minimum also guarantees no blank term, which the note lookup would treat as
-// "match everything".
+export const isSameLocalDay = (a: Date, b: Date): boolean =>
+  a.getFullYear() === b.getFullYear() &&
+  a.getMonth() === b.getMonth() &&
+  a.getDate() === b.getDate();
+
+// Steps by calendar day rather than 24 hours so DST changes don't shift the day.
+export const shiftLocalDay = (date: Date, days: number): Date => {
+  const shifted = new Date(date);
+  shifted.setDate(shifted.getDate() + days);
+  return shifted;
+};
+
+// The note lookup treats a blank term as "match everything". Matching whole letter/digit runs
+// can't produce one, and the length filter drops the short leftovers.
 export const extractSearchTerms = (question: string): string[] => {
   const words = question.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
   const terms = words.filter((word) => word.length >= MIN_TERM_LENGTH && !STOPWORDS.has(word));
@@ -80,7 +92,8 @@ const updatedAtMs = (note: Note): number => tryParseNoteTimestamp(note.updatedAt
 
 const scoreNote = (note: Note, terms: string[]): number => {
   const title = note.title.toLowerCase();
-  const body = note.content.toLowerCase();
+  // The AI summary is what gets sent to the model, so it counts toward relevance too.
+  const body = `${note.content}\n${note.enhancedContent ?? ''}`.toLowerCase();
   return terms.reduce(
     (score, term) =>
       score +
@@ -96,29 +109,66 @@ export const rankChatNotes = (notes: Note[], terms: string[]): Note[] =>
     .sort((a, b) => b.score - a.score || updatedAtMs(b.note) - updatedAtMs(a.note))
     .map(({ note }) => note);
 
+interface CalendarEntry {
+  event: GoogleCalendarEvent;
+  // Where the event sits on the timeline, and the local day it is labelled with.
+  sortTime: number;
+  day: Date;
+  start: Date;
+  end: Date;
+}
+
+// All-day events are stored as UTC midnight of the calendar date, so their date is read from the
+// UTC parts. Reading local parts would shift them a day in zones behind UTC.
+const utcDateAsLocalDay = (date: Date): Date =>
+  new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+
+const toCalendarEntry = (
+  event: GoogleCalendarEvent,
+  now: Date,
+  windowEnd: number,
+): CalendarEntry | null => {
+  const start = tryParseNoteTimestamp(event.startAt);
+  const end = tryParseNoteTimestamp(event.endAt);
+  if (!start || !end) return null;
+
+  if (event.allDay) {
+    const firstDay = utcDateAsLocalDay(start);
+    // endAt is the exclusive end date, so the event's last day is the one before it.
+    const endDay = utcDateAsLocalDay(end);
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if (endDay.getTime() <= today.getTime() || firstDay.getTime() >= windowEnd) return null;
+    const day = firstDay.getTime() < today.getTime() ? today : firstDay;
+    return { event, sortTime: day.getTime(), day, start, end };
+  }
+
+  if (start.getTime() >= windowEnd || end.getTime() < now.getTime()) return null;
+  return { event, sortTime: start.getTime(), day: start, start, end };
+};
+
+const formatCalendarDay = (day: Date, now: Date): string => {
+  if (isSameLocalDay(day, now)) return 'Today';
+  if (isSameLocalDay(day, shiftLocalDay(now, 1))) return 'Tomorrow';
+  return day.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+};
+
+const formatCalendarLine = ({ event, day, start, end }: CalendarEntry, now: Date): string => {
+  const summary = event.summary?.trim() || 'Untitled meeting';
+  if (event.allDay) return `- ${summary} · ${formatCalendarDay(day, now)} · all day`;
+
+  const dayLabel = isSameLocalDay(day, now) ? '' : `${formatCalendarDay(day, now)} `;
+  return `- ${summary} · ${dayLabel}${formatChatTime(start)}–${formatChatTime(end)}`;
+};
+
 const formatCalendarSection = (calendar: GoogleCalendarEvent[] | null, now: Date): string => {
   if (calendar === null) return 'No calendar connected.';
 
-  const windowStart = now.getTime();
-  const windowEnd = windowStart + CALENDAR_WINDOW_MS;
+  const windowEnd = now.getTime() + CALENDAR_WINDOW_MS;
   const lines = calendar
-    .map((event) => ({
-      event,
-      start: tryParseNoteTimestamp(event.startAt),
-      end: tryParseNoteTimestamp(event.endAt),
-    }))
-    .filter(
-      (entry): entry is { event: GoogleCalendarEvent; start: Date; end: Date } =>
-        entry.start !== null &&
-        entry.end !== null &&
-        entry.start.getTime() < windowEnd &&
-        entry.end.getTime() >= windowStart,
-    )
-    .sort((a, b) => a.start.getTime() - b.start.getTime())
-    .map(
-      ({ event, start, end }) =>
-        `- ${event.summary?.trim() || 'Untitled meeting'} · ${formatChatTime(start)}–${formatChatTime(end)}`,
-    );
+    .map((event) => toCalendarEntry(event, now, windowEnd))
+    .filter((entry): entry is CalendarEntry => entry !== null)
+    .sort((a, b) => a.sortTime - b.sortTime)
+    .map((entry) => formatCalendarLine(entry, now));
 
   return lines.length > 0 ? lines.join('\n') : 'No meetings in the next 48 hours.';
 };
@@ -136,8 +186,8 @@ const formatNotesSection = (
       generatedNotes: note.enhancedContent,
       sourceText: note.content,
     }).slice(0, CHAT_NOTE_CHAR_CAP);
-    // Stop at the first note that doesn't fit so a lower-ranked note never displaces a better one.
-    if (body.length > remaining) break;
+    // A note that won't fit is dropped whole, but a smaller, lower-ranked one may still fit.
+    if (body.length > remaining) continue;
 
     const updated = tryParseNoteTimestamp(note.updatedAt);
     const updatedLabel = updated ? ` (updated ${formatChatDate(updated)})` : '';

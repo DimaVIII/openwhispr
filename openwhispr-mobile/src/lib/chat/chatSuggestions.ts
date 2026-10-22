@@ -1,6 +1,6 @@
 import type { GoogleCalendarEvent, Note } from '@/data';
 import { tryParseNoteTimestamp } from '@/lib/parseNoteTimestamp';
-import { formatChatDate, formatChatTime } from './chatContext';
+import { formatChatDate, formatChatTime, isSameLocalDay, shiftLocalDay } from './chatContext';
 
 export interface ChatSuggestion {
   kind: 'calendar' | 'note' | 'actions';
@@ -16,16 +16,9 @@ export interface ChatSuggestionsInput {
 }
 
 const RECENTLY_STARTED_MS = 15 * 60 * 1000;
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-const isSameLocalDay = (a: Date, b: Date): boolean =>
-  a.getFullYear() === b.getFullYear() &&
-  a.getMonth() === b.getMonth() &&
-  a.getDate() === b.getDate();
-
 const describeDay = (date: Date, now: Date): string => {
   if (isSameLocalDay(date, now)) return 'Today';
-  if (isSameLocalDay(date, new Date(now.getTime() - DAY_MS))) return 'Yesterday';
+  if (isSameLocalDay(date, shiftLocalDay(now, -1))) return 'Yesterday';
   return formatChatDate(date);
 };
 

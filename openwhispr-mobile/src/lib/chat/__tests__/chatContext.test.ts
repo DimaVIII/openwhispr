@@ -11,6 +11,9 @@ import type { ChatMessage } from '../types';
 // Built with local-time constructors so assertions don't depend on the machine's timezone.
 const NOW = new Date(2026, 9, 22, 9, 0, 0);
 
+const formatTime = (date: Date): string =>
+  date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+
 const makeNote = (overrides: Partial<Note> & { id: number }): Note =>
   ({
     title: 'Untitled',
@@ -84,6 +87,20 @@ describe('rankChatNotes', () => {
     ]);
   });
 
+  it('ranks a note that matches only in its AI summary', () => {
+    const noMatch = makeNote({ id: 1, title: 'Sync', content: 'Nothing relevant.' });
+    const summaryHit = makeNote({
+      id: 2,
+      title: 'Sync',
+      content: 'Nothing relevant.',
+      enhancedContent: '## Decisions\n- Launch onboarding Friday',
+    });
+
+    expect(rankChatNotes([noMatch, summaryHit], ['onboarding']).map((note) => note.id)).toEqual([
+      2, 1,
+    ]);
+  });
+
   it('breaks ties with the newer update', () => {
     const older = makeNote({ id: 1, title: 'Plan', updatedAt: '2026-10-01T10:00:00.000Z' });
     const newer = makeNote({ id: 2, title: 'Plan', updatedAt: '2026-10-10T10:00:00.000Z' });
@@ -112,6 +129,18 @@ describe('buildChatPayload', () => {
     ]);
   });
 
+  it('fits a smaller later note after skipping one that is too long', () => {
+    const notes = [
+      makeNote({ id: 1, title: 'First', content: 'a'.repeat(5_000) }),
+      makeNote({ id: 2, title: 'Too long', content: 'b'.repeat(5_000) }),
+      makeNote({ id: 3, title: 'Small', content: 'c'.repeat(500) }),
+    ];
+
+    const { sources } = buildPayload({ notes, noteCharBudget: 6_000 });
+
+    expect(sources.map((source) => source.noteId)).toEqual([1, 3]);
+  });
+
   it('says when there are no matching notes', () => {
     expect(buildPayload().text).toContain('NOTES:\nNo matching notes.');
   });
@@ -131,17 +160,62 @@ describe('buildChatPayload', () => {
       makeEvent(null, new Date(2026, 9, 23, 14, 0), new Date(2026, 9, 23, 15, 0)),
       makeEvent('Next week', new Date(2026, 9, 28, 10, 0), new Date(2026, 9, 28, 11, 0)),
     ];
-    const time = (date: Date): string =>
-      date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-
     const { text } = buildPayload({ calendar });
 
     expect(text).toContain(
-      `- Standup · ${time(new Date(2026, 9, 22, 10, 0))}–${time(new Date(2026, 9, 22, 10, 30))}`,
+      `- Standup · ${formatTime(new Date(2026, 9, 22, 10, 0))}–${formatTime(new Date(2026, 9, 22, 10, 30))}`,
     );
     expect(text).toContain('- Untitled meeting · ');
     expect(text).not.toContain('Already over');
     expect(text).not.toContain('Next week');
+  });
+
+  it("labels tomorrow's meetings", () => {
+    const start = new Date(2026, 9, 23, 14, 0);
+    const end = new Date(2026, 9, 23, 15, 0);
+
+    const { text } = buildPayload({ calendar: [makeEvent('Review', start, end)] });
+
+    expect(text).toContain(`- Review · Tomorrow ${formatTime(start)}–${formatTime(end)}`);
+  });
+
+  it('labels later meetings with the weekday and date', () => {
+    const start = new Date(2026, 9, 24, 8, 30);
+    const end = new Date(2026, 9, 24, 9, 0);
+    const label = start.toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+    });
+
+    // 47 hours after NOW: inside the window, but two calendar days out.
+    const { text } = buildPayload({ calendar: [makeEvent('Planning', start, end)] });
+
+    expect(text).toContain(`- Planning · ${label} ${formatTime(start)}–${formatTime(end)}`);
+  });
+
+  it('shows all-day events without times', () => {
+    const allDay = (summary: string, startDate: string, endDate: string): GoogleCalendarEvent =>
+      ({
+        id: 2,
+        summary,
+        allDay: 1,
+        startAt: `${startDate}T00:00:00.000Z`,
+        endAt: `${endDate}T00:00:00.000Z`,
+      }) as GoogleCalendarEvent;
+
+    const { text } = buildPayload({
+      calendar: [
+        allDay('Offsite', '2026-10-22', '2026-10-23'),
+        allDay('Holiday', '2026-10-23', '2026-10-24'),
+        allDay('Last week', '2026-10-14', '2026-10-15'),
+      ],
+    });
+
+    expect(text).toContain('- Offsite · Today · all day');
+    expect(text).toContain('- Holiday · Tomorrow · all day');
+    expect(text).not.toContain('Last week');
+    expect(text).not.toMatch(/all day.*AM|PM.*all day/);
   });
 
   it('keeps only the last six history messages', () => {
