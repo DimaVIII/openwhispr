@@ -36,6 +36,10 @@ const clearLocalChatHistory = (): void => {
     clearChatHistory();
   } catch (error) {
     console.warn('[auth] chat history was not cleared:', error);
+    Sentry.captureException(error, {
+      level: 'warning',
+      tags: { feature: 'chat', operation: 'clear-history' },
+    });
   }
 };
 

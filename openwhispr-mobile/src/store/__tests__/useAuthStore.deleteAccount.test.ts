@@ -36,6 +36,7 @@ jest.mock('expo-secure-store', () => ({
   deleteItemAsync: jest.fn(),
 }));
 
+import { Sentry } from '@/lib/sentry';
 import { useAuthStore } from '@/store/useAuthStore';
 
 const member = {
@@ -107,5 +108,9 @@ it('finishes a completed deletion even if chat history cannot be cleared', async
   await useAuthStore.getState().deleteAccount();
   expect(useAuthStore.getState()).toMatchObject({ user: null, isLoading: false, error: null });
   expect(warn).toHaveBeenCalledWith('[auth] chat history was not cleared:', expect.any(Error));
+  expect(Sentry.captureException).toHaveBeenCalledWith(expect.any(Error), {
+    level: 'warning',
+    tags: { feature: 'chat', operation: 'clear-history' },
+  });
   warn.mockRestore();
 });

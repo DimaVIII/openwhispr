@@ -81,6 +81,20 @@ describe('useChatStore', () => {
     expect(mockRepo.getConversation(sent?.conversationId ?? '')?.title).toBe('What did we decide?');
   });
 
+  it('cuts a title by character so an emoji is never split', async () => {
+    mockRun.mockResolvedValueOnce(answer('ok'));
+
+    const sent = useChatStore.getState().send(`${'x'.repeat(59)}😀😀`, {
+      conversationId: null,
+      ...sendOptions,
+    });
+    await sent?.done;
+
+    expect(mockRepo.getConversation(sent?.conversationId ?? '')?.title).toBe(
+      `${'x'.repeat(59)}😀…`,
+    );
+  });
+
   it('refuses a blank question', () => {
     expect(
       useChatStore.getState().send('   ', { conversationId: null, ...sendOptions }),
@@ -190,16 +204,21 @@ describe('useChatStore', () => {
   });
 
   it('records a failure and retries without a second user message', async () => {
+    const conversation = mockRepo.createConversation('Pricing');
+    const earlier = [
+      mockRepo.appendMessage({ conversationId: conversation.id, role: 'user', text: 'q1' }),
+      mockRepo.appendMessage({ conversationId: conversation.id, role: 'assistant', text: 'a1' }),
+    ];
     mockRun.mockRejectedValueOnce(new Error('The model is unavailable.'));
     mockRun.mockResolvedValueOnce(answer('retried answer'));
 
     const sent = useChatStore.getState().send('question', {
-      conversationId: null,
+      conversationId: conversation.id,
       ...sendOptions,
     });
     await sent?.done;
-    const conversationId = sent?.conversationId ?? '';
-    const [userMessage] = mockRepo.getMessages(conversationId);
+    const conversationId = conversation.id;
+    const userMessage = mockRepo.getMessages(conversationId)[2];
 
     expect(useChatStore.getState().failure).toEqual({
       conversationId,
@@ -211,12 +230,12 @@ describe('useChatStore', () => {
 
     await useChatStore.getState().retry({ allowCloudFallback: true });
 
-    expect(turnInput(1)).toMatchObject({
-      question: 'question',
-      history: [],
-      allowCloudFallback: true,
-    });
+    expect(turnInput(0).history).toEqual(earlier);
+    expect(turnInput(1)).toMatchObject({ question: 'question', allowCloudFallback: true });
+    expect(turnInput(1).history).toEqual(earlier);
     expect(mockRepo.getMessages(conversationId).map(({ role, text }) => ({ role, text }))).toEqual([
+      { role: 'user', text: 'q1' },
+      { role: 'assistant', text: 'a1' },
       { role: 'user', text: 'question' },
       { role: 'assistant', text: 'retried answer' },
     ]);
@@ -294,6 +313,70 @@ describe('useChatStore', () => {
     ]);
     expect(useChatStore.getState().failure).toBeNull();
     expect(useChatStore.getState().pending).toBeNull();
+  });
+
+  it('records a failure when a current turn rejects with an AbortError', async () => {
+    mockRun.mockRejectedValueOnce(abortError());
+
+    const sent = useChatStore.getState().send('question', {
+      conversationId: null,
+      ...sendOptions,
+    });
+    await sent?.done;
+
+    expect(useChatStore.getState().failure).toMatchObject({
+      conversationId: sent?.conversationId,
+      question: 'question',
+      message: 'Aborted',
+    });
+    expect(useChatStore.getState().pending).toBeNull();
+  });
+
+  it('ignores steps from a cancelled turn after a new one starts', () => {
+    mockRun.mockReturnValue(deferred<ChatTurnResult>().promise);
+    const turnTwoSteps = [
+      { id: 'search' as const, status: 'active' as const, label: 'Searching…' },
+    ];
+
+    useChatStore.getState().send('first', { conversationId: null, ...sendOptions });
+    useChatStore.getState().cancel();
+    useChatStore.getState().send('second', { conversationId: null, ...sendOptions });
+    turnInput(1).onSteps(turnTwoSteps);
+    turnInput(0).onSteps([{ id: 'write', status: 'active', label: 'Writing your answer…' }]);
+
+    expect(useChatStore.getState().pending?.steps).toEqual(turnTwoSteps);
+  });
+
+  it('ignores a late rejection after reset', async () => {
+    const turn = deferred<ChatTurnResult>();
+    mockRun.mockReturnValueOnce(turn.promise);
+
+    const sent = useChatStore.getState().send('question', {
+      conversationId: null,
+      ...sendOptions,
+    });
+    clearChatHistory();
+    turn.reject(new Error('The model is unavailable.'));
+    await sent?.done;
+
+    expect(useChatStore.getState().failure).toBeNull();
+    expect(useChatStore.getState().pending).toBeNull();
+    expect(db.select().from(chatMessages).all()).toEqual([]);
+  });
+
+  it('refuses to send into a deleted conversation', () => {
+    const conversation = mockRepo.createConversation('A');
+
+    expect(useChatStore.getState().beginTranscribing(conversation.id)).toBe(true);
+    useChatStore.getState().deleteConversation(conversation.id);
+    const sent = useChatStore.getState().send('spoken', {
+      conversationId: conversation.id,
+      ...sendOptions,
+    });
+
+    expect(sent).toBeNull();
+    expect(db.select().from(chatMessages).all()).toEqual([]);
+    expect(mockRun).not.toHaveBeenCalled();
   });
 
   it('holds one transcribing slot and lets send take it over', async () => {

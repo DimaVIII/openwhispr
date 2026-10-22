@@ -84,17 +84,15 @@ const abortTurn = (): void => {
 
 const toConversationTitle = (question: string): string => {
   const collapsed = question.replace(/\s+/g, ' ').trim();
-  return collapsed.length > TITLE_MAX_LENGTH
-    ? `${collapsed.slice(0, TITLE_MAX_LENGTH)}…`
+  // Counted by code point, so the cut never splits an emoji's surrogate pair.
+  const characters = Array.from(collapsed);
+  return characters.length > TITLE_MAX_LENGTH
+    ? `${characters.slice(0, TITLE_MAX_LENGTH).join('')}…`
     : collapsed;
 };
 
 const toFailureMessage = (error: unknown): string =>
   error instanceof Error && error.message ? error.message : FALLBACK_FAILURE_MESSAGE;
-
-// runChatTurn aborts with a DOMException, which not every runtime makes an Error subclass.
-const isAbortError = (error: unknown): boolean =>
-  typeof error === 'object' && error !== null && 'name' in error && error.name === 'AbortError';
 
 export const useChatStore = create<ChatState>((set, get) => {
   const runTurn = async (request: TurnRequest): Promise<void> => {
@@ -143,11 +141,9 @@ export const useChatStore = create<ChatState>((set, get) => {
       }));
     } catch (error) {
       if (!isCurrent()) return;
+      // Cancel and reset already orphaned their turn, so anything reaching here, an AbortError
+      // included, is a real failure the user can retry.
       turn.controller = null;
-      if (isAbortError(error)) {
-        set({ pending: null });
-        return;
-      }
       set({
         pending: null,
         failure: {
@@ -188,6 +184,10 @@ export const useChatStore = create<ChatState>((set, get) => {
     send: (question, options) => {
       const text = question.trim();
       if (!text || get().pending?.phase === 'working') return null;
+      // A screen can still hold the id of a conversation deleted under it.
+      if (options.conversationId && !chatRepository.getConversation(options.conversationId)) {
+        return null;
+      }
 
       const conversationId =
         options.conversationId ?? chatRepository.createConversation(toConversationTitle(text)).id;
