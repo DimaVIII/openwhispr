@@ -256,21 +256,24 @@ function createEnterpriseIdentityManager({
     const url = `${identity.apiUrl}/api/workspaces/${encodeURIComponent(
       identity.workspaceId
     )}/enterprise-providers`;
+    let responseError;
     const body = await fetchWithTimeout(
       url,
       { method: "GET", headers: requestHeaders(identity) },
       async (response) => {
         assertIdentityCurrent(identity);
         if (!response.ok) {
-          const detail = await readError(
-            response,
-            `Managed enterprise API error: ${response.status}`
+          responseError = Object.assign(
+            new Error(`Managed enterprise API error: ${response.status}`),
+            {
+              code: response.status === 401 ? "AUTH_EXPIRED" : "MANAGED_CONFIG_FAILED",
+              status: response.status,
+            }
           );
-          const error = new Error(detail.message);
-          error.code =
-            detail.code || (response.status === 401 ? "AUTH_EXPIRED" : "MANAGED_CONFIG_FAILED");
-          error.status = response.status;
-          throw error;
+          const detail = await readError(response, responseError.message);
+          responseError.message = detail.message;
+          responseError.code = detail.code || responseError.code;
+          throw responseError;
         }
         try {
           return await response.json();
@@ -282,7 +285,10 @@ function createEnterpriseIdentityManager({
           throw error;
         }
       }
-    );
+    ).catch((error) => {
+      // A stalled error body must not turn a known authorization failure into a timeout.
+      throw responseError || error;
+    });
     assertIdentityCurrent(identity);
     const config = validateManagedEnterpriseEnvelope(body?.data, identity.workspaceId);
     if (!config) {
