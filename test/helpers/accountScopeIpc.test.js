@@ -308,3 +308,69 @@ test("signed-out transitions restore guest meeting detection without granting a 
   assert.equal(fakeThis._audioFeaturePolicy.failure("meeting"), null);
   assert.deepEqual(applied.at(-1), { audioDetection: true, processDetection: true });
 });
+
+test("senderless audio policy uses the current bearer or a live app window's cookies, while renderer auth stays scoped", async (t) => {
+  const originalManager = fakeThis.windowManager;
+  const originalAccount = databaseManager.activeAccountId;
+  const originalTokenState = tokenState;
+  const originalApiUrl = process.env.OPENWHISPR_API_URL;
+  t.after(() => {
+    fakeThis.windowManager = originalManager;
+    databaseManager.activeAccountId = originalAccount;
+    tokenState = originalTokenState;
+    if (originalApiUrl === undefined) delete process.env.OPENWHISPR_API_URL;
+    else process.env.OPENWHISPR_API_URL = originalApiUrl;
+  });
+  process.env.OPENWHISPR_API_URL = "https://api.openwhispr.test";
+  const requests = [];
+  t.mock.method(electronStub.net, "fetch", async (_url, init) => {
+    requests.push(init.headers);
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ data: { managed: false, policy: null, policyUpdatedAt: null } }),
+    };
+  });
+  const windowWithCookie = (value, destroyed = false) => ({
+    isDestroyed: () => destroyed,
+    webContents: {
+      session: { cookies: { get: async () => (value ? [{ name: "session", value }] : []) } },
+    },
+  });
+  const renderer = windowWithCookie("renderer-session");
+  t.mock.method(electronStub.BrowserWindow, "fromWebContents", () => renderer);
+  for (const [token, controlPanel, main, event, expected] of [
+    ["cli-bearer", null, null, {}, { Authorization: "Bearer cli-bearer" }],
+    [null, windowWithCookie("control-session"), null, {}, { Cookie: "session=control-session" }],
+    [
+      null,
+      windowWithCookie("stale", true),
+      windowWithCookie("main-session"),
+      {},
+      { Cookie: "session=main-session" },
+    ],
+    [
+      null,
+      windowWithCookie("control-session"),
+      null,
+      { sender: {} },
+      { Cookie: "session=renderer-session" },
+    ],
+    [null, windowWithCookie(""), null, {}, null],
+  ]) {
+    tokenState = { token, generation: tokenState.generation + 1 };
+    databaseManager.activeAccountId = expected ? "cli-account" : null;
+    fakeThis.windowManager = { controlPanelWindow: controlPanel, mainWindow: main };
+    const before = requests.length;
+    assert.deepEqual(
+      await fakeThis._audioFeaturePolicy.run(event, "upload", () => ({ success: true })),
+      { success: true }
+    );
+    assert.equal(requests.length - before, expected ? 1 : 0);
+    if (expected) {
+      for (const [key, value] of Object.entries(expected)) {
+        assert.equal(requests.at(-1)[key], value);
+      }
+    }
+  }
+});

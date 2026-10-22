@@ -28,6 +28,7 @@ const keys = new Map();
 const notifications = [];
 const editor = { id: 1 };
 const windows = [1, 2, 3].map((id) => ({
+  id,
   isDestroyed: () => id === 3,
   webContents: { id, send: (...args) => notifications.push([id, ...args]) },
 }));
@@ -60,7 +61,9 @@ class FakeStreaming {
   disconnects = 0;
   adoptMode() {}
   beginConnecting() {}
-  setTokenRefreshFn() {}
+  setTokenRefreshFn(fn) {
+    this.tokenRefreshFn = fn;
+  }
   getCachedToken() {
     return this.cachedToken;
   }
@@ -121,6 +124,7 @@ const electron = {
   BrowserWindow: {
     getAllWindows: () => windows,
     fromWebContents: () => windows[1],
+    fromId: (id) => windows.find((win) => win.id === id),
   },
   net: {
     // BYOK mints present the saved key; managed ones present the account session.
@@ -334,6 +338,52 @@ for (const [provider, property, saveChannel] of STREAMING.filter(([name]) => nam
     assert.equal(rodeWarm(provider, property, result), true);
   });
 }
+
+test("managed AssemblyAI and Deepgram dictation identify their purpose for start, warmup and refresh", async (t) => {
+  withManagedApi(t);
+  const requests = [];
+  t.mock.method(electron.net, "fetch", async (url, init) => {
+    assert.equal(init.headers["Content-Type"], "application/json");
+    const purpose = init.body ? JSON.parse(init.body).purpose : undefined;
+    requests.push({ url, purpose });
+    const allowed = purpose === "dictation";
+    return {
+      ok: allowed,
+      status: allowed ? 200 : 403,
+      json: async () =>
+        allowed
+          ? { token: "dictation-token" }
+          : { code: "AUDIO_PURPOSE_REQUIRED", error: "An audio purpose is required." },
+    };
+  });
+  for (const [provider, property] of [
+    ["assemblyai", "assemblyAiStreaming"],
+    ["deepgram", "deepgramStreaming"],
+  ]) {
+    target[property] = null;
+    assert.equal(
+      (await invoke(`${provider}-streaming-warmup`, { mode: "openwhispr" })).success,
+      true
+    );
+    target[property] = null;
+    assert.equal(
+      (await invoke(`${provider}-streaming-start`, { mode: "openwhispr" })).success,
+      true
+    );
+  }
+  assert.equal(await target.deepgramStreaming.tokenRefreshFn(), "dictation-token");
+  assert.deepEqual(
+    requests.map(({ url }) => new URL(url).pathname),
+    [
+      "/api/streaming-token",
+      "/api/streaming-token",
+      "/api/deepgram-streaming-token",
+      "/api/deepgram-streaming-token",
+      "/api/deepgram-streaming-token",
+    ]
+  );
+  assert.ok(requests.every(({ purpose }) => purpose === "dictation"));
+});
 
 for (const [provider, property, saveChannel] of STREAMING.filter(([name]) =>
   ["assemblyai", "corti"].includes(name)

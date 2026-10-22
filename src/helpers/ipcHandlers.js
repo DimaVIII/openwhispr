@@ -6605,7 +6605,13 @@ class IPCHandlers {
     this._audioFeaturePolicy = createAudioFeaturePolicy({
       getPolicy: async (event) => {
         const generation = tokenStore.getState().generation;
-        const authHeaders = await getAuthHeader(event);
+        const authHeaders = event.sender
+          ? await getAuthHeader(event)
+          : await getAuthHeaderFromWindow(
+              [this.windowManager.controlPanelWindow, this.windowManager.mainWindow].find(
+                (win) => win && !win.isDestroyed()
+              )
+            );
         if (generation !== tokenStore.getState().generation) return { success: false };
         if (!authHeaders.Authorization && !authHeaders.Cookie) {
           return typeof this.databaseManager.activeAccountId === "string"
@@ -11450,8 +11456,10 @@ class IPCHandlers {
       const tokenResponse = await proxyFetch(`${apiUrl}/api/streaming-token`, {
         method: "POST",
         headers: withPolicyHeaders({
+          "Content-Type": "application/json",
           ...authHeader,
         }),
+        body: JSON.stringify({ purpose: "dictation" }),
       });
 
       if (!tokenResponse.ok) {
@@ -11690,7 +11698,8 @@ class IPCHandlers {
 
       const tokenResponse = await proxyFetch(`${apiUrl}/api/deepgram-streaming-token`, {
         method: "POST",
-        headers: withPolicyHeaders(authHeader),
+        headers: withPolicyHeaders({ "Content-Type": "application/json", ...authHeader }),
+        body: JSON.stringify({ purpose: "dictation" }),
       });
 
       if (!tokenResponse.ok) {
@@ -11724,8 +11733,10 @@ class IPCHandlers {
       const tokenResponse = await proxyFetch(`${apiUrl}/api/deepgram-streaming-token`, {
         method: "POST",
         headers: withPolicyHeaders({
+          "Content-Type": "application/json",
           ...authHeader,
         }),
+        body: JSON.stringify({ purpose: "dictation" }),
       });
 
       if (!tokenResponse.ok) {
