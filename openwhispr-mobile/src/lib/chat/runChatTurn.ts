@@ -197,38 +197,50 @@ const describeNextEvent = (events: GoogleCalendarEvent[], now: Date): string => 
   return start ? `${summary} · ${formatChatTime(start)}` : summary;
 };
 
-interface FoundNotes extends ChatCandidateNotes {
+interface FoundNotes {
+  /** The notes to send. */
+  notes: Note[];
+  /** How many notes match, or with a period how many it holds. */
+  total: number;
   /** Null when the notes were searched for across every note. */
   period: ChatNotesPeriod | null;
 }
 
-// In a period only the notes matching the question's words are read, when any do. When none do, a
-// period the question names outright ("this week") reads all its notes, since the question asked
-// for them, while "recently" only hints at one, so every note is searched instead.
+// A period's notes are all read, the ones matching the question's words first, since the words
+// that ask about a period ("What did I work on today?") rarely name what is in it. "Recently" only
+// hints at a period, so when none of its notes match, every note is searched, and its notes are
+// read only when that finds nothing either. A note is found only once `pick` keeps it, so an
+// empty match (a failed recording) decides nothing.
 const findNotes = (
   { terms, scope }: ChatQuery,
   find: (terms: string[], window?: ChatTimeScope) => ChatCandidateNotes,
+  pick: (notes: Note[]) => Note[],
 ): FoundNotes => {
-  if (!scope) return { ...(terms.length > 0 ? find(terms) : NO_NOTES), period: null };
-  const fromPeriod = (found: ChatCandidateNotes, matched: boolean): FoundNotes => ({
-    ...found,
-    period: { scope, total: found.total, matched },
-  });
-  if (terms.length > 0) {
-    const matches = find(terms, scope);
-    if (matches.total > 0) return fromPeriod(matches, true);
-    if (scope.soft) return { ...find(terms), period: null };
+  const searchAll = (): FoundNotes => {
+    const found = terms.length > 0 ? find(terms) : NO_NOTES;
+    return { notes: pick(found.notes), total: found.total, period: null };
+  };
+  if (!scope) return searchAll();
+
+  const matches = terms.length > 0 ? pick(find(terms, scope).notes) : [];
+  if (matches.length === 0 && scope.soft) {
+    const everywhere = searchAll();
+    if (everywhere.notes.length > 0) return everywhere;
   }
-  return fromPeriod(find([], scope), false);
+  const inPeriod = find([], scope);
+  const matchIds = new Set(matches.map((note) => note.id));
+  return {
+    notes: pick([...matches, ...inPeriod.notes.filter((note) => !matchIds.has(note.id))]),
+    total: inPeriod.total,
+    period: { scope, total: inPeriod.total, matched: matches.length > 0 },
+  };
 };
 
 const describeFound = ({ total, period }: FoundNotes): string => {
   if (period) {
-    const { scope, matched } = period;
+    const { scope } = period;
     if (total === 0) return `No ${scope.meetingsOnly ? 'meeting' : 'note'}s from ${scope.label}`;
-    const notes = countPeriodNotes(total, scope);
-    if (!matched) return notes;
-    return `${notes} ${total === 1 ? 'matches' : 'match'}`;
+    return countPeriodNotes(total, scope);
   }
   if (total === 0) return 'No matching notes';
   if (total === 1) return '1 note matches';
@@ -292,11 +304,6 @@ export async function runChatTurn(
   }
 
   setStep({ id: 'search', status: 'active', label: 'Searching your notes…' });
-  // Only notes whose words match, or that were made in the period the question names, are sent: a
-  // question about something else gets no notes rather than unrelated ones.
-  const found = findNotes(parseChatQuery(question, now), (terms, window) =>
-    deps.getCandidateNotes(terms, { includePrivate, limit: MATCH_POOL, window }),
-  );
   // Transcripts of the notes with no text of their own, read once whether a note is sent or passed
   // over for having nothing in it.
   const transcripts = new Map<number, string>();
@@ -307,12 +314,23 @@ export async function runChatTurn(
     return transcript.trim() !== '';
   };
   // The repository ranks by matched terms across the title, the text, the summary and the
-  // transcript, so its order stands. It stops at the notes it sends, so no spare transcript is read.
-  const notes: Note[] = [];
-  for (const note of allowed(found.notes)) {
-    if (notes.length >= MAX_MATCHED_NOTES) break;
-    if (hasContent(note)) notes.push(note);
-  }
+  // transcript, so its order stands. It stops at the notes it keeps, so no spare transcript is read.
+  const pick = (candidates: Note[]): Note[] => {
+    const picked: Note[] = [];
+    for (const note of allowed(candidates)) {
+      if (picked.length >= MAX_MATCHED_NOTES) break;
+      if (hasContent(note)) picked.push(note);
+    }
+    return picked;
+  };
+  // Only notes whose words match, or that were made in the period the question names, are sent: a
+  // question about something else gets no notes rather than unrelated ones.
+  const found = findNotes(
+    parseChatQuery(question, now),
+    (terms, window) => deps.getCandidateNotes(terms, { includePrivate, limit: MATCH_POOL, window }),
+    pick,
+  );
+  const { notes } = found;
   setStep({
     id: 'search',
     status: 'done',

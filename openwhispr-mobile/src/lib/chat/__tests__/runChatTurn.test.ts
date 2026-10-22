@@ -286,26 +286,34 @@ describe('runChatTurn', () => {
     ];
     // Matches in the period for terms with a window, every note of the period for no terms, and
     // older matches for terms without one.
-    const repository = (inPeriod: Note[]) =>
+    const repository = (
+      inPeriod: Note[],
+      older: Note[] = [SEP_PRICING],
+    ): jest.Mock<ChatCandidateNotes, [string[], ChatCandidateOptions]> =>
       jest.fn((terms: string[], { window }: ChatCandidateOptions): ChatCandidateNotes => {
-        const notes = !window ? [SEP_PRICING] : terms.length > 0 ? inPeriod : THIS_WEEK;
+        const notes = !window ? older : terms.length > 0 ? inPeriod : THIS_WEEK;
         return { notes, total: notes.length };
       });
     const searchDetail = (input: ReturnType<typeof makeInput>): string | undefined =>
       lastSteps(input.onSteps).find((step) => step.id === 'search')?.detail;
 
-    it('sends only the period’s notes that match', async () => {
+    it('sends the period’s matching notes first, then the rest of the period', async () => {
       const getCandidateNotes = repository([THIS_WEEK[1]]);
       const input = makeInput({ question: 'What happened at standup this week?' });
       const deps = makeDeps({ getCandidateNotes });
 
       const result = await runChatTurn(input, deps);
 
-      expect(getCandidateNotes).toHaveBeenCalledTimes(1);
-      expect(result.sources.map((source) => source.noteId)).toEqual([22]);
-      expect(searchDetail(input)).toBe('1 note from this week matches');
+      expect(
+        getCandidateNotes.mock.calls.map(([terms, options]) => [terms, !!options.window]),
+      ).toEqual([
+        [['standup'], true],
+        [[], true],
+      ]);
+      expect(result.sources.map((source) => source.noteId)).toEqual([22, 21]);
+      expect(searchDetail(input)).toBe('2 notes from this week');
       expect(sentText(deps.chat)).toContain(
-        'NOTES (1 of 1 note from this week that match the question):',
+        'NOTES (2 of 2 notes from this week, matching ones first):',
       );
     });
 
@@ -343,6 +351,38 @@ describe('runChatTurn', () => {
       expect(result.sources.map((source) => source.noteId)).toEqual([20]);
       expect(searchDetail(input)).toBe('1 note matches');
       expect(sentText(deps.chat)).toMatch(/\nNOTES:\n### Pricing call \(updated /);
+    });
+
+    it('reads the “recently” period when no note anywhere matches', async () => {
+      const getCandidateNotes = repository([], []);
+      const input = makeInput({ question: 'What did I work on lately?' });
+      const deps = makeDeps({ getCandidateNotes });
+
+      const result = await runChatTurn(input, deps);
+
+      expect(
+        getCandidateNotes.mock.calls.map(([terms, options]) => [terms, !!options.window]),
+      ).toEqual([
+        [['work'], true],
+        [['work'], false],
+        [[], true],
+      ]);
+      expect(result.sources.map((source) => source.noteId)).toEqual([21, 22]);
+      expect(searchDetail(input)).toBe('2 notes from the last 7 days');
+      expect(sentText(deps.chat)).toContain(
+        'NOTES (2 of 2 notes from the last 7 days, newest first):',
+      );
+    });
+
+    it('counts no empty match, so “recently” still searches every note', async () => {
+      const failed = makeNote({ id: 23, title: 'Pricing call' });
+      const getCandidateNotes = repository([failed]);
+      const input = makeInput({ question: 'What was our most recent pricing decision?' });
+
+      const result = await runChatTurn(input, makeDeps({ getCandidateNotes }));
+
+      expect(result.sources.map((source) => source.noteId)).toEqual([20]);
+      expect(searchDetail(input)).toBe('1 note matches');
     });
   });
 

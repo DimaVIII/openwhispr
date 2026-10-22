@@ -27,8 +27,9 @@ const SOFT_PERIOD = /^(?:recent(?:ly)?|lately)$/i;
 const MEETING_WORD = /\bmeetings?\b/gi;
 // A quoted meeting title ("Today's priorities") names the meeting, not a period.
 const QUOTED = /"[^"]*"|“[^”]*”/g;
-// A version or an amount ("1.10", "10,000") is one term, so it can find itself whole.
-const SEARCH_WORD = /\p{N}+(?:[.,:]\p{N}+)+|[\p{L}\p{N}]+/gu;
+// A version or an amount ("1.10", "10,000") is one term, so it can find itself whole. A comma joins
+// only a thousands group, so a list ("3,4") or years ("2025,2026") stay separate numbers.
+const SEARCH_WORD = /\p{N}+(?:[.:]\p{N}+|,\p{N}{3}(?!\p{N}))+|[\p{L}\p{N}]+/gu;
 
 export const CHAT_SYSTEM_PROMPT = `You are OpenWhispr's assistant. The user is asking from the OpenWhispr app, which holds their notes and meeting transcripts.
 
@@ -135,6 +136,15 @@ const STOPWORDS = new Set([
   'open',
   // "most recent"
   'most',
+  // How a question asks what went on ("What happened today?", "Anything new lately?", "How is
+  // hiring going?"), never what about. "new" would also match inside "renewal" and "news".
+  'happen',
+  'happened',
+  'happening',
+  'happens',
+  'anything',
+  'new',
+  'going',
 ]);
 
 /** `null` means no calendar is connected; `'unavailable'` means one is but couldn't be read. */
@@ -202,10 +212,9 @@ export interface ChatTimeScope extends ChatNoteWindow {
   soft: boolean;
 }
 
-/** The notes read from a period: how many it holds, and whether they matched the question's words. */
+/** The notes read from a period: how many it holds, and whether the ones matching the question lead. */
 export interface ChatNotesPeriod {
   scope: ChatTimeScope;
-  /** The period's notes that match, or all of them when none do. */
   total: number;
   matched: boolean;
 }
@@ -356,7 +365,8 @@ const formatNoteDate = (note: Note, byCreation: boolean): string => {
 // period from them.
 const formatNotesHeading = (sent: number, period: ChatNotesPeriod | undefined): string => {
   if (!period || sent === 0) return 'NOTES:';
-  const order = period.matched ? ' that match the question' : ', newest first';
+  let order = ', newest first';
+  if (period.matched) order = sent === 1 ? ', matching the question' : ', matching ones first';
   return `NOTES (${sent} of ${countPeriodNotes(period.total, period.scope)}${order}):`;
 };
 

@@ -142,11 +142,26 @@ describe('Chat questions through the real search', () => {
     expect(await sourcesFor('What was our most recent pricing decision?', deps)).toEqual([pricing]);
   });
 
-  it('sends only this week’s notes that match a topic', async () => {
-    const { deps, seed } = setUp();
-    const planning = seed('Q4 planning', 'The budget is 40k.', new Date(2026, 9, 21, 11, 0));
+  it('sends this week’s notes that match a topic first, then the rest of the week', async () => {
+    const { deps, ids, seed } = setUp();
+    const planning = seed('Q4 planning', 'The budget is 40k.', new Date(2026, 9, 19, 11, 0));
 
-    expect(await sourcesFor('What is the budget this week?', deps)).toEqual([planning]);
+    expect(await sourcesFor('What is the budget this week?', deps)).toEqual([
+      planning,
+      ids.contractCall,
+      ids.groceries,
+    ]);
+    expect((deps.chat as jest.Mock).mock.calls[0][0].text).toContain(
+      'NOTES (3 of 3 notes from this week, matching ones first):',
+    );
+  });
+
+  it('counts no empty match, so a “recent” question still finds the older note', async () => {
+    const { deps, seed } = setUp();
+    seed('Pricing', '', new Date(2026, 9, 21, 16, 0));
+    const pricing = seed('Pricing', 'Pricing decision: $20 a seat.', new Date(2026, 8, 5, 12, 0));
+
+    expect(await sourcesFor('What was our most recent pricing decision?', deps)).toEqual([pricing]);
   });
 
   it('sends this week’s notes when none of them match a topic', async () => {
@@ -155,6 +170,57 @@ describe('Chat questions through the real search', () => {
       ids.contractCall,
       ids.groceries,
     ]);
+  });
+
+  describe('asking what went on in a period', () => {
+    // Today's notes, the older one saying a word the question asks with.
+    const seedToday = (seed: Seed): { incident: number; standup: number } => ({
+      incident: seed('Renewal call', 'The outage happened at 2am.', new Date(2026, 9, 22, 7, 0)),
+      standup: seed('Standup', 'Shipped the export.', new Date(2026, 9, 22, 8, 30)),
+    });
+
+    it.each(['What happened today?', 'Anything new today?'])(
+      'reads all of today’s notes, newest first, for “%s”',
+      async (question) => {
+        const { deps, seed } = setUp();
+        const today = seedToday(seed);
+
+        expect(await sourcesFor(question, deps)).toEqual([today.standup, today.incident]);
+      },
+    );
+
+    it('reads the last 7 days, not an older note saying “happened”', async () => {
+      const { deps, ids, seed } = setUp();
+      seed('Offsite', 'Nothing much happened.', new Date(2026, 7, 14, 12, 0));
+
+      expect(await sourcesFor('What happened recently?', deps)).toEqual([
+        ids.contractCall,
+        ids.groceries,
+      ]);
+    });
+
+    it('reads the last 7 days when no note says the question’s words', async () => {
+      const { deps, ids } = setUp();
+      expect(await sourcesFor('What did I work on lately?', deps)).toEqual([
+        ids.contractCall,
+        ids.groceries,
+      ]);
+    });
+
+    it('reads this week’s to-dos with the action items chip, the matching one first', async () => {
+      const { deps, ids, seed } = setUp();
+      const actionItems = seed(
+        'Design review',
+        'Action items: Sam updates the mocks.',
+        new Date(2026, 9, 19, 10, 0),
+        'meeting',
+      );
+      const flights = seed('Trip', '- [ ] Book flights', new Date(2026, 9, 22, 8, 0));
+
+      expect(await sourcesFor(chip('What are my open action items from this week?'), deps)).toEqual(
+        [actionItems, flights, ids.contractCall, ids.groceries],
+      );
+    });
   });
 
   it.each([

@@ -122,6 +122,14 @@ describe('parseChatQuery', () => {
     expect(parseChatQuery('What did I decide recently?', NOW).terms).toEqual([]);
     expect(extractSearchTerms('Summarise what we decided')).toEqual([]);
   });
+
+  it('leaves no asking words in a question about what went on in a period', () => {
+    expect(parseChatQuery('What happened today?', NOW).terms).toEqual([]);
+    expect(parseChatQuery('Anything new today?', NOW).terms).toEqual([]);
+    expect(parseChatQuery('What has been happening lately?', NOW).terms).toEqual([]);
+    expect(extractSearchTerms('What happens next with the merger?')).toEqual(['next', 'merger']);
+    expect(extractSearchTerms('How is the new hire going?')).toEqual(['hire']);
+  });
 });
 
 describe('extractSearchTerms', () => {
@@ -183,6 +191,13 @@ describe('extractSearchTerms', () => {
     expect(extractSearchTerms('What ships in 1.10?')).toEqual(['ships', '1.10']);
     expect(extractSearchTerms('Who owes the $10,000?')).toEqual(['owes', '10,000']);
     expect(extractSearchTerms('Is 10. enough, or 10.5:1?')).toEqual(['10', 'enough', '10.5:1']);
+    expect(extractSearchTerms('Who pays 1,250,000?')).toEqual(['pays', '1,250,000']);
+  });
+
+  it('joins numbers at a comma only before a thousands group', () => {
+    expect(extractSearchTerms('Pick 13,4 and 25')).toEqual(['pick', '13', '25']);
+    expect(extractSearchTerms('Budget for 2025,2026')).toEqual(['budget', '2025', '2026']);
+    expect(extractSearchTerms('Rows 10,0000')).toEqual(['rows', '10', '0000']);
   });
 
   it('drops a clock time and the "prep" of a meeting prep', () => {
@@ -322,7 +337,18 @@ describe('buildChatPayload', () => {
     expect(text).toMatch(/### Sync 20 \(created Oct 20\)\nBody/);
 
     const matched = buildPayload({ notes, period: { scope, total: 3, matched: true } }).text;
-    expect(matched).toContain('NOTES (2 of 3 meetings from this week that match the question):');
+    expect(matched).toContain('NOTES (2 of 3 meetings from this week, matching ones first):');
+  });
+
+  it('words the heading for a single note from a period', () => {
+    const scope = parseChatQuery('Summarize my meetings this week', NOW).scope;
+    if (!scope) throw new Error('No period');
+    const notes = [makeNote({ id: 1, title: 'Sync', content: 'Body' })];
+
+    const matched = buildPayload({ notes, period: { scope, total: 1, matched: true } }).text;
+    expect(matched).toContain('NOTES (1 of 1 meeting from this week, matching the question):');
+    const newest = buildPayload({ notes, period: { scope, total: 1, matched: false } }).text;
+    expect(newest).toContain('NOTES (1 of 1 meeting from this week, newest first):');
   });
 
   it('says when there are no matching notes', () => {
