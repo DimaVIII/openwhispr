@@ -227,6 +227,10 @@ describe('extractSearchTerms', () => {
 describe('buildChatPayload', () => {
   it('uses the assistant system prompt', () => {
     expect(buildPayload().systemPrompt).toBe(CHAT_SYSTEM_PROMPT);
+    // A follow-up must not repeat the notes an earlier answer cited.
+    expect(CHAT_SYSTEM_PROMPT).toContain(
+      'Name only notes listed under NOTES for this question. Notes named in RECENT CHAT belonged to earlier questions; if NOTES lists none, never say a note was used.',
+    );
   });
 
   it('fills notes until the budget and lists only the included notes as sources', () => {
