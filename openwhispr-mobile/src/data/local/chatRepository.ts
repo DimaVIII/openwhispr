@@ -34,8 +34,15 @@ const parseJsonArray = <T>(raw: string | null): T[] | null => {
   }
 };
 
+// Answers are markdown, so the one-line preview drops its markers rather than showing "**Decision:**".
 const toPreview = (text: string | null): string =>
-  (text ?? '').replace(/\s+/g, ' ').trim().slice(0, PREVIEW_MAX_LENGTH);
+  (text ?? '')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/^\s*(?:#{1,6}\s+|>\s*|[-*+]\s+|\d+\.\s+)/gm, '')
+    .replace(/(\*\*|__|`|~~)/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, PREVIEW_MAX_LENGTH);
 
 const toConversation = (row: ConversationRow): ChatConversation => ({
   id: row.id,

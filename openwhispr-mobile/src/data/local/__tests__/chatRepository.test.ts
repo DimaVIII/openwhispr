@@ -27,6 +27,20 @@ describe('LocalChatRepository', () => {
     expect(list[1].preview).toBe('');
   });
 
+  it('shows a markdown answer as plain text in the preview', () => {
+    const { repo } = createMemoryChatRepository();
+    const a = repo.createConversation('A');
+    repo.appendMessage({
+      conversationId: a.id,
+      role: 'assistant',
+      text: '## Summary\n**Decision:** moved to `March`.\n- See [the note](https://x.y)',
+    });
+
+    expect(repo.listConversations()[0].preview).toBe(
+      'Summary Decision: moved to March. See the note',
+    );
+  });
+
   it('cuts the preview to 120 characters and honors the limit', () => {
     const { repo } = createMemoryChatRepository();
     const a = repo.createConversation('A');
