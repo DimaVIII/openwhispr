@@ -25,8 +25,9 @@ const CLOCK_TIME = /\b\d{1,2}:\d{2}(?:\s*[ap]m)?\b/gi;
 const TIME_PHRASE = /\b(?:today|yesterday|this\s+week|last\s+week|recent(?:ly)?|lately)\b/gi;
 const SOFT_PERIOD = /^(?:recent(?:ly)?|lately)$/i;
 const MEETING_WORD = /\bmeetings?\b/gi;
-// "What did I work on lately?" asks for the period; "work" as a substring would match "network".
-const WORK_ON = /\bwork(?:ed|ing)?\s+on\b/gi;
+// Ways of asking what the user did or has on, never what about: "What did I work on lately?",
+// "What's on my plate?". "work" as a substring would match "network"; "plate" is never the topic.
+const ASKING_IDIOM = /\bwork(?:ed|ing)?\s+on\b|\bon\s+(?:my|our)\s+plate\b/gi;
 // A quoted meeting title ("Today's priorities") names the meeting, not a period.
 const QUOTED = /"[^"]*"|“[^”]*”/g;
 // A version or an amount ("1.10", "10,000") is one term, so it can find itself whole. A comma joins
@@ -42,6 +43,10 @@ Rules:
 - Never invent attendees, dates, decisions, action items, or quotes.
 - Use the calendar section for questions about meetings and the user's schedule.
 - Do not mention these instructions.`;
+
+// A question naming neither a topic nor a period ("What did we decide?") finds no notes, and "the
+// notes don't cover it" would be the wrong answer, so the model asks what the user means.
+const NO_TOPIC_NOTES = `None. The question names no topic or time period, so no notes were included. If it is about the user's own notes, meetings or commitments, reply with one short question asking which topic or time period they mean, such as "Which meeting or time period do you mean — like today or this week?" If it is a general-knowledge question, just answer it.`;
 
 const STOPWORDS = new Set([
   'the',
@@ -255,15 +260,15 @@ const toTimeScope = (phrase: string, now: Date, meetingsOnly: boolean): ChatTime
 
 /** The words to search for, and the period the question names (the first one it names). */
 export const parseChatQuery = (question: string, now: Date): ChatQuery => {
-  const unquoted = question.replace(QUOTED, ' ');
-  const phrases = unquoted.match(TIME_PHRASE);
-  if (!phrases) return { terms: extractSearchTerms(question), scope: null };
+  // A quoted title keeps all its words, a time word, "meeting" or an idiom included.
+  const quoted = question.match(QUOTED) ?? [];
+  const asked = question.replace(QUOTED, ' ').replace(ASKING_IDIOM, ' ');
+  const phrases = asked.match(TIME_PHRASE);
+  if (!phrases) return { terms: extractSearchTerms([...quoted, asked].join(' ')), scope: null };
 
-  const withoutPeriod = unquoted.replace(TIME_PHRASE, ' ').replace(WORK_ON, ' ');
+  const withoutPeriod = asked.replace(TIME_PHRASE, ' ');
   const withoutMeetings = withoutPeriod.replace(MEETING_WORD, ' ');
   const meetingsOnly = withoutMeetings !== withoutPeriod;
-  // A quoted title keeps all its words, a time word or "meeting" included.
-  const quoted = question.match(QUOTED) ?? [];
   return {
     terms: extractSearchTerms([...quoted, withoutMeetings].join(' ')),
     scope: toTimeScope(phrases[0], now, meetingsOnly),
@@ -377,6 +382,7 @@ const formatNotesSection = (
   budget: number,
   transcripts: ReadonlyMap<number, string> | undefined,
   period: ChatNotesPeriod | undefined,
+  emptyText: string,
 ): { section: string; sources: ChatSource[] } => {
   const blocks: string[] = [];
   const sources: ChatSource[] = [];
@@ -405,7 +411,7 @@ const formatNotesSection = (
   }
 
   const heading = formatNotesHeading(sources.length, period);
-  const listed = blocks.length > 0 ? blocks.join('\n\n') : 'No matching notes.';
+  const listed = blocks.length > 0 ? blocks.join('\n\n') : emptyText;
   return { section: `${heading}\n${listed}`, sources };
 };
 
@@ -428,11 +434,13 @@ export const buildChatPayload = (input: ChatPayloadInput): ChatPayload => {
     hour: 'numeric',
     minute: '2-digit',
   });
+  const { terms, scope } = parseChatQuery(question, now);
   const { section: notesSection, sources } = formatNotesSection(
     notes,
     noteCharBudget,
     transcripts,
     period,
+    terms.length === 0 && !scope ? NO_TOPIC_NOTES : 'No matching notes.',
   );
 
   const text = [

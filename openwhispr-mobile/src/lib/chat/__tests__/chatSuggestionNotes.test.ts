@@ -4,6 +4,7 @@ import { notes } from '@/db/schema';
 import { createMemoryRepository } from '@/data/local/__tests__/testDb';
 import { buildChatSuggestions } from '../chatSuggestions';
 import { runChatTurn, type ChatTurnDeps } from '../runChatTurn';
+import type { ChatMessage } from '../types';
 
 // Every chip on the Chat root must reach notes through the real search, even when none of its
 // words appear in them, and never reach notes it isn't about.
@@ -58,11 +59,15 @@ const setUp = (): { deps: ChatTurnDeps; ids: Record<string, number>; seed: Seed 
   return { deps, ids, seed };
 };
 
-const sourcesFor = async (question: string, deps: ChatTurnDeps): Promise<number[]> => {
+const sourcesFor = async (
+  question: string,
+  deps: ChatTurnDeps,
+  history: ChatMessage[] = [],
+): Promise<number[]> => {
   const result = await runChatTurn(
     {
       question,
-      history: [],
+      history,
       signal: new AbortController().signal,
       allowCloudFallback: false,
       onSteps: () => undefined,
@@ -222,6 +227,50 @@ describe('Chat questions through the real search', () => {
       expect(await sourcesFor(chip('What are my open action items from this week?'), deps)).toEqual(
         [actionItems, flights, ids.contractCall, ids.groceries],
       );
+    });
+  });
+
+  describe('a broad question', () => {
+    const CLARIFY = 'reply with one short question asking which topic or time period they mean';
+    const sentText = (deps: ChatTurnDeps): string => (deps.chat as jest.Mock).mock.calls[0][0].text;
+    const message = (id: string, role: ChatMessage['role'], text: string): ChatMessage => ({
+      id,
+      conversationId: 'c1',
+      role,
+      text,
+      steps: [],
+      sources: [],
+      createdAt: 0,
+    });
+    const CLARIFIED: ChatMessage[] = [
+      message('m1', 'user', 'What did we decide?'),
+      message('m2', 'assistant', 'Which meeting or time period do you mean — like this week?'),
+    ];
+
+    it.each(['What did we decide?', 'What’s on my plate?'])(
+      'sends no notes and asks the model to clarify “%s”',
+      async (question) => {
+        const { deps } = setUp();
+        expect(await sourcesFor(question, deps)).toEqual([]);
+        expect(sentText(deps)).toContain(CLARIFY);
+      },
+    );
+
+    it('reads this week’s notes when the answer names the period', async () => {
+      const { deps, ids } = setUp();
+      expect(await sourcesFor('This week', deps, CLARIFIED)).toEqual([
+        ids.contractCall,
+        ids.groceries,
+      ]);
+      expect(sentText(deps)).toContain('User: What did we decide?');
+      expect(sentText(deps)).not.toContain(CLARIFY);
+    });
+
+    it('finds the meeting the answer names', async () => {
+      const { deps, seed } = setUp();
+      const falcon = seed('Falcon kickoff', 'We chose Postgres.', new Date(2026, 8, 8, 10, 0));
+      expect(await sourcesFor('The Falcon meeting', deps, CLARIFIED)).toEqual([falcon]);
+      expect(sentText(deps)).toContain('User: What did we decide?');
     });
   });
 

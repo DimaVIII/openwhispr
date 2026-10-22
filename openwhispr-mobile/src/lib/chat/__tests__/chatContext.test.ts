@@ -130,6 +130,18 @@ describe('parseChatQuery', () => {
     expect(extractSearchTerms('What happens next with the merger?')).toEqual(['next', 'merger']);
     expect(extractSearchTerms('How is the new hire going?')).toEqual(['hire']);
   });
+
+  it('leaves no topic in a broad question about what the user did or has on', () => {
+    for (const question of ['What did we decide?', 'What’s on my plate?', 'What did I work on?']) {
+      expect(parseChatQuery(question, NOW)).toEqual({ terms: [], scope: null });
+    }
+    expect(parseChatQuery('What is on our plate this week?', NOW)).toEqual({
+      terms: [],
+      scope: expect.objectContaining({ label: 'this week' }),
+    });
+    expect(parseChatQuery('How is work on Falcon going?', NOW).terms).toEqual(['falcon']);
+    expect(parseChatQuery('Prep me for "Work on my plate"', NOW).terms).toEqual(['work', 'plate']);
+  });
 });
 
 describe('extractSearchTerms', () => {
@@ -352,7 +364,39 @@ describe('buildChatPayload', () => {
   });
 
   it('says when there are no matching notes', () => {
-    expect(buildPayload().text).toContain('NOTES:\nNo matching notes.');
+    const { text } = buildPayload({ question: 'What is the capital of France?' });
+    expect(text).toContain('NOTES:\nNo matching notes.\n\nRECENT CHAT:');
+  });
+
+  describe('a question naming no topic or period', () => {
+    const CLARIFY = 'reply with one short question asking which topic or time period they mean';
+
+    it.each(['What did we decide?', 'What’s on my plate?'])(
+      'asks the model to clarify “%s” when no notes are sent',
+      (question) => {
+        const { text } = buildPayload({ question });
+        expect(text).toContain(
+          'NOTES:\nNone. The question names no topic or time period, so no notes were included.',
+        );
+        expect(text).toContain(CLARIFY);
+        expect(text).toContain('If it is a general-knowledge question, just answer it.');
+      },
+    );
+
+    it('keeps the usual notes for a topic, a period or notes sent', () => {
+      const scope = parseChatQuery('What did we decide this week?', NOW).scope;
+      if (!scope) throw new Error('No period');
+      const notes = [makeNote({ id: 1, title: 'Plan', content: 'Body' })];
+      const payloads = [
+        buildPayload({ question: 'What is the capital of France?' }),
+        buildPayload({
+          question: 'What did we decide this week?',
+          period: { scope, total: 0, matched: false },
+        }),
+        buildPayload({ question: 'What did we decide?', notes }),
+      ];
+      for (const { text } of payloads) expect(text).not.toContain(CLARIFY);
+    });
   });
 
   it('says when no calendar is connected', () => {
