@@ -54,7 +54,7 @@ function createElectronAPI() {
     onMeetingTranscriptionError: noopListener,
     onMeetingTranscriptionFatalError: noopListener,
     onMeetingSystemAudioSilent: noopListener,
-    onMeetingDiarizationComplete: noopListener,
+    onMeetingDiarizationComplete: capture("diarization"),
   };
   return { api, listeners, writes };
 }
@@ -122,6 +122,7 @@ test("recording again into a plain-text transcript keeps the old text", async (t
 
 test("a resumed plain-text note with no new segments keeps the old text", async (t) => {
   const { api, writes } = createElectronAPI();
+  api.meetingTranscriptionStop = async () => ({ success: true, transcript: "" });
   const { store, startRecordingForNote, parseTranscriptSegments } = await load(t, api);
 
   assert.equal(await startRecordingForNote(note(OLD_TRANSCRIPT)), true);
@@ -132,6 +133,27 @@ test("a resumed plain-text note with no new segments keeps the old text", async 
   assert.deepEqual(
     parseTranscriptSegments(saved[0].transcript).map((segment) => segment.text),
     [OLD_TRANSCRIPT]
+  );
+});
+
+test("a resumed note keeps old text and main's stop-only text after an empty completion", async (t) => {
+  const { api, listeners, writes } = createElectronAPI();
+  const fallback = "New text returned only at stop.";
+  api.meetingTranscriptionStop = async () => ({
+    success: true,
+    transcript: fallback,
+    diarizationSessionId: "diar-stop-only",
+  });
+  const { store, startRecordingForNote, parseTranscriptSegments } = await load(t, api);
+
+  assert.equal(await startRecordingForNote(note(OLD_TRANSCRIPT)), true);
+  await store.stopRecording();
+  listeners.diarization({ noteId: NOTE_ID, sessionId: "diar-stop-only", segments: [] });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(
+    parseTranscriptSegments(transcriptWrites(writes).at(-1).transcript).map(({ text }) => text),
+    [OLD_TRANSCRIPT, fallback]
   );
 });
 
