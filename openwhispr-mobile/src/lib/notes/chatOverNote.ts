@@ -90,7 +90,7 @@ export const boundChatContext = (context: string): BoundedContext => {
   };
 };
 
-const formatHistory = (history: ChatOverNoteMessage[]): string => {
+export const formatChatHistory = (history: ChatOverNoteMessage[]): string => {
   const messages = history
     .slice(-MAX_HISTORY_MESSAGES)
     .map((message) => {
@@ -112,7 +112,7 @@ export const buildChatOverNotePayload = (request: ChatOverNoteRequest): ChatOver
     systemPrompt: CHAT_OVER_NOTE_SYSTEM_PROMPT,
     text: `NOTE OR TRANSCRIPT CONTEXT:\n${boundedContext.text}${truncationNote}
 
-RECENT EPHEMERAL CHAT:\n${formatHistory(request.history)}
+RECENT EPHEMERAL CHAT:\n${formatChatHistory(request.history)}
 
 USER QUESTION:\n${request.question.trim()}`,
   };
