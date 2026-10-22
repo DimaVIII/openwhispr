@@ -16,6 +16,8 @@ interface ChatInputBarProps {
   onChangeText: (text: string) => void;
   placeholder: string;
   busy: boolean;
+  /** Whether the busy turn or transcription is this screen's own, so Stop can end it. */
+  canStop: boolean;
   disabled: boolean;
   onSend: () => void;
   /** Runs the screen's checks, then calls `startVoice` to open the mic. */
@@ -24,6 +26,8 @@ interface ChatInputBarProps {
   onCancelTurn: () => void;
   /** Space below the bar while the keyboard is hidden. */
   restingBottomPadding: number;
+  /** A line above the composer, e.g. naming the chat that's working. */
+  notice?: React.ReactNode;
 }
 
 /** The composer, or the voice panel while listening, kept above the keyboard. */
@@ -33,11 +37,13 @@ export function ChatInputBar({
   onChangeText,
   placeholder,
   busy,
+  canStop,
   disabled,
   onSend,
   onMicPress,
   onCancelTurn,
   restingBottomPadding,
+  notice,
 }: ChatInputBarProps): React.JSX.Element {
   const keyboardHeight = useKeyboardHeight();
   // The composer unmounts while the voice panel shows, so it takes focus as it mounts again.
@@ -68,6 +74,7 @@ export function ChatInputBar({
           keyboardHeight > 0 ? keyboardHeight + COMPOSER_KEYBOARD_GAP : restingBottomPadding,
       }}
     >
+      {notice}
       {voice.state === 'listening' ? (
         <ChatVoicePanel
           elapsedSeconds={voice.elapsedSeconds}
@@ -86,7 +93,7 @@ export function ChatInputBar({
           disabled={disabled}
           onSend={onSend}
           onMicPress={() => onMicPress(startVoice)}
-          onStop={handleStop}
+          onStop={canStop ? handleStop : undefined}
           autoFocus={focusComposer}
         />
       )}

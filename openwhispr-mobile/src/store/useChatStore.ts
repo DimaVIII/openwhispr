@@ -1,10 +1,10 @@
 import { create } from 'zustand';
 import { chatRepository } from '@/data';
+import { toChatErrorMessage } from '@/lib/chat/chatErrorMessage';
 import { runChatTurn } from '@/lib/chat/runChatTurn';
 import type { ChatConversationSummary, ChatMessage, ChatStep } from '@/lib/chat/types';
 
 const TITLE_MAX_LENGTH = 60;
-const FALLBACK_FAILURE_MESSAGE = 'Check your connection and try again.';
 
 export interface ChatPending {
   // null while transcribing a question for a chat that doesn't exist yet.
@@ -91,9 +91,6 @@ const toConversationTitle = (question: string): string => {
     : collapsed;
 };
 
-const toFailureMessage = (error: unknown): string =>
-  error instanceof Error && error.message ? error.message : FALLBACK_FAILURE_MESSAGE;
-
 export const useChatStore = create<ChatState>((set, get) => {
   const runTurn = async (request: TurnRequest): Promise<void> => {
     const controller = new AbortController();
@@ -150,7 +147,7 @@ export const useChatStore = create<ChatState>((set, get) => {
           conversationId: request.conversationId,
           messageId: request.userMessageId,
           question: request.question,
-          message: toFailureMessage(error),
+          message: toChatErrorMessage(error),
         },
       });
     }
@@ -194,7 +191,8 @@ export const useChatStore = create<ChatState>((set, get) => {
       const history = chatRepository.getMessages(conversationId);
       const userMessage = chatRepository.appendMessage({ conversationId, role: 'user', text });
       set((state) => ({
-        failure: null,
+        // A failure belongs to its own conversation, so a send anywhere else leaves it showing.
+        failure: state.failure?.conversationId === conversationId ? null : state.failure,
         conversations: chatRepository.listConversations(),
         messages:
           state.activeConversationId === conversationId
@@ -235,10 +233,16 @@ export const useChatStore = create<ChatState>((set, get) => {
       if (!failure) return null;
 
       chatRepository.deleteMessage(failure.messageId);
+      // A conversation left with nothing in it would linger as an empty row under the old title, so
+      // it goes, and the next send starts a new one titled from the edited question.
+      const emptied = chatRepository.getMessages(failure.conversationId).length === 0;
+      if (emptied) chatRepository.deleteConversation(failure.conversationId);
       set((state) => ({
         failure: null,
         conversations: chatRepository.listConversations(),
-        messages: state.messages.filter((message) => message.id !== failure.messageId),
+        ...(emptied && state.activeConversationId === failure.conversationId
+          ? { activeConversationId: null, messages: [] }
+          : { messages: state.messages.filter((message) => message.id !== failure.messageId) }),
       }));
       return failure.question;
     },

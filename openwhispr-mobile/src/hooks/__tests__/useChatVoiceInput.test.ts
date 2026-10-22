@@ -6,6 +6,10 @@ jest.mock('@/data', () => ({ chatRepository: {} }));
 jest.mock('@/lib/chat/runChatTurn', () => ({ runChatTurn: jest.fn() }));
 jest.mock('@/components/ui/PermissionAlert', () => ({ showPermissionAlert: jest.fn() }));
 jest.mock('@/lib/privateMode', () => ({ promptLocalModelFallback: jest.fn() }));
+jest.mock('@/lib/utils', () => ({
+  ...jest.requireActual<typeof import('@/lib/utils')>('@/lib/utils'),
+  safeHaptics: jest.fn(),
+}));
 let mockActiveMode = 'private';
 jest.mock('@/store/useProcessingModeStore', () => ({
   useProcessingModeStore: { getState: () => ({ activeMode: mockActiveMode }) },
@@ -55,6 +59,7 @@ jest.mock('@/hooks/useAudioRecording', () => ({
 
 import { useChatStore } from '@/store/useChatStore';
 import { promptLocalModelFallback } from '@/lib/privateMode';
+import { safeHaptics } from '@/lib/utils';
 import { useChatVoiceInput } from '../useChatVoiceInput';
 
 const mockSend = jest.fn();
@@ -232,6 +237,7 @@ it('cancels the recording when a chat turn is already running', async () => {
   expect(mockCancelRecording).toHaveBeenCalled();
   expect(mockStopRecording).not.toHaveBeenCalled();
   expect(useChatStore.getState().pending?.conversationId).toBe('conv-2');
+  expect(safeHaptics).toHaveBeenCalledWith('light');
 });
 
 it('does not start while a chat turn is running', async () => {

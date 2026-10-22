@@ -119,6 +119,52 @@ describe('ChatHomeScreen', () => {
     expect(mockVoice.cancel).toHaveBeenCalledTimes(1);
   });
 
+  it('locks the composer with no Stop while a chat is working, and links to it', async () => {
+    const screen = await renderHome();
+    act(() => {
+      useChatStore.setState({
+        conversations: [
+          { id: 'c4', title: 'Pricing decisions', preview: '', createdAt: 1, updatedAt: 1 },
+        ],
+        pending: { conversationId: 'c4', phase: 'working', steps: [], startedAt: Date.now() },
+      });
+    });
+
+    expect(screen.queryByLabelText('Stop')).toBeNull();
+    expect(screen.getByPlaceholderText('Ask anything').props.editable).toBe(false);
+    fireEvent.press(screen.getByLabelText('Working on “Pricing decisions”…'));
+    expect(router.push).toHaveBeenCalledWith('/(tabs)/(chat)/c4');
+  });
+
+  it('names a new chat’s question without a link', async () => {
+    const screen = await renderHome();
+    act(() => {
+      useChatStore.setState({
+        pending: { conversationId: null, phase: 'transcribing', steps: [], startedAt: Date.now() },
+      });
+    });
+
+    expect(screen.getByText('Working on your question…')).toBeTruthy();
+    expect(screen.queryByLabelText('Working on your question…')).toBeNull();
+    expect(screen.queryByLabelText('Stop')).toBeNull();
+    expect(screen.queryByText('Transcribing…')).toBeNull();
+  });
+
+  it('keeps Stop for its own spoken question while it transcribes', async () => {
+    mockVoice.state = 'transcribing';
+    const screen = await renderHome();
+    act(() => {
+      useChatStore.setState({
+        pending: { conversationId: null, phase: 'transcribing', steps: [], startedAt: Date.now() },
+      });
+    });
+
+    expect(screen.getByText('Transcribing…')).toBeTruthy();
+    expect(screen.queryByText('Working on your question…')).toBeNull();
+    fireEvent.press(screen.getByLabelText('Stop'));
+    expect(mockVoice.cancel).toHaveBeenCalledTimes(1);
+  });
+
   it('opens a spoken question’s chat only while Home has focus', async () => {
     const screen = await renderHome();
     mockOnSent?.('c1');

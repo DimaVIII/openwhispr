@@ -1,4 +1,5 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
+import { Text } from 'react-native';
 import type { ChatVoiceInput } from '@/hooks/useChatVoiceInput';
 import { safeHaptics } from '@/lib/utils';
 import { ChatInputBar, type StartVoice } from '../ChatInputBar';
@@ -29,6 +30,7 @@ const baseProps = (voice: ChatVoiceInput, overrides: Partial<Props> = {}): Props
   onChangeText: jest.fn(),
   placeholder: 'Reply',
   busy: false,
+  canStop: true,
   disabled: false,
   onSend: jest.fn(),
   onMicPress: (startVoice: StartVoice) => startVoice(false),
@@ -64,6 +66,23 @@ describe('ChatInputBar', () => {
     fireEvent.press(second.getByLabelText('Stop'));
     expect(onCancelTurn).toHaveBeenCalledTimes(1);
     expect(idle.cancel).not.toHaveBeenCalled();
+  });
+
+  it('offers no Stop for a turn the screen does not own, and shows its notice', () => {
+    const onCancelTurn = jest.fn();
+    const screen = render(
+      <ChatInputBar
+        {...baseProps(makeVoice(), {
+          busy: true,
+          canStop: false,
+          onCancelTurn,
+          notice: <Text>Working on “Pricing”…</Text>,
+        })}
+      />,
+    );
+    expect(screen.queryByLabelText('Stop')).toBeNull();
+    expect(screen.getByText('Working on “Pricing”…')).toBeTruthy();
+    expect(screen.getByPlaceholderText('Reply').props.editable).toBe(false);
   });
 
   it('starts voice through onMicPress, with a light haptic when it is refused', async () => {

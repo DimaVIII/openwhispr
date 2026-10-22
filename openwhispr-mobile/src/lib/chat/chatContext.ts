@@ -47,12 +47,14 @@ const STOPWORDS = new Set([
   'give',
 ]);
 
+/** `null` means no calendar is connected; `'unavailable'` means one is but couldn't be read. */
+export type ChatCalendar = GoogleCalendarEvent[] | null | 'unavailable';
+
 export interface ChatPayloadInput {
   question: string;
   history: ChatMessage[];
   notes: Note[];
-  /** `null` means no calendar is connected. */
-  calendar: GoogleCalendarEvent[] | null;
+  calendar: ChatCalendar;
   now: Date;
   noteCharBudget?: number;
 }
@@ -165,8 +167,9 @@ const formatCalendarLine = ({ event, day, start, end }: CalendarEntry, now: Date
   return `- ${summary} · ${dayLabel}${formatChatTime(start)}–${formatChatTime(end)}`;
 };
 
-const formatCalendarSection = (calendar: GoogleCalendarEvent[] | null, now: Date): string => {
+const formatCalendarSection = (calendar: ChatCalendar, now: Date): string => {
   if (calendar === null) return 'No calendar connected.';
+  if (calendar === 'unavailable') return 'Calendar unavailable right now.';
 
   const windowEnd = now.getTime() + CALENDAR_WINDOW_MS;
   const lines = calendar

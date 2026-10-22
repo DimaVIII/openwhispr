@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TabScreenHeader } from '@/components/ui/TabScreenHeader';
 import { GlassBackButton } from '@/components/ui/GlassBackButton';
 import { ChatAssistantMessage } from '@/components/chat/ChatAssistantMessage';
+import { ChatComposerNotice } from '@/components/chat/ChatComposerNotice';
 import { ChatErrorRow } from '@/components/chat/ChatErrorRow';
 import { ChatInputBar } from '@/components/chat/ChatInputBar';
 import { ChatSteps } from '@/components/chat/ChatSteps';
@@ -14,7 +15,8 @@ import { ChatWatermark } from '@/components/chat/ChatWatermark';
 import { useChatSendGate } from '@/hooks/useChatSendGate';
 import { useChatVoiceInput } from '@/hooks/useChatVoiceInput';
 import { chatTabGateOptions } from '@/lib/chat/chatConsent';
-import { CHAT_HOME_ROUTE, NEW_CHAT_ID } from '@/lib/chat/chatRoutes';
+import { ownsChatPending, selectPendingTitle, workingElsewhereLabel } from '@/lib/chat/chatPending';
+import { CHAT_HOME_ROUTE, chatConversationRoute, NEW_CHAT_ID } from '@/lib/chat/chatRoutes';
 import { useChatStore } from '@/store/useChatStore';
 import { useProcessingModeStore } from '@/store/useProcessingModeStore';
 
@@ -31,6 +33,7 @@ export function ChatConversationScreen(): React.JSX.Element {
   const title = useChatStore(
     (s) => s.conversations.find((conversation) => conversation.id === conversationId)?.title,
   );
+  const pendingTitle = useChatStore(selectPendingTitle);
   const activeMode = useProcessingModeStore((s) => s.activeMode);
   const { chatEnabled, gate } = useChatSendGate();
 
@@ -67,8 +70,7 @@ export function ChatConversationScreen(): React.JSX.Element {
     return () => subscription.remove();
   }, []);
 
-  // A new chat's pending turn carries null until send creates the conversation.
-  const pendingHere = pending?.conversationId === conversationId ? pending : null;
+  const pendingHere = ownsChatPending(pending, conversationId, voice.state) ? pending : null;
   const failureHere = failure && failure.conversationId === conversationId ? failure : null;
   // One turn runs at a time across every chat, so a turn elsewhere locks this composer too.
   const busy = pending !== null || voice.state === 'transcribing';
@@ -97,7 +99,15 @@ export function ChatConversationScreen(): React.JSX.Element {
 
   const handleEditQuestion = (): void => {
     const question = useChatStore.getState().editFailedQuestion();
-    if (question !== null) setDraft(question);
+    if (question === null) return;
+    setDraft(question);
+    // Editing the only question deletes the chat, so the next send starts a new one.
+    const deleted =
+      conversationId !== null &&
+      !useChatStore
+        .getState()
+        .conversations.some((conversation) => conversation.id === conversationId);
+    if (deleted) router.setParams({ id: NEW_CHAT_ID });
   };
 
   const openNote = (noteId: number): void => {
@@ -105,6 +115,16 @@ export function ChatConversationScreen(): React.JSX.Element {
     if (voiceRef.current.state !== 'idle') return;
     router.push(`/(tabs)/(notes)/${noteId}`);
   };
+
+  // A turn in another chat locks this composer without offering to stop it.
+  const workingId = pending?.conversationId ?? null;
+  const workingElsewhere =
+    pending && !pendingHere ? (
+      <ChatComposerNotice
+        label={workingElsewhereLabel(pendingTitle)}
+        onPress={workingId ? () => router.push(chatConversationRoute(workingId)) : undefined}
+      />
+    ) : null;
 
   return (
     <View className="flex-1 bg-systemBackground">
@@ -155,6 +175,7 @@ export function ChatConversationScreen(): React.JSX.Element {
         onChangeText={setDraft}
         placeholder="Reply"
         busy={busy}
+        canStop={pendingHere !== null || voice.state === 'transcribing'}
         disabled={!chatEnabled}
         onSend={handleSend}
         onMicPress={(startVoice) => {
@@ -162,6 +183,7 @@ export function ChatConversationScreen(): React.JSX.Element {
         }}
         onCancelTurn={() => useChatStore.getState().cancel()}
         restingBottomPadding={Math.max(insets.bottom, 14)}
+        notice={workingElsewhere}
       />
     </View>
   );

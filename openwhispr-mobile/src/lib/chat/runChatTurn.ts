@@ -9,6 +9,7 @@ import {
   formatChatTime,
   isInChatCalendarWindow,
   rankChatNotes,
+  type ChatCalendar,
   type ChatPayload,
 } from './chatContext';
 import type { ChatMessage, ChatSource, ChatStep, ChatStepId } from './types';
@@ -17,6 +18,8 @@ const CANDIDATE_POOL_LIMIT = 50;
 const MAX_MATCHED_NOTES = 4;
 const MIN_CHAT_NOTES = 2;
 const CONTEXT_LIMIT_NOTE_CHAR_BUDGET = 3_000;
+// Well past what 48 hours can hold, so a busy day never pushes tomorrow out of the request.
+const CHAT_CALENDAR_EVENT_LIMIT = 50;
 
 export interface ChatTurnInput {
   question: string;
@@ -77,7 +80,12 @@ export const createDefaultChatTurnDeps = (): ChatTurnDeps => ({
     const { calendarRepository } = require('@/data') as typeof import('@/data');
     const { getMeetingCalendarEventSuggestions } =
       require('@/lib/calendar/meetingSuggestions') as typeof import('@/lib/calendar/meetingSuggestions');
-    return getMeetingCalendarEventSuggestions(accounts, calendarRepository, now);
+    return getMeetingCalendarEventSuggestions(
+      accounts,
+      calendarRepository,
+      now,
+      CHAT_CALENDAR_EVENT_LIMIT,
+    );
   },
   chat: (request) => {
     const { ReasoningService } =
@@ -124,12 +132,12 @@ const usedPrivateNote = (
       message.sources.some((source) => isNotePrivate(source.noteId)),
   );
 
-// A calendar that can't be read counts as none connected, so the notes can still answer.
-const readAccounts = (deps: ChatTurnDeps): GoogleCalendarAccount[] => {
+// A calendar that can't be read is reported as unavailable, and the notes can still answer.
+const readAccounts = (deps: ChatTurnDeps): GoogleCalendarAccount[] | null => {
   try {
     return deps.getConnectedCalendarAccounts();
   } catch {
-    return [];
+    return null;
   }
 };
 
@@ -197,19 +205,21 @@ export async function runChatTurn(
   const history =
     includePrivate || !usedPrivateNote(input.history, deps.isNotePrivate) ? input.history : [];
 
-  let calendar: GoogleCalendarEvent[] | null = null;
   const accounts = readAccounts(deps);
-  if (accounts.length > 0) {
+  let calendar: ChatCalendar = accounts === null ? 'unavailable' : null;
+  if (accounts && accounts.length > 0) {
     setStep({ id: 'calendar', status: 'active', label: 'Checking your calendar…' });
-    calendar = readEvents(deps, accounts, now);
-    if (calendar === null) {
+    const events = readEvents(deps, accounts, now);
+    if (events === null) {
+      calendar = 'unavailable';
       removeStep('calendar');
     } else {
+      calendar = events;
       setStep({
         id: 'calendar',
         status: 'done',
         label: 'Checked your calendar',
-        detail: describeNextEvent(calendar, now),
+        detail: describeNextEvent(events, now),
       });
     }
     throwIfAborted(signal);

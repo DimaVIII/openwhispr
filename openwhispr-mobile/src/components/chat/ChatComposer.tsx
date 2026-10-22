@@ -15,7 +15,8 @@ interface ChatComposerProps {
   disabled: boolean;
   onSend: () => void;
   onMicPress: () => void;
-  onStop: () => void;
+  /** Stops the screen's own turn; without it a busy composer is simply locked. */
+  onStop?: () => void;
   /** Focuses the input when it mounts, e.g. on returning from the voice panel. */
   autoFocus?: boolean;
 }
@@ -32,6 +33,8 @@ export function ChatComposer({
   autoFocus = false,
 }: ChatComposerProps): React.JSX.Element {
   const hasText = value.trim().length > 0;
+  // A turn the screen doesn't own still locks it, since only one turn runs at a time.
+  const locked = disabled || busy;
 
   return (
     <View
@@ -44,12 +47,12 @@ export function ChatComposer({
         onChangeText={onChangeText}
         placeholder={placeholder}
         placeholderTextColor={iosColor('tertiaryLabel')}
-        editable={!busy && !disabled}
+        editable={!locked}
         autoFocus={autoFocus}
         multiline
         className="max-h-[120px] min-h-[40px] flex-1 py-2 text-[16px] leading-[22px] text-label"
       />
-      {busy ? (
+      {busy && onStop ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Stop"
@@ -61,11 +64,11 @@ export function ChatComposer({
           <View className="h-3.5 w-3.5 rounded-[4px] bg-white" />
         </Pressable>
       ) : hasText ? (
-        <ChatGradientButton label="Send" disabled={disabled} onPress={onSend}>
+        <ChatGradientButton label="Send" disabled={locked} onPress={onSend}>
           <SystemIcon name="arrow.up" mdName="ArrowUp" size={18} color={CHAT_COLORS.onGradient} />
         </ChatGradientButton>
       ) : (
-        <ChatGradientButton label="Speak your question" disabled={disabled} onPress={onMicPress}>
+        <ChatGradientButton label="Speak your question" disabled={locked} onPress={onMicPress}>
           <SystemIcon name="mic.fill" mdName="Mic" size={18} color={CHAT_COLORS.onGradient} />
         </ChatGradientButton>
       )}

@@ -942,7 +942,7 @@ describe('the Chat page', () => {
     expect(mockToggle).toHaveBeenCalledWith('noteChatEnabled', false);
   });
 
-  it('hides the model choice while note chat is off', () => {
+  it('hides the model choice while chat is off', () => {
     mockConfig = { defaultMode: 'cloud', noteChatEnabled: false };
     render(<WorkflowSettingsScreen />);
     expect(screen.getByLabelText('Chat').props.value).toBe(false);
@@ -959,7 +959,7 @@ describe('the Chat page', () => {
     mockConfig = { defaultMode: 'cloud', noteChatEnabled: false };
     render(<WorkflowSettingsScreen />);
     expect(
-      screen.getByText('Notes don’t offer Ask about this note while note chat is off.'),
+      screen.getByText('Notes don’t offer Ask about this note while chat is off.'),
     ).toBeTruthy();
   });
 
@@ -1132,7 +1132,7 @@ it.each([
   expect(selectedMode()).toBe(label);
 });
 
-it('explains what Local Mode means for note chat', () => {
+it('explains what Local Mode means for chat', () => {
   mockConfig = { defaultMode: 'private' };
   mockActiveMode = 'private';
   mockScope = 'noteChat';
@@ -1212,11 +1212,11 @@ it('locks no mode outside Local Mode', () => {
 it.each([
   [
     'cloud',
-    'On-Device turns on Local Mode: dictation stays on this iPhone, notes you make stay private, and note chat asks before leaving it.',
+    'On-Device turns on Local Mode: dictation stays on this iPhone, notes you make stay private, and chat asks before leaving it.',
   ],
   [
     'private',
-    'Local Mode is on: dictation stays on this iPhone, notes you make stay private, and note chat asks before leaving it. Choose OpenWhispr Cloud or Bring Your Own Key to turn it off.',
+    'Local Mode is on: dictation stays on this iPhone, notes you make stay private, and chat asks before leaving it. Choose OpenWhispr Cloud or Bring Your Own Key to turn it off.',
   ],
 ])('explains Local Mode on the Dictation page in %s mode', (mode, note) => {
   mockConfig = { defaultMode: mode };

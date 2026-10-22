@@ -213,3 +213,77 @@ it('still writes history by default', async () => {
   expect(mockAddTranscript).toHaveBeenCalledWith(expect.objectContaining({ text: 'Saved.' }));
   expect(deleteManagedTranscriptAudio).not.toHaveBeenCalled();
 });
+
+describe('cancelRecording', () => {
+  const startHook = async (): Promise<
+    ReturnType<typeof renderHook<ReturnType<typeof useAudioRecording>, unknown>>
+  > => {
+    const hook = renderHook(() => useAudioRecording({ saveToHistory: false }));
+    await act(async () => {
+      await hook.result.current.startRecording();
+    });
+    mockRecorder.isRecording = true;
+    return hook;
+  };
+
+  it('stops the recorder and deletes the file it was writing', async () => {
+    const { result } = await startHook();
+
+    await act(async () => {
+      await result.current.cancelRecording();
+    });
+
+    expect(mockRecorder.stop).toHaveBeenCalled();
+    expect(FileSystem.deleteAsync).toHaveBeenCalledWith('file:///tmp/rec.wav', {
+      idempotent: true,
+    });
+    expect(result.current.isRecording).toBe(false);
+  });
+
+  it('still cancels when the file cannot be deleted', async () => {
+    jest.mocked(FileSystem.deleteAsync).mockRejectedValueOnce(new Error('EACCES'));
+    const { result } = await startHook();
+
+    await act(async () => {
+      await expect(result.current.cancelRecording()).resolves.toBeUndefined();
+    });
+
+    expect(result.current.isRecording).toBe(false);
+  });
+
+  it('leaves a finished recording alone when nothing is recording', async () => {
+    const { result } = renderHook(() => useAudioRecording({ saveToHistory: false }));
+
+    await act(async () => {
+      await result.current.cancelRecording();
+    });
+
+    expect(mockRecorder.stop).not.toHaveBeenCalled();
+    expect(FileSystem.deleteAsync).not.toHaveBeenCalled();
+  });
+
+  it('leaves the file to a stop already under way', async () => {
+    mockTranscribe.mockResolvedValue(transcribed('Kept.'));
+    let finishNativeStop: () => void = () => undefined;
+    mockRecorder.stop.mockImplementationOnce(
+      () =>
+        new Promise<undefined>((resolve) => {
+          finishNativeStop = () => resolve(undefined);
+        }),
+    );
+    const { result } = await startHook();
+
+    let stopping: Promise<void> = Promise.resolve();
+    await act(async () => {
+      stopping = result.current.stopRecording();
+      await result.current.cancelRecording();
+    });
+    await act(async () => {
+      finishNativeStop();
+      mockRecorder.isRecording = false;
+      await stopping;
+    });
+
+    expect(FileSystem.deleteAsync).not.toHaveBeenCalled();
+  });
+});

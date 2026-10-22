@@ -9,7 +9,11 @@ import {
 import type { ChatMessage, ChatStep } from '../types';
 
 const mockGetNoteById = jest.fn();
-jest.mock('@/data', () => ({ notesRepository: { getNoteById: mockGetNoteById } }));
+const mockGetUpcomingEvents = jest.fn();
+jest.mock('@/data', () => ({
+  notesRepository: { getNoteById: mockGetNoteById },
+  calendarRepository: { getUpcomingEvents: mockGetUpcomingEvents },
+}));
 
 // Built with local-time constructors so assertions don't depend on the machine's timezone.
 const NOW = new Date(2026, 9, 22, 9, 0, 0);
@@ -182,6 +186,23 @@ describe('runChatTurn', () => {
     expect(lastSteps(untitledInput.onSteps)[0].detail).toBe(
       `Untitled meeting · ${formatTime(new Date(2026, 9, 22, 11, 0))}`,
     );
+  });
+
+  it('sends every meeting in the next 48 hours, not just the first few', async () => {
+    const events = Array.from({ length: 8 }, (_, index) =>
+      makeEvent(
+        `Meeting ${index + 1}`,
+        new Date(2026, 9, 22, 10 + index * 4, 0),
+        new Date(2026, 9, 22, 10 + index * 4, 30),
+      ),
+    );
+    mockGetUpcomingEvents.mockReturnValueOnce(events);
+    const deps = makeDeps({ getCalendarEvents: createDefaultChatTurnDeps().getCalendarEvents });
+
+    await runChatTurn(makeInput(), deps);
+
+    const text = sentText(deps.chat);
+    for (const event of events) expect(text).toContain(`- ${event.summary} · `);
   });
 
   it('says when no meetings are coming up but still sends the calendar section', async () => {
@@ -454,7 +475,8 @@ describe('runChatTurn', () => {
 
       expect(result.text).toBe('The answer.');
       expect(lastSteps(input.onSteps).map((step) => step.id)).toEqual(['search', 'read', 'write']);
-      expect(sentText(deps.chat)).toContain('No calendar connected.');
+      expect(sentText(deps.chat)).toContain('Calendar unavailable right now.');
+      expect(sentText(deps.chat)).not.toContain('No calendar connected.');
     }
   });
 

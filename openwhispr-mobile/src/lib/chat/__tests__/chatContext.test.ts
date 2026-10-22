@@ -166,6 +166,12 @@ describe('buildChatPayload', () => {
     expect(buildPayload({ calendar: null }).text).toContain('No calendar connected.');
   });
 
+  it('says when the calendar could not be read', () => {
+    const { text } = buildPayload({ calendar: 'unavailable' });
+    expect(text).toContain('CALENDAR (next 48 hours):\nCalendar unavailable right now.');
+    expect(text).not.toContain('No calendar connected.');
+  });
+
   it('says when the next 48 hours are empty', () => {
     expect(buildPayload({ calendar: [] }).text).toContain('No meetings in the next 48 hours.');
   });

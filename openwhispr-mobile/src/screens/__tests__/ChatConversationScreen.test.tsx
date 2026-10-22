@@ -159,6 +159,23 @@ describe('ChatConversationScreen', () => {
     expect(mockCancel).toHaveBeenCalledTimes(1);
   });
 
+  it('locks the composer with no Stop while another chat works, and links to it', () => {
+    useChatStore.setState({
+      conversations: [
+        { id: 'c1', title: 'Pricing decisions', preview: '', createdAt: 1, updatedAt: 1 },
+        { id: 'c2', title: 'Launch plan', preview: '', createdAt: 1, updatedAt: 1 },
+      ],
+      pending: { conversationId: 'c2', phase: 'working', steps: [], startedAt: Date.now() },
+    });
+    const screen = render(<ChatConversationScreen />);
+
+    expect(screen.queryByLabelText('Stop')).toBeNull();
+    expect(screen.getByPlaceholderText('Reply').props.editable).toBe(false);
+    fireEvent.press(screen.getByLabelText('Working on “Launch plan”…'));
+    expect(router.push).toHaveBeenCalledWith('/(tabs)/(chat)/c2');
+    expect(mockCancel).not.toHaveBeenCalled();
+  });
+
   it('shows Retry after a failure', () => {
     useChatStore.setState({
       failure: {
@@ -188,6 +205,28 @@ describe('ChatConversationScreen', () => {
 
     fireEvent.press(screen.getByLabelText('Edit question'));
     expect(mockEditFailedQuestion).toHaveBeenCalledTimes(1);
+    expect(screen.getByPlaceholderText('Reply').props.value).toBe('What did we decide?');
+    expect(router.setParams).not.toHaveBeenCalled();
+  });
+
+  it('starts over as a new chat when Edit question empties this one', () => {
+    useChatStore.setState({
+      failure: {
+        conversationId: 'c1',
+        messageId: 'm1',
+        question: question.text,
+        message: 'Check your connection and try again.',
+      },
+    });
+    mockEditFailedQuestion.mockImplementationOnce(() => {
+      // The store deletes a conversation that editing leaves empty.
+      useChatStore.setState({ conversations: [], activeConversationId: null, messages: [] });
+      return 'What did we decide?';
+    });
+    const screen = render(<ChatConversationScreen />);
+
+    fireEvent.press(screen.getByLabelText('Edit question'));
+    expect(router.setParams).toHaveBeenCalledWith({ id: 'new' });
     expect(screen.getByPlaceholderText('Reply').props.value).toBe('What did we decide?');
   });
 

@@ -5,6 +5,7 @@ import { Text } from '@/components/ui/Text';
 import { SystemIcon } from '@/components/ui/SystemIcon';
 import { TabScreenHeader } from '@/components/ui/TabScreenHeader';
 import { GlassIconButton } from '@/components/ui/GlassIconButton';
+import { ChatComposerNotice } from '@/components/chat/ChatComposerNotice';
 import { ChatInputBar } from '@/components/chat/ChatInputBar';
 import { ChatRecentList } from '@/components/chat/ChatRecentList';
 import { ChatSuggestionCards } from '@/components/chat/ChatSuggestionCards';
@@ -15,6 +16,7 @@ import { useChatSendGate } from '@/hooks/useChatSendGate';
 import { useChatVoiceInput } from '@/hooks/useChatVoiceInput';
 import { getMeetingCalendarEventSuggestions } from '@/lib/calendar/meetingSuggestions';
 import { chatTabGateOptions } from '@/lib/chat/chatConsent';
+import { selectPendingTitle, workingElsewhereLabel } from '@/lib/chat/chatPending';
 import { CHAT_HISTORY_ROUTE, chatConversationRoute, NEW_CHAT_ID } from '@/lib/chat/chatRoutes';
 import { buildChatSuggestions, type ChatSuggestion } from '@/lib/chat/chatSuggestions';
 import { tryParseNoteTimestamp } from '@/lib/parseNoteTimestamp';
@@ -65,6 +67,7 @@ export function ChatHomeScreen(): React.JSX.Element {
 
   const conversations = useChatStore((s) => s.conversations);
   const pending = useChatStore((s) => s.pending);
+  const pendingTitle = useChatStore(selectPendingTitle);
   const activeMode = useProcessingModeStore((s) => s.activeMode);
   const { chatEnabled, gate } = useChatSendGate();
   const voice = useChatVoiceInput({
@@ -104,8 +107,19 @@ export function ChatHomeScreen(): React.JSX.Element {
     }, []),
   );
 
-  // One turn runs at a time across every chat, so any pending turn locks Home too.
+  // One turn runs at a time across every chat, so any pending turn locks Home too. Home is no
+  // conversation, so the only thing it can stop is its own spoken question.
   const busy = pending !== null || voice.state === 'transcribing';
+  const transcribingHere = voice.state === 'transcribing';
+  const workingId = pending?.conversationId ?? null;
+  const composerNotice = transcribingHere ? (
+    <ChatComposerNotice label="Transcribing…" />
+  ) : pending ? (
+    <ChatComposerNotice
+      label={workingElsewhereLabel(pendingTitle)}
+      onPress={workingId ? () => pushConversation(workingId) : undefined}
+    />
+  ) : null;
   const gateOptions = chatTabGateOptions(activeMode);
   // Leaving Home, or asking something else, while a question is being spoken would drop it.
   const runIfVoiceIdle = (action: () => void): void => {
@@ -188,6 +202,7 @@ export function ChatHomeScreen(): React.JSX.Element {
             onChangeText={setDraft}
             placeholder="Ask anything"
             busy={busy}
+            canStop={transcribingHere}
             disabled={false}
             onSend={() => ask(draft, true)}
             onMicPress={(startVoice) => {
@@ -195,6 +210,7 @@ export function ChatHomeScreen(): React.JSX.Element {
             }}
             onCancelTurn={() => useChatStore.getState().cancel()}
             restingBottomPadding={TAB_BAR_CLEARANCE}
+            notice={composerNotice}
           />
         </>
       ) : (

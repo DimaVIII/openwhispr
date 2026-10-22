@@ -42,6 +42,21 @@ describe('ChatComposer', () => {
     expect(busy.props.onStop).toHaveBeenCalledTimes(1);
   });
 
+  it('shows no Stop while a turn it cannot stop is running', () => {
+    const empty = renderComposer({ busy: true, onStop: undefined });
+    expect(empty.queryByLabelText('Stop')).toBeNull();
+    expect(empty.getByLabelText('Speak your question').props.accessibilityState).toEqual({
+      disabled: true,
+    });
+    fireEvent.press(empty.getByLabelText('Speak your question'));
+    expect(empty.props.onMicPress).not.toHaveBeenCalled();
+
+    const typed = renderComposer({ value: 'hello', busy: true, onStop: undefined });
+    expect(typed.queryByLabelText('Stop')).toBeNull();
+    fireEvent.press(typed.getByLabelText('Send'));
+    expect(typed.props.onSend).not.toHaveBeenCalled();
+  });
+
   it('locks the input while busy or disabled', () => {
     expect(renderComposer().getByPlaceholderText('Ask anything').props.editable).toBe(true);
     expect(renderComposer({ busy: true }).getByPlaceholderText('Ask anything').props.editable).toBe(

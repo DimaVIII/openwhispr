@@ -224,7 +224,7 @@ describe('useChatStore', () => {
       conversationId,
       messageId: userMessage.id,
       question: 'question',
-      message: 'The model is unavailable.',
+      message: 'Check your connection and try again.',
     });
     expect(useChatStore.getState().pending).toBeNull();
 
@@ -254,24 +254,34 @@ describe('useChatStore', () => {
     expect(useChatStore.getState().failure?.message).toBe('Check your connection and try again.');
   });
 
-  it('keeps a failure while another conversation opens and clears it on the next send', async () => {
+  it('keeps a failure through sends elsewhere and clears it on a send to its conversation', async () => {
     const other = mockRepo.createConversation('B');
     mockRun.mockRejectedValueOnce(new Error('boom'));
-    mockRun.mockResolvedValueOnce(answer('ok'));
+    mockRun.mockResolvedValue(answer('ok'));
 
     const sent = useChatStore.getState().send('question', {
       conversationId: null,
       ...sendOptions,
     });
     await sent?.done;
+    const failedId = sent?.conversationId ?? '';
     useChatStore.getState().openConversation(other.id);
 
-    expect(useChatStore.getState().failure?.conversationId).toBe(sent?.conversationId);
+    expect(useChatStore.getState().failure?.conversationId).toBe(failedId);
 
-    const next = useChatStore.getState().send('in B', { conversationId: other.id, ...sendOptions });
+    await useChatStore.getState().send('in B', { conversationId: other.id, ...sendOptions })?.done;
+    await useChatStore.getState().send('a new chat', { conversationId: null, ...sendOptions })
+      ?.done;
+
+    expect(useChatStore.getState().failure?.conversationId).toBe(failedId);
+
+    const again = useChatStore.getState().send('again', {
+      conversationId: failedId,
+      ...sendOptions,
+    });
 
     expect(useChatStore.getState().failure).toBeNull();
-    await next?.done;
+    await again?.done;
   });
 
   it('hands the failed question back for editing and deletes it', async () => {
@@ -290,6 +300,39 @@ describe('useChatStore', () => {
     expect(useChatStore.getState().messages).toEqual([]);
     expect(useChatStore.getState().failure).toBeNull();
     expect(useChatStore.getState().editFailedQuestion()).toBeNull();
+  });
+
+  it('deletes a conversation that editing the failed question leaves empty', async () => {
+    mockRun.mockRejectedValueOnce(new Error('boom'));
+
+    const sent = useChatStore.getState().send('fix me', {
+      conversationId: null,
+      ...sendOptions,
+    });
+    const conversationId = sent?.conversationId ?? '';
+    useChatStore.getState().openConversation(conversationId);
+    await sent?.done;
+
+    expect(useChatStore.getState().editFailedQuestion()).toBe('fix me');
+    expect(mockRepo.getConversation(conversationId)).toBeNull();
+    expect(useChatStore.getState().conversations).toEqual([]);
+    expect(useChatStore.getState().activeConversationId).toBeNull();
+  });
+
+  it('keeps a conversation that still has messages after editing the failed question', async () => {
+    const conversation = mockRepo.createConversation('A');
+    mockRepo.appendMessage({ conversationId: conversation.id, role: 'user', text: 'q1' });
+    mockRepo.appendMessage({ conversationId: conversation.id, role: 'assistant', text: 'a1' });
+    mockRun.mockRejectedValueOnce(new Error('boom'));
+
+    await useChatStore.getState().send('fix me', {
+      conversationId: conversation.id,
+      ...sendOptions,
+    })?.done;
+
+    expect(useChatStore.getState().editFailedQuestion()).toBe('fix me');
+    expect(mockRepo.getConversation(conversation.id)).not.toBeNull();
+    expect(mockRepo.getMessages(conversation.id).map(({ text }) => text)).toEqual(['q1', 'a1']);
   });
 
   it('cancel keeps the question and clears pending', async () => {
@@ -327,7 +370,7 @@ describe('useChatStore', () => {
     expect(useChatStore.getState().failure).toMatchObject({
       conversationId: sent?.conversationId,
       question: 'question',
-      message: 'Aborted',
+      message: 'Check your connection and try again.',
     });
     expect(useChatStore.getState().pending).toBeNull();
   });

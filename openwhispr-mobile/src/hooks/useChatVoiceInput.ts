@@ -5,6 +5,7 @@ import { useAudioRecording } from '@/hooks/useAudioRecording';
 import { useUsageLimitRecovery } from '@/hooks/useUsageLimitRecovery';
 import { isMicPermissionError, isNoSpeechError, showMicPermissionAlert } from '@/lib/permissions';
 import { promptLocalModelFallback } from '@/lib/privateMode';
+import { safeHaptics } from '@/lib/utils';
 import { useChatStore, type ChatPending } from '@/store/useChatStore';
 import { useProcessingModeStore } from '@/store/useProcessingModeStore';
 import { useUsageStore } from '@/store/useUsageStore';
@@ -159,6 +160,8 @@ export function useChatVoiceInput({
     // A slot means a finish is already stopping the recorder.
     if (slotRef.current || state !== 'listening') return;
     if (!takeSlot()) {
+      // Another turn took the slot while this question was spoken, so it's dropped; the tap says so.
+      safeHaptics('light');
       await recording.cancelRecording();
       return;
     }
