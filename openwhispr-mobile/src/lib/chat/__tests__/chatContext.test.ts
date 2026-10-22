@@ -95,6 +95,16 @@ describe('extractSearchTerms', () => {
     expect(extractSearchTerms('회의 예산 어때?')).toEqual(['회의', '예산', '어때']);
   });
 
+  it('drops two-letter Arabic and Hebrew particles', () => {
+    expect(extractSearchTerms('ما هي قرارات الميزانية في اجتماع الأمس؟')).toEqual([
+      'قرارات',
+      'الميزانية',
+      'اجتماع',
+      'الأمس',
+    ]);
+    expect(extractSearchTerms('מה זה של התקציב')).toEqual(['התקציב']);
+  });
+
   it('splits Chinese and Japanese runs into bigrams', () => {
     expect(extractSearchTerms('预算会议')).toEqual(['预算', '算会', '会议']);
     expect(extractSearchTerms('Acme 会議')).toEqual(['acme', '会議']);

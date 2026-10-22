@@ -263,12 +263,29 @@ describe('runChatTurn', () => {
 
     expect(getCandidateNotes).toHaveBeenCalledWith(
       expect.arrayContaining(['pricing']),
-      expect.objectContaining({ limit: 4 }),
+      expect.objectContaining({ limit: 8 }),
     );
     expect(result.sources.map((source) => source.noteId)).toEqual([3, 4, 5, 6]);
     expect(lastSteps(input.onSteps).find((step) => step.id === 'search')?.detail).toBe(
       '7 notes match',
     );
+  });
+
+  it('lets the next match take an empty match’s place', async () => {
+    const failed = makeNote({ id: 2, title: 'Pricing call' });
+    const matched = [
+      failed,
+      ...[3, 4, 5, 6].map((id) =>
+        makeNote({ id, title: `Pricing ${id}`, content: 'Pricing notes.' }),
+      ),
+    ];
+
+    const result = await runChatTurn(
+      makeInput(),
+      makeDeps({ getCandidateNotes: candidatesFrom(matched) }),
+    );
+
+    expect(result.sources.map((source) => source.noteId)).toEqual([3, 4, 5, 6]);
   });
 
   it('passes over empty recent notes when filling', async () => {

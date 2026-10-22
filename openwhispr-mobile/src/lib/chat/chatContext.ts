@@ -11,9 +11,10 @@ const NOTE_CUT_MARKER = '\n\n[...rest of the note omitted...]';
 const MAX_SEARCH_TERMS = 6;
 const MIN_TERM_LENGTH = 3;
 // Most two-character words are filler ("he", "go"), so one is kept only when it is clearly a name or
-// code ("Q3", "AI", "HR") or from a script without letter case, where two syllables make a word
-// (Korean "회의", "예산").
-const SHORT_TERM = /^(?=.*\p{N})[\p{L}\p{N}]{2}$|^\p{Lu}{2}$|^\p{Lo}{2}$/u;
+// code ("Q3", "AI", "HR") or Korean, where two syllables make a word ("회의", "예산"). Other
+// scripts without letter case keep the length rule: their two-letter words are mostly particles
+// (Arabic "في", Hebrew "של").
+const SHORT_TERM = /^(?=.*\p{N})[\p{L}\p{N}]{2}$|^\p{Lu}{2}$|^\p{Script=Hangul}{2}$/u;
 // Chinese and Japanese don't put spaces between words, so their runs are searched as bigrams.
 const UNSPACED_SCRIPT_RUN = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]+/gu;
 

@@ -15,6 +15,9 @@ import {
 import type { ChatMessage, ChatSource, ChatStep, ChatStepId } from './types';
 
 const MAX_MATCHED_NOTES = 4;
+// A match can be empty (a failed recording matching by title), so a few spare matches are read to
+// take its place.
+const MATCH_POOL = MAX_MATCHED_NOTES * 2;
 const MIN_CHAT_NOTES = 2;
 // Recent notes topping up a thin match can be empty (a recording that failed), so the fill reads a
 // few more than it needs and passes over those.
@@ -256,7 +259,7 @@ export async function runChatTurn(
   const terms = extractSearchTerms(question);
   const matches =
     terms.length > 0
-      ? deps.getCandidateNotes(terms, { includePrivate, limit: MAX_MATCHED_NOTES })
+      ? deps.getCandidateNotes(terms, { includePrivate, limit: MATCH_POOL })
       : { notes: [], total: 0 };
   // Transcripts of the notes with no text of their own, read once whether a note is sent or passed
   // over for having nothing in it.
@@ -269,7 +272,7 @@ export async function runChatTurn(
   };
   // The repository ranks by matched terms across the title, the text, the summary and the
   // transcript, so its order stands.
-  const notes = allowed(matches.notes).filter(hasContent);
+  const notes = allowed(matches.notes).filter(hasContent).slice(0, MAX_MATCHED_NOTES);
   if (notes.length < MIN_CHAT_NOTES) {
     const matchedIds = new Set(notes.map((note) => note.id));
     const recent = allowed(
