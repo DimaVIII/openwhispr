@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { Alert, ScrollView, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Text } from '@/components/ui/Text';
 import { TabScreenHeader } from '@/components/ui/TabScreenHeader';
@@ -8,6 +8,7 @@ import { SwipeableCard } from '@/components/ui/SwipeableCard';
 import { ChatConversationRow } from '@/components/chat/ChatConversationRow';
 import { TAB_BAR_CLEARANCE } from '@/components/ui/tabBarClearance';
 import { CHAT_HOME_ROUTE, chatConversationRoute } from '@/lib/chat/chatRoutes';
+import { confirmDestructive } from '@/lib/alerts';
 import { safeHaptics } from '@/lib/utils';
 import { useChatStore } from '@/store/useChatStore';
 
@@ -18,18 +19,11 @@ export function ChatHistoryScreen(): React.JSX.Element {
   // deletes without swiping, so there is nothing to restore.
   const confirmDelete = (conversationId: string, onCancel?: () => void): void => {
     safeHaptics('warning');
-    Alert.alert(
+    confirmDestructive(
       'Delete this chat?',
-      undefined,
-      [
-        { text: 'Cancel', style: 'cancel', onPress: onCancel },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => useChatStore.getState().deleteConversation(conversationId),
-        },
-      ],
-      { onDismiss: onCancel },
+      '',
+      () => useChatStore.getState().deleteConversation(conversationId),
+      { onCancel },
     );
   };
 

@@ -53,12 +53,8 @@ describe('ChatHistoryScreen', () => {
     ]);
     fireEvent(row, 'accessibilityAction', { nativeEvent: { actionName: 'delete' } });
 
-    expect(alert).toHaveBeenCalledWith(
-      'Delete this chat?',
-      undefined,
-      expect.any(Array),
-      expect.any(Object),
-    );
+    // Nothing slid away, so there is nothing to restore and no cancel handler.
+    expect(alert).toHaveBeenCalledWith('Delete this chat?', '', expect.any(Array));
     const buttons = alert.mock.calls[0][2] as AlertButton[];
     buttons.find((button) => button.text === 'Delete')?.onPress?.();
     expect(mockDeleteConversation).toHaveBeenCalledWith('c1');

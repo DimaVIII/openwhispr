@@ -229,7 +229,7 @@ describe('buildChatPayload', () => {
     expect(buildPayload().systemPrompt).toBe(CHAT_SYSTEM_PROMPT);
     // A follow-up must not repeat the notes an earlier answer cited.
     expect(CHAT_SYSTEM_PROMPT).toContain(
-      'Name only notes listed under NOTES for this question. Notes named in RECENT CHAT belonged to earlier questions; if NOTES lists none, never say a note was used.',
+      "Name by title only notes listed under NOTES. A follow-up can still be answered from RECENT CHAT, but don't name or cite the notes an earlier answer named.",
     );
   });
 
