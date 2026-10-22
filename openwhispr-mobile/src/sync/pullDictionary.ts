@@ -1,4 +1,5 @@
-import { SyncStalledError, uncheckedSync, type SyncCheckpoint } from './syncContext';
+import { uncheckedSync, type SyncCheckpoint } from './syncContext';
+import * as Sentry from '@sentry/react-native';
 import { and, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { dictionaryEntries } from '@/db/schema';
@@ -144,8 +145,11 @@ type Fetcher = (
 // supplies the field that drives cursor advancement — `created_at` for
 // snapshot pulls (which order by created_at) and `updated_at` for delta pulls
 // (ordered by updated_at). Either way the (cursor, id) pair is a strict
-// keyset; a page that doesn't advance the boundary throws rather than loop, or
-// save a cursor that would freeze the pull.
+// keyset. An API whose timestamps are finer than the cursor it accepts repeats
+// a batch written at one instant, so a page that doesn't advance the boundary
+// ends the walk (returning false) and keeps what the applied pages reached:
+// failing instead would save nothing, and every run would start over. Mirrors
+// desktop SyncService's dictionary pull.
 async function walkPages(
   fetcher: Fetcher,
   cursorField: 'created_at' | 'updated_at',
@@ -153,7 +157,7 @@ async function walkPages(
   initialCursorId: string | null,
   maxes: { updatedAt: string; id: string },
   checkpoint: SyncCheckpoint,
-): Promise<void> {
+): Promise<boolean> {
   let cursor = initialCursor;
   let cursorId = initialCursorId;
 
@@ -161,7 +165,7 @@ async function walkPages(
     checkpoint();
     const { entries, hasMore } = await fetcher(cursor, PAGE_SIZE, cursorId);
     checkpoint();
-    if (entries.length === 0) break;
+    if (entries.length === 0) return true;
 
     for (const remote of entries) {
       applyRemote(remote);
@@ -173,11 +177,17 @@ async function walkPages(
       }
     }
 
-    if (!hasMore) break;
+    if (!hasMore) return true;
     const last = entries[entries.length - 1];
     const lastCursor = last[cursorField];
     if (lastCursor === cursor && last.id === cursorId) {
-      throw new SyncStalledError(`Dictionary ${cursorField} pull stopped advancing`);
+      Sentry.addBreadcrumb({
+        category: 'sync',
+        message: `Dictionary ${cursorField} pull stopped advancing; resuming next run`,
+        level: 'warning',
+        data: { cursor, cursorId },
+      });
+      return false;
     }
     cursor = lastCursor;
     cursorId = last.id;
@@ -204,21 +214,38 @@ export async function pullDictionary(checkpoint: SyncCheckpoint = uncheckedSync)
   // already passed them never revisits. Once, a snapshot refreshes the live
   // rows, then the usual delta from the stored cursor applies what a live-only
   // snapshot can't show: deletions and retirements since that cursor. Nothing
-  // is saved until both finish, so an interrupted backfill simply runs again.
+  // is saved until both finish, so an interrupted backfill simply runs again;
+  // one that stopped advancing is not marked done either, so it is retried.
   const backfill = !notesRepository.getSyncState(DICTIONARY_SHARED_AT_BACKFILL_KEY);
+  let complete = true;
 
   if (!since || backfill) {
     checkpoint();
-    await walkPages(fetchDictionarySnapshot, 'created_at', null, null, maxes, checkpoint);
+    complete = await walkPages(
+      fetchDictionarySnapshot,
+      'created_at',
+      null,
+      null,
+      maxes,
+      checkpoint,
+    );
     checkpoint();
   }
   if (since) {
     checkpoint();
-    await walkPages(fetchDictionary, 'updated_at', since, sinceId, maxes, checkpoint);
+    const deltaComplete = await walkPages(
+      fetchDictionary,
+      'updated_at',
+      since,
+      sinceId,
+      maxes,
+      checkpoint,
+    );
+    complete &&= deltaComplete;
     checkpoint();
   }
 
   if (maxes.updatedAt) notesRepository.setSyncState(DICTIONARY_CURSOR_KEY, maxes.updatedAt);
   if (maxes.id) notesRepository.setSyncState(DICTIONARY_CURSOR_ID_KEY, maxes.id);
-  if (backfill) notesRepository.setSyncState(DICTIONARY_SHARED_AT_BACKFILL_KEY, '1');
+  if (backfill && complete) notesRepository.setSyncState(DICTIONARY_SHARED_AT_BACKFILL_KEY, '1');
 }

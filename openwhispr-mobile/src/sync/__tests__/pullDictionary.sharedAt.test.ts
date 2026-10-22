@@ -24,6 +24,7 @@ jest.mock('@/data/remote/dictionaryApi', () => ({
   deleteDictionaryEntry: jest.fn(),
 }));
 jest.mock('@sentry/react-native', () => ({
+  addBreadcrumb: jest.fn(),
   captureMessage: jest.fn(),
   captureException: jest.fn(),
 }));
@@ -37,7 +38,7 @@ import {
   updateDictionaryEntry,
 } from '@/data/remote/dictionaryApi';
 import type { RemoteDictionaryEntry } from '@/data/remote/dictionaryApi';
-import { SyncStalledError } from '../syncContext';
+import * as Sentry from '@sentry/react-native';
 import {
   DICTIONARY_CURSOR_ID_KEY,
   DICTIONARY_CURSOR_KEY,
@@ -352,18 +353,58 @@ describe('pullDictionary shared_at backfill', () => {
 });
 
 describe('pullDictionary stalled pages', () => {
-  it('throws a SyncStalledError instead of saving a cursor that stopped advancing', async () => {
+  it('ends a delta that stopped advancing and keeps what it applied', async () => {
     mockRepo.setSyncState(DICTIONARY_CURSOR_KEY, '2026-10-01T00:00:00.000Z');
     mockRepo.setSyncState(DICTIONARY_CURSOR_ID_KEY, 'remote-0');
-    const stuck = remoteEntry();
+    const stuck = remoteEntry({ shared_at: SHARED_AT });
     jest
       .mocked(fetchDictionary)
       .mockResolvedValueOnce({ entries: [stuck], hasMore: true })
       .mockResolvedValueOnce({ entries: [stuck], hasMore: true });
 
-    await expect(pullDictionary()).rejects.toBeInstanceOf(SyncStalledError);
+    await expect(pullDictionary()).resolves.toBeUndefined();
 
-    expect(mockRepo.getSyncState(DICTIONARY_CURSOR_KEY)).toBe('2026-10-01T00:00:00.000Z');
-    expect(mockRepo.getSyncState(DICTIONARY_CURSOR_ID_KEY)).toBe('remote-0');
+    expect(fetchDictionary).toHaveBeenCalledTimes(2);
+    expect(readRow()?.sharedAt).toBe(SHARED_AT);
+    expect(mockRepo.getSyncState(DICTIONARY_CURSOR_KEY)).toBe('2026-10-02T00:00:00.000Z');
+    expect(mockRepo.getSyncState(DICTIONARY_CURSOR_ID_KEY)).toBe('remote-1');
+    expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
+      expect.objectContaining({ level: 'warning', category: 'sync' }),
+    );
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
+
+  it('a backfill whose snapshot stopped advancing is not marked done, so it runs again', async () => {
+    mockRepo.clearSyncState(DICTIONARY_SHARED_AT_BACKFILL_KEY);
+    mockRepo.setSyncState(DICTIONARY_CURSOR_KEY, '2026-10-02T00:00:00.000Z');
+    const stuck = remoteEntry({ shared_at: SHARED_AT });
+    jest
+      .mocked(fetchDictionarySnapshot)
+      .mockResolvedValueOnce({ entries: [stuck], hasMore: true })
+      .mockResolvedValueOnce({ entries: [stuck], hasMore: true });
+
+    await expect(pullDictionary()).resolves.toBeUndefined();
+
+    // The delta from the stored cursor still runs.
+    expect(fetchDictionary).toHaveBeenCalledTimes(1);
+    expect(readRow()?.sharedAt).toBe(SHARED_AT);
+    expect(mockRepo.getSyncState(DICTIONARY_SHARED_AT_BACKFILL_KEY)).toBeNull();
+
+    await pullDictionary();
+
+    expect(fetchDictionarySnapshot).toHaveBeenCalledTimes(3);
+    expect(mockRepo.getSyncState(DICTIONARY_SHARED_AT_BACKFILL_KEY)).toBeTruthy();
+  });
+
+  it('a backfill whose delta stopped advancing is not marked done', async () => {
+    mockRepo.clearSyncState(DICTIONARY_SHARED_AT_BACKFILL_KEY);
+    mockRepo.setSyncState(DICTIONARY_CURSOR_KEY, '2026-10-02T00:00:00.000Z');
+    mockRepo.setSyncState(DICTIONARY_CURSOR_ID_KEY, 'remote-1');
+    const stuck = remoteEntry();
+    jest.mocked(fetchDictionary).mockResolvedValueOnce({ entries: [stuck], hasMore: true });
+
+    await pullDictionary();
+
+    expect(mockRepo.getSyncState(DICTIONARY_SHARED_AT_BACKFILL_KEY)).toBeNull();
   });
 });

@@ -151,6 +151,35 @@ test('BYOK prompt ends with personal words', async (): Promise<void> => {
   expectFilledEndingWithPersonal(input.prompt);
 });
 
+// Three-character words: more than 100 of them fit the decoder window.
+const SHORT_WORKSPACE = Array.from(
+  { length: 150 },
+  (_, i) => `w${i.toString(36).padStart(2, '0')}`,
+);
+
+test('cloud and local prompts stop at 100 terms in all, personal words included', async (): Promise<void> => {
+  mockSharedWorkspace = SHORT_WORKSPACE;
+  const expected = [...SHORT_WORKSPACE.slice(0, 98), ...PERSONAL].join(', ');
+  await TranscriptionService.transcribe(recording('cloud'));
+  expect(uploadedParameters().prompt).toBe(expected);
+  await TranscriptionService.transcribe(recording('local'));
+  const [, options] = mockLocalTranscribe.mock.calls[0] as unknown as [string, { prompt: string }];
+  expect(options.prompt).toBe(expected);
+});
+
+test('BYOK prompt carries at most 100 shared words', async (): Promise<void> => {
+  mockSharedWorkspace = SHORT_WORKSPACE;
+  await TranscriptionService.transcribe(recording('byok'));
+  const [input] = jest.mocked(transcribeWithProvider).mock.calls[0];
+  expect(input.prompt).toBe([...SHORT_WORKSPACE.slice(0, 100), ...PERSONAL].join(', '));
+});
+
+test('a personal-only prompt is the plain joined list', async (): Promise<void> => {
+  mockSharedWorkspace = [];
+  await TranscriptionService.transcribe(recording('cloud'));
+  expect(uploadedParameters().prompt).toBe(PERSONAL.join(', '));
+});
+
 test('fused cleanup keeps personal words apart from at most 200 shared ones', async (): Promise<void> => {
   await TranscriptionService.transcribeWithCloudCleanup(recording('cloud'));
   const parameters = uploadedParameters();

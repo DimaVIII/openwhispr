@@ -1026,8 +1026,11 @@ describe('shared dictionary pull', () => {
     expect(mockPushNotes).toHaveBeenCalled();
   });
 
-  it('a network-level shared pull failure stays out of Sentry', async () => {
-    mockPullSharedDictionary.mockRejectedValue(new TypeError('Network request failed'));
+  it.each([
+    ['expo/fetch', new Error('fetch failed: The Internet connection appears to be offline.')],
+    ['React Native fetch', new TypeError('Network request failed')],
+  ])('a %s network failure in the shared pull stays out of Sentry', async (_label, error) => {
+    mockPullSharedDictionary.mockRejectedValue(error);
 
     requestSync('manual');
     await flush();
@@ -1035,11 +1038,27 @@ describe('shared dictionary pull', () => {
     expect(Sentry.captureException).not.toHaveBeenCalled();
     expect(mockPushNotes).toHaveBeenCalled();
   });
+
+  it('reports a crash in the shared pull, such as a malformed body, without failing the run', async () => {
+    const crash = new TypeError("Cannot read properties of undefined (reading 'at')");
+    mockPullSharedDictionary.mockRejectedValue(crash);
+
+    requestSync('manual');
+    await flush();
+
+    expect(Sentry.captureException).toHaveBeenCalledWith(crash, {
+      tags: { sync: 'shared-dictionary' },
+    });
+    expect(mockPushNotes).toHaveBeenCalled();
+    expect(mockPullDictionary).toHaveBeenCalled();
+    expect(useSyncStore.getState().status).toBe('idle');
+    expect(useSyncStore.getState().lastError).toBeNull();
+  });
 });
 
 describe('personal dictionary pass', () => {
   it.each([
-    ['a stalled pull', new SyncStalledError('Dictionary updated_at pull stopped advancing')],
+    ['a crashed pull', new TypeError('entries is not iterable')],
     ['a failed backfill snapshot', new ApiError('boom', 500)],
   ])('%s is reported and the push still runs', async (_label, error) => {
     mockPullDictionary.mockRejectedValue(error);

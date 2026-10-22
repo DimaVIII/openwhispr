@@ -106,6 +106,18 @@ function isQuietNetworkError(err: unknown): boolean {
   );
 }
 
+// A request that never got an answer: expo/fetch's FetchError ("fetch failed:
+// …", not exported; an abort included), or React Native's fetch's TypeError.
+// Narrower than isQuietNetworkError, so a TypeError from a malformed 200 body
+// is reported rather than filed as offline.
+function isFetchFailure(err: unknown): boolean {
+  return (
+    err instanceof Error &&
+    (err.message.startsWith('fetch failed') ||
+      (err instanceof TypeError && err.message === 'Network request failed'))
+  );
+}
+
 // Ends the run as a clean idle: no lastError, no captureException, and a
 // partial set so the gate's subscriptionRequired survives untouched.
 function endRunQuietly(message: string, err: unknown): void {
@@ -251,7 +263,7 @@ async function syncSharedDictionary(
     checkpoint();
   } catch (err) {
     if (err instanceof SyncCancelledError) throw err;
-    if (isQuietNetworkError(err)) {
+    if (isFetchFailure(err)) {
       Sentry.addBreadcrumb({
         category: 'sync',
         message: 'shared dictionary pass: network-level error (offline?)',

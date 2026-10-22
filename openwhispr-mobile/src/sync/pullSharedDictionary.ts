@@ -173,6 +173,48 @@ interface EntriesPass {
   cursor: Cursor | null;
 }
 
+// Snapshot pages run on created_at, so a list the member joins mid-pass only
+// shows up in later pages' scopes, without its older rows. `firstScopes` lets
+// the caller spot that.
+async function pullSnapshot(
+  workspaceId: string,
+  checkpoint: SyncCheckpoint,
+): Promise<{ pass: EntriesPass; firstScopes: RemoteSharedScope[] }> {
+  const entries: Entries = {};
+  let page: SharedDictionaryPage = { limit: PAGE_LIMIT };
+  let passStartedAt: string | undefined;
+  let firstScopes: RemoteSharedScope[] | undefined;
+  let lastId: string | null = null;
+  while (true) {
+    checkpoint();
+    const response = await fetchSharedDictionary(workspaceId, page);
+    checkpoint();
+    passStartedAt ??= response.server_time;
+    firstScopes ??= response.scopes;
+    for (const entry of response.entries) {
+      if (!entry.deleted_at) entries[entry.id] = { spaceId: entry.space_id, word: entry.word };
+    }
+    const last = response.entries.at(-1);
+    if (last) lastId = last.id;
+    if (!response.hasMore) {
+      return {
+        pass: {
+          kind: 'snapshot',
+          entries,
+          scopes: response.scopes,
+          paused: response.paused,
+          cursor: advanceCursor(null, passStartedAt, lastId),
+        },
+        firstScopes,
+      };
+    }
+    if (!last || (last.created_at === page.cursor && last.id === page.cursorId)) {
+      throw new SyncStalledError('Shared dictionary snapshot stopped advancing');
+    }
+    page = { cursor: last.created_at, cursorId: last.id, limit: PAGE_LIMIT };
+  }
+}
+
 // Pages into memory; nothing is written until the whole pass is in, so a pass
 // cut short never half-replaces the stored state.
 async function pullEntries(
@@ -183,34 +225,13 @@ async function pullEntries(
   const stored = readCursor(ENTRIES_CURSOR);
 
   if (!stored || !base) {
-    const entries: Entries = {};
-    let page: SharedDictionaryPage = { limit: PAGE_LIMIT };
-    let passStartedAt: string | undefined;
-    let lastId: string | null = null;
-    while (true) {
-      checkpoint();
-      const response = await fetchSharedDictionary(workspaceId, page);
-      checkpoint();
-      passStartedAt ??= response.server_time;
-      for (const entry of response.entries) {
-        if (!entry.deleted_at) entries[entry.id] = { spaceId: entry.space_id, word: entry.word };
-      }
-      const last = response.entries.at(-1);
-      if (last) lastId = last.id;
-      if (!response.hasMore) {
-        return {
-          kind: 'snapshot',
-          entries,
-          scopes: response.scopes,
-          paused: response.paused,
-          cursor: advanceCursor(null, passStartedAt, lastId),
-        };
-      }
-      if (!last || (last.created_at === page.cursor && last.id === page.cursorId)) {
-        throw new SyncStalledError('Shared dictionary snapshot stopped advancing');
-      }
-      page = { cursor: last.created_at, cursorId: last.id, limit: PAGE_LIMIT };
-    }
+    const snapshot = await pullSnapshot(workspaceId, checkpoint);
+    if (!hasReturningScope(snapshot.firstScopes, snapshot.pass.scopes)) return snapshot.pass;
+    const redo = await pullSnapshot(workspaceId, checkpoint);
+    if (!hasReturningScope(redo.firstScopes, redo.pass.scopes)) return redo.pass;
+    // Joined again during the redo: keep what was read but store no cursor, so
+    // the next run snapshots instead of this one looping.
+    return { ...redo.pass, cursor: null };
   }
 
   const entries: Entries = { ...base.entries };

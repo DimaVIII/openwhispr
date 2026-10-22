@@ -336,6 +336,52 @@ describe('pullSharedDictionary', () => {
     expect(mockSyncState.get(SHARED_DICTIONARY_CURSOR_KEY)).toBe(T2);
   });
 
+  it('a list joined mid-snapshot redoes the snapshot once for its older words', async () => {
+    const workspaceOnly = { scopes: [scope(null)] };
+    mockFetchSharedDictionary
+      .mockResolvedValueOnce(listPage([entry('e1', 'Acme')], { ...workspaceOnly, hasMore: true }))
+      // Joined space-1 here; its word e2 sorts before the page-2 cursor.
+      .mockResolvedValueOnce(listPage([entry('e3', 'Widget')], { server_time: T2 }))
+      .mockResolvedValueOnce(
+        listPage([entry('e1', 'Acme'), entry('e2', 'Gizmo', { space_id: 'space-1' })], {
+          hasMore: true,
+          server_time: T2,
+        }),
+      )
+      .mockResolvedValueOnce(listPage([entry('e3', 'Widget')], { server_time: T2 }));
+
+    await expect(pullSharedDictionary()).resolves.toEqual({ changed: true });
+
+    expect(mockFetchSharedDictionary).toHaveBeenCalledTimes(4);
+    expect(mockFetchSharedDictionary).toHaveBeenNthCalledWith(3, 'ws-1', { limit: 200 });
+    const state = await loadSharedDictionaryState();
+    expect(state?.entries).toEqual({
+      e1: { spaceId: null, word: 'Acme' },
+      e2: { spaceId: 'space-1', word: 'Gizmo' },
+      e3: { spaceId: null, word: 'Widget' },
+    });
+    expect(state?.scopes).toEqual([scope(null), scope('space-1')]);
+    expect(mockSyncState.get(SHARED_DICTIONARY_CURSOR_KEY)).toBe(T2);
+  });
+
+  it('a list joined during the redo too stores no cursor, so the next run snapshots', async () => {
+    const joinMidPass = (): void => {
+      mockFetchSharedDictionary
+        .mockResolvedValueOnce(
+          listPage([entry('e1', 'Acme')], { scopes: [scope(null)], hasMore: true }),
+        )
+        .mockResolvedValueOnce(listPage([entry('e3', 'Widget')]));
+    };
+    joinMidPass();
+    joinMidPass();
+
+    await expect(pullSharedDictionary()).resolves.toEqual({ changed: true });
+
+    expect(mockFetchSharedDictionary).toHaveBeenCalledTimes(4);
+    expect(Object.keys((await loadSharedDictionaryState())?.entries ?? {})).toEqual(['e1', 'e3']);
+    expect(mockSyncState.get(SHARED_DICTIONARY_CURSOR_KEY)).toBeUndefined();
+  });
+
   it('expired cursor re-snapshots and drops an entry missing from the snapshot', async () => {
     await seedStored();
     mockFetchSharedDictionary

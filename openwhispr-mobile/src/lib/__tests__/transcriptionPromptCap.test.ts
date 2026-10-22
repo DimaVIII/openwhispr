@@ -120,10 +120,40 @@ describe('formatDictionaryPrompt', () => {
   });
 
   it('stops the shared fill at sharedChars but keeps personal words to maxChars', (): void => {
-    expect(formatDictionaryPrompt([['P1'], ['S1', 'S2'], ['W1']], 100, 10)).toBe('S1, S2, P1');
-    expect(formatDictionaryPrompt([['P1'], ['S1', 'S2'], ['W1']], 100, 9)).toBe('S1, P1');
+    const tiers = [['P1'], ['S1', 'S2'], ['W1']];
+    expect(formatDictionaryPrompt(tiers, 100, { sharedChars: 10 })).toBe('S1, S2, P1');
+    expect(formatDictionaryPrompt(tiers, 100, { sharedChars: 9 })).toBe('S1, P1');
     // Personal words past sharedChars still fit; no shared word joins them.
-    expect(formatDictionaryPrompt([['Piha', 'Biscuit'], ['S1'], []], 100, 5)).toBe('Piha, Biscuit');
+    expect(formatDictionaryPrompt([['Piha', 'Biscuit'], ['S1'], []], 100, { sharedChars: 5 })).toBe(
+      'Piha, Biscuit',
+    );
+  });
+
+  it('stops the shared fill at sharedWords, space words first', (): void => {
+    expect(formatDictionaryPrompt([['P1'], ['S1', 'S2'], ['W1']], 100, { sharedWords: 2 })).toBe(
+      'S1, S2, P1',
+    );
+    expect(formatDictionaryPrompt([['P1'], ['S1'], ['W1', 'W2']], 100, { sharedWords: 2 })).toBe(
+      'W1, S1, P1',
+    );
+  });
+
+  it('stops the shared fill at totalTerms, counting the terms inside a personal entry', (): void => {
+    // "Smith, John" is two terms to a provider that splits the prompt on commas.
+    expect(
+      formatDictionaryPrompt([['Smith, John', 'P2'], ['S1', 'S2'], []], 100, { totalTerms: 4 }),
+    ).toBe('S1, Smith, John, P2');
+  });
+
+  it('never drops a personal word for the shared caps', (): void => {
+    const personal = Array.from({ length: 150 }, (_, i) => `p${i}`);
+    expect(
+      formatDictionaryPrompt([personal, ['S1'], []], 10_000, {
+        sharedChars: 5,
+        sharedWords: 0,
+        totalTerms: 100,
+      }),
+    ).toBe(personal.join(', '));
   });
 });
 

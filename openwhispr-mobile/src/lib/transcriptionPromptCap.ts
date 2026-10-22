@@ -32,33 +32,62 @@ export function sharedDictionaryPromptChars(limit: number): number {
   return limit <= WHISPER_PROMPT_CHARS ? Math.min(limit, WHISPER_DECODER_PROMPT_CHARS) : limit;
 }
 
+// At most this many shared words ride in a transcription prompt, as in
+// desktop's keyterms, keywords and prompts (MAX_SHARED_KEYTERMS).
+export const MAX_SHARED_KEYTERMS = 100;
+// OpenWhispr Cloud's Gemini route keeps the first 100 terms of the prompt
+// (openwhispr-api lib/providers/gemini.ts), and the prompt opens with shared
+// words, so shared words must stop before the total reaches it. Same as
+// desktop's PROMPT_HEAD_TERMS.
+export const PROMPT_HEAD_TERMS = 100;
+
+// The terms a provider splits a prompt entry into: a personal entry may hold commas.
+const termCount = (word: string): number =>
+  word.split(/[,\r\n]+/).filter((term) => term.trim()).length || 1;
+
+export interface SharedPromptLimits {
+  sharedChars?: number;
+  sharedWords?: number;
+  totalTerms?: number;
+}
+
 // Builds the dictionary prompt from priority tiers (personal, space, workspace).
 // Whole words are kept greedily, highest tier first, so a long shared list can
 // only ever crowd out lower-priority words. They are emitted lowest tier first:
 // Whisper-family decoders keep the TAIL of an over-long prompt, so the user's
-// own words belong there. `maxChars` bounds the whole prompt; `sharedChars`
-// bounds its length once shared words join it, so personal words keep the full
-// limit. A personal-only list that fits is the plain ", "-joined string it
-// always was. Ported from desktop dictionaryPromptCap.js.
+// own words belong there. `maxChars` bounds the whole prompt; the shared limits
+// (`sharedChars` for the prompt's length once shared words join it,
+// `sharedWords`, `totalTerms`) bound only the shared fill, so personal words
+// keep the full limit. A personal-only list that fits is the plain ", "-joined
+// string it always was. Ported from desktop dictionaryPromptCap.js.
 export function formatDictionaryPrompt(
   tiers: string[][],
   maxChars: number,
-  sharedChars: number = maxChars,
+  {
+    sharedChars = Infinity,
+    sharedWords = Infinity,
+    totalTerms = Infinity,
+  }: SharedPromptLimits = {},
 ): string {
   const kept: string[][] = tiers.map(() => []);
   let length = 0;
   let count = 0;
+  let terms = 0;
+  let shared = 0;
   let full = false;
   for (let tier = 0; tier < tiers.length && !full; tier++) {
     for (const word of tiers[tier]) {
       const next = length + word.length + (count > 0 ? 2 : 0);
+      const nextTerms = terms + termCount(word);
       // Strict priority: the first word that doesn't fit ends the fill.
-      if (next > maxChars || (tier > 0 && next > sharedChars)) {
-        full = true;
-        break;
-      }
+      full =
+        next > maxChars ||
+        (tier > 0 && (next > sharedChars || shared >= sharedWords || nextTerms > totalTerms));
+      if (full) break;
       length = next;
+      terms = nextTerms;
       count++;
+      if (tier > 0) shared++;
       kept[tier].push(word);
     }
   }
