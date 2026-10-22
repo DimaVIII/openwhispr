@@ -1,4 +1,5 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
+import { AccessibilityInfo } from 'react-native';
 import { router } from 'expo-router';
 import type { GoogleCalendarEvent } from '@/data';
 import type { AuthUser } from '@/lib/authClient';
@@ -193,6 +194,9 @@ describe('ChatHomeScreen', () => {
       useChatStore.setState({ sendBlockedByWipe: true });
       return null;
     });
+    const announce = jest
+      .spyOn(AccessibilityInfo, 'announceForAccessibility')
+      .mockImplementation(() => undefined);
     const screen = await renderHome();
     expect(screen.queryByText('Couldn’t send right now. Try again.')).toBeNull();
 
@@ -200,8 +204,11 @@ describe('ChatHomeScreen', () => {
     fireEvent.press(screen.getByLabelText('Send'));
 
     expect(screen.getByText('Couldn’t send right now. Try again.')).toBeTruthy();
+    expect(announce).toHaveBeenCalledTimes(1);
+    expect(announce).toHaveBeenCalledWith('Couldn’t send right now. Try again.');
     expect(screen.getByPlaceholderText(COMPOSER).props.value).toBe('What changed?');
     expect(router.push).not.toHaveBeenCalled();
+    announce.mockRestore();
   });
 
   it('ignores a suggestion tap while listening', async () => {

@@ -1,5 +1,5 @@
-import { useCallback, useRef, useState } from 'react';
-import { Keyboard, Pressable, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AccessibilityInfo, Keyboard, Pressable, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Text } from '@/components/ui/Text';
 import { SystemIcon } from '@/components/ui/SystemIcon';
@@ -100,6 +100,14 @@ export function ChatHomeScreen(): React.JSX.Element {
       };
     }, []),
   );
+
+  // The notice appears beside the composer, out of a screen reader's sight, so the screen on show
+  // reads it out.
+  useEffect(() => {
+    if (sendBlocked && focusedRef.current) {
+      AccessibilityInfo.announceForAccessibility(SEND_BLOCKED_NOTICE);
+    }
+  }, [sendBlocked]);
 
   // One turn runs at a time across every chat, so any pending turn locks Home too. Home is no
   // conversation, so the only thing it can stop is its own spoken question.

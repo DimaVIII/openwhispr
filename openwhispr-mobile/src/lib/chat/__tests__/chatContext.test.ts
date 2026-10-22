@@ -56,21 +56,22 @@ describe('parseChatQuery', () => {
   const day = (date: number): Date => new Date(2026, 9, date);
 
   it('reads each period from local midnight, weeks from Monday', () => {
-    const cases: [string, Date, Date, string][] = [
-      ['What happened today?', day(22), day(23), 'today'],
-      ['What did I say yesterday?', day(21), day(22), 'yesterday'],
-      ['What happened this week?', day(19), day(23), 'this week'],
-      ['What happened last  week?', day(12), day(19), 'last week'],
-      ['Anything recent?', day(16), day(23), 'the last 7 days'],
-      ['What did I decide recently?', day(16), day(23), 'the last 7 days'],
-      ['Who did I meet lately?', day(16), day(23), 'the last 7 days'],
+    const cases: [string, Date, Date, string, boolean][] = [
+      ['What happened today?', day(22), day(23), 'today', false],
+      ['What did I say yesterday?', day(21), day(22), 'yesterday', false],
+      ['What happened this week?', day(19), day(23), 'this week', false],
+      ['What happened last  week?', day(12), day(19), 'last week', false],
+      ['Anything recent?', day(16), day(23), 'the last 7 days', true],
+      ['What did I decide Recently?', day(16), day(23), 'the last 7 days', true],
+      ['Who did I meet lately?', day(16), day(23), 'the last 7 days', true],
     ];
-    for (const [question, start, end, label] of cases) {
+    for (const [question, start, end, label, soft] of cases) {
       expect(parseChatQuery(question, NOW).scope).toEqual({
         start,
         end,
         meetingsOnly: false,
         label,
+        soft,
       });
     }
   });
@@ -81,20 +82,45 @@ describe('parseChatQuery', () => {
 
   it('keeps the period’s words out of the search, and "meetings" when it narrows to them', () => {
     expect(parseChatQuery('Summarize my meetings this week', NOW)).toEqual({
-      terms: ['summarize'],
+      terms: [],
       scope: expect.objectContaining({ meetingsOnly: true, label: 'this week' }),
     });
-    expect(parseChatQuery('What did we decide on pricing today?', NOW).terms).toEqual([
-      'decide',
-      'pricing',
-    ]);
+    expect(parseChatQuery('What did we decide on pricing today?', NOW).terms).toEqual(['pricing']);
   });
 
   it('names no period, and keeps every word, when the question names none', () => {
-    expect(parseChatQuery('What did the meeting decide about the weekly budget?', NOW)).toEqual({
-      terms: ['meeting', 'decide', 'weekly', 'budget'],
+    expect(parseChatQuery('What did the meeting say about the weekly budget?', NOW)).toEqual({
+      terms: ['meeting', 'say', 'weekly', 'budget'],
       scope: null,
     });
+  });
+
+  it('reads no period from a quoted meeting title, and still searches its words', () => {
+    expect(parseChatQuery('Prep me for "Today\'s priorities" at 9:00 AM.', NOW)).toEqual({
+      terms: ['today', 'priorities'],
+      scope: null,
+    });
+    expect(parseChatQuery('Notes on “Last week recap” from this week', NOW)).toEqual({
+      terms: ['last', 'week', 'recap'],
+      scope: expect.objectContaining({ label: 'this week' }),
+    });
+  });
+
+  it('keeps the topic words of a question that names a period', () => {
+    expect(parseChatQuery('What was our most recent pricing decision?', NOW)).toEqual({
+      terms: ['pricing', 'decision'],
+      scope: expect.objectContaining({ soft: true }),
+    });
+  });
+
+  it('leaves the chips no asking words to search for', () => {
+    expect(parseChatQuery('What are my open action items from this week?', NOW).terms).toEqual([
+      'action',
+      'items',
+    ]);
+    expect(parseChatQuery('Who have I promised to follow up with lately?', NOW).terms).toEqual([]);
+    expect(parseChatQuery('What did I decide recently?', NOW).terms).toEqual([]);
+    expect(extractSearchTerms('Summarise what we decided')).toEqual([]);
   });
 });
 
@@ -151,6 +177,12 @@ describe('extractSearchTerms', () => {
       'الأمس',
     ]);
     expect(extractSearchTerms('מה זה של התקציב')).toEqual(['התקציב']);
+  });
+
+  it('keeps a number joined by "." "," or ":" as one term', () => {
+    expect(extractSearchTerms('What ships in 1.10?')).toEqual(['ships', '1.10']);
+    expect(extractSearchTerms('Who owes the $10,000?')).toEqual(['owes', '10,000']);
+    expect(extractSearchTerms('Is 10. enough, or 10.5:1?')).toEqual(['10', 'enough', '10.5:1']);
   });
 
   it('drops a clock time and the "prep" of a meeting prep', () => {
@@ -269,6 +301,28 @@ describe('buildChatPayload', () => {
 
     expect(text).not.toContain('Failed recording');
     expect(sources).toEqual([{ noteId: 2, title: 'Pricing' }]);
+  });
+
+  it('says how many of a period’s notes it sends, each with the day it was made', () => {
+    const scope = parseChatQuery('Summarize my meetings this week', NOW).scope;
+    if (!scope) throw new Error('No period');
+    const notes = [21, 20].map((date) =>
+      makeNote({
+        id: date,
+        title: `Sync ${date}`,
+        content: 'Body',
+        createdAt: new Date(2026, 9, date, 10, 0).toISOString(),
+        updatedAt: NOW.toISOString(),
+      }),
+    );
+
+    const { text } = buildPayload({ notes, period: { scope, total: 9, matched: false } });
+    expect(text).toContain('NOTES (2 of 9 meetings from this week, newest first):\n### Sync 21');
+    expect(text).toMatch(/### Sync 21 \(created Oct 21\)\nBody/);
+    expect(text).toMatch(/### Sync 20 \(created Oct 20\)\nBody/);
+
+    const matched = buildPayload({ notes, period: { scope, total: 3, matched: true } }).text;
+    expect(matched).toContain('NOTES (2 of 3 meetings from this week that match the question):');
   });
 
   it('says when there are no matching notes', () => {

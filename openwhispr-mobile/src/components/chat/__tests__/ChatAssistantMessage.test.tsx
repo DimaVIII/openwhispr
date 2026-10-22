@@ -71,6 +71,32 @@ describe('ChatAssistantMessage', () => {
     jest.useRealTimers();
   });
 
+  it('keeps "Copied" for its full time after a second copy', async () => {
+    jest.useFakeTimers();
+    const { getByLabelText, queryByText } = render(
+      <ChatAssistantMessage message={message} onOpenNote={jest.fn()} />,
+    );
+    await act(async () => {
+      fireEvent.press(getByLabelText('Copy answer'));
+    });
+    act(() => {
+      jest.advanceTimersByTime(1_500);
+    });
+    await act(async () => {
+      fireEvent.press(getByLabelText('Copy answer'));
+    });
+
+    act(() => {
+      jest.advanceTimersByTime(1_500);
+    });
+    expect(queryByText('Copied')).toBeTruthy();
+    act(() => {
+      jest.advanceTimersByTime(500);
+    });
+    expect(queryByText('Copied')).toBeNull();
+    jest.useRealTimers();
+  });
+
   it('survives a failed clipboard write, claiming no copy', async () => {
     (Clipboard.setStringAsync as jest.Mock).mockRejectedValueOnce(new Error('denied'));
     const { getByLabelText, queryByText } = render(

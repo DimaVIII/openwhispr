@@ -11,12 +11,15 @@ import { tryParseNoteTimestamp } from '@/lib/parseNoteTimestamp';
 import type { ReasoningResponse, ReasoningRoutingOptions } from '@/types';
 import {
   buildChatPayload,
+  countPeriodNotes,
   formatChatTime,
   isInChatCalendarWindow,
   lacksNoteText,
   parseChatQuery,
   type ChatCalendar,
+  type ChatNotesPeriod,
   type ChatPayload,
+  type ChatQuery,
   type ChatTimeScope,
 } from './chatContext';
 import type { ChatMessage, ChatSource, ChatStep, ChatStepId } from './types';
@@ -25,6 +28,7 @@ const MAX_MATCHED_NOTES = 4;
 // A note found can be empty (a failed recording matching by title, or made in the period asked
 // about), so a few spares are read to take its place.
 const MATCH_POOL = MAX_MATCHED_NOTES * 2;
+const NO_NOTES: ChatCandidateNotes = { notes: [], total: 0 };
 const CONTEXT_LIMIT_NOTE_CHAR_BUDGET = 3_000;
 // The read spans the day looked back as well as the 48 hours sent, so 72 hours share it: about 16
 // events a day, more than a busy calendar holds, so tomorrow isn't pushed out of the request.
@@ -193,15 +197,42 @@ const describeNextEvent = (events: GoogleCalendarEvent[], now: Date): string => 
   return start ? `${summary} · ${formatChatTime(start)}` : summary;
 };
 
-const describeFound = (count: number, scope: ChatTimeScope | null): string => {
-  if (scope) {
-    const noun = scope.meetingsOnly ? 'meeting' : 'note';
-    if (count === 0) return `No ${noun}s from ${scope.label}`;
-    return `${count} ${noun}${count === 1 ? '' : 's'} from ${scope.label}`;
+interface FoundNotes extends ChatCandidateNotes {
+  /** Null when the notes were searched for across every note. */
+  period: ChatNotesPeriod | null;
+}
+
+// In a period only the notes matching the question's words are read, when any do. When none do, a
+// period the question names outright ("this week") reads all its notes, since the question asked
+// for them, while "recently" only hints at one, so every note is searched instead.
+const findNotes = (
+  { terms, scope }: ChatQuery,
+  find: (terms: string[], window?: ChatTimeScope) => ChatCandidateNotes,
+): FoundNotes => {
+  if (!scope) return { ...(terms.length > 0 ? find(terms) : NO_NOTES), period: null };
+  const fromPeriod = (found: ChatCandidateNotes, matched: boolean): FoundNotes => ({
+    ...found,
+    period: { scope, total: found.total, matched },
+  });
+  if (terms.length > 0) {
+    const matches = find(terms, scope);
+    if (matches.total > 0) return fromPeriod(matches, true);
+    if (scope.soft) return { ...find(terms), period: null };
   }
-  if (count === 0) return 'No matching notes';
-  if (count === 1) return '1 note matches';
-  return `${count} notes match`;
+  return fromPeriod(find([], scope), false);
+};
+
+const describeFound = ({ total, period }: FoundNotes): string => {
+  if (period) {
+    const { scope, matched } = period;
+    if (total === 0) return `No ${scope.meetingsOnly ? 'meeting' : 'note'}s from ${scope.label}`;
+    const notes = countPeriodNotes(total, scope);
+    if (!matched) return notes;
+    return `${notes} ${total === 1 ? 'matches' : 'match'}`;
+  }
+  if (total === 0) return 'No matching notes';
+  if (total === 1) return '1 note matches';
+  return `${total} notes match`;
 };
 
 const describeReading = (sources: ChatSource[]): { active: string; done: string } => {
@@ -263,15 +294,9 @@ export async function runChatTurn(
   setStep({ id: 'search', status: 'active', label: 'Searching your notes…' });
   // Only notes whose words match, or that were made in the period the question names, are sent: a
   // question about something else gets no notes rather than unrelated ones.
-  const { terms, scope } = parseChatQuery(question, now);
-  const found =
-    terms.length > 0 || scope
-      ? deps.getCandidateNotes(terms, {
-          includePrivate,
-          limit: MATCH_POOL,
-          window: scope ?? undefined,
-        })
-      : { notes: [], total: 0 };
+  const found = findNotes(parseChatQuery(question, now), (terms, window) =>
+    deps.getCandidateNotes(terms, { includePrivate, limit: MATCH_POOL, window }),
+  );
   // Transcripts of the notes with no text of their own, read once whether a note is sent or passed
   // over for having nothing in it.
   const transcripts = new Map<number, string>();
@@ -292,7 +317,7 @@ export async function runChatTurn(
     id: 'search',
     status: 'done',
     label: 'Searched your notes',
-    detail: describeFound(found.total, scope),
+    detail: describeFound(found),
   });
   throwIfAborted(signal);
 
@@ -303,7 +328,15 @@ export async function runChatTurn(
     payloadNotes: Note[],
     options: { noteCharBudget?: number; history: ChatMessage[] },
   ): ChatPayload =>
-    buildChatPayload({ question, notes: payloadNotes, calendar, now, transcripts, ...options });
+    buildChatPayload({
+      question,
+      notes: payloadNotes,
+      calendar,
+      now,
+      transcripts,
+      period: found.period ?? undefined,
+      ...options,
+    });
 
   let payload = buildPayload(notes, { history });
   if (payload.sources.length > 0) {

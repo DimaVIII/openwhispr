@@ -256,6 +256,8 @@ export const useChatStore = create<ChatState>((set, get) => {
     },
 
     send: (question, options) => {
+      // Only this send's own refusal may say so: callers read the flag after any null.
+      set({ sendBlockedByWipe: false });
       const text = question.trim();
       // A spoken question's own slot is released before it sends, so any pending entry is a turn or
       // a transcription this send would race.
@@ -275,7 +277,6 @@ export const useChatStore = create<ChatState>((set, get) => {
       const history = readMessages(conversationId);
       const userMessage = chatRepository.appendMessage({ conversationId, role: 'user', text });
       set((state) => ({
-        sendBlockedByWipe: false,
         failures: withoutFailure(state.failures, conversationId),
         conversations: readConversations(),
         messages:

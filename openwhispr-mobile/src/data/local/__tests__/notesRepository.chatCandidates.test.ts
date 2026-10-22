@@ -225,6 +225,24 @@ describe('LocalNotesRepository.getChatCandidateNotes', () => {
     expect(ids('2026')).toEqual([dated]);
   });
 
+  it('matches a number with "." "," or ":" in it whole', () => {
+    const { repo, db } = createMemoryRepository();
+    const version = seed(repo, db, { content: 'Ships in 1.10.', updatedAt: '2026-10-01 10:00:00' });
+    const amount = seed(repo, db, { content: 'Owes $10,000', updatedAt: '2026-10-02 10:00:00' });
+    seed(repo, db, {
+      content: 'Not 1.100, 11.10, 1.10.2, v1.10 or 10,000,000',
+      updatedAt: '2026-10-03 10:00:00',
+    });
+
+    const ids = (term: string): number[] =>
+      repo
+        .getChatCandidateNotes([term], { includePrivate: false, limit: 10 })
+        .notes.map((note) => note.id);
+
+    expect(ids('1.10')).toEqual([version]);
+    expect(ids('10,000')).toEqual([amount]);
+  });
+
   it('matches a Korean term inside a longer word', () => {
     const { repo, db } = createMemoryRepository();
     const id = seed(repo, db, {
@@ -270,7 +288,7 @@ describe('LocalNotesRepository.getChatCandidateNotes', () => {
       meetingsOnly: false,
     };
 
-    it('counts every note made in it, matches first, then the newest', () => {
+    it('keeps only the notes made in it that match, or with no terms all of them, newest first', () => {
       const { repo, db } = createMemoryRepository();
       const early = seed(repo, db, {
         content: 'Pricing holds.',
@@ -312,9 +330,9 @@ describe('LocalNotesRepository.getChatCandidateNotes', () => {
       });
       const noTerms = repo.getChatCandidateNotes([], { includePrivate: false, limit: 2, window });
 
-      expect(matched.notes.map((note) => note.id)).toEqual([early, late, middle]);
-      expect(matched.total).toBe(3);
-      expect(unmatched.notes.map((note) => note.id)).toEqual([late, middle, early]);
+      expect(matched.notes.map((note) => note.id)).toEqual([early]);
+      expect(matched.total).toBe(1);
+      expect(unmatched).toEqual({ notes: [], total: 0 });
       expect(noTerms.notes.map((note) => note.id)).toEqual([late, middle]);
       expect(noTerms.total).toBe(3);
     });

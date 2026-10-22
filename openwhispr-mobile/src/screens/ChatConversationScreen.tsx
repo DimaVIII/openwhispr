@@ -172,6 +172,14 @@ export function ChatConversationScreen(): React.JSX.Element {
     wasWorkingRef.current = workingHere;
   }, [workingHere, failureHere, lastMessage]);
 
+  // The notice appears beside the composer, out of a screen reader's sight, so the screen on show
+  // reads it out.
+  useEffect(() => {
+    if (sendBlocked && focusedRef.current) {
+      AccessibilityInfo.announceForAccessibility(SEND_BLOCKED_NOTICE);
+    }
+  }, [sendBlocked]);
+
   const handleSend = (): void => {
     const question = draft.trim();
     if (!question || busy) return;

@@ -21,13 +21,15 @@ export function ChatAssistantMessage({
   message,
   onOpenNote,
 }: ChatAssistantMessageProps): React.JSX.Element {
-  const [copied, setCopied] = useState(false);
+  // Counts the copies while "Copied" shows, so each one restarts its timer.
+  const [copies, setCopies] = useState(0);
+  const copied = copies > 0;
 
   useEffect(() => {
-    if (!copied) return undefined;
-    const timer = setTimeout(() => setCopied(false), COPIED_MS);
+    if (copies === 0) return undefined;
+    const timer = setTimeout(() => setCopies(0), COPIED_MS);
     return () => clearTimeout(timer);
-  }, [copied]);
+  }, [copies]);
 
   const copy = async (): Promise<void> => {
     safeHaptics('light');
@@ -37,7 +39,7 @@ export function ChatAssistantMessage({
       // The clipboard can refuse a write; there is nothing useful to tell the user.
       return;
     }
-    setCopied(true);
+    setCopies((count) => count + 1);
     AccessibilityInfo.announceForAccessibility('Copied');
   };
 

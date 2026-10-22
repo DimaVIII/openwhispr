@@ -617,6 +617,19 @@ describe('a failed chat wipe', () => {
     expect(useChatStore.getState().sendBlockedByWipe).toBe(false);
   });
 
+  it('clears the refusal when a send is refused for another reason', () => {
+    failClearAll(2);
+    expect(clearChatHistory()).toBe(false);
+    useChatStore.getState().send('first', { conversationId: null, ...sendOptions });
+    expect(useChatStore.getState().sendBlockedByWipe).toBe(true);
+
+    expect(useChatStore.getState().beginTranscribing(null)).toBe(true);
+    expect(
+      useChatStore.getState().send('again', { conversationId: null, ...sendOptions }),
+    ).toBeNull();
+    expect(useChatStore.getState().sendBlockedByWipe).toBe(false);
+  });
+
   it('finishes the wipe on the next launch before any chat is read', () => {
     const previousId = seedPreviousAccount();
     failClearAll(1);

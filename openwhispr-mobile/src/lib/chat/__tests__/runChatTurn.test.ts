@@ -263,7 +263,7 @@ describe('runChatTurn', () => {
     const result = await runChatTurn(input, makeDeps({ getCandidateNotes }));
 
     expect(getCandidateNotes).toHaveBeenCalledTimes(1);
-    expect(getCandidateNotes).toHaveBeenCalledWith(['summarize'], {
+    expect(getCandidateNotes).toHaveBeenCalledWith([], {
       includePrivate: false,
       limit: 8,
       window: expect.objectContaining({
@@ -276,6 +276,74 @@ describe('runChatTurn', () => {
     expect(steps.find((step) => step.id === 'search')?.detail).toBe('2 meetings from this week');
     expect(steps.find((step) => step.id === 'read')?.label).toBe('Read “Weekly sync” and 1 more');
     expect(result.sources.map((source) => source.noteId)).toEqual([9, 10]);
+  });
+
+  describe('a period with words to search for', () => {
+    const SEP_PRICING = makeNote({ id: 20, title: 'Pricing call', content: 'We kept $12.' });
+    const THIS_WEEK = [
+      makeNote({ id: 21, title: 'Groceries', content: 'Oat milk.' }),
+      makeNote({ id: 22, title: 'Standup', content: 'Blockers.' }),
+    ];
+    // Matches in the period for terms with a window, every note of the period for no terms, and
+    // older matches for terms without one.
+    const repository = (inPeriod: Note[]) =>
+      jest.fn((terms: string[], { window }: ChatCandidateOptions): ChatCandidateNotes => {
+        const notes = !window ? [SEP_PRICING] : terms.length > 0 ? inPeriod : THIS_WEEK;
+        return { notes, total: notes.length };
+      });
+    const searchDetail = (input: ReturnType<typeof makeInput>): string | undefined =>
+      lastSteps(input.onSteps).find((step) => step.id === 'search')?.detail;
+
+    it('sends only the period’s notes that match', async () => {
+      const getCandidateNotes = repository([THIS_WEEK[1]]);
+      const input = makeInput({ question: 'What happened at standup this week?' });
+      const deps = makeDeps({ getCandidateNotes });
+
+      const result = await runChatTurn(input, deps);
+
+      expect(getCandidateNotes).toHaveBeenCalledTimes(1);
+      expect(result.sources.map((source) => source.noteId)).toEqual([22]);
+      expect(searchDetail(input)).toBe('1 note from this week matches');
+      expect(sentText(deps.chat)).toContain(
+        'NOTES (1 of 1 note from this week that match the question):',
+      );
+    });
+
+    it('sends every note of a period the question names when none match', async () => {
+      const getCandidateNotes = repository([]);
+      const input = makeInput({ question: 'What did I spend on flights this week?' });
+      const deps = makeDeps({ getCandidateNotes });
+
+      const result = await runChatTurn(input, deps);
+
+      expect(
+        getCandidateNotes.mock.calls.map(([terms, options]) => [terms, !!options.window]),
+      ).toEqual([
+        [['spend', 'flights'], true],
+        [[], true],
+      ]);
+      expect(result.sources.map((source) => source.noteId)).toEqual([21, 22]);
+      expect(searchDetail(input)).toBe('2 notes from this week');
+      expect(sentText(deps.chat)).toContain('NOTES (2 of 2 notes from this week, newest first):');
+    });
+
+    it('searches every note when nothing from “recently” matches', async () => {
+      const getCandidateNotes = repository([]);
+      const input = makeInput({ question: 'What was our most recent pricing decision?' });
+      const deps = makeDeps({ getCandidateNotes });
+
+      const result = await runChatTurn(input, deps);
+
+      expect(
+        getCandidateNotes.mock.calls.map(([terms, options]) => [terms, !!options.window]),
+      ).toEqual([
+        [['pricing', 'decision'], true],
+        [['pricing', 'decision'], false],
+      ]);
+      expect(result.sources.map((source) => source.noteId)).toEqual([20]);
+      expect(searchDetail(input)).toBe('1 note matches');
+      expect(sentText(deps.chat)).toMatch(/\nNOTES:\n### Pricing call \(updated /);
+    });
   });
 
   it('says when a period holds nothing', async () => {

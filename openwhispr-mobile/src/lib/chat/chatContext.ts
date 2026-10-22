@@ -20,10 +20,15 @@ const UNSPACED_SCRIPT_RUN = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakan
 // A number matches only whole numbers in notes, so "10:30" there never matches "10": a clock time
 // in the question ("Prep me for … at 3:15 PM") would only find stray numbers and every "PM".
 const CLOCK_TIME = /\b\d{1,2}:\d{2}(?:\s*[ap]m)?\b/gi;
-// A period the question names. Its notes are read whether or not their words match, so its words
-// aren't searched for; nor is "meeting" once it narrows the period to meetings.
+// A period the question names. Its notes can be read whether or not their words match, so its
+// words aren't searched for; nor is "meeting" once it narrows the period to meetings.
 const TIME_PHRASE = /\b(?:today|yesterday|this\s+week|last\s+week|recent(?:ly)?|lately)\b/gi;
+const SOFT_PERIOD = /^(?:recent(?:ly)?|lately)$/i;
 const MEETING_WORD = /\bmeetings?\b/gi;
+// A quoted meeting title ("Today's priorities") names the meeting, not a period.
+const QUOTED = /"[^"]*"|“[^”]*”/g;
+// A version or an amount ("1.10", "10,000") is one term, so it can find itself whole.
+const SEARCH_WORD = /\p{N}+(?:[.,:]\p{N}+)+|[\p{L}\p{N}]+/gu;
 
 export const CHAT_SYSTEM_PROMPT = `You are OpenWhispr's assistant. The user is asking from the OpenWhispr app, which holds their notes and meeting transcripts.
 
@@ -119,6 +124,17 @@ const STOPWORDS = new Set([
   'ok',
   // "Prep me for …" would otherwise find every note saying "prepare".
   'prep',
+  // The asking words of the Chat root's chips, so a chip has no words of its own to search for and
+  // reads its period. Topic words stay searchable: "decision" in "our pricing decision".
+  'summarize',
+  'summarise',
+  'decide',
+  'decided',
+  'promised',
+  'follow',
+  'open',
+  // "most recent"
+  'most',
 ]);
 
 /** `null` means no calendar is connected; `'unavailable'` means one is but couldn't be read. */
@@ -133,6 +149,8 @@ export interface ChatPayloadInput {
   noteCharBudget?: number;
   /** Transcripts of the notes with no text or summary of their own, by note id. */
   transcripts?: ReadonlyMap<number, string>;
+  /** Set when the notes were read from a period the question names. */
+  period?: ChatNotesPeriod;
 }
 
 export interface ChatPayload {
@@ -168,10 +186,7 @@ const toBigrams = (run: string): string[] => {
 // can't produce one, and the length filter drops the short leftovers.
 export const extractSearchTerms = (question: string): string[] => {
   const words = (
-    question
-      .replace(UNSPACED_SCRIPT_RUN, ' ')
-      .replace(CLOCK_TIME, ' ')
-      .match(/[\p{L}\p{N}]+/gu) ?? []
+    question.replace(UNSPACED_SCRIPT_RUN, ' ').replace(CLOCK_TIME, ' ').match(SEARCH_WORD) ?? []
   )
     .filter((word) => word.length >= MIN_TERM_LENGTH || SHORT_TERM.test(word))
     .map((word) => word.toLowerCase())
@@ -183,6 +198,16 @@ export const extractSearchTerms = (question: string): string[] => {
 /** A period a question names, with how the search step says it: "3 notes from {label}". */
 export interface ChatTimeScope extends ChatNoteWindow {
   label: string;
+  /** "Recently" rather than "this week": with no note in it matching, every note is searched. */
+  soft: boolean;
+}
+
+/** The notes read from a period: how many it holds, and whether they matched the question's words. */
+export interface ChatNotesPeriod {
+  scope: ChatTimeScope;
+  /** The period's notes that match, or all of them when none do. */
+  total: number;
+  matched: boolean;
 }
 
 export interface ChatQuery {
@@ -201,6 +226,7 @@ const toTimeScope = (phrase: string, now: Date, meetingsOnly: boolean): ChatTime
     end,
     meetingsOnly,
     label,
+    soft: SOFT_PERIOD.test(phrase),
   });
   switch (phrase.toLowerCase().replace(/\s+/g, ' ')) {
     case 'today':
@@ -218,17 +244,24 @@ const toTimeScope = (phrase: string, now: Date, meetingsOnly: boolean): ChatTime
 
 /** The words to search for, and the period the question names (the first one it names). */
 export const parseChatQuery = (question: string, now: Date): ChatQuery => {
-  const phrases = question.match(TIME_PHRASE);
+  const unquoted = question.replace(QUOTED, ' ');
+  const phrases = unquoted.match(TIME_PHRASE);
   if (!phrases) return { terms: extractSearchTerms(question), scope: null };
 
-  const withoutPeriod = question.replace(TIME_PHRASE, ' ');
+  const withoutPeriod = unquoted.replace(TIME_PHRASE, ' ');
   const withoutMeetings = withoutPeriod.replace(MEETING_WORD, ' ');
   const meetingsOnly = withoutMeetings !== withoutPeriod;
+  // A quoted title keeps all its words, a time word or "meeting" included.
+  const quoted = question.match(QUOTED) ?? [];
   return {
-    terms: extractSearchTerms(withoutMeetings),
+    terms: extractSearchTerms([...quoted, withoutMeetings].join(' ')),
     scope: toTimeScope(phrases[0], now, meetingsOnly),
   };
 };
+
+/** "3 meetings from this week". */
+export const countPeriodNotes = (count: number, scope: ChatTimeScope): string =>
+  `${count} ${scope.meetingsOnly ? 'meeting' : 'note'}${count === 1 ? '' : 's'} from ${scope.label}`;
 
 /** Whether a note has neither text nor an AI summary, so only its transcript can say anything. */
 export const lacksNoteText = (note: Note): boolean =>
@@ -312,10 +345,26 @@ const formatNoteText = (note: Note): string => {
     .join('\n\n');
 };
 
+// A period holds the notes made in it, so they say when they were made.
+const formatNoteDate = (note: Note, byCreation: boolean): string => {
+  const date = tryParseNoteTimestamp(byCreation ? note.createdAt : note.updatedAt);
+  if (!date) return '';
+  return ` (${byCreation ? 'created' : 'updated'} ${formatChatDate(date)})`;
+};
+
+// The model is told when it got only some of a period's notes, so it doesn't answer for the whole
+// period from them.
+const formatNotesHeading = (sent: number, period: ChatNotesPeriod | undefined): string => {
+  if (!period || sent === 0) return 'NOTES:';
+  const order = period.matched ? ' that match the question' : ', newest first';
+  return `NOTES (${sent} of ${countPeriodNotes(period.total, period.scope)}${order}):`;
+};
+
 const formatNotesSection = (
   notes: Note[],
   budget: number,
   transcripts: ReadonlyMap<number, string> | undefined,
+  period: ChatNotesPeriod | undefined,
 ): { section: string; sources: ChatSource[] } => {
   const blocks: string[] = [];
   const sources: ChatSource[] = [];
@@ -338,14 +387,14 @@ const formatNotesSection = (
       included = `${body.slice(0, remaining - NOTE_CUT_MARKER.length).trimEnd()}${NOTE_CUT_MARKER}`;
     }
 
-    const updated = tryParseNoteTimestamp(note.updatedAt);
-    const updatedLabel = updated ? ` (updated ${formatChatDate(updated)})` : '';
-    blocks.push(`### ${note.title}${updatedLabel}\n${included}`);
+    blocks.push(`### ${note.title}${formatNoteDate(note, period !== undefined)}\n${included}`);
     sources.push({ noteId: note.id, title: note.title });
     remaining -= included.length;
   }
 
-  return { section: blocks.length > 0 ? blocks.join('\n\n') : 'No matching notes.', sources };
+  const heading = formatNotesHeading(sources.length, period);
+  const listed = blocks.length > 0 ? blocks.join('\n\n') : 'No matching notes.';
+  return { section: `${heading}\n${listed}`, sources };
 };
 
 export const buildChatPayload = (input: ChatPayloadInput): ChatPayload => {
@@ -357,6 +406,7 @@ export const buildChatPayload = (input: ChatPayloadInput): ChatPayload => {
     now,
     noteCharBudget = CHAT_NOTE_CHAR_BUDGET,
     transcripts,
+    period,
   } = input;
   const today = now.toLocaleString('en-US', {
     weekday: 'long',
@@ -366,12 +416,17 @@ export const buildChatPayload = (input: ChatPayloadInput): ChatPayload => {
     hour: 'numeric',
     minute: '2-digit',
   });
-  const { section: notesSection, sources } = formatNotesSection(notes, noteCharBudget, transcripts);
+  const { section: notesSection, sources } = formatNotesSection(
+    notes,
+    noteCharBudget,
+    transcripts,
+    period,
+  );
 
   const text = [
     `TODAY:\n${today}`,
     `CALENDAR (next 48 hours):\n${formatCalendarSection(calendar, now)}`,
-    `NOTES:\n${notesSection}`,
+    notesSection,
     `RECENT CHAT:\n${formatChatHistory(history)}`,
     `USER QUESTION:\n${question.trim()}`,
   ].join('\n\n');

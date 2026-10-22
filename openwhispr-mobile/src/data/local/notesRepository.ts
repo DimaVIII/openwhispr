@@ -146,10 +146,12 @@ const pushRejectedKey = (localId: number): string => `note.pushRejected.${localI
 // matches whole words only. Longer terms, and those from other scripts, match anywhere, since
 // Korean particles attach to the nouns they follow.
 const WHOLE_WORD_TERM = /^[a-z0-9]{1,2}$/;
-const NUMBER_TERM = /^[0-9]+$/;
+// Digits, or digit groups joined by `.`, `,` or `:` ("1.10", "10,000").
+const NUMBER_TERM = /^[0-9]+(?:[.,:][0-9]+)*$/;
 
 // A number matches whole numbers only: "10" never matches "100", "2010", "10:30", "1.10" or
-// "10,000". A `.`, `:` or `,` between digits joins them, but one after a number ends it ("10.").
+// "10,000", and "1.10" never matches "1.100". A `.`, `:` or `,` between digits joins them, but one
+// after a number ends it ("10.").
 const numberPatterns = (term: string): string[] => {
   const before = ['*[^A-Za-z0-9.:,]', '*[^0-9][.:,]'];
   const after = ['[^A-Za-z0-9.:,]*', '[.:,][^0-9]*'];
@@ -157,7 +159,7 @@ const numberPatterns = (term: string): string[] => {
 };
 
 // GLOB patterns for a term that must match whole, or null for one matched anywhere. Terms are
-// letters and digits only, so nothing in them needs escaping.
+// letters and digits, joined in a number by `.`, `,` or `:`, none of which GLOB treats specially.
 const wholeTermPatterns = (term: string): string[] | null => {
   if (NUMBER_TERM.test(term)) return numberPatterns(term);
   if (!WHOLE_WORD_TERM.test(term)) return null;
@@ -638,8 +640,8 @@ export class LocalNotesRepository implements NotesRepository {
     // make it one of this week's.
     const recency = window ? sql`datetime(${notes.createdAt})` : sql`${notes.updatedAt}`;
     // Only the ids are ranked and counted, so the heavy columns (content, transcript JSON) are read
-    // for the notes returned alone. The count runs before the limit, so it counts every match, or in
-    // a period every note made in it: there the terms only put the matching notes first.
+    // for the notes returned alone. The count runs before the limit, so it counts every match, or
+    // with no terms every note in the period.
     const total = sql<number>`count(*) OVER ()`;
     const ranked =
       terms.length === 0
@@ -650,13 +652,7 @@ export class LocalNotesRepository implements NotesRepository {
             .orderBy(desc(recency))
             .limit(options.limit)
             .all()
-        : this.rankChatMatches(terms, {
-            visible,
-            recency,
-            total,
-            limit: options.limit,
-            requireMatch: !window,
-          });
+        : this.rankChatMatches(terms, { visible, recency, total, limit: options.limit });
     if (ranked.length === 0) return { notes: [], total: 0 };
 
     const rows = new Map(
@@ -685,7 +681,6 @@ export class LocalNotesRepository implements NotesRepository {
       recency: SQL;
       total: SQL<number>;
       limit: number;
-      requireMatch: boolean;
     },
   ): { id: number; total: number }[] {
     const termScores = terms.map((term) => {
@@ -719,7 +714,7 @@ export class LocalNotesRepository implements NotesRepository {
     return this.database
       .select({ id: scored.id, total: query.total })
       .from(scored)
-      .where(query.requireMatch ? gt(scored.score, 0) : undefined)
+      .where(gt(scored.score, 0))
       .orderBy(desc(scored.score), desc(scored.recency))
       .limit(query.limit)
       .all();

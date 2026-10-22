@@ -653,4 +653,31 @@ describe('ChatConversationScreen', () => {
     expect(screen.getByText('Couldn’t send right now. Try again.')).toBeTruthy();
     expect(screen.getByPlaceholderText('Reply').props.value).toBe('And the price?');
   });
+
+  it('reads out a refusal by a failed chat wipe, only from the chat on screen', () => {
+    mockRunFocusEffects = true;
+    mockDb.conversations = [{ id: 'c1', title: 'Pricing decisions', createdAt: 1, updatedAt: 1 }];
+    mockDb.messages = [question];
+    const announce = jest
+      .spyOn(AccessibilityInfo, 'announceForAccessibility')
+      .mockImplementation(() => undefined);
+    const screen = render(<ChatConversationScreen />);
+
+    act(() => {
+      useChatStore.setState({ sendBlockedByWipe: true });
+    });
+    expect(announce).toHaveBeenCalledTimes(1);
+    expect(announce).toHaveBeenCalledWith('Couldn’t send right now. Try again.');
+
+    act(() => {
+      useChatStore.setState({ sendBlockedByWipe: false });
+    });
+    mockFocused = false;
+    screen.rerender(<ChatConversationScreen />);
+    act(() => {
+      useChatStore.setState({ sendBlockedByWipe: true });
+    });
+    expect(announce).toHaveBeenCalledTimes(1);
+    announce.mockRestore();
+  });
 });
