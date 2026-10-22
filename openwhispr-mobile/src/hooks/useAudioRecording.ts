@@ -33,6 +33,9 @@ export interface UseAudioRecordingOptions {
   onComplete?: (text: string) => void;
   onError?: (error: Error) => void;
   allowsBackgroundRecording?: boolean;
+  // Defaults to true. When false, nothing reaches transcript history (no row on
+  // success or failure) and the recording is deleted once its outcome is known.
+  saveToHistory?: boolean;
   // Private mode but the on-device model is unavailable. We never fall back to
   // the cloud silently — the caller prompts, and may invoke retryWithCloud to
   // transcribe the recording we already captured.
@@ -77,6 +80,7 @@ export function useAudioRecording(options: UseAudioRecordingOptions = {}) {
   const audioRecorder = useAudioRecorder(recorderOptions);
   const isSupported = isExpoAudioAvailable() && !!audioRecorder;
   const allowsBackgroundRecording = options.allowsBackgroundRecording === true;
+  const saveToHistory = options.saveToHistory !== false;
 
   const ensureAudioSupport = () => {
     if (!isSupported || !expoAudio || !audioRecorder) {
@@ -199,6 +203,9 @@ export function useAudioRecording(options: UseAudioRecordingOptions = {}) {
 
       const speechAnalysis = await analyzeSpeechActivity(uri, 'recording');
       if (speechAnalysis?.noSpeechLikely) {
+        if (!saveToHistory) {
+          await FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => undefined);
+        }
         throw createNoSpeechError();
       }
       const clientTranscriptionId = `recording-${randomUUID()}`;
@@ -220,7 +227,9 @@ export function useAudioRecording(options: UseAudioRecordingOptions = {}) {
           isLocalModelMissingError(transcribeError) &&
           options.onLocalModelMissing
         ) {
-          await addFailedRecording(retained, transcriptionProvider, transcribeError);
+          if (saveToHistory) {
+            await addFailedRecording(retained, transcriptionProvider, transcribeError);
+          }
           options.onLocalModelMissing(() => {
             retryWithCloud(retained, clientTranscriptionId);
           });
@@ -229,13 +238,19 @@ export function useAudioRecording(options: UseAudioRecordingOptions = {}) {
         // Cloud quota exhausted. Keep the recording so an approved retry can
         // reuse it, then hand the billing/retry decision to the caller.
         if (isUsageLimitError(transcribeError) && options.onUsageLimitReached) {
-          await addFailedRecording(retained, transcriptionProvider, transcribeError);
+          if (saveToHistory) {
+            await addFailedRecording(retained, transcriptionProvider, transcribeError);
+          }
           await options.onUsageLimitReached(transcribeError, () =>
             retryWithCloud(retained, clientTranscriptionId),
           );
           return;
         }
-        await addFailedRecording(retained, transcriptionProvider, transcribeError);
+        if (saveToHistory) {
+          await addFailedRecording(retained, transcriptionProvider, transcribeError);
+        } else {
+          await discardRetainedAudio(retained);
+        }
         throw transcribeError;
       }
     } catch (error) {
@@ -256,6 +271,11 @@ export function useAudioRecording(options: UseAudioRecordingOptions = {}) {
       audioMimeType,
     });
     return { id, audioUrl, audioFileName, audioMimeType };
+  };
+
+  // Never lets a cleanup failure replace the result or error being reported.
+  const discardRetainedAudio = async (retained: RetainedRecordingAudio): Promise<void> => {
+    await deleteManagedTranscriptAudio(retained.audioUrl).catch(() => undefined);
   };
 
   const addFailedRecording = async (
@@ -315,6 +335,13 @@ export function useAudioRecording(options: UseAudioRecordingOptions = {}) {
 
     const finalText = processedResult.text;
 
+    if (!saveToHistory) {
+      await discardRetainedAudio(retained);
+      setCurrentText(finalText);
+      options.onComplete?.(finalText);
+      return;
+    }
+
     // The transcript is already paid for, so a history write failure must not lose it.
     const saved = await addTranscript({
       id: retained.id,
@@ -359,7 +386,9 @@ export function useAudioRecording(options: UseAudioRecordingOptions = {}) {
         );
         return;
       }
-      if (!isNoSpeechError(error)) {
+      if (!saveToHistory) {
+        await discardRetainedAudio(retained);
+      } else if (!isNoSpeechError(error)) {
         await addFailedRecording(retained, 'cloud', error);
       }
       options.onError?.(
