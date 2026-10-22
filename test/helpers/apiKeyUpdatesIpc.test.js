@@ -33,6 +33,7 @@ const windows = [1, 2, 3].map((id) => ({
 }));
 const mintToken = async (key) => `token-${key}`;
 let fetchToken = mintToken;
+let authGeneration = 1;
 const environmentManager = Object.fromEntries(
   bindings.flatMap(({ get, save, storeKey }) => [
     [get, () => keys.get(storeKey) || ""],
@@ -161,7 +162,7 @@ Module._load = function (request, parent, isMain) {
     if (request === "./tokenStore")
       return {
         get: () => "account",
-        getState: () => ({ token: "account", generation: 1 }),
+        getState: () => ({ token: "account", generation: authGeneration }),
         subscribe: () => () => {},
       };
   }
@@ -709,4 +710,81 @@ test("meeting policy revocation closes live streams and prevents a late warmup f
   assert.equal(result.success, false);
   assert.equal(result.code, "POLICY_MEETING_RECORDING_DISABLED");
   assert.ok(meetingStreams().every((stream) => !stream?.isConnected));
+});
+
+test("a completed policy stop preserves its result for only its renderer, session and auth generation", async (t) => {
+  resetMeeting(t);
+  const stopped = deferred();
+  target._startOrSkipDiarization = (sessionId) => stopped.resolve(sessionId);
+  t.after(() => {
+    delete target._startOrSkipDiarization;
+    authGeneration = 1;
+  });
+  invoke("save-deepgram-key", "A");
+  const options = { provider: "deepgram-realtime", mode: "byok", sessionId: "policy-stopped" };
+  assert.equal((await invoke("meeting-transcription-start", options)).success, true);
+  meetingStreams()[1].onFinalTranscript("Already recorded.", Date.now());
+  target._audioFeaturePolicy.update({
+    success: true,
+    managed: true,
+    policy: { features: { meetingRecordingEnabled: false } },
+  });
+  const diarizationSessionId = await stopped.promise;
+  await new Promise(setImmediate);
+
+  assert.deepEqual(await invoke("meeting-transcription-stop", "other-session"), {
+    success: false,
+    reason: "stale-session",
+  });
+  assert.deepEqual(
+    await handlers.get("meeting-transcription-stop")({ sender: {} }, options.sessionId),
+    { success: false, reason: "stale-session" }
+  );
+  assert.deepEqual(await invoke("meeting-transcription-stop", options.sessionId), {
+    success: true,
+    transcript: "Already recorded.",
+    diarizationSessionId,
+  });
+
+  authGeneration++;
+  assert.deepEqual(await invoke("meeting-transcription-stop", options.sessionId), {
+    success: false,
+    reason: "stale-session",
+  });
+  assert.equal(
+    (await invoke("meeting-transcription-start", { ...options, sessionId: "next-session" }))
+      .success,
+    true
+  );
+  assert.deepEqual(await invoke("meeting-transcription-stop", options.sessionId), {
+    success: false,
+    reason: "stale-session",
+  });
+  assert.ok(meetingStreams().every((stream) => stream.isConnected));
+});
+
+test("an in-flight policy stop rejects another renderer and an auth change before delivery", async (t) => {
+  const finishStop = deferred();
+  t.after(() => {
+    finishStop.resolve();
+    authGeneration = 1;
+  });
+  resetMeeting(t);
+  t.mock.method(target.audioTapManager, "stop", () => finishStop.promise);
+  invoke("save-deepgram-key", "A");
+  const options = { provider: "deepgram-realtime", mode: "byok", sessionId: "pending-policy-stop" };
+  assert.equal((await invoke("meeting-transcription-start", options)).success, true);
+  target._audioFeaturePolicy.update({
+    success: true,
+    managed: true,
+    policy: { features: { meetingRecordingEnabled: false } },
+  });
+  const foreign = handlers.get("meeting-transcription-stop")({ sender: {} }, options.sessionId);
+  const pending = invoke("meeting-transcription-stop", options.sessionId);
+  authGeneration++;
+  const changed = invoke("meeting-transcription-stop", options.sessionId);
+  finishStop.resolve();
+  for (const result of await Promise.all([foreign, pending, changed])) {
+    assert.deepEqual(result, { success: false, reason: "stale-session" });
+  }
 });

@@ -8158,6 +8158,7 @@ class IPCHandlers {
     let meetingConnectionOptions = null;
     let meetingConnectionWin = null;
     let meetingConnectionKey = null;
+    let policyMeetingStop = null;
     let meetingReconnectAudioBuffers = { mic: [], system: [] };
     let meetingReconnectAudioBytes = { mic: 0, system: 0 };
     let meetingReconnectReplaySources = new Set();
@@ -9794,9 +9795,13 @@ class IPCHandlers {
         meetingLocalTimer = null;
       }
       if (wasActive) broadcastToWindows("meeting-transcription-error", "policyRestricted");
-      void meetingTranscriptionLifecycle
-        .stopSession()
-        .catch((error) => debugLogger.warn("Policy meeting stop failed", { error: error.message }));
+      const stopped = meetingTranscriptionLifecycle.stopSession();
+      // The renderer still needs this result after its capture cleanup to bind
+      // diarization to the resumed note's seed rows.
+      if (policyMeetingStop && !policyMeetingStop.promise) policyMeetingStop.promise = stopped;
+      void stopped.catch((error) =>
+        debugLogger.warn("Policy meeting stop failed", { error: error.message })
+      );
     };
 
     const stopMeetingTranscription = async (expectedSessionId) => {
@@ -9909,8 +9914,22 @@ class IPCHandlers {
     };
 
     const meetingTranscriptionLifecycle = createMeetingTranscriptionLifecycle({
-      start: ({ sessionId, ownerWebContents, options }) =>
-        startMeetingTranscription({ sender: ownerWebContents }, { ...options, sessionId }),
+      start: ({
+        sessionId,
+        ownerWebContents,
+        options: { transcriptionOptions, authGeneration },
+      }) => {
+        policyMeetingStop = {
+          sessionId,
+          ownerWebContents,
+          authGeneration,
+          promise: null,
+        };
+        return startMeetingTranscription(
+          { sender: ownerWebContents },
+          { ...transcriptionOptions, sessionId }
+        );
+      },
       stop: (sessionId) => stopMeetingTranscription(sessionId),
       onError: (error, sessionId) => {
         debugLogger.error(
@@ -9929,13 +9948,28 @@ class IPCHandlers {
       return meetingTranscriptionLifecycle.startSession({
         sessionId,
         ownerWebContents: event.sender,
-        options,
+        options: {
+          transcriptionOptions: options,
+          authGeneration: tokenStore.getState().generation,
+        },
       });
     });
 
-    ipcMain.handle("meeting-transcription-stop", (_event, expectedSessionId) =>
-      meetingTranscriptionLifecycle.stopSession(expectedSessionId)
-    );
+    ipcMain.handle("meeting-transcription-stop", async (event, expectedSessionId) => {
+      const stopped = policyMeetingStop;
+      if (stopped?.promise && stopped.sessionId === expectedSessionId) {
+        if (
+          stopped.ownerWebContents !== event.sender ||
+          stopped.authGeneration !== tokenStore.getState().generation
+        )
+          return { success: false, reason: "stale-session" };
+        const result = await stopped.promise;
+        return stopped.authGeneration === tokenStore.getState().generation
+          ? result
+          : { success: false, reason: "stale-session" };
+      }
+      return meetingTranscriptionLifecycle.stopSession(expectedSessionId);
+    });
 
     ipcMain.handle(
       "meeting-transcription-set-system-audio-available",

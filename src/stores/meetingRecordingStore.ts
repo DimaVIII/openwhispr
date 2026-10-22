@@ -1263,6 +1263,7 @@ export async function startRecording(args: StartRecordingArgs): Promise<boolean>
         if (activeRecordingSessionId !== sessionId) return;
         reportMeetingError(err);
         logger.error("Meeting transcription stream error", { error: err }, "meeting");
+        if (err === "policyRestricted" && isRecordingFlag) void stopRecording(sessionId);
       });
       if (errorCleanup) ipcCleanups.push(errorCleanup);
 
@@ -1837,6 +1838,7 @@ if (typeof window !== "undefined") {
   const enqueueDiarizationCompletion = createSerialQueue();
   window.electronAPI?.onMeetingDiarizationComplete?.((data) => {
     enqueueDiarizationCompletion(async () => {
+      await meetingRecordingStopBarrier.waitForPendingStop();
       const {
         diarizationSessionId,
         isRecording,
