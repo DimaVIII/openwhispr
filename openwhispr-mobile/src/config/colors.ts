@@ -47,3 +47,20 @@ export function iosColor(name: string): string {
   }
   return ANDROID_FALLBACKS[name] ?? '#000000';
 }
+
+// Fixed colors for the Chat tab that have no system token. Text and fills that
+// do have one (label, secondaryLabel, ...) use the NativeWind token instead.
+export const CHAT_COLORS = {
+  stopButton: '#111113',
+  hairline: 'rgba(0,0,0,0.08)',
+  neutralRing: 'rgba(0,0,0,0.12)',
+  neutralTrack: 'rgba(0,0,0,0.06)',
+  successForeground: '#1E7A3D',
+  successBackground: '#E6F3EA',
+  errorForeground: '#B3261E',
+  errorBackground: '#FBECEA',
+  recordingDot: '#E5342B',
+  watermark: 'rgba(17,17,19,0.07)',
+  onGradient: '#FFFFFF',
+  onGradientSubtle: 'rgba(255,255,255,0.55)',
+} as const;

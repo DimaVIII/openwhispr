@@ -1,7 +1,11 @@
-import { Pressable, TextInput, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { SystemIcon } from '@/components/ui/SystemIcon';
-import { BRAND_GRADIENT } from '@/config/colors';
+import { CHAT_COLORS, iosColor } from '@/config/colors';
+import {
+  ChatGradientButton,
+  COMPOSER_BUTTON_RADIUS,
+  COMPOSER_BUTTON_SIZE,
+} from './ChatGradientButton';
 
 interface ChatComposerProps {
   value: string;
@@ -12,49 +16,6 @@ interface ChatComposerProps {
   onSend: () => void;
   onMicPress: () => void;
   onStop: () => void;
-}
-
-const BUTTON_SIZE = 40;
-const BUTTON_RADIUS = 13;
-
-function GradientButton({
-  label,
-  disabled,
-  onPress,
-  children,
-}: {
-  label: string;
-  disabled: boolean;
-  onPress: () => void;
-  children: React.ReactNode;
-}): React.JSX.Element {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ disabled }}
-      disabled={disabled}
-      onPress={onPress}
-      hitSlop={2}
-      style={{ opacity: disabled ? 0.4 : 1 }}
-    >
-      <LinearGradient
-        colors={BRAND_GRADIENT}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={{
-          width: BUTTON_SIZE,
-          height: BUTTON_SIZE,
-          borderRadius: BUTTON_RADIUS,
-          borderCurve: 'continuous',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        {children}
-      </LinearGradient>
-    </Pressable>
-  );
 }
 
 export function ChatComposer({
@@ -71,18 +32,18 @@ export function ChatComposer({
 
   return (
     <View
-      className="flex-row items-end gap-2 border border-[rgba(0,0,0,0.08)] bg-white py-2 pl-4 pr-2"
-      style={{ borderRadius: 18, borderCurve: 'continuous' }}
+      className="flex-row items-end gap-2 bg-secondarySystemGroupedBackground py-2 pl-4 pr-2"
+      style={styles.container}
     >
       <TextInput
         accessibilityLabel={placeholder}
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor="#6B6B70"
+        placeholderTextColor={iosColor('tertiaryLabel')}
         editable={!busy && !disabled}
         multiline
-        className="max-h-[120px] min-h-[40px] flex-1 py-2 text-[16px] leading-[22px] text-[#111113]"
+        className="max-h-[120px] min-h-[40px] flex-1 py-2 text-[16px] leading-[22px] text-label"
       />
       {busy ? (
         <Pressable
@@ -90,25 +51,36 @@ export function ChatComposer({
           accessibilityLabel="Stop"
           onPress={onStop}
           hitSlop={2}
-          className="items-center justify-center bg-[#111113]"
-          style={{
-            width: BUTTON_SIZE,
-            height: BUTTON_SIZE,
-            borderRadius: BUTTON_RADIUS,
-            borderCurve: 'continuous',
-          }}
+          className="items-center justify-center"
+          style={styles.stop}
         >
           <View className="h-3.5 w-3.5 rounded-[4px] bg-white" />
         </Pressable>
       ) : hasText ? (
-        <GradientButton label="Send" disabled={disabled} onPress={onSend}>
-          <SystemIcon name="arrow.up" mdName="ArrowUp" size={18} color="#FFFFFF" />
-        </GradientButton>
+        <ChatGradientButton label="Send" disabled={disabled} onPress={onSend}>
+          <SystemIcon name="arrow.up" mdName="ArrowUp" size={18} color={CHAT_COLORS.onGradient} />
+        </ChatGradientButton>
       ) : (
-        <GradientButton label="Speak your question" disabled={disabled} onPress={onMicPress}>
-          <SystemIcon name="mic.fill" mdName="Mic" size={18} color="#FFFFFF" />
-        </GradientButton>
+        <ChatGradientButton label="Speak your question" disabled={disabled} onPress={onMicPress}>
+          <SystemIcon name="mic.fill" mdName="Mic" size={18} color={CHAT_COLORS.onGradient} />
+        </ChatGradientButton>
       )}
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    borderRadius: 18,
+    borderCurve: 'continuous',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: CHAT_COLORS.hairline,
+  },
+  stop: {
+    width: COMPOSER_BUTTON_SIZE,
+    height: COMPOSER_BUTTON_SIZE,
+    borderRadius: COMPOSER_BUTTON_RADIUS,
+    borderCurve: 'continuous',
+    backgroundColor: CHAT_COLORS.stopButton,
+  },
+});

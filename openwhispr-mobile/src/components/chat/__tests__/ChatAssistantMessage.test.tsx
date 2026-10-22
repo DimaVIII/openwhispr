@@ -1,5 +1,5 @@
 import { Share } from 'react-native';
-import { fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 import * as Clipboard from 'expo-clipboard';
 import type { ChatMessage } from '@/lib/chat/types';
 import { ChatAssistantMessage } from '../ChatAssistantMessage';
@@ -53,6 +53,17 @@ describe('ChatAssistantMessage', () => {
     );
     fireEvent.press(getByLabelText('Copy answer'));
     expect(Clipboard.setStringAsync).toHaveBeenCalledWith('You agreed on $40 per seat.');
+  });
+
+  it('survives a failed clipboard write', async () => {
+    (Clipboard.setStringAsync as jest.Mock).mockRejectedValueOnce(new Error('denied'));
+    const { getByLabelText } = render(
+      <ChatAssistantMessage message={message} onOpenNote={jest.fn()} />,
+    );
+    await act(async () => {
+      fireEvent.press(getByLabelText('Copy answer'));
+    });
+    expect(Clipboard.setStringAsync).toHaveBeenCalled();
   });
 
   it('shares the answer', () => {

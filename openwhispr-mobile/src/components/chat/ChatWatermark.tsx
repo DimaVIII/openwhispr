@@ -1,5 +1,6 @@
 import { StyleSheet, View } from 'react-native';
 import { OpenWhisprMark } from '@/components/ui/OpenWhisprMark';
+import { CHAT_COLORS } from '@/config/colors';
 
 export function ChatWatermark(): React.JSX.Element {
   return (
@@ -8,7 +9,7 @@ export function ChatWatermark(): React.JSX.Element {
       style={StyleSheet.absoluteFill}
       className="items-center justify-center"
     >
-      <OpenWhisprMark size={132} color="rgba(17,17,19,0.07)" />
+      <OpenWhisprMark size={132} color={CHAT_COLORS.watermark} />
     </View>
   );
 }

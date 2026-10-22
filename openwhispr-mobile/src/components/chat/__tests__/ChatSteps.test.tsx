@@ -13,6 +13,12 @@ jest.mock('react-native-reanimated', () => ({
   withRepeat: jest.fn(),
   withTiming: jest.fn(),
 }));
+jest.mock('../ChatSpinner', () => ({
+  ChatSpinner: () => {
+    const { View } = require('react-native');
+    return <View testID="chat-spinner" />;
+  },
+}));
 jest.mock('@/components/ui/Text', () => ({ Text: require('react-native').Text }));
 jest.mock('@/components/ui/SystemIcon', () => ({ SystemIcon: () => null }));
 
@@ -27,7 +33,7 @@ describe('ChatSteps', () => {
   });
 
   it('shows only the active step until opened', () => {
-    const { getByText, queryByText, getByRole } = render(
+    const { getByText, queryByText, queryByTestId, getByRole } = render(
       <ChatSteps steps={steps} variant="working" />,
     );
     expect(getByText('Reading “Pricing call”…')).toBeTruthy();
@@ -38,7 +44,34 @@ describe('ChatSteps', () => {
 
     expect(getByText('Searched your notes')).toBeTruthy();
     expect(getByText('2 notes match')).toBeTruthy();
+    expect(queryByTestId('chat-spinner')).not.toBeNull();
     expect(getByRole('button').props.accessibilityState).toEqual({ expanded: true });
+  });
+
+  it('shows only reported steps when opened', () => {
+    const { getAllByTestId, getByRole, queryByText } = render(
+      <ChatSteps
+        steps={[{ id: 'search', status: 'active', label: 'Searching your notes…' }]}
+        variant="working"
+      />,
+    );
+    fireEvent.press(getByRole('button'));
+    expect(getAllByTestId('chat-step-row')).toHaveLength(1);
+    expect(queryByText('Writing your answer')).toBeNull();
+    expect(queryByText('Checking your calendar')).toBeNull();
+  });
+
+  it('shows a saved step that was left active as done', () => {
+    const { getByRole, getAllByTestId, queryByTestId } = render(
+      <ChatSteps
+        steps={[{ id: 'read', status: 'active', label: 'Reading “Pricing call”…' }]}
+        variant="done"
+        sourceCount={1}
+      />,
+    );
+    fireEvent.press(getByRole('button'));
+    expect(getAllByTestId('chat-step-row')).toHaveLength(1);
+    expect(queryByTestId('chat-spinner')).toBeNull();
   });
 
   it('says Thinking… before the first step', () => {
@@ -72,6 +105,16 @@ describe('ChatSteps', () => {
     expect(getByText('Still working')).toBeTruthy();
     expect(getByText('0:15')).toBeTruthy();
     expect(getByText('Questions that span many notes can take up to a minute.')).toBeTruthy();
+  });
+
+  it('clears its one-second timer on unmount', () => {
+    jest.useFakeTimers();
+    const { unmount } = render(
+      <ChatSteps steps={steps} variant="working" startedAt={Date.now()} />,
+    );
+    expect(jest.getTimerCount()).toBe(1);
+    unmount();
+    expect(jest.getTimerCount()).toBe(0);
   });
 
   it('never shows Still working without a start time', () => {

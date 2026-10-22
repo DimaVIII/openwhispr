@@ -1,8 +1,9 @@
-import { Pressable, Share, View } from 'react-native';
+import { Pressable, Share, StyleSheet, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { Text } from '@/components/ui/Text';
 import { SystemIcon } from '@/components/ui/SystemIcon';
 import { MarkdownRenderer } from '@/components/notes/MarkdownRenderer';
+import { CHAT_COLORS } from '@/config/colors';
 import { safeHaptics } from '@/lib/utils';
 import type { ChatMessage } from '@/lib/chat/types';
 import { ChatSteps } from './ChatSteps';
@@ -18,7 +19,11 @@ export function ChatAssistantMessage({
 }: ChatAssistantMessageProps): React.JSX.Element {
   const copy = async (): Promise<void> => {
     safeHaptics('light');
-    await Clipboard.setStringAsync(message.text);
+    try {
+      await Clipboard.setStringAsync(message.text);
+    } catch {
+      // The clipboard can refuse a write; there is nothing useful to tell the user.
+    }
   };
 
   const share = async (): Promise<void> => {
@@ -44,10 +49,11 @@ export function ChatAssistantMessage({
               accessibilityRole="link"
               accessibilityLabel={source.title}
               onPress={() => onOpenNote(source.noteId)}
-              className="min-h-[44px] max-w-full flex-row items-center gap-1.5 rounded-[10px] border border-[rgba(0,0,0,0.08)] bg-white px-3 active:opacity-70"
+              className="min-h-[44px] max-w-full flex-row items-center gap-1.5 rounded-[10px] bg-secondarySystemGroupedBackground px-3 active:opacity-70"
+              style={styles.chip}
             >
-              <SystemIcon name="doc.text" mdName="FileText" size={14} color="#5F5F66" />
-              <Text className="shrink text-[14px] text-[#111113]" numberOfLines={1}>
+              <SystemIcon name="doc.text" mdName="FileText" size={14} color="secondaryLabel" />
+              <Text className="shrink text-[14px] text-label" numberOfLines={1}>
                 {source.title}
               </Text>
             </Pressable>
@@ -61,7 +67,7 @@ export function ChatAssistantMessage({
           onPress={copy}
           className="h-11 w-11 items-center justify-center active:opacity-60"
         >
-          <SystemIcon name="doc.on.doc" mdName="Copy" size={18} color="#6B6B70" />
+          <SystemIcon name="doc.on.doc" mdName="Copy" size={18} color="secondaryLabel" />
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -69,9 +75,13 @@ export function ChatAssistantMessage({
           onPress={share}
           className="h-11 w-11 items-center justify-center active:opacity-60"
         >
-          <SystemIcon name="square.and.arrow.up" mdName="Share" size={18} color="#6B6B70" />
+          <SystemIcon name="square.and.arrow.up" mdName="Share" size={18} color="secondaryLabel" />
         </Pressable>
       </View>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  chip: { borderWidth: StyleSheet.hairlineWidth, borderColor: CHAT_COLORS.hairline },
+});
