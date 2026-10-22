@@ -50,6 +50,7 @@ export function useSignOut({ showConfirmDialog, showAlertDialog }: SignOutDialog
       title: t("settingsPage.account.signOut.endMeetingTitle"),
       description: t("settingsPage.account.signOut.endMeetingDescription"),
       confirmText: t("settingsPage.account.signOut.signOut"),
+      cancelText: t("common.cancel"),
       variant: "destructive",
       onConfirm: () => void performSignOut(),
     });

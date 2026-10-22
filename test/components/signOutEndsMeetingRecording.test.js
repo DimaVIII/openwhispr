@@ -90,10 +90,11 @@ test("sign-out asks first only when it would end a meeting recording", () => {
         useMeetingRecordingStore: { getState: () => ({ isRecording }) },
         performSignOut: async () => calls.push("signed out"),
         showConfirmDialog: (options) => {
+          assert.equal(options.cancelText, "Abbrechen");
           calls.push(`asked: ${options.title}`);
           options.onConfirm();
         },
-        t: (key) => key,
+        t: (key) => (key === "common.cancel" ? "Abbrechen" : key),
       }
     );
     requestSignOut();

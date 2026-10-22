@@ -130,7 +130,7 @@ export default function WorkspaceSwitcher(): React.ReactElement | null {
           align="start"
           sideOffset={8}
           // Wider than the sidebar, as in the design, so names and the invite button have room.
-          className="w-60"
+          className="max-h-[var(--radix-dropdown-menu-content-available-height)] w-60 overflow-y-auto"
         >
           {current && (
             <>
