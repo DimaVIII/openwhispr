@@ -120,7 +120,7 @@ interface CalendarEntry {
 
 // All-day events are stored as UTC midnight of the calendar date, so their date is read from the
 // UTC parts. Reading local parts would shift them a day in zones behind UTC.
-const utcDateAsLocalDay = (date: Date): Date =>
+export const utcDateAsLocalDay = (date: Date): Date =>
   new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 
 const toCalendarEntry = (
