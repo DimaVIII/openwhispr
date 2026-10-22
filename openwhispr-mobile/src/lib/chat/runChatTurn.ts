@@ -1,27 +1,30 @@
-import type { ChatCandidateNotes, GoogleCalendarAccount, GoogleCalendarEvent, Note } from '@/data';
+import type {
+  ChatCandidateNotes,
+  ChatCandidateOptions,
+  GoogleCalendarAccount,
+  GoogleCalendarEvent,
+  Note,
+} from '@/data';
 import type { InferenceRoute, InferenceSelection } from '@/lib/mobileProviders';
 import { isLocalContextLimitError } from '@/lib/localReasoning';
 import { tryParseNoteTimestamp } from '@/lib/parseNoteTimestamp';
 import type { ReasoningResponse, ReasoningRoutingOptions } from '@/types';
 import {
   buildChatPayload,
-  extractSearchTerms,
   formatChatTime,
   isInChatCalendarWindow,
   lacksNoteText,
+  parseChatQuery,
   type ChatCalendar,
   type ChatPayload,
+  type ChatTimeScope,
 } from './chatContext';
 import type { ChatMessage, ChatSource, ChatStep, ChatStepId } from './types';
 
 const MAX_MATCHED_NOTES = 4;
-// A match can be empty (a failed recording matching by title), so a few spare matches are read to
-// take its place.
+// A note found can be empty (a failed recording matching by title, or made in the period asked
+// about), so a few spares are read to take its place.
 const MATCH_POOL = MAX_MATCHED_NOTES * 2;
-const MIN_CHAT_NOTES = 2;
-// Recent notes topping up a thin match can be empty (a recording that failed), so the fill reads a
-// few more than it needs and passes over those.
-const RECENT_FILL_POOL = 10;
 const CONTEXT_LIMIT_NOTE_CHAR_BUDGET = 3_000;
 // The read spans the day looked back as well as the 48 hours sent, so 72 hours share it: about 16
 // events a day, more than a busy calendar holds, so tomorrow isn't pushed out of the request.
@@ -54,10 +57,7 @@ export interface ChatModelRequest {
 }
 
 export interface ChatTurnDeps {
-  getCandidateNotes: (
-    terms: string[],
-    options: { includePrivate: boolean; limit: number },
-  ) => ChatCandidateNotes;
+  getCandidateNotes: (terms: string[], options: ChatCandidateOptions) => ChatCandidateNotes;
   isNotePrivate: (noteId: number) => boolean;
   /** The note's transcript, formatted for a model, or '' when it has none. */
   getNoteTranscript: (noteId: number) => string;
@@ -193,7 +193,12 @@ const describeNextEvent = (events: GoogleCalendarEvent[], now: Date): string => 
   return start ? `${summary} · ${formatChatTime(start)}` : summary;
 };
 
-const describeMatches = (count: number): string => {
+const describeFound = (count: number, scope: ChatTimeScope | null): string => {
+  if (scope) {
+    const noun = scope.meetingsOnly ? 'meeting' : 'note';
+    if (count === 0) return `No ${noun}s from ${scope.label}`;
+    return `${count} ${noun}${count === 1 ? '' : 's'} from ${scope.label}`;
+  }
   if (count === 0) return 'No matching notes';
   if (count === 1) return '1 note matches';
   return `${count} notes match`;
@@ -256,10 +261,16 @@ export async function runChatTurn(
   }
 
   setStep({ id: 'search', status: 'active', label: 'Searching your notes…' });
-  const terms = extractSearchTerms(question);
-  const matches =
-    terms.length > 0
-      ? deps.getCandidateNotes(terms, { includePrivate, limit: MATCH_POOL })
+  // Only notes whose words match, or that were made in the period the question names, are sent: a
+  // question about something else gets no notes rather than unrelated ones.
+  const { terms, scope } = parseChatQuery(question, now);
+  const found =
+    terms.length > 0 || scope
+      ? deps.getCandidateNotes(terms, {
+          includePrivate,
+          limit: MATCH_POOL,
+          window: scope ?? undefined,
+        })
       : { notes: [], total: 0 };
   // Transcripts of the notes with no text of their own, read once whether a note is sent or passed
   // over for having nothing in it.
@@ -273,25 +284,15 @@ export async function runChatTurn(
   // The repository ranks by matched terms across the title, the text, the summary and the
   // transcript, so its order stands. It stops at the notes it sends, so no spare transcript is read.
   const notes: Note[] = [];
-  for (const note of allowed(matches.notes)) {
+  for (const note of allowed(found.notes)) {
     if (notes.length >= MAX_MATCHED_NOTES) break;
     if (hasContent(note)) notes.push(note);
-  }
-  if (notes.length < MIN_CHAT_NOTES) {
-    const matchedIds = new Set(notes.map((note) => note.id));
-    const recent = allowed(
-      deps.getCandidateNotes([], { includePrivate, limit: RECENT_FILL_POOL }).notes,
-    );
-    for (const note of recent) {
-      if (notes.length >= MIN_CHAT_NOTES) break;
-      if (!matchedIds.has(note.id) && hasContent(note)) notes.push(note);
-    }
   }
   setStep({
     id: 'search',
     status: 'done',
     label: 'Searched your notes',
-    detail: describeMatches(matches.total),
+    detail: describeFound(found.total, scope),
   });
   throwIfAborted(signal);
 

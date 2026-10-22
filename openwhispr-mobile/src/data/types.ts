@@ -155,6 +155,19 @@ export interface ChatCandidateNotes {
   total: number;
 }
 
+/** A period a chat question names: the notes created from `start` up to (not including) `end`. */
+export interface ChatNoteWindow {
+  start: Date;
+  end: Date;
+  meetingsOnly: boolean;
+}
+
+export interface ChatCandidateOptions {
+  includePrivate: boolean;
+  limit: number;
+  window?: ChatNoteWindow;
+}
+
 export interface NotesRepository {
   // Existing methods
   getFolders(): Folder[];
@@ -223,13 +236,11 @@ export interface NotesRepository {
   searchNotes(query: string, folderId?: number): Note[];
   /**
    * Notes for answering a chat question: any term matches title, content, AI summary or
-   * transcript, the notes matching the most terms first. With no terms, the most recent notes.
-   * Capped at `limit`; `total` counts every note that matched.
+   * transcript, the notes matching the most terms first. With a window, every note created in it
+   * counts whether or not a term matches: the matches first, then the newest. With no terms, the
+   * most recent notes. Capped at `limit`; `total` counts them all before the cap.
    */
-  getChatCandidateNotes(
-    terms: string[],
-    options: { includePrivate: boolean; limit: number },
-  ): ChatCandidateNotes;
+  getChatCandidateNotes(terms: string[], options: ChatCandidateOptions): ChatCandidateNotes;
   getActions(): Action[];
   getActionById(id: number): Action | null;
   createAction(name: string, description: string, prompt: string): Action;

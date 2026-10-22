@@ -36,8 +36,11 @@ export interface ChatVoiceInput {
 interface UseChatVoiceInputOptions {
   conversationId: string | null;
   onSent?: (conversationId: string) => void;
-  /** Gets a transcript instead of sending it when the chat route changed since the mic opened. */
-  onRouteChanged: (text: string) => void;
+  /**
+   * Gets a transcript to keep in the composer instead of sending it: the chat route changed since
+   * the mic opened, or a failed chat wipe refused the send.
+   */
+  onNotSent: (text: string) => void;
   /** Whether the screen is still showing; a mic that opens after it isn't is closed again. */
   isFocused: () => boolean;
 }
@@ -62,7 +65,7 @@ const currentGateRoute = (): string => {
 export function useChatVoiceInput({
   conversationId,
   onSent,
-  onRouteChanged,
+  onNotSent,
   isFocused,
 }: UseChatVoiceInputOptions): ChatVoiceInput {
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -72,8 +75,8 @@ export function useChatVoiceInput({
   conversationIdRef.current = conversationId;
   const onSentRef = useRef(onSent);
   onSentRef.current = onSent;
-  const onRouteChangedRef = useRef(onRouteChanged);
-  onRouteChangedRef.current = onRouteChanged;
+  const onNotSentRef = useRef(onNotSent);
+  onNotSentRef.current = onNotSent;
   const isFocusedRef = useRef(isFocused);
   isFocusedRef.current = isFocused;
   const allowCloudFallbackRef = useRef(false);
@@ -132,7 +135,7 @@ export function useChatVoiceInput({
     releaseSlot();
     if (movedAway) return;
     if (currentGateRoute() !== gateRouteRef.current) {
-      onRouteChangedRef.current(text);
+      onNotSentRef.current(text);
       return;
     }
     const result = useChatStore.getState().send(text, {
@@ -140,6 +143,7 @@ export function useChatVoiceInput({
       allowCloudFallback: allowCloudFallbackRef.current,
     });
     if (result) onSentRef.current?.(result.conversationId);
+    else if (useChatStore.getState().sendBlockedByWipe) onNotSentRef.current(text);
   };
 
   const recording = useAudioRecording({

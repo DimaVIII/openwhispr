@@ -4,6 +4,7 @@ import {
   CHAT_NOTE_CHAR_CAP,
   CHAT_SYSTEM_PROMPT,
   extractSearchTerms,
+  parseChatQuery,
 } from '../chatContext';
 import type { ChatMessage } from '../types';
 
@@ -49,6 +50,53 @@ const buildPayload = (overrides: Partial<Parameters<typeof buildChatPayload>[0]>
     now: NOW,
     ...overrides,
   });
+
+describe('parseChatQuery', () => {
+  // NOW is Thursday, October 22.
+  const day = (date: number): Date => new Date(2026, 9, date);
+
+  it('reads each period from local midnight, weeks from Monday', () => {
+    const cases: [string, Date, Date, string][] = [
+      ['What happened today?', day(22), day(23), 'today'],
+      ['What did I say yesterday?', day(21), day(22), 'yesterday'],
+      ['What happened this week?', day(19), day(23), 'this week'],
+      ['What happened last  week?', day(12), day(19), 'last week'],
+      ['Anything recent?', day(16), day(23), 'the last 7 days'],
+      ['What did I decide recently?', day(16), day(23), 'the last 7 days'],
+      ['Who did I meet lately?', day(16), day(23), 'the last 7 days'],
+    ];
+    for (const [question, start, end, label] of cases) {
+      expect(parseChatQuery(question, NOW).scope).toEqual({
+        start,
+        end,
+        meetingsOnly: false,
+        label,
+      });
+    }
+  });
+
+  it('starts a week on Monday even on a Sunday', () => {
+    expect(parseChatQuery('this week', new Date(2026, 9, 25, 20, 0)).scope?.start).toEqual(day(19));
+  });
+
+  it('keeps the period’s words out of the search, and "meetings" when it narrows to them', () => {
+    expect(parseChatQuery('Summarize my meetings this week', NOW)).toEqual({
+      terms: ['summarize'],
+      scope: expect.objectContaining({ meetingsOnly: true, label: 'this week' }),
+    });
+    expect(parseChatQuery('What did we decide on pricing today?', NOW).terms).toEqual([
+      'decide',
+      'pricing',
+    ]);
+  });
+
+  it('names no period, and keeps every word, when the question names none', () => {
+    expect(parseChatQuery('What did the meeting decide about the weekly budget?', NOW)).toEqual({
+      terms: ['meeting', 'decide', 'weekly', 'budget'],
+      scope: null,
+    });
+  });
+});
 
 describe('extractSearchTerms', () => {
   it('drops stopwords and short words', () => {
@@ -103,6 +151,11 @@ describe('extractSearchTerms', () => {
       'الأمس',
     ]);
     expect(extractSearchTerms('מה זה של התקציב')).toEqual(['התקציב']);
+  });
+
+  it('drops a clock time and the "prep" of a meeting prep', () => {
+    expect(extractSearchTerms('Prep me for "Acme sync" at 3:15 PM.')).toEqual(['acme', 'sync']);
+    expect(extractSearchTerms('Standup at 10:30am about Q3')).toEqual(['standup', 'q3']);
   });
 
   it('splits Chinese and Japanese runs into bigrams', () => {

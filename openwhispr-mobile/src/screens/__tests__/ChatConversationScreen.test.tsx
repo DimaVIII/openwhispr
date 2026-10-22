@@ -18,7 +18,7 @@ const mockDb: { conversations: ChatConversation[]; messages: ChatMessage[] } = {
 let mockChatEnabled = true;
 let mockVoiceOptions: {
   onSent?: (id: string) => void;
-  onRouteChanged: (text: string) => void;
+  onNotSent: (text: string) => void;
   isFocused: () => boolean;
 } | null = null;
 const mockVoice = {
@@ -117,6 +117,7 @@ const question: ChatMessage = {
   createdAt: 1,
 };
 
+const realSend = useChatStore.getState().send;
 const mockCancel = jest.fn();
 const mockRetry = jest.fn(async () => undefined);
 const mockEditFailedQuestion = jest.fn(() => 'What did we decide?');
@@ -138,6 +139,8 @@ beforeEach(() => {
     messages: [question],
     pending: null,
     failures: {},
+    sendBlockedByWipe: false,
+    send: realSend,
     cancel: mockCancel,
     retry: mockRetry,
     editFailedQuestion: mockEditFailedQuestion,
@@ -560,7 +563,7 @@ describe('ChatConversationScreen', () => {
     const screen = render(<ChatConversationScreen />);
 
     act(() => {
-      mockVoiceOptions?.onRouteChanged('When is my next meeting?');
+      mockVoiceOptions?.onNotSent('When is my next meeting?');
     });
     expect(screen.getByPlaceholderText('Reply').props.value).toBe('When is my next meeting?');
   });
@@ -570,7 +573,7 @@ describe('ChatConversationScreen', () => {
     fireEvent.changeText(screen.getByPlaceholderText('Reply'), 'Also, ');
 
     act(() => {
-      mockVoiceOptions?.onRouteChanged('when is my next meeting?');
+      mockVoiceOptions?.onNotSent('when is my next meeting?');
     });
     expect(screen.getByPlaceholderText('Reply').props.value).toBe('Also, when is my next meeting?');
   });
@@ -633,5 +636,21 @@ describe('ChatConversationScreen', () => {
       text: 'Second question',
     });
     expect(router.setParams).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the reply and says so when a failed chat wipe refuses the send', () => {
+    useChatStore.setState({
+      send: jest.fn(() => {
+        useChatStore.setState({ sendBlockedByWipe: true });
+        return null;
+      }),
+    });
+    const screen = render(<ChatConversationScreen />);
+
+    fireEvent.changeText(screen.getByPlaceholderText('Reply'), 'And the price?');
+    fireEvent.press(screen.getByLabelText('Send'));
+
+    expect(screen.getByText('Couldn’t send right now. Try again.')).toBeTruthy();
+    expect(screen.getByPlaceholderText('Reply').props.value).toBe('And the price?');
   });
 });

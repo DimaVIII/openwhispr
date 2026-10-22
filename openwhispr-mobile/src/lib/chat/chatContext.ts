@@ -1,4 +1,4 @@
-import type { GoogleCalendarEvent, Note } from '@/data';
+import type { ChatNoteWindow, GoogleCalendarEvent, Note } from '@/data';
 import { boundChatContext, formatChatHistory } from '@/lib/notes/chatOverNote';
 import { tryParseNoteTimestamp } from '@/lib/parseNoteTimestamp';
 import type { ChatMessage, ChatSource } from './types';
@@ -17,6 +17,13 @@ const MIN_TERM_LENGTH = 3;
 const SHORT_TERM = /^(?=.*\p{N})[\p{L}\p{N}]{2}$|^\p{Lu}{2}$|^\p{Script=Hangul}{2}$/u;
 // Chinese and Japanese don't put spaces between words, so their runs are searched as bigrams.
 const UNSPACED_SCRIPT_RUN = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]+/gu;
+// A number matches only whole numbers in notes, so "10:30" there never matches "10": a clock time
+// in the question ("Prep me for … at 3:15 PM") would only find stray numbers and every "PM".
+const CLOCK_TIME = /\b\d{1,2}:\d{2}(?:\s*[ap]m)?\b/gi;
+// A period the question names. Its notes are read whether or not their words match, so its words
+// aren't searched for; nor is "meeting" once it narrows the period to meetings.
+const TIME_PHRASE = /\b(?:today|yesterday|this\s+week|last\s+week|recent(?:ly)?|lately)\b/gi;
+const MEETING_WORD = /\bmeetings?\b/gi;
 
 export const CHAT_SYSTEM_PROMPT = `You are OpenWhispr's assistant. The user is asking from the OpenWhispr app, which holds their notes and meeting transcripts.
 
@@ -110,6 +117,8 @@ const STOPWORDS = new Set([
   'give',
   'please',
   'ok',
+  // "Prep me for …" would otherwise find every note saying "prepare".
+  'prep',
 ]);
 
 /** `null` means no calendar is connected; `'unavailable'` means one is but couldn't be read. */
@@ -158,12 +167,67 @@ const toBigrams = (run: string): string[] => {
 // The note lookup treats a blank term as "match everything". Matching whole letter/digit runs
 // can't produce one, and the length filter drops the short leftovers.
 export const extractSearchTerms = (question: string): string[] => {
-  const words = (question.replace(UNSPACED_SCRIPT_RUN, ' ').match(/[\p{L}\p{N}]+/gu) ?? [])
+  const words = (
+    question
+      .replace(UNSPACED_SCRIPT_RUN, ' ')
+      .replace(CLOCK_TIME, ' ')
+      .match(/[\p{L}\p{N}]+/gu) ?? []
+  )
     .filter((word) => word.length >= MIN_TERM_LENGTH || SHORT_TERM.test(word))
     .map((word) => word.toLowerCase())
     .filter((word) => !STOPWORDS.has(word));
   const bigrams = (question.toLowerCase().match(UNSPACED_SCRIPT_RUN) ?? []).flatMap(toBigrams);
   return [...new Set([...words, ...bigrams])].slice(0, MAX_SEARCH_TERMS);
+};
+
+/** A period a question names, with how the search step says it: "3 notes from {label}". */
+export interface ChatTimeScope extends ChatNoteWindow {
+  label: string;
+}
+
+export interface ChatQuery {
+  terms: string[];
+  scope: ChatTimeScope | null;
+}
+
+// Weeks start on Monday, the ISO week, whatever the device's locale. "Recent" is the last 7 days,
+// today included. Each period runs from a local midnight.
+const toTimeScope = (phrase: string, now: Date, meetingsOnly: boolean): ChatTimeScope => {
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const tomorrow = shiftLocalDay(today, 1);
+  const monday = shiftLocalDay(today, -((today.getDay() + 6) % 7));
+  const scope = (start: Date, end: Date, label: string): ChatTimeScope => ({
+    start,
+    end,
+    meetingsOnly,
+    label,
+  });
+  switch (phrase.toLowerCase().replace(/\s+/g, ' ')) {
+    case 'today':
+      return scope(today, tomorrow, 'today');
+    case 'yesterday':
+      return scope(shiftLocalDay(today, -1), today, 'yesterday');
+    case 'this week':
+      return scope(monday, tomorrow, 'this week');
+    case 'last week':
+      return scope(shiftLocalDay(monday, -7), monday, 'last week');
+    default:
+      return scope(shiftLocalDay(today, -6), tomorrow, 'the last 7 days');
+  }
+};
+
+/** The words to search for, and the period the question names (the first one it names). */
+export const parseChatQuery = (question: string, now: Date): ChatQuery => {
+  const phrases = question.match(TIME_PHRASE);
+  if (!phrases) return { terms: extractSearchTerms(question), scope: null };
+
+  const withoutPeriod = question.replace(TIME_PHRASE, ' ');
+  const withoutMeetings = withoutPeriod.replace(MEETING_WORD, ' ');
+  const meetingsOnly = withoutMeetings !== withoutPeriod;
+  return {
+    terms: extractSearchTerms(withoutMeetings),
+    scope: toTimeScope(phrases[0], now, meetingsOnly),
+  };
 };
 
 /** Whether a note has neither text nor an AI summary, so only its transcript can say anything. */

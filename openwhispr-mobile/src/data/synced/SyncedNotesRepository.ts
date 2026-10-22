@@ -17,6 +17,7 @@ import type {
   RemoteNote,
   ConflictedNote,
   ChatCandidateNotes,
+  ChatCandidateOptions,
   Segment,
   NewSegment,
   Speaker,
@@ -66,10 +67,7 @@ export class SyncedNotesRepository implements NotesRepository {
   searchNotes(query: string, folderId?: number): Note[] {
     return this.local.searchNotes(query, folderId);
   }
-  getChatCandidateNotes(
-    terms: string[],
-    options: { includePrivate: boolean; limit: number },
-  ): ChatCandidateNotes {
+  getChatCandidateNotes(terms: string[], options: ChatCandidateOptions): ChatCandidateNotes {
     return this.local.getChatCandidateNotes(terms, options);
   }
   getActions(): Action[] {

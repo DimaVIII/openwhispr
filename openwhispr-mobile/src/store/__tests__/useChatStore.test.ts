@@ -104,6 +104,19 @@ describe('useChatStore', () => {
     expect(mockRepo.listConversations()).toEqual([]);
   });
 
+  it('refuses a send to a deleted chat, or while busy, without blaming a wipe', () => {
+    mockRun.mockReturnValueOnce(deferred<ChatTurnResult>().promise);
+
+    expect(
+      useChatStore.getState().send('lost', { conversationId: 'deleted', ...sendOptions }),
+    ).toBeNull();
+    useChatStore.getState().send('first', { conversationId: null, ...sendOptions });
+    expect(
+      useChatStore.getState().send('second', { conversationId: null, ...sendOptions }),
+    ).toBeNull();
+    expect(useChatStore.getState().sendBlockedByWipe).toBe(false);
+  });
+
   it('refuses a second send while one is pending', () => {
     mockRun.mockReturnValueOnce(deferred<ChatTurnResult>().promise);
     const other = mockRepo.createConversation('Other');
@@ -571,6 +584,37 @@ describe('a failed chat wipe', () => {
     expect(useChatStore.getState().messages).toEqual([]);
     expect(mockRepo.getConversation(previousId)).toBeNull();
     expect(stored.has(WIPE_PENDING_KEY)).toBe(false);
+  });
+
+  it('says a send was refused by the wipe, until the wipe goes through', () => {
+    seedPreviousAccount();
+    failClearAll(3);
+    expect(clearChatHistory()).toBe(false);
+    expect(useChatStore.getState().sendBlockedByWipe).toBe(false);
+
+    expect(
+      useChatStore.getState().send('new question', { conversationId: null, ...sendOptions }),
+    ).toBeNull();
+    expect(useChatStore.getState().sendBlockedByWipe).toBe(true);
+
+    // The third failed attempt; the next read finishes the wipe.
+    useChatStore.getState().loadConversations();
+    expect(useChatStore.getState().sendBlockedByWipe).toBe(true);
+    useChatStore.getState().loadConversations();
+    expect(useChatStore.getState().sendBlockedByWipe).toBe(false);
+  });
+
+  it('clears the refusal when a send gets through', () => {
+    failClearAll(2);
+    expect(clearChatHistory()).toBe(false);
+    useChatStore.getState().send('first', { conversationId: null, ...sendOptions });
+    expect(useChatStore.getState().sendBlockedByWipe).toBe(true);
+    mockRun.mockReturnValueOnce(deferred<ChatTurnResult>().promise);
+
+    expect(
+      useChatStore.getState().send('again', { conversationId: null, ...sendOptions }),
+    ).not.toBeNull();
+    expect(useChatStore.getState().sendBlockedByWipe).toBe(false);
   });
 
   it('finishes the wipe on the next launch before any chat is read', () => {

@@ -16,10 +16,13 @@ export interface ChatSuggestionsInput {
 
 const RECENTLY_STARTED_MS = 15 * 60 * 1000;
 
+// Each names a period, so it reads that period's notes even when none use its words ("action
+// items", "follow up"). "Lately" and "recently" are the last 7 days, which still hold notes early
+// in a week.
 const STATIC_SUGGESTIONS: readonly ChatSuggestion[] = [
   'Summarize my meetings this week',
-  'What are my open action items?',
-  'Who have I promised to follow up with?',
+  'What are my open action items from this week?',
+  'Who have I promised to follow up with lately?',
   'What did I decide recently?',
 ].map((question) => ({ label: question, prompt: question }));
 

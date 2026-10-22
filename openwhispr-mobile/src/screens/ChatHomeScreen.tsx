@@ -17,7 +17,11 @@ import { getAccountFirstName } from '@/lib/accountDisplay';
 import { getMeetingCalendarEventSuggestions } from '@/lib/calendar/meetingSuggestions';
 import { chatTabGateOptions } from '@/lib/chat/chatConsent';
 import { withSpokenQuestion } from '@/lib/chat/chatDraft';
-import { selectPendingTitle, workingElsewhereLabel } from '@/lib/chat/chatPending';
+import {
+  SEND_BLOCKED_NOTICE,
+  selectPendingTitle,
+  workingElsewhereLabel,
+} from '@/lib/chat/chatPending';
 import {
   CHAT_HISTORY_ROUTE,
   CHAT_SETTINGS_ROUTE,
@@ -57,6 +61,7 @@ export function ChatHomeScreen(): React.JSX.Element {
 
   const pending = useChatStore((s) => s.pending);
   const pendingTitle = useChatStore(selectPendingTitle);
+  const sendBlocked = useChatStore((s) => s.sendBlockedByWipe);
   const firstName = useAuthStore((s) => getAccountFirstName(s.user));
   const activeMode = useProcessingModeStore((s) => s.activeMode);
   const { chatEnabled, gate } = useChatSendGate();
@@ -66,7 +71,7 @@ export function ChatHomeScreen(): React.JSX.Element {
     onSent: (conversationId) => {
       if (focusedRef.current) pushConversation(conversationId);
     },
-    onRouteChanged: (text) => setDraft((current) => withSpokenQuestion(current, text)),
+    onNotSent: (text) => setDraft((current) => withSpokenQuestion(current, text)),
     isFocused: () => focusedRef.current,
   });
   const voiceRef = useRef(voice);
@@ -108,6 +113,8 @@ export function ChatHomeScreen(): React.JSX.Element {
         label={workingElsewhereLabel(pendingTitle)}
         onPress={workingId ? () => pushConversation(workingId) : undefined}
       />
+    ) : sendBlocked ? (
+      <ChatComposerNotice label={SEND_BLOCKED_NOTICE} />
     ) : null;
   const gateOptions = chatTabGateOptions(activeMode);
   // Leaving Home, or asking something else, while a question is being spoken would drop it.

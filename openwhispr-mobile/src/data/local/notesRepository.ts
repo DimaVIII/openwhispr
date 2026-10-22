@@ -55,6 +55,8 @@ import type {
   RemoteNote,
   ConflictedNote,
   ChatCandidateNotes,
+  ChatCandidateOptions,
+  ChatNoteWindow,
   Segment,
   NewSegment,
   Speaker,
@@ -140,21 +142,43 @@ const NOTE_PUSH_ACK_FIELDS: ReadonlyArray<keyof Note> = [
 
 const pushRejectedKey = (localId: number): string => `note.pushRejected.${localId}`;
 
-// A short Latin term ("ai", "q3", "10") would match inside longer words ("said", "email"), so it
+// A short Latin term ("ai", "q3") would match inside longer words ("said", "email"), so it
 // matches whole words only. Longer terms, and those from other scripts, match anywhere, since
 // Korean particles attach to the nouns they follow.
 const WHOLE_WORD_TERM = /^[a-z0-9]{1,2}$/;
+const NUMBER_TERM = /^[0-9]+$/;
+
+// A number matches whole numbers only: "10" never matches "100", "2010", "10:30", "1.10" or
+// "10,000". A `.`, `:` or `,` between digits joins them, but one after a number ends it ("10.").
+const numberPatterns = (term: string): string[] => {
+  const before = ['*[^A-Za-z0-9.:,]', '*[^0-9][.:,]'];
+  const after = ['[^A-Za-z0-9.:,]*', '[.:,][^0-9]*'];
+  return before.flatMap((start) => after.map((end) => `${start}${term}${end}`));
+};
+
+// GLOB patterns for a term that must match whole, or null for one matched anywhere. Terms are
+// letters and digits only, so nothing in them needs escaping.
+const wholeTermPatterns = (term: string): string[] | null => {
+  if (NUMBER_TERM.test(term)) return numberPatterns(term);
+  if (!WHOLE_WORD_TERM.test(term)) return null;
+  // GLOB folds no case at all.
+  const letters = Array.from(term, (character) =>
+    /[a-z]/.test(character) ? `[${character.toUpperCase()}${character}]` : character,
+  ).join('');
+  return [`*[^A-Za-z0-9]${letters}[^A-Za-z0-9]*`];
+};
 
 // Search terms arrive lowercased. SQLite's LIKE folds ASCII case only, so a term with other letters
-// also looks for its capitalised form ("Übergabe" heading a title). GLOB folds no case at all.
+// also looks for its capitalised form ("Übergabe" heading a title).
 const chatTermMatcher = (term: string): ((column: SQLWrapper) => SQL) => {
-  if (WHOLE_WORD_TERM.test(term)) {
-    const letters = Array.from(term, (character) =>
-      /[a-z]/.test(character) ? `[${character.toUpperCase()}${character}]` : character,
-    ).join('');
+  const globs = wholeTermPatterns(term);
+  if (globs) {
     // Padding the column lets a term at its start or end meet a boundary too.
-    const pattern = `*[^A-Za-z0-9]${letters}[^A-Za-z0-9]*`;
-    return (column) => sql`(' ' || ${column} || ' ') GLOB ${pattern}`;
+    return (column) =>
+      sql`(${sql.join(
+        globs.map((pattern) => sql`(' ' || ${column} || ' ') GLOB ${pattern}`),
+        sql` OR `,
+      )})`;
   }
 
   const capitalised = `${term.charAt(0).toUpperCase()}${term.slice(1)}`;
@@ -167,6 +191,15 @@ const chatTermMatcher = (term: string): ((column: SQLWrapper) => SQL) => {
       sql` OR `,
     )})`;
 };
+
+// Notes carry SQLite's "YYYY-MM-DD HH:MM:SS" (UTC) or the server's ISO timestamps, so both sides go
+// through datetime() to compare instants rather than strings.
+const createdIn = ({ start, end, meetingsOnly }: ChatNoteWindow): SQL | undefined =>
+  and(
+    sql`datetime(${notes.createdAt}) >= datetime(${start.toISOString()})`,
+    sql`datetime(${notes.createdAt}) < datetime(${end.toISOString()})`,
+    meetingsOnly ? eq(notes.noteType, 'meeting') : undefined,
+  );
 
 export class LocalNotesRepository implements NotesRepository {
   private readonly database: NotesDb;
@@ -593,17 +626,20 @@ export class LocalNotesRepository implements NotesRepository {
     return this.database.select().from(notes).where(condition).orderBy(desc(notes.updatedAt)).all();
   }
 
-  getChatCandidateNotes(
-    terms: string[],
-    options: { includePrivate: boolean; limit: number },
-  ): ChatCandidateNotes {
+  getChatCandidateNotes(terms: string[], options: ChatCandidateOptions): ChatCandidateNotes {
+    const { window } = options;
     const visible = and(
       isNull(notes.deletedAt),
       eq(notes.leftTeam, 0),
       options.includePrivate ? undefined : eq(notes.isPrivate, 0),
+      window ? createdIn(window) : undefined,
     );
+    // A period's notes are listed by when they were made, since editing an old meeting doesn't
+    // make it one of this week's.
+    const recency = window ? sql`datetime(${notes.createdAt})` : sql`${notes.updatedAt}`;
     // Only the ids are ranked and counted, so the heavy columns (content, transcript JSON) are read
-    // for the notes returned alone. The window count runs before the limit, so it counts every match.
+    // for the notes returned alone. The count runs before the limit, so it counts every match, or in
+    // a period every note made in it: there the terms only put the matching notes first.
     const total = sql<number>`count(*) OVER ()`;
     const ranked =
       terms.length === 0
@@ -611,10 +647,16 @@ export class LocalNotesRepository implements NotesRepository {
             .select({ id: notes.id, total })
             .from(notes)
             .where(visible)
-            .orderBy(desc(notes.updatedAt))
+            .orderBy(desc(recency))
             .limit(options.limit)
             .all()
-        : this.rankChatMatches(terms, visible, total, options.limit);
+        : this.rankChatMatches(terms, {
+            visible,
+            recency,
+            total,
+            limit: options.limit,
+            requireMatch: !window,
+          });
     if (ranked.length === 0) return { notes: [], total: 0 };
 
     const rows = new Map(
@@ -638,9 +680,13 @@ export class LocalNotesRepository implements NotesRepository {
 
   private rankChatMatches(
     terms: string[],
-    visible: SQL | undefined,
-    total: SQL<number>,
-    limit: number,
+    query: {
+      visible: SQL | undefined;
+      recency: SQL;
+      total: SQL<number>;
+      limit: number;
+      requireMatch: boolean;
+    },
   ): { id: number; total: number }[] {
     const termScores = terms.map((term) => {
       const matches = chatTermMatcher(term);
@@ -663,19 +709,19 @@ export class LocalNotesRepository implements NotesRepository {
     const scored = this.database
       .select({
         id: notes.id,
-        updatedAt: notes.updatedAt,
+        recency: sql<string>`${query.recency}`.as('recency'),
         score: sql<number>`${sql.join(termScores, sql` + `)}`.as('score'),
       })
       .from(notes)
-      .where(visible)
+      .where(query.visible)
       .limit(Number.MAX_SAFE_INTEGER)
       .as('scored');
     return this.database
-      .select({ id: scored.id, total })
+      .select({ id: scored.id, total: query.total })
       .from(scored)
-      .where(gt(scored.score, 0))
-      .orderBy(desc(scored.score), desc(scored.updatedAt))
-      .limit(limit)
+      .where(query.requireMatch ? gt(scored.score, 0) : undefined)
+      .orderBy(desc(scored.score), desc(scored.recency))
+      .limit(query.limit)
       .all();
   }
 

@@ -59,7 +59,8 @@ describe('ChatInputBar', () => {
   it('listens in the composer: the mic finishes and × cancels', () => {
     const voice = makeVoice({ state: 'listening' });
     const screen = render(<ChatInputBar {...baseProps(voice)} />);
-    expect(screen.getByText('Listening…')).toBeTruthy();
+    expect(screen.getByLabelText('Recording')).toBeTruthy();
+    expect(screen.queryByText('Listening…')).toBeNull();
     expect(screen.queryByPlaceholderText('Reply')).toBeNull();
     expect(screen.queryByLabelText('Speak your question')).toBeNull();
 

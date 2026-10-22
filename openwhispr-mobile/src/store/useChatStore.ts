@@ -38,6 +38,9 @@ interface ChatState {
   pending: ChatPending | null;
   // Keyed by conversation, so a failure in one chat never takes another's Retry away.
   failures: Record<string, ChatFailure>;
+  // Set when a send was refused because a failed chat wipe still holds the saved chats back, so the
+  // screens can say why nothing was sent. Cleared once the wipe goes through.
+  sendBlockedByWipe: boolean;
   loadConversations: () => void;
   openConversation: (id: string) => void;
   // Clears the open conversation only while it is still `id`, so a screen that's leaving never
@@ -63,13 +66,19 @@ interface TurnRequest {
 
 const INITIAL_STATE: Pick<
   ChatState,
-  'conversations' | 'activeConversationId' | 'messages' | 'pending' | 'failures'
+  | 'conversations'
+  | 'activeConversationId'
+  | 'messages'
+  | 'pending'
+  | 'failures'
+  | 'sendBlockedByWipe'
 > = {
   conversations: [],
   activeConversationId: null,
   messages: [],
   pending: null,
   failures: {},
+  sendBlockedByWipe: false,
 };
 
 const withoutFailure = (
@@ -224,7 +233,8 @@ export const useChatStore = create<ChatState>((set, get) => {
     ...INITIAL_STATE,
 
     loadConversations: () => {
-      set({ conversations: readConversations() });
+      const conversations = readConversations();
+      set(isWipePending() ? { conversations } : { conversations, sendBlockedByWipe: false });
     },
 
     openConversation: (id) => {
@@ -251,7 +261,10 @@ export const useChatStore = create<ChatState>((set, get) => {
       // a transcription this send would race.
       if (!text || get().pending) return null;
       // Nothing is written beside chats a failed wipe still holds back.
-      if (!savedChatsReadable()) return null;
+      if (!savedChatsReadable()) {
+        set({ sendBlockedByWipe: true });
+        return null;
+      }
       // A screen can still hold the id of a conversation deleted under it.
       if (options.conversationId && !chatRepository.getConversation(options.conversationId)) {
         return null;
@@ -262,6 +275,7 @@ export const useChatStore = create<ChatState>((set, get) => {
       const history = readMessages(conversationId);
       const userMessage = chatRepository.appendMessage({ conversationId, role: 'user', text });
       set((state) => ({
+        sendBlockedByWipe: false,
         failures: withoutFailure(state.failures, conversationId),
         conversations: readConversations(),
         messages:

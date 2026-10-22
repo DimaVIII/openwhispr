@@ -6,8 +6,8 @@ const NOW = new Date(2026, 9, 22, 9, 0, 0);
 
 const STATIC_LABELS = [
   'Summarize my meetings this week',
-  'What are my open action items?',
-  'Who have I promised to follow up with?',
+  'What are my open action items from this week?',
+  'Who have I promised to follow up with lately?',
   'What did I decide recently?',
 ];
 

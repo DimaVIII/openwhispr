@@ -16,7 +16,12 @@ import { useChatSendGate } from '@/hooks/useChatSendGate';
 import { useChatVoiceInput } from '@/hooks/useChatVoiceInput';
 import { chatTabGateOptions } from '@/lib/chat/chatConsent';
 import { withSpokenQuestion } from '@/lib/chat/chatDraft';
-import { ownsChatPending, selectPendingTitle, workingElsewhereLabel } from '@/lib/chat/chatPending';
+import {
+  ownsChatPending,
+  SEND_BLOCKED_NOTICE,
+  selectPendingTitle,
+  workingElsewhereLabel,
+} from '@/lib/chat/chatPending';
 import {
   CHAT_HOME_ROUTE,
   CHAT_SETTINGS_ROUTE,
@@ -67,6 +72,7 @@ export function ChatConversationScreen(): React.JSX.Element {
     (s) => s.conversations.find((conversation) => conversation.id === conversationId)?.title,
   );
   const pendingTitle = useChatStore(selectPendingTitle);
+  const sendBlocked = useChatStore((s) => s.sendBlockedByWipe);
   const activeMode = useProcessingModeStore((s) => s.activeMode);
   const { chatEnabled, gate } = useChatSendGate();
   const isFocused = useCallback((): boolean => focusedRef.current, []);
@@ -82,7 +88,7 @@ export function ChatConversationScreen(): React.JSX.Element {
   const voice = useChatVoiceInput({
     conversationId,
     onSent: adoptConversation,
-    onRouteChanged: (text) => setDraft((current) => withSpokenQuestion(current, text)),
+    onNotSent: (text) => setDraft((current) => withSpokenQuestion(current, text)),
     isFocused,
   });
   const voiceRef = useRef(voice);
@@ -215,6 +221,8 @@ export function ChatConversationScreen(): React.JSX.Element {
       label={workingElsewhereLabel(pendingTitle)}
       onPress={workingId ? () => router.push(chatConversationRoute(workingId)) : undefined}
     />
+  ) : sendBlocked ? (
+    <ChatComposerNotice label={SEND_BLOCKED_NOTICE} />
   ) : null;
 
   return (

@@ -10,6 +10,8 @@ type SeedNote = {
   isPrivate?: number;
   leftTeam?: number;
   deletedAt?: string | null;
+  noteType?: string;
+  createdAt?: string;
   updatedAt: string;
 };
 
@@ -204,6 +206,25 @@ describe('LocalNotesRepository.getChatCandidateNotes', () => {
     expect(ids('10')).toEqual([ten]);
   });
 
+  it('matches a number only as a whole number', () => {
+    const { repo, db } = createMemoryRepository();
+    const plain = seed(repo, db, { content: 'We need 10.', updatedAt: '2026-10-01 10:00:00' });
+    const listed = seed(repo, db, { content: 'Seats: 10, 12', updatedAt: '2026-10-02 10:00:00' });
+    const dated = seed(repo, db, { content: 'Planned for 2026', updatedAt: '2026-10-03 10:00:00' });
+    seed(repo, db, {
+      content: 'Starts 10:30, ships 1.10 in 20261, costs 100 or 10,000',
+      updatedAt: '2026-10-04 10:00:00',
+    });
+
+    const ids = (term: string): number[] =>
+      repo
+        .getChatCandidateNotes([term], { includePrivate: false, limit: 10 })
+        .notes.map((note) => note.id);
+
+    expect(ids('10')).toEqual([listed, plain]);
+    expect(ids('2026')).toEqual([dated]);
+  });
+
   it('matches a Korean term inside a longer word', () => {
     const { repo, db } = createMemoryRepository();
     const id = seed(repo, db, {
@@ -240,5 +261,91 @@ describe('LocalNotesRepository.getChatCandidateNotes', () => {
     const result = repo.getChatCandidateNotes([], { includePrivate: false, limit: 2 }).notes;
 
     expect(result.map((note) => note.id)).toEqual([newest, middle]);
+  });
+
+  describe('in a period', () => {
+    const window = {
+      start: new Date('2026-10-19T00:00:00Z'),
+      end: new Date('2026-10-23T00:00:00Z'),
+      meetingsOnly: false,
+    };
+
+    it('counts every note made in it, matches first, then the newest', () => {
+      const { repo, db } = createMemoryRepository();
+      const early = seed(repo, db, {
+        content: 'Pricing holds.',
+        createdAt: '2026-10-19 09:00:00',
+        updatedAt: '2026-10-19 09:00:00',
+      });
+      // The server's ISO timestamps compare as instants alongside SQLite's own.
+      const late = seed(repo, db, {
+        content: 'Hiring update.',
+        createdAt: '2026-10-22T08:00:00.000Z',
+        updatedAt: '2026-10-22 08:00:00',
+      });
+      const middle = seed(repo, db, {
+        content: 'Roadmap review.',
+        createdAt: '2026-10-21T10:00:00+02:00',
+        updatedAt: '2026-10-21 08:00:00',
+      });
+      // Edited this week, but made before it.
+      seed(repo, db, {
+        content: 'Pricing call.',
+        createdAt: '2026-10-18 23:59:59',
+        updatedAt: '2026-10-22 09:00:00',
+      });
+      seed(repo, db, {
+        content: 'Pricing tomorrow.',
+        createdAt: '2026-10-23 00:00:00',
+        updatedAt: '2026-10-23 00:00:00',
+      });
+
+      const matched = repo.getChatCandidateNotes(['pricing'], {
+        includePrivate: false,
+        limit: 10,
+        window,
+      });
+      const unmatched = repo.getChatCandidateNotes(['budget'], {
+        includePrivate: false,
+        limit: 10,
+        window,
+      });
+      const noTerms = repo.getChatCandidateNotes([], { includePrivate: false, limit: 2, window });
+
+      expect(matched.notes.map((note) => note.id)).toEqual([early, late, middle]);
+      expect(matched.total).toBe(3);
+      expect(unmatched.notes.map((note) => note.id)).toEqual([late, middle, early]);
+      expect(noTerms.notes.map((note) => note.id)).toEqual([late, middle]);
+      expect(noTerms.total).toBe(3);
+    });
+
+    it('keeps only meetings when asked, and still hides private, deleted and left notes', () => {
+      const { repo, db } = createMemoryRepository();
+      const createdAt = '2026-10-20 10:00:00';
+      const meeting = seed(repo, db, {
+        title: 'Standup',
+        noteType: 'meeting',
+        createdAt,
+        updatedAt: createdAt,
+      });
+      seed(repo, db, { title: 'Groceries', createdAt, updatedAt: createdAt });
+      seed(repo, db, { noteType: 'meeting', isPrivate: 1, createdAt, updatedAt: createdAt });
+      seed(repo, db, { noteType: 'meeting', leftTeam: 1, createdAt, updatedAt: createdAt });
+      seed(repo, db, {
+        noteType: 'meeting',
+        deletedAt: createdAt,
+        createdAt,
+        updatedAt: createdAt,
+      });
+
+      const result = repo.getChatCandidateNotes([], {
+        includePrivate: false,
+        limit: 10,
+        window: { ...window, meetingsOnly: true },
+      });
+
+      expect(result.notes.map((note) => note.id)).toEqual([meeting]);
+      expect(result.total).toBe(1);
+    });
   });
 });

@@ -1,4 +1,5 @@
-import { Pressable, Share, StyleSheet, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { AccessibilityInfo, Pressable, StyleSheet, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { Text } from '@/components/ui/Text';
 import { SystemIcon } from '@/components/ui/SystemIcon';
@@ -13,25 +14,31 @@ interface ChatAssistantMessageProps {
   onOpenNote: (noteId: number) => void;
 }
 
+// As long as the referral link's copy confirmation stays.
+const COPIED_MS = 2_000;
+
 export function ChatAssistantMessage({
   message,
   onOpenNote,
 }: ChatAssistantMessageProps): React.JSX.Element {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return undefined;
+    const timer = setTimeout(() => setCopied(false), COPIED_MS);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
   const copy = async (): Promise<void> => {
     safeHaptics('light');
     try {
       await Clipboard.setStringAsync(message.text);
     } catch {
       // The clipboard can refuse a write; there is nothing useful to tell the user.
+      return;
     }
-  };
-
-  const share = async (): Promise<void> => {
-    try {
-      await Share.share({ message: message.text });
-    } catch {
-      // Dismissing or failing the share sheet needs no handling here.
-    }
+    setCopied(true);
+    AccessibilityInfo.announceForAccessibility('Copied');
   };
 
   return (
@@ -60,23 +67,21 @@ export function ChatAssistantMessage({
           ))}
         </View>
       ) : null}
-      <View className="mt-1 flex-row">
+      <View className="mt-1 flex-row items-center">
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Copy answer"
           onPress={copy}
           className="h-11 w-11 items-center justify-center active:opacity-60"
         >
-          <SystemIcon name="doc.on.doc" mdName="Copy" size={18} color="secondaryLabel" />
+          <SystemIcon
+            name={copied ? 'checkmark' : 'doc.on.doc'}
+            mdName={copied ? 'Check' : 'Copy'}
+            size={18}
+            color={copied ? 'systemGreen' : 'secondaryLabel'}
+          />
         </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Share answer"
-          onPress={share}
-          className="h-11 w-11 items-center justify-center active:opacity-60"
-        >
-          <SystemIcon name="square.and.arrow.up" mdName="Share" size={18} color="secondaryLabel" />
-        </Pressable>
+        {copied ? <Text className="text-[13px] text-secondaryLabel">Copied</Text> : null}
       </View>
     </View>
   );

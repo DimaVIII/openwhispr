@@ -1,4 +1,10 @@
-import type { ChatCandidateNotes, GoogleCalendarAccount, GoogleCalendarEvent, Note } from '@/data';
+import type {
+  ChatCandidateNotes,
+  ChatCandidateOptions,
+  GoogleCalendarAccount,
+  GoogleCalendarEvent,
+  Note,
+} from '@/data';
 import { LocalReasoningError } from '@/lib/localReasoning';
 import {
   createDefaultChatTurnDeps,
@@ -72,18 +78,13 @@ const PRIVATE_HISTORY: ChatMessage[] = [
   makeMessage('m4', 'assistant', 'Price stays at $12.', [{ noteId: 1, title: 'Pricing call' }]),
 ];
 
-// Stands in for the repository: the matches for any terms, the recent notes for none, capped at
-// the limit and counted before it.
+// Stands in for the repository: the matches for any terms or a period, the recent notes for
+// neither, capped at the limit and counted before it.
 const candidatesFrom = (matched: Note[], recent: Note[] = []) =>
-  jest.fn(
-    (
-      terms: string[],
-      { limit }: { includePrivate: boolean; limit: number },
-    ): ChatCandidateNotes => {
-      const notes = terms.length > 0 ? matched : recent;
-      return { notes: notes.slice(0, limit), total: notes.length };
-    },
-  );
+  jest.fn((terms: string[], { limit, window }: ChatCandidateOptions): ChatCandidateNotes => {
+    const notes = terms.length > 0 || window ? matched : recent;
+    return { notes: notes.slice(0, limit), total: notes.length };
+  });
 
 const makeDeps = (overrides: Partial<ChatTurnDeps> = {}): ChatTurnDeps => ({
   getCandidateNotes: candidatesFrom([PRICING, ROADMAP]),
@@ -235,21 +236,60 @@ describe('runChatTurn', () => {
     expect(sentText(deps.chat)).toContain('No meetings in the next 48 hours.');
   });
 
-  it('fills up to two notes with recent ones when nothing matches', async () => {
+  it('sends no notes when nothing matches', async () => {
     const recent = makeNote({ id: 9, title: 'Weekly sync', content: 'Status updates.' });
     const getCandidateNotes = candidatesFrom([], [recent]);
-    const input = makeInput({ question: 'Anything new?' });
+    const input = makeInput({ question: 'What is the capital of France?' });
+    const deps = makeDeps({ getCandidateNotes });
+
+    const result = await runChatTurn(input, deps);
+
+    expect(getCandidateNotes.mock.calls.map(([terms]) => terms)).toEqual([['capital', 'france']]);
+    const steps = lastSteps(input.onSteps);
+    expect(steps.map((step) => step.id)).toEqual(['calendar', 'search', 'write']);
+    expect(steps.find((step) => step.id === 'search')?.detail).toBe('No matching notes');
+    expect(result.sources).toEqual([]);
+    expect(sentText(deps.chat)).toContain('NOTES:\nNo matching notes.');
+  });
+
+  it('reads the notes from a period the question names, whatever their words', async () => {
+    const meetings = [
+      makeNote({ id: 9, title: 'Weekly sync', content: 'Status updates.', noteType: 'meeting' }),
+      makeNote({ id: 10, title: 'Standup', content: 'Blockers.', noteType: 'meeting' }),
+    ];
+    const getCandidateNotes = candidatesFrom(meetings);
+    const input = makeInput({ question: 'Summarize my meetings this week' });
 
     const result = await runChatTurn(input, makeDeps({ getCandidateNotes }));
 
-    expect(getCandidateNotes).toHaveBeenCalledWith(
-      [],
-      expect.objectContaining({ includePrivate: false }),
-    );
+    expect(getCandidateNotes).toHaveBeenCalledTimes(1);
+    expect(getCandidateNotes).toHaveBeenCalledWith(['summarize'], {
+      includePrivate: false,
+      limit: 8,
+      window: expect.objectContaining({
+        start: new Date(2026, 9, 19),
+        end: new Date(2026, 9, 23),
+        meetingsOnly: true,
+      }),
+    });
     const steps = lastSteps(input.onSteps);
-    expect(steps.find((step) => step.id === 'search')?.detail).toBe('No matching notes');
-    expect(steps.find((step) => step.id === 'read')?.label).toBe('Read “Weekly sync”');
-    expect(result.sources).toEqual([{ noteId: 9, title: 'Weekly sync' }]);
+    expect(steps.find((step) => step.id === 'search')?.detail).toBe('2 meetings from this week');
+    expect(steps.find((step) => step.id === 'read')?.label).toBe('Read “Weekly sync” and 1 more');
+    expect(result.sources.map((source) => source.noteId)).toEqual([9, 10]);
+  });
+
+  it('says when a period holds nothing', async () => {
+    const empty = makeInput({ question: 'What happened yesterday?' });
+    await runChatTurn(empty, makeDeps({ getCandidateNotes: candidatesFrom([]) }));
+    expect(lastSteps(empty.onSteps).find((step) => step.id === 'search')?.detail).toBe(
+      'No notes from yesterday',
+    );
+
+    const one = makeInput({ question: 'Any meeting today?' });
+    await runChatTurn(one, makeDeps({ getCandidateNotes: candidatesFrom([PRICING]) }));
+    expect(lastSteps(one.onSteps).find((step) => step.id === 'search')?.detail).toBe(
+      '1 meeting from today',
+    );
   });
 
   it('reads only the notes it sends, and says how many matched in all', async () => {
@@ -301,7 +341,7 @@ describe('runChatTurn', () => {
     expect(getNoteTranscript.mock.calls.map(([id]) => id)).toEqual([2, 3, 4, 5]);
   });
 
-  it('passes over empty recent notes when filling', async () => {
+  it('passes over empty notes from a period', async () => {
     const failed = makeNote({ id: 8, title: 'Failed recording' });
     const recent = [
       failed,
@@ -311,8 +351,8 @@ describe('runChatTurn', () => {
     const getNoteTranscript = jest.fn(() => '');
 
     const result = await runChatTurn(
-      makeInput({ question: 'Anything new?' }),
-      makeDeps({ getCandidateNotes: candidatesFrom([], recent), getNoteTranscript }),
+      makeInput({ question: 'Anything new today?' }),
+      makeDeps({ getCandidateNotes: candidatesFrom(recent), getNoteTranscript }),
     );
 
     expect(getNoteTranscript).toHaveBeenCalledWith(8);

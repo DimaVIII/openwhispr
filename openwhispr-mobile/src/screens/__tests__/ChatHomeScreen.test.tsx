@@ -2,7 +2,7 @@ import { act, fireEvent, render } from '@testing-library/react-native';
 import { router } from 'expo-router';
 import type { GoogleCalendarEvent } from '@/data';
 import type { AuthUser } from '@/lib/authClient';
-import { useChatStore } from '@/store/useChatStore';
+import { useChatStore, type ChatSendResult } from '@/store/useChatStore';
 import { ChatHomeScreen } from '../ChatHomeScreen';
 
 const mockVoice = {
@@ -80,8 +80,11 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
 }));
 
-const mockSend = jest.fn(() => ({ conversationId: 'c9', done: Promise.resolve() }));
-const ACTION_ITEMS = 'What are my open action items?';
+const mockSend = jest.fn((): ChatSendResult | null => ({
+  conversationId: 'c9',
+  done: Promise.resolve(),
+}));
+const ACTION_ITEMS = 'What are my open action items from this week?';
 const COMPOSER = 'Summarize my meetings this week';
 
 const renderHome = async (): Promise<ReturnType<typeof render>> => {
@@ -97,7 +100,13 @@ beforeEach(() => {
   mockChatEnabled = true;
   mockEvents = [];
   jest.clearAllMocks();
-  useChatStore.setState({ conversations: [], pending: null, failures: {}, send: mockSend });
+  useChatStore.setState({
+    conversations: [],
+    pending: null,
+    failures: {},
+    sendBlockedByWipe: false,
+    send: mockSend,
+  });
   mockUser = null;
 });
 
@@ -177,6 +186,22 @@ describe('ChatHomeScreen', () => {
     });
     expect(router.push).toHaveBeenCalledWith('/(tabs)/(chat)/c9');
     expect(screen.getByPlaceholderText(COMPOSER).props.value).toBe('');
+  });
+
+  it('keeps the question and says so when a failed chat wipe refuses the send', async () => {
+    mockSend.mockImplementationOnce(() => {
+      useChatStore.setState({ sendBlockedByWipe: true });
+      return null;
+    });
+    const screen = await renderHome();
+    expect(screen.queryByText('Couldn’t send right now. Try again.')).toBeNull();
+
+    fireEvent.changeText(screen.getByLabelText('Ask anything'), 'What changed?');
+    fireEvent.press(screen.getByLabelText('Send'));
+
+    expect(screen.getByText('Couldn’t send right now. Try again.')).toBeTruthy();
+    expect(screen.getByPlaceholderText(COMPOSER).props.value).toBe('What changed?');
+    expect(router.push).not.toHaveBeenCalled();
   });
 
   it('ignores a suggestion tap while listening', async () => {

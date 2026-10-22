@@ -84,7 +84,7 @@ const deferred = (): Deferred => {
   return { promise, resolve };
 };
 
-const mockOnRouteChanged = jest.fn();
+const mockOnNotSent = jest.fn();
 let mockFocused = true;
 
 const renderVoiceInput = (conversationId: string | null, onSent?: (id: string) => void) =>
@@ -92,7 +92,7 @@ const renderVoiceInput = (conversationId: string | null, onSent?: (id: string) =
     useChatVoiceInput({
       conversationId,
       onSent,
-      onRouteChanged: mockOnRouteChanged,
+      onNotSent: mockOnNotSent,
       isFocused: () => mockFocused,
     }),
   );
@@ -162,7 +162,7 @@ it('hands the transcript back instead of sending when the chat route changed', a
   });
 
   expect(mockSend).not.toHaveBeenCalled();
-  expect(mockOnRouteChanged).toHaveBeenCalledWith('When is my next meeting?');
+  expect(mockOnNotSent).toHaveBeenCalledWith('When is my next meeting?');
   expect(useChatStore.getState().pending).toBeNull();
 });
 
@@ -182,7 +182,37 @@ it('hands the transcript back instead of sending when Chat was turned off', asyn
   });
 
   expect(mockSend).not.toHaveBeenCalled();
-  expect(mockOnRouteChanged).toHaveBeenCalledWith('When is my next meeting?');
+  expect(mockOnNotSent).toHaveBeenCalledWith('When is my next meeting?');
+});
+
+it('hands the transcript back when a failed chat wipe refuses the send, and only then', async () => {
+  const speak = async (): Promise<void> => {
+    const { result, rerender } = renderVoiceInput('conv-1');
+    await act(async () => {
+      await result.current.start(false);
+    });
+    rerender({});
+    await act(async () => {
+      await result.current.finish();
+    });
+  };
+  mockStopBehavior = async () => {
+    mockRecordingOptions.onComplete?.('When is my next meeting?');
+  };
+
+  mockSend.mockImplementationOnce(() => {
+    useChatStore.setState({ sendBlockedByWipe: true });
+    return null;
+  });
+  await speak();
+  expect(mockOnNotSent).toHaveBeenCalledWith('When is my next meeting?');
+
+  mockOnNotSent.mockClear();
+  useChatStore.setState({ sendBlockedByWipe: false });
+  mockSend.mockReturnValueOnce(null);
+  await speak();
+  expect(mockSend).toHaveBeenCalledTimes(2);
+  expect(mockOnNotSent).not.toHaveBeenCalled();
 });
 
 it('opens one recording for two quick taps', async () => {

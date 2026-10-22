@@ -60,18 +60,20 @@ function ListeningField({
       >
         <SystemIcon name="xmark" mdName="X" size={13} color="secondaryLabel" />
       </Pressable>
-      <Text className="text-[16px] text-secondaryLabel">Listening…</Text>
-      <RecordingBars
-        isRecording
-        edgeToEdge
-        color={BRAND_GRADIENT[1]}
-        height={18}
-        numBars={WAVEFORM_BARS}
-        barWidth={3}
-        barGap={3}
-        amplitude={currentAmplitude}
-        waveformData={waveformData}
-      />
+      {/* The waveform alone shows it's listening, so a screen reader is told in words. */}
+      <View accessible accessibilityLabel="Recording">
+        <RecordingBars
+          isRecording
+          edgeToEdge
+          color={BRAND_GRADIENT[1]}
+          height={18}
+          numBars={WAVEFORM_BARS}
+          barWidth={3}
+          barGap={3}
+          amplitude={currentAmplitude}
+          waveformData={waveformData}
+        />
+      </View>
     </View>
   );
 }

@@ -24,6 +24,8 @@ export type {
   RemoteNoteCreateResult,
   ConflictedNote,
   ChatCandidateNotes,
+  ChatCandidateOptions,
+  ChatNoteWindow,
 } from './types';
 export type {
   CalendarParticipant,

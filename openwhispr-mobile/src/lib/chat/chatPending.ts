@@ -26,3 +26,6 @@ export const selectPendingTitle = (state: {
 
 export const workingElsewhereLabel = (title: string | undefined): string =>
   title ? `Working on “${title}”…` : 'Working on your question…';
+
+/** Said when a send was refused because saved chats from a failed wipe are still being cleared. */
+export const SEND_BLOCKED_NOTICE = 'Couldn’t send right now. Try again.';

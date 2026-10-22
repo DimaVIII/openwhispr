@@ -1,7 +1,8 @@
-import { Share } from 'react-native';
+import { AccessibilityInfo } from 'react-native';
 import { act, fireEvent, render } from '@testing-library/react-native';
 import * as Clipboard from 'expo-clipboard';
 import type { ChatMessage } from '@/lib/chat/types';
+import { safeHaptics } from '@/lib/utils';
 import { ChatAssistantMessage } from '../ChatAssistantMessage';
 
 jest.mock('react-native-reanimated', () => ({
@@ -47,31 +48,45 @@ describe('ChatAssistantMessage', () => {
     expect(onOpenNote).toHaveBeenCalledWith(7);
   });
 
-  it('copies the answer', () => {
-    const { getByLabelText } = render(
+  it('copies the answer and says so briefly', async () => {
+    jest.useFakeTimers();
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility');
+    const { getByLabelText, queryByText } = render(
       <ChatAssistantMessage message={message} onOpenNote={jest.fn()} />,
     );
-    fireEvent.press(getByLabelText('Copy answer'));
+    expect(queryByText('Copied')).toBeNull();
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Copy answer'));
+    });
     expect(Clipboard.setStringAsync).toHaveBeenCalledWith('You agreed on $40 per seat.');
+    expect(safeHaptics).toHaveBeenCalledWith('light');
+    expect(queryByText('Copied')).toBeTruthy();
+    expect(announce).toHaveBeenCalledWith('Copied');
+
+    act(() => {
+      jest.advanceTimersByTime(2_000);
+    });
+    expect(queryByText('Copied')).toBeNull();
+    jest.useRealTimers();
   });
 
-  it('survives a failed clipboard write', async () => {
+  it('survives a failed clipboard write, claiming no copy', async () => {
     (Clipboard.setStringAsync as jest.Mock).mockRejectedValueOnce(new Error('denied'));
-    const { getByLabelText } = render(
+    const { getByLabelText, queryByText } = render(
       <ChatAssistantMessage message={message} onOpenNote={jest.fn()} />,
     );
     await act(async () => {
       fireEvent.press(getByLabelText('Copy answer'));
     });
     expect(Clipboard.setStringAsync).toHaveBeenCalled();
+    expect(queryByText('Copied')).toBeNull();
   });
 
-  it('shares the answer', () => {
-    const share = jest.spyOn(Share, 'share').mockResolvedValue({ action: 'sharedAction' });
-    const { getByLabelText } = render(
+  it('offers Copy alone', () => {
+    const { queryByLabelText } = render(
       <ChatAssistantMessage message={message} onOpenNote={jest.fn()} />,
     );
-    fireEvent.press(getByLabelText('Share answer'));
-    expect(share).toHaveBeenCalledWith({ message: 'You agreed on $40 per seat.' });
+    expect(queryByLabelText('Share answer')).toBeNull();
   });
 });
