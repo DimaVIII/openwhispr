@@ -24,7 +24,6 @@ export interface ChatOverNotePayload {
 }
 
 const MAX_CONTEXT_CHARS = 24_000;
-const CONTEXT_EDGE_CHARS = 12_000;
 const MAX_HISTORY_MESSAGES = 6;
 const TRUNCATION_MARKER = '\n\n[...middle omitted for chat context...]\n\n';
 // Generated notes lead with their summary and action items, so a long one keeps its start.
@@ -76,15 +75,19 @@ interface BoundedContext {
   truncated: boolean;
 }
 
-export const boundChatContext = (context: string): BoundedContext => {
+export const boundChatContext = (
+  context: string,
+  maxChars: number = MAX_CONTEXT_CHARS,
+): BoundedContext => {
   const trimmed = context.trim();
-  if (trimmed.length <= MAX_CONTEXT_CHARS) {
+  if (trimmed.length <= maxChars) {
     return { text: trimmed, truncated: false };
   }
 
+  const edgeChars = Math.floor(maxChars / 2);
   return {
-    text: `${trimmed.slice(0, CONTEXT_EDGE_CHARS).trimEnd()}${TRUNCATION_MARKER}${trimmed
-      .slice(-CONTEXT_EDGE_CHARS)
+    text: `${trimmed.slice(0, edgeChars).trimEnd()}${TRUNCATION_MARKER}${trimmed
+      .slice(-edgeChars)
       .trimStart()}`,
     truncated: true,
   };

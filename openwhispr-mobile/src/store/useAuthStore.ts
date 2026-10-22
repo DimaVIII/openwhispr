@@ -27,20 +27,11 @@ const GUEST_SESSION_KEY = 'openwhispr_guest_session';
 // including failures, so its late result cannot overwrite the chosen session.
 let anonymousSignInInFlight: Promise<void> | null = null;
 
-// Required lazily: the chat store reaches SQLite through @/data. A failed wipe is logged rather
-// than thrown, so it can't leave a sign-out or a completed account deletion half done.
+// Required lazily: the chat store reaches SQLite through @/data.
 const clearLocalChatHistory = (): void => {
   const { clearChatHistory } =
     require('@/lib/chat/chatHistory') as typeof import('@/lib/chat/chatHistory');
-  try {
-    clearChatHistory();
-  } catch (error) {
-    console.warn('[auth] chat history was not cleared:', error);
-    Sentry.captureException(error, {
-      level: 'warning',
-      tags: { feature: 'chat', operation: 'clear-history' },
-    });
-  }
+  clearChatHistory();
 };
 
 type SessionResult = {

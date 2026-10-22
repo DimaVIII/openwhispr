@@ -1,5 +1,9 @@
 import type { GoogleCalendarEvent, Note } from '@/data';
-import { buildNoteChatContext, formatChatHistory } from '@/lib/notes/chatOverNote';
+import {
+  boundChatContext,
+  buildNoteChatContext,
+  formatChatHistory,
+} from '@/lib/notes/chatOverNote';
 import { tryParseNoteTimestamp } from '@/lib/parseNoteTimestamp';
 import type { ChatMessage, ChatSource } from './types';
 
@@ -9,12 +13,12 @@ export const CHAT_NOTE_CHAR_CAP = 6_000;
 const CALENDAR_WINDOW_MS = 48 * 60 * 60 * 1000;
 const NOTE_CUT_MARKER = '\n\n[...rest of the note omitted...]';
 const MAX_SEARCH_TERMS = 6;
-// Two characters keeps terms like "Q3" and "AI"; the stopwords drop the common short words.
-const MIN_TERM_LENGTH = 2;
+const MIN_TERM_LENGTH = 3;
+// A two-character term matches inside longer words ("ai" in "said"), so one is kept only when it is
+// clearly a name or code: "Q3", "AI", "HR".
+const SHORT_TERM = /^(?=.*\p{N})[\p{L}\p{N}]{2}$|^\p{Lu}{2}$/u;
 // Chinese and Japanese don't put spaces between words, so their runs are searched as bigrams.
 const UNSPACED_SCRIPT_RUN = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]+/gu;
-const TITLE_HIT_SCORE = 3;
-const BODY_HIT_SCORE = 1;
 
 export const CHAT_SYSTEM_PROMPT = `You are OpenWhispr's assistant. The user is asking from the OpenWhispr app, which holds their notes and meeting transcripts.
 
@@ -107,6 +111,7 @@ const STOPWORDS = new Set([
   'show',
   'give',
   'please',
+  'ok',
 ]);
 
 /** `null` means no calendar is connected; `'unavailable'` means one is but couldn't be read. */
@@ -155,38 +160,17 @@ const toBigrams = (run: string): string[] => {
 // The note lookup treats a blank term as "match everything". Matching whole letter/digit runs
 // can't produce one, and the length filter drops the short leftovers.
 export const extractSearchTerms = (question: string): string[] => {
-  const lower = question.toLowerCase();
-  const words = (lower.replace(UNSPACED_SCRIPT_RUN, ' ').match(/[\p{L}\p{N}]+/gu) ?? []).filter(
-    (word) => word.length >= MIN_TERM_LENGTH && !STOPWORDS.has(word),
-  );
-  const bigrams = (lower.match(UNSPACED_SCRIPT_RUN) ?? []).flatMap(toBigrams);
+  const words = (question.replace(UNSPACED_SCRIPT_RUN, ' ').match(/[\p{L}\p{N}]+/gu) ?? [])
+    .filter((word) => word.length >= MIN_TERM_LENGTH || SHORT_TERM.test(word))
+    .map((word) => word.toLowerCase())
+    .filter((word) => !STOPWORDS.has(word));
+  const bigrams = (question.toLowerCase().match(UNSPACED_SCRIPT_RUN) ?? []).flatMap(toBigrams);
   return [...new Set([...words, ...bigrams])].slice(0, MAX_SEARCH_TERMS);
 };
 
 /** Whether a note has neither text nor an AI summary, so only its transcript can say anything. */
 export const lacksNoteText = (note: Note): boolean =>
   !note.content.trim() && !note.enhancedContent?.trim();
-
-const updatedAtMs = (note: Note): number => tryParseNoteTimestamp(note.updatedAt)?.getTime() ?? 0;
-
-const scoreNote = (note: Note, terms: string[]): number => {
-  const title = note.title.toLowerCase();
-  // The AI summary is what gets sent to the model, so it counts toward relevance too.
-  const body = `${note.content}\n${note.enhancedContent ?? ''}`.toLowerCase();
-  return terms.reduce(
-    (score, term) =>
-      score +
-      (title.includes(term) ? TITLE_HIT_SCORE : 0) +
-      (body.includes(term) ? BODY_HIT_SCORE : 0),
-    0,
-  );
-};
-
-export const rankChatNotes = (notes: Note[], terms: string[]): Note[] =>
-  notes
-    .map((note) => ({ note, score: scoreNote(note, terms) }))
-    .sort((a, b) => b.score - a.score || updatedAtMs(b.note) - updatedAtMs(a.note))
-    .map(({ note }) => note);
 
 interface CalendarEntry {
   event: GoogleCalendarEvent;
@@ -267,12 +251,16 @@ const formatNotesSection = (
   let remaining = budget;
 
   for (const note of notes) {
-    // A meeting whose summary never ran is sent as its transcript.
-    const sourceText = lacksNoteText(note) ? (transcripts?.get(note.id) ?? '') : note.content;
-    const body = buildNoteChatContext({
-      generatedNotes: note.enhancedContent,
-      sourceText,
-    }).slice(0, CHAT_NOTE_CHAR_CAP);
+    // A meeting whose summary never ran is sent as its transcript, cut as the note's own chat cuts
+    // one: its start and its end.
+    const body = lacksNoteText(note)
+      ? boundChatContext(transcripts?.get(note.id) ?? '', CHAT_NOTE_CHAR_CAP).text
+      : buildNoteChatContext({
+          generatedNotes: note.enhancedContent,
+          sourceText: note.content,
+        }).slice(0, CHAT_NOTE_CHAR_CAP);
+    // A note with nothing to read (a failed recording) would be sent and listed as read for nothing.
+    if (!body) continue;
     // The top note is cut to fit rather than dropped, so a tight budget still sends one note. Any
     // later note that won't fit is dropped whole, but a smaller, lower-ranked one may still fit.
     let included = body;

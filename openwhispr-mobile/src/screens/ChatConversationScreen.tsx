@@ -15,6 +15,7 @@ import { ChatWatermark } from '@/components/chat/ChatWatermark';
 import { useChatSendGate } from '@/hooks/useChatSendGate';
 import { useChatVoiceInput } from '@/hooks/useChatVoiceInput';
 import { chatTabGateOptions } from '@/lib/chat/chatConsent';
+import { withSpokenQuestion } from '@/lib/chat/chatDraft';
 import { ownsChatPending, selectPendingTitle, workingElsewhereLabel } from '@/lib/chat/chatPending';
 import {
   CHAT_HOME_ROUTE,
@@ -23,6 +24,7 @@ import {
   chatNoteRoute,
   NEW_CHAT_ID,
 } from '@/lib/chat/chatRoutes';
+import type { ChatMessage } from '@/lib/chat/types';
 import { useChatStore } from '@/store/useChatStore';
 import { useProcessingModeStore } from '@/store/useProcessingModeStore';
 
@@ -39,7 +41,13 @@ export function ChatConversationScreen(): React.JSX.Element {
   const nearBottomRef = useRef(true);
   const wasWorkingRef = useRef(false);
 
-  const messages = useChatStore((s) => s.messages);
+  const openMessages = useChatStore((s) =>
+    s.activeConversationId === conversationId ? s.messages : null,
+  );
+  // The store holds the open chat's messages only, so a chat pushed over this one takes them; this
+  // screen keeps its own rows until it's open again, and a swipe back never shows the other chat.
+  const [messages, setMessages] = useState<ChatMessage[]>(openMessages ?? []);
+  if (openMessages && openMessages !== messages) setMessages(openMessages);
   const pending = useChatStore((s) => s.pending);
   const failureHere = useChatStore((s) =>
     conversationId ? s.failures[conversationId] : undefined,
@@ -50,6 +58,7 @@ export function ChatConversationScreen(): React.JSX.Element {
   const pendingTitle = useChatStore(selectPendingTitle);
   const activeMode = useProcessingModeStore((s) => s.activeMode);
   const { chatEnabled, gate } = useChatSendGate();
+  const isFocused = useCallback((): boolean => focusedRef.current, []);
 
   // router.setParams acts on whichever screen is focused, so a popped or covered new chat whose
   // spoken question lands late must leave it alone.
@@ -62,8 +71,8 @@ export function ChatConversationScreen(): React.JSX.Element {
   const voice = useChatVoiceInput({
     conversationId,
     onSent: adoptConversation,
-    onRouteChanged: setDraft,
-    isFocused: () => focusedRef.current,
+    onRouteChanged: (text) => setDraft((current) => withSpokenQuestion(current, text)),
+    isFocused,
   });
   const voiceRef = useRef(voice);
   voiceRef.current = voice;
@@ -79,10 +88,15 @@ export function ChatConversationScreen(): React.JSX.Element {
         // A question still being spoken is dropped; one already transcribing may still send.
         if (voiceRef.current.state === 'listening')
           voiceRef.current.cancel().catch(() => undefined);
-        // A chat opened over this one has already taken its place, so only this one is closed.
-        useChatStore.getState().closeConversation(conversationId);
       };
     }, [conversationId]),
+  );
+
+  // Closed only once this chat goes away, since a note or chat pushed over it leaves it underneath.
+  // A chat opened over this one has already taken its place, so only this one is closed.
+  useEffect(
+    () => () => useChatStore.getState().closeConversation(conversationId),
+    [conversationId],
   );
 
   // The bar's padding grows with the keyboard, which shrinks the list without changing its content.
@@ -105,9 +119,10 @@ export function ChatConversationScreen(): React.JSX.Element {
     nearBottomRef.current = true;
   }, [messages.length, pendingHere?.phase, failureHere]);
 
-  // The answer and the error arrive out of sight of a screen reader, so they're announced.
+  // The answer and the error arrive out of sight of a screen reader, so they're announced, but
+  // only by the chat on screen.
   useEffect(() => {
-    if (wasWorkingRef.current && !workingHere) {
+    if (wasWorkingRef.current && !workingHere && focusedRef.current) {
       if (failureHere) {
         AccessibilityInfo.announceForAccessibility(
           `Couldn’t get an answer. ${failureHere.message}`,
@@ -217,6 +232,7 @@ export function ChatConversationScreen(): React.JSX.Element {
             steps={pendingHere.steps}
             variant="working"
             startedAt={pendingHere.startedAt}
+            isFocused={isFocused}
           />
         ) : null}
         {failureHere ? (

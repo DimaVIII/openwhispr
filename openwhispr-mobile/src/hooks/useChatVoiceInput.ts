@@ -3,6 +3,7 @@ import { Alert } from 'react-native';
 import type { AudioRecorder } from 'expo-audio';
 import { useAudioRecording } from '@/hooks/useAudioRecording';
 import { useUsageLimitRecovery } from '@/hooks/useUsageLimitRecovery';
+import { isNoteChatEnabled } from '@/lib/dictationAgent';
 import { isMicPermissionError, isNoSpeechError, showMicPermissionAlert } from '@/lib/permissions';
 import { promptLocalModelFallback } from '@/lib/privateMode';
 import { safeHaptics } from '@/lib/utils';
@@ -39,12 +40,15 @@ interface TranscribingSlot {
   pending: ChatPending | null;
 }
 
-// The send gate's checks (account, paywall, Local Mode consent) depend on these two, so a question
-// is sent only on the route they were run for.
-const currentGateRoute = (): string =>
-  `${useConfigStore.getState().config?.inference?.noteChat?.mode ?? ''}:${
+// The send gate's checks (account, paywall, Local Mode consent) depend on the route and the mode,
+// so a question is sent only on the route they were run for, and only while Chat is still on.
+const currentGateRoute = (): string => {
+  const { config } = useConfigStore.getState();
+  const enabled = config ? isNoteChatEnabled(config) : true;
+  return `${enabled}:${config?.inference?.noteChat?.mode ?? ''}:${
     useProcessingModeStore.getState().activeMode
   }`;
+};
 
 export function useChatVoiceInput({
   conversationId,
@@ -193,7 +197,8 @@ export function useChatVoiceInput({
     }
     // The screen was left while the recorder started, so nobody would see it listening.
     if (!isFocusedRef.current()) {
-      await recording.cancelRecording();
+      // start promises a boolean, and a mic that won't close has nothing left to report.
+      await recording.cancelRecording().catch(() => undefined);
       return false;
     }
     return true;

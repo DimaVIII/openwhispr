@@ -17,8 +17,14 @@ import { useChatVoiceInput } from '@/hooks/useChatVoiceInput';
 import { getMeetingCalendarEventSuggestions } from '@/lib/calendar/meetingSuggestions';
 import { chatTabGateOptions } from '@/lib/chat/chatConsent';
 import { lacksNoteText } from '@/lib/chat/chatContext';
+import { withSpokenQuestion } from '@/lib/chat/chatDraft';
 import { selectPendingTitle, workingElsewhereLabel } from '@/lib/chat/chatPending';
-import { CHAT_HISTORY_ROUTE, chatConversationRoute, NEW_CHAT_ID } from '@/lib/chat/chatRoutes';
+import {
+  CHAT_HISTORY_ROUTE,
+  CHAT_SETTINGS_ROUTE,
+  chatConversationRoute,
+  NEW_CHAT_ID,
+} from '@/lib/chat/chatRoutes';
 import { buildChatSuggestions, type ChatSuggestion } from '@/lib/chat/chatSuggestions';
 import { tryParseNoteTimestamp } from '@/lib/parseNoteTimestamp';
 import { useChatStore } from '@/store/useChatStore';
@@ -93,7 +99,7 @@ export function ChatHomeScreen(): React.JSX.Element {
     onSent: (conversationId) => {
       if (focusedRef.current) pushConversation(conversationId);
     },
-    onRouteChanged: setDraft,
+    onRouteChanged: (text) => setDraft((current) => withSpokenQuestion(current, text)),
     isFocused: () => focusedRef.current,
   });
   const voiceRef = useRef(voice);
@@ -235,7 +241,7 @@ export function ChatHomeScreen(): React.JSX.Element {
           />
         </>
       ) : (
-        <ChatTurnedOff onOpenAIModels={() => router.push('/(account)/ai-models')} />
+        <ChatTurnedOff onOpenSettings={() => router.push(CHAT_SETTINGS_ROUTE)} />
       )}
     </View>
   );

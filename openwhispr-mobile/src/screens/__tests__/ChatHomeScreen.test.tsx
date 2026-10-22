@@ -118,6 +118,9 @@ describe('ChatHomeScreen', () => {
     expect(screen.getByText('Chat is turned off')).toBeTruthy();
     expect(screen.queryByLabelText('New chat')).toBeNull();
     expect(screen.getByLabelText('All chats')).toBeTruthy();
+
+    fireEvent.press(screen.getByText('Open Chat settings'));
+    expect(router.push).toHaveBeenCalledWith('/(account)/ai-workflow?scope=noteChat');
   });
 
   it('suggests a later meeting when the next one has been running a while', async () => {

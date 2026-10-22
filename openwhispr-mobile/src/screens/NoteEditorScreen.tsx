@@ -13,7 +13,7 @@ import * as Clipboard from 'expo-clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/components/ui/Text';
 import { isMicPermissionError, showMicPermissionAlert } from '@/lib/permissions';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { type Href, useLocalSearchParams, useRouter } from 'expo-router';
 import { useNotesStore } from '@/store/useNotesStore';
 import { useActionsStore } from '@/store/useActionsStore';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -131,7 +131,7 @@ const transcriptStatusText = (status: string): string => {
 /** Where the editor sits: the screens it opens are pushed onto the same tab's stack. */
 export interface NoteEditorStack {
   /** Where Back goes when there is nothing to go back to. */
-  root: string;
+  root: Href;
   /** The prefix of the stack's actions and voice-enrollment routes. */
   routePrefix: string;
 }
@@ -145,7 +145,7 @@ export default function NoteEditorScreen({
   stack = NOTES_EDITOR_STACK,
 }: {
   stack?: NoteEditorStack;
-}) {
+}): React.JSX.Element {
   const { id } = useLocalSearchParams<{ id: string }>();
   const noteId = parseInt(id ?? '', 10);
   const router = useRouter();

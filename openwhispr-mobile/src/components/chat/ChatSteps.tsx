@@ -17,6 +17,8 @@ interface ChatStepsProps {
   sourceCount?: number;
   /** Epoch ms when the turn began; without it "Still working" never shows. */
   startedAt?: number;
+  /** Whether its screen is showing, so a covered chat stays quiet; a stable callback. */
+  isFocused?: () => boolean;
 }
 
 const SLOW_AFTER_MS = 15_000;
@@ -32,6 +34,7 @@ export function ChatSteps({
   variant,
   sourceCount = 0,
   startedAt,
+  isFocused,
 }: ChatStepsProps): React.JSX.Element {
   const [expanded, setExpanded] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -57,9 +60,13 @@ export function ChatSteps({
       ? (activeStep?.label ?? 'Thinking…')
       : sourcesLabel(sourceCount);
 
+  // Announced once rather than through a live region, which Android would also read on every
+  // step change and again for this.
   useEffect(() => {
-    if (slow) AccessibilityInfo.announceForAccessibility(`${SLOW_LABEL} on your answer.`);
-  }, [slow]);
+    if (slow && (isFocused?.() ?? true)) {
+      AccessibilityInfo.announceForAccessibility(`${SLOW_LABEL} on your answer.`);
+    }
+  }, [slow, isFocused]);
 
   return (
     <View
@@ -93,7 +100,6 @@ export function ChatSteps({
               working ? 'text-[15px] font-medium text-label' : 'text-[14px] text-secondaryLabel'
             }
             numberOfLines={1}
-            accessibilityLiveRegion="polite"
           >
             {headerLabel}
           </Text>

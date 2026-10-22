@@ -88,6 +88,26 @@ describe('ChatInputBar', () => {
     now.mockRestore();
   });
 
+  it('ignores a Stop right after Send even once the question is working', () => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(10_000);
+    const onCancelTurn = jest.fn();
+    const voice = makeVoice({ state: 'listening' });
+    const screen = render(<ChatInputBar {...baseProps(voice, { busy: true, onCancelTurn })} />);
+    fireEvent.press(screen.getByLabelText('Send'));
+
+    screen.rerender(
+      <ChatInputBar {...baseProps({ ...voice, state: 'idle' }, { busy: true, onCancelTurn })} />,
+    );
+    now.mockReturnValue(10_300);
+    fireEvent.press(screen.getByLabelText('Stop'));
+    expect(onCancelTurn).not.toHaveBeenCalled();
+
+    now.mockReturnValue(10_600);
+    fireEvent.press(screen.getByLabelText('Stop'));
+    expect(onCancelTurn).toHaveBeenCalledTimes(1);
+    now.mockRestore();
+  });
+
   it('disables the mic while a cancelled question is still settling', () => {
     const screen = render(<ChatInputBar {...baseProps(makeVoice({ isSettling: true }))} />);
 

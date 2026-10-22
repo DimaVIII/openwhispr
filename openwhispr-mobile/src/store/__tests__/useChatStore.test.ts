@@ -10,6 +10,7 @@ jest.mock('@/data', () => ({
   },
 }));
 jest.mock('@/lib/chat/runChatTurn', () => ({ runChatTurn: jest.fn() }));
+jest.mock('@/lib/sentry', () => ({ Sentry: { captureException: jest.fn() } }));
 
 import { runChatTurn } from '@/lib/chat/runChatTurn';
 import { clearChatHistory } from '@/lib/chat/chatHistory';

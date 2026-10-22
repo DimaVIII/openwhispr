@@ -104,6 +104,25 @@ describe('LocalNotesRepository.getChatCandidateNotes', () => {
     expect(result.map((note) => note.id)).toEqual([acme, bodyOnly]);
   });
 
+  it('ranks a meeting matching every term in its transcript above newer single matches', () => {
+    const { repo, db } = createMemoryRepository();
+    const meeting = seed(repo, db, { title: 'Leadership sync', updatedAt: '2026-09-01 10:00:00' });
+    repo.replaceSegments(meeting, [
+      { noteId: meeting, startMs: 0, endMs: 1000, text: 'The hiring freeze holds.' },
+    ]);
+    for (let day = 10; day < 14; day += 1) {
+      seed(repo, db, { content: 'A hiring update.', updatedAt: `2026-10-${day} 10:00:00` });
+    }
+
+    const result = repo.getChatCandidateNotes(['hiring', 'freeze'], {
+      includePrivate: false,
+      limit: 4,
+    });
+
+    expect(result[0].id).toBe(meeting);
+    expect(result).toHaveLength(4);
+  });
+
   it('treats % and _ in a term literally', () => {
     const { repo, db } = createMemoryRepository();
     const id = seed(repo, db, { content: 'grew 50% this year', updatedAt: '2026-10-01 10:00:00' });

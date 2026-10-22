@@ -10,8 +10,11 @@ jest.mock('@/lib/utils', () => ({
   ...jest.requireActual<typeof import('@/lib/utils')>('@/lib/utils'),
   safeHaptics: jest.fn(),
 }));
+let mockConfig: { noteChatEnabled?: boolean; inference: { noteChat: { mode: string } } } = {
+  inference: { noteChat: { mode: 'local' } },
+};
 jest.mock('@/store/useConfigStore', () => ({
-  useConfigStore: { getState: () => ({ config: { inference: { noteChat: { mode: 'local' } } } }) },
+  useConfigStore: { getState: () => ({ config: mockConfig }) },
 }));
 let mockActiveMode = 'private';
 jest.mock('@/store/useProcessingModeStore', () => ({
@@ -102,6 +105,7 @@ beforeEach(() => {
   mockStopBehavior = async () => undefined;
   mockNativeStop = Promise.resolve();
   mockActiveMode = 'private';
+  mockConfig = { inference: { noteChat: { mode: 'local' } } };
   useChatStore.getState().reset();
   mockSend.mockReturnValue({ conversationId: 'conv-1', done: Promise.resolve() });
   useChatStore.setState({ send: mockSend });
@@ -162,6 +166,25 @@ it('hands the transcript back instead of sending when the chat route changed', a
   expect(useChatStore.getState().pending).toBeNull();
 });
 
+it('hands the transcript back instead of sending when Chat was turned off', async () => {
+  mockStopBehavior = async () => {
+    mockConfig = { ...mockConfig, noteChatEnabled: false };
+    mockRecordingOptions.onComplete?.('When is my next meeting?');
+  };
+  const { result, rerender } = renderVoiceInput('conv-1');
+
+  await act(async () => {
+    await result.current.start(false);
+  });
+  rerender({});
+  await act(async () => {
+    await result.current.finish();
+  });
+
+  expect(mockSend).not.toHaveBeenCalled();
+  expect(mockOnRouteChanged).toHaveBeenCalledWith('When is my next meeting?');
+});
+
 it('opens one recording for two quick taps', async () => {
   const { result } = renderVoiceInput('conv-1');
 
@@ -188,6 +211,23 @@ it('closes a mic that opened after the screen was left', async () => {
 
   expect(started).toBe(false);
   expect(mockCancelRecording).toHaveBeenCalledTimes(1);
+});
+
+it('reports a refused start when the mic it opened late won’t close', async () => {
+  mockStartRecording.mockImplementationOnce(async () => {
+    mockIsRecording = true;
+    mockFocused = false;
+  });
+  mockCancelRecording.mockRejectedValueOnce(new Error('stop failed'));
+  const { result } = renderVoiceInput('conv-1');
+
+  let started: Promise<boolean> = Promise.resolve(true);
+  await act(async () => {
+    started = result.current.start(false);
+    await started.catch(() => undefined);
+  });
+
+  await expect(started).resolves.toBe(false);
 });
 
 it('reports settling while a cancelled question is still transcribing', () => {

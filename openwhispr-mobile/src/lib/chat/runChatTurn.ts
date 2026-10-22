@@ -9,7 +9,6 @@ import {
   formatChatTime,
   isInChatCalendarWindow,
   lacksNoteText,
-  rankChatNotes,
   type ChatCalendar,
   type ChatPayload,
 } from './chatContext';
@@ -19,7 +18,8 @@ const CANDIDATE_POOL_LIMIT = 50;
 const MAX_MATCHED_NOTES = 4;
 const MIN_CHAT_NOTES = 2;
 const CONTEXT_LIMIT_NOTE_CHAR_BUDGET = 3_000;
-// Well past what 48 hours can hold, so a busy day never pushes tomorrow out of the request.
+// The read spans the day looked back as well as the 48 hours sent, so 72 hours share it: about 16
+// events a day, more than a busy calendar holds, so tomorrow isn't pushed out of the request.
 const CHAT_CALENDAR_EVENT_LIMIT = 50;
 // An all-day event is stored as UTC midnight to UTC midnight, so west of UTC today's ends before
 // the local day does. A day's lookback keeps it; chatContext drops the events that have ended.
@@ -256,7 +256,9 @@ export async function runChatTurn(
     terms.length > 0
       ? allowed(deps.getCandidateNotes(terms, { includePrivate, limit: CANDIDATE_POOL_LIMIT }))
       : [];
-  const notes = rankChatNotes(matches, terms).slice(0, MAX_MATCHED_NOTES);
+  // The repository ranks by matched terms across the title, the text, the summary and the
+  // transcript, so its order stands.
+  const notes = matches.slice(0, MAX_MATCHED_NOTES);
   if (notes.length < MIN_CHAT_NOTES) {
     const matchedIds = new Set(notes.map((note) => note.id));
     // Asking for enough to cover the matches already held still leaves room for the fill.

@@ -12,6 +12,8 @@ import {
   isNotNull,
   isNull,
   inArray,
+  gt,
+  getTableColumns,
   type SQL,
   type SQLWrapper,
 } from 'drizzle-orm';
@@ -567,7 +569,22 @@ export class LocalNotesRepository implements NotesRepository {
     terms: string[],
     options: { includePrivate: boolean; limit: number },
   ): Note[] {
-    const termMatches = terms.map((term) => {
+    const visible = and(
+      isNull(notes.deletedAt),
+      eq(notes.leftTeam, 0),
+      options.includePrivate ? undefined : eq(notes.isPrivate, 0),
+    );
+    if (terms.length === 0) {
+      return this.database
+        .select()
+        .from(notes)
+        .where(visible)
+        .orderBy(desc(notes.updatedAt))
+        .limit(options.limit)
+        .all();
+    }
+
+    const termScores = terms.map((term) => {
       // Escape LIKE wildcards so a term such as "50%" matches literally.
       const pattern = `%${term.replace(/[\\%_]/g, '\\$&')}%`;
       const matches = (column: SQLWrapper): SQL => sql`${column} LIKE ${pattern} ESCAPE '\\'`;
@@ -579,30 +596,26 @@ export class LocalNotesRepository implements NotesRepository {
           AND ${transcriptSegments.deletedAt} IS NULL
           AND ${matches(transcriptSegments.text)}
       )`;
-      return {
-        title: matches(notes.title),
-        body: sql`(${matches(notes.content)} OR ${matches(notes.enhancedContent)} OR ${inTranscript})`,
-      };
+      return sql`(CASE WHEN ${matches(notes.title)} THEN 2
+        WHEN ${matches(notes.content)} OR ${matches(notes.enhancedContent)} OR ${inTranscript} THEN 1
+        ELSE 0 END)`;
     });
-    const conditions = [
-      isNull(notes.deletedAt),
-      eq(notes.leftTeam, 0),
-      options.includePrivate ? undefined : eq(notes.isPrivate, 0),
-      or(...termMatches.flatMap((match) => [match.title, match.body])),
-    ];
     // The pool is cut at the limit, so it keeps the notes that match the most terms, a title match
-    // counting double, rather than whichever matching notes changed last.
-    const matchScore = termMatches.map(
-      (match) => sql`(CASE WHEN ${match.title} THEN 2 WHEN ${match.body} THEN 1 ELSE 0 END)`,
-    );
-    return this.database
-      .select()
+    // counting double, rather than whichever matching notes changed last. Each note is scored
+    // once: a LIMIT, even one that keeps every row, stops SQLite inlining the subquery or pushing
+    // the filter into it, either of which would run every LIKE and EXISTS again.
+    const scored = this.database
+      .select({ id: notes.id, score: sql<number>`${sql.join(termScores, sql` + `)}`.as('score') })
       .from(notes)
-      .where(and(...conditions))
-      .orderBy(
-        ...(matchScore.length > 0 ? [desc(sql.join(matchScore, sql` + `))] : []),
-        desc(notes.updatedAt),
-      )
+      .where(visible)
+      .limit(Number.MAX_SAFE_INTEGER)
+      .as('scored');
+    return this.database
+      .select(getTableColumns(notes))
+      .from(notes)
+      .innerJoin(scored, eq(scored.id, notes.id))
+      .where(gt(scored.score, 0))
+      .orderBy(desc(scored.score), desc(notes.updatedAt))
       .limit(options.limit)
       .all();
   }

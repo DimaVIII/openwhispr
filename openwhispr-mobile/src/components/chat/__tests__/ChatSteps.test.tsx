@@ -127,9 +127,27 @@ describe('ChatSteps', () => {
     announce.mockRestore();
   });
 
-  it('marks the header label as a polite live region', () => {
+  it('leaves step changes to the explicit announcement, with no live region', () => {
     const { getByText } = render(<ChatSteps steps={steps} variant="working" />);
-    expect(getByText('Reading “Pricing call”…').props.accessibilityLiveRegion).toBe('polite');
+    expect(getByText('Reading “Pricing call”…').props.accessibilityLiveRegion).toBeUndefined();
+  });
+
+  it('announces nothing while its screen is covered', () => {
+    jest.useFakeTimers();
+    const announce = jest
+      .spyOn(AccessibilityInfo, 'announceForAccessibility')
+      .mockImplementation(() => undefined);
+    const isFocused = (): boolean => false;
+    render(
+      <ChatSteps steps={steps} variant="working" startedAt={Date.now()} isFocused={isFocused} />,
+    );
+
+    act(() => {
+      jest.advanceTimersByTime(20_000);
+    });
+
+    expect(announce).not.toHaveBeenCalled();
+    announce.mockRestore();
   });
 
   it('clears its one-second timer on unmount', () => {

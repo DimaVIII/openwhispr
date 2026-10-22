@@ -36,7 +36,6 @@ jest.mock('expo-secure-store', () => ({
   deleteItemAsync: jest.fn(),
 }));
 
-import { Sentry } from '@/lib/sentry';
 import { useAuthStore } from '@/store/useAuthStore';
 
 const member = {
@@ -98,19 +97,4 @@ it('clears local chat history on sign-out and on account deletion', async () => 
   useAuthStore.setState({ user: member, sessionCookie: 'fixture-session' });
   await useAuthStore.getState().deleteAccount();
   expect(mockClearChatHistory).toHaveBeenCalledTimes(2);
-});
-
-it('finishes a completed deletion even if chat history cannot be cleared', async () => {
-  const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-  mockClearChatHistory.mockImplementationOnce(() => {
-    throw new Error('database is locked');
-  });
-  await useAuthStore.getState().deleteAccount();
-  expect(useAuthStore.getState()).toMatchObject({ user: null, isLoading: false, error: null });
-  expect(warn).toHaveBeenCalledWith('[auth] chat history was not cleared:', expect.any(Error));
-  expect(Sentry.captureException).toHaveBeenCalledWith(expect.any(Error), {
-    level: 'warning',
-    tags: { feature: 'chat', operation: 'clear-history' },
-  });
-  warn.mockRestore();
 });

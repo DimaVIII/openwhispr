@@ -315,6 +315,36 @@ describe('cancelRecording', () => {
     });
   });
 
+  it('keeps a send that lands while a cancel deletes the file from stopping again', async () => {
+    let finishDelete: () => void = () => undefined;
+    jest.mocked(FileSystem.deleteAsync).mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishDelete = resolve;
+        }),
+    );
+    const { result } = await startHook();
+
+    let cancelling: Promise<void> = Promise.resolve();
+    await act(async () => {
+      cancelling = result.current.cancelRecording();
+      // The native stop resolves, so the cancel moves on to deleting the file.
+      mockRecorder.isRecording = false;
+      await Promise.resolve();
+      expect(FileSystem.deleteAsync).toHaveBeenCalledTimes(1);
+      await result.current.stopRecording();
+    });
+    await act(async () => {
+      finishDelete();
+      await cancelling;
+    });
+
+    expect(FileSystem.deleteAsync).toHaveBeenCalledTimes(1);
+    expect(mockRecorder.stop).toHaveBeenCalledTimes(1);
+    expect(mockTranscribe).not.toHaveBeenCalled();
+    expect(result.current.isRecording).toBe(false);
+  });
+
   it('leaves a transcription under way processing when cancelled', async () => {
     let finishTranscribing: () => void = () => undefined;
     mockTranscribe.mockImplementationOnce(

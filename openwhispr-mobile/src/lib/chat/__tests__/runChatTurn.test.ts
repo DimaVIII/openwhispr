@@ -376,6 +376,26 @@ describe('runChatTurn', () => {
     expect(sentText(deps.chat)).toContain('[00:00] Priya: Pricing holds.');
   });
 
+  it('keeps the repository’s ranking, so a meeting matched in its transcript stays in', async () => {
+    const meeting = makeNote({ id: 3, title: 'Leadership sync', noteType: 'meeting' });
+    const bodyHits = [4, 5, 6, 7].map((id) =>
+      makeNote({ id, title: `Update ${id}`, content: 'A hiring update.' }),
+    );
+    const deps = makeDeps({
+      getCandidateNotes: jest.fn((terms: string[]) =>
+        terms.length > 0 ? [meeting, ...bodyHits] : [],
+      ),
+      getNoteTranscript: jest.fn(
+        () => 'Meeting transcript:\n[0:00] Priya: The hiring freeze holds.',
+      ),
+    });
+
+    const result = await runChatTurn(makeInput({ question: 'Is the hiring freeze on?' }), deps);
+
+    expect(result.sources.map((source) => source.noteId)).toEqual([3, 4, 5, 6]);
+    expect(sentText(deps.chat)).toContain('The hiring freeze holds.');
+  });
+
   it('formats a transcript from the note’s segments and speakers', () => {
     mockGetSegments.mockReturnValueOnce([
       {

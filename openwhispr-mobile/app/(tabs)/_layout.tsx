@@ -21,7 +21,8 @@ export default function TabsLayout() {
   const segments = useSegments() as string[];
   const isNoteEditor =
     segments[1] === '(notes)' && segments[2] !== undefined && !NOTES_STATIC_ROUTES.has(segments[2]);
-  const isChatThread =
+  // A conversation, or a note opened from one: both hide the tab bar, as the note editor does.
+  const isChatDetail =
     segments[1] === '(chat)' && segments[2] !== undefined && !CHAT_STATIC_ROUTES.has(segments[2]);
   // The keyboard-dictation handoff takes over the Record tab with a full-screen
   // return screen ("Returning to your app…", "Back to <App>", or the swipe
@@ -31,7 +32,7 @@ export default function TabsLayout() {
   return (
     <NativeTabs
       minimizeBehavior="onScrollDown"
-      hidden={isNoteEditor || isChatThread || handoffActive}
+      hidden={isNoteEditor || isChatDetail || handoffActive}
       labelStyle={{ fontFamily: AppFont.medium }}
     >
       <NativeTabs.Trigger name="(record)">

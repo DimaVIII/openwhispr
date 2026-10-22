@@ -66,12 +66,10 @@ export function ChatInputBar({
   };
 
   const handleStop = (): void => {
-    if (voice.state !== 'transcribing') {
-      onCancelTurn();
-      return;
-    }
+    // A quick transcription can already be working when the second tap lands.
     if (Date.now() - finishedAtRef.current < STOP_AFTER_SEND_GRACE_MS) return;
-    voice.cancel().catch(() => undefined);
+    if (voice.state === 'transcribing') voice.cancel().catch(() => undefined);
+    else onCancelTurn();
   };
 
   const handleSwitchToTyping = (): void => {

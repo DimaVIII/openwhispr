@@ -4,7 +4,6 @@ import {
   CHAT_NOTE_CHAR_CAP,
   CHAT_SYSTEM_PROMPT,
   extractSearchTerms,
-  rankChatNotes,
 } from '../chatContext';
 import type { ChatMessage } from '../types';
 
@@ -87,42 +86,15 @@ describe('extractSearchTerms', () => {
     expect(extractSearchTerms('What is our Q3 AI budget?')).toEqual(['q3', 'ai', 'budget']);
   });
 
+  it('drops two-character words that are neither codes nor capitalised', () => {
+    expect(extractSearchTerms('Did he go over the ai email? Hi, OK')).toEqual(['over', 'email']);
+    expect(extractSearchTerms('Ask HR about 2x pay')).toEqual(['ask', 'hr', '2x', 'pay']);
+  });
+
   it('splits Chinese and Japanese runs into bigrams', () => {
     expect(extractSearchTerms('预算会议')).toEqual(['预算', '算会', '会议']);
     expect(extractSearchTerms('Acme 会議')).toEqual(['acme', '会議']);
     expect(extractSearchTerms('第三季度预算会议的结论是什么')).toHaveLength(6);
-  });
-});
-
-describe('rankChatNotes', () => {
-  it('ranks a title match above a body match', () => {
-    const bodyHit = makeNote({ id: 1, title: 'Weekly sync', content: 'We covered onboarding.' });
-    const titleHit = makeNote({ id: 2, title: 'Onboarding review', content: 'Nothing here.' });
-
-    expect(rankChatNotes([bodyHit, titleHit], ['onboarding']).map((note) => note.id)).toEqual([
-      2, 1,
-    ]);
-  });
-
-  it('ranks a note that matches only in its AI summary', () => {
-    const noMatch = makeNote({ id: 1, title: 'Sync', content: 'Nothing relevant.' });
-    const summaryHit = makeNote({
-      id: 2,
-      title: 'Sync',
-      content: 'Nothing relevant.',
-      enhancedContent: '## Decisions\n- Launch onboarding Friday',
-    });
-
-    expect(rankChatNotes([noMatch, summaryHit], ['onboarding']).map((note) => note.id)).toEqual([
-      2, 1,
-    ]);
-  });
-
-  it('breaks ties with the newer update', () => {
-    const older = makeNote({ id: 1, title: 'Plan', updatedAt: '2026-10-01T10:00:00.000Z' });
-    const newer = makeNote({ id: 2, title: 'Plan', updatedAt: '2026-10-10T10:00:00.000Z' });
-
-    expect(rankChatNotes([older, newer], ['plan']).map((note) => note.id)).toEqual([2, 1]);
   });
 });
 
@@ -191,6 +163,29 @@ describe('buildChatPayload', () => {
     expect(text).toContain('[00:00] Priya: We ship Friday.');
     expect(text).toContain('The summary');
     expect(text).not.toContain('Not sent.');
+  });
+
+  it('cuts a long transcript to its start and its end', () => {
+    const transcript = `START ${'a'.repeat(CHAT_NOTE_CHAR_CAP)} END`;
+    const notes = [makeNote({ id: 1, title: 'Weekly sync' })];
+
+    const { text } = buildPayload({ notes, transcripts: new Map([[1, transcript]]) });
+
+    expect(text).toContain('START');
+    expect(text).toContain('END');
+    expect(text).toContain('[...middle omitted for chat context...]');
+  });
+
+  it('skips a note with nothing to read', () => {
+    const notes = [
+      makeNote({ id: 1, title: 'Failed recording' }),
+      makeNote({ id: 2, title: 'Pricing', content: 'We kept $12.' }),
+    ];
+
+    const { text, sources } = buildPayload({ notes });
+
+    expect(text).not.toContain('Failed recording');
+    expect(sources).toEqual([{ noteId: 2, title: 'Pricing' }]);
   });
 
   it('says when there are no matching notes', () => {

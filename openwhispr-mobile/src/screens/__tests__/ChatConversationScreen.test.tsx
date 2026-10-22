@@ -9,6 +9,8 @@ import { ChatConversationScreen } from '../ChatConversationScreen';
 let mockParams: Record<string, string> = { id: 'c1' };
 // Off by default, so a test's seeded store state isn't reloaded from the repository.
 let mockRunFocusEffects = false;
+// Read on each render, so a rerender after changing it blurs or refocuses the screen.
+let mockFocused = true;
 const mockDb: { conversations: ChatConversation[]; messages: ChatMessage[] } = {
   conversations: [],
   messages: [],
@@ -32,7 +34,8 @@ jest.mock('expo-router', () => ({
   router: { push: jest.fn(), setParams: jest.fn(), back: jest.fn(), canGoBack: () => true },
   useFocusEffect: (effect: () => void | (() => void)) => {
     const { useEffect } = require('react');
-    useEffect(() => (mockRunFocusEffects ? effect() : undefined), [effect]);
+    const focused = mockFocused;
+    useEffect(() => (mockRunFocusEffects && focused ? effect() : undefined), [effect, focused]);
   },
   useLocalSearchParams: () => mockParams,
 }));
@@ -121,6 +124,7 @@ const mockEditFailedQuestion = jest.fn(() => 'What did we decide?');
 beforeEach(() => {
   mockParams = { id: 'c1' };
   mockRunFocusEffects = false;
+  mockFocused = true;
   mockChatEnabled = true;
   mockDb.conversations = [];
   mockDb.messages = [];
@@ -359,6 +363,9 @@ describe('ChatConversationScreen', () => {
   });
 
   it('announces the answer and an error to screen readers', () => {
+    mockRunFocusEffects = true;
+    mockDb.conversations = [{ id: 'c1', title: 'Pricing decisions', createdAt: 1, updatedAt: 1 }];
+    mockDb.messages = [question];
     const announce = jest
       .spyOn(AccessibilityInfo, 'announceForAccessibility')
       .mockImplementation(() => undefined);
@@ -395,6 +402,74 @@ describe('ChatConversationScreen', () => {
     announce.mockRestore();
   });
 
+  it('announces nothing from a chat that is covered', () => {
+    mockRunFocusEffects = true;
+    mockDb.conversations = [{ id: 'c1', title: 'Pricing decisions', createdAt: 1, updatedAt: 1 }];
+    mockDb.messages = [question];
+    const announce = jest
+      .spyOn(AccessibilityInfo, 'announceForAccessibility')
+      .mockImplementation(() => undefined);
+    useChatStore.setState({
+      pending: { conversationId: 'c1', phase: 'working', steps: [], startedAt: Date.now() },
+    });
+    const screen = render(<ChatConversationScreen />);
+
+    mockFocused = false;
+    screen.rerender(<ChatConversationScreen />);
+    act(() => {
+      useChatStore.setState({
+        pending: null,
+        messages: [question, { ...question, id: 'm2', role: 'assistant', text: 'We kept $12.' }],
+      });
+    });
+
+    expect(announce).not.toHaveBeenCalled();
+    announce.mockRestore();
+  });
+
+  it('keeps its rows and place while another chat is pushed over it', () => {
+    mockRunFocusEffects = true;
+    mockDb.conversations = [
+      { id: 'c1', title: 'Pricing decisions', createdAt: 1, updatedAt: 1 },
+      { id: 'c2', title: 'Launch plan', createdAt: 1, updatedAt: 1 },
+    ];
+    mockDb.messages = [question, { ...question, id: 'm9', conversationId: 'c2', text: 'Launch?' }];
+    const scrollToEnd = jest.spyOn(ScrollView.prototype, 'scrollToEnd');
+    const screen = render(<ChatConversationScreen />);
+    const list = screen.UNSAFE_getByType(ScrollView);
+    fireEvent.scroll(list, {
+      nativeEvent: {
+        contentOffset: { y: 0 },
+        layoutMeasurement: { height: 600 },
+        contentSize: { height: 2_000 },
+      },
+    });
+
+    // Chat B opens over this one, which stays mounted underneath.
+    mockFocused = false;
+    screen.rerender(<ChatConversationScreen />);
+    act(() => {
+      useChatStore.getState().openConversation('c2');
+    });
+    expect(screen.getByText(question.text)).toBeTruthy();
+    expect(screen.queryByText('Launch?')).toBeNull();
+
+    // Back from B: it closes, and this chat reloads the same rows without jumping to the end.
+    act(() => {
+      useChatStore.getState().closeConversation('c2');
+    });
+    mockFocused = true;
+    screen.rerender(<ChatConversationScreen />);
+    scrollToEnd.mockClear();
+    fireEvent(list, 'contentSizeChange', 400, 2_000);
+    expect(scrollToEnd).not.toHaveBeenCalled();
+    expect(useChatStore.getState().activeConversationId).toBe('c1');
+
+    screen.unmount();
+    expect(useChatStore.getState().activeConversationId).toBeNull();
+    scrollToEnd.mockRestore();
+  });
+
   it('puts a spoken question back in the composer when the chat route changed', () => {
     const screen = render(<ChatConversationScreen />);
 
@@ -402,6 +477,16 @@ describe('ChatConversationScreen', () => {
       mockVoiceOptions?.onRouteChanged('When is my next meeting?');
     });
     expect(screen.getByPlaceholderText('Reply').props.value).toBe('When is my next meeting?');
+  });
+
+  it('adds a spoken question after what was already typed', () => {
+    const screen = render(<ChatConversationScreen />);
+    fireEvent.changeText(screen.getByPlaceholderText('Reply'), 'Also, ');
+
+    act(() => {
+      mockVoiceOptions?.onRouteChanged('when is my next meeting?');
+    });
+    expect(screen.getByPlaceholderText('Reply').props.value).toBe('Also, when is my next meeting?');
   });
 
   it('adopts a late spoken question only while it is still showing', () => {
