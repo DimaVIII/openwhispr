@@ -110,7 +110,13 @@ const databaseManager = new Proxy(
 );
 
 function buildFakeThis() {
-  const target = { sessionId: "test-session", connectorManager, databaseManager };
+  const target = {
+    sessionId: "test-session",
+    connectorManager,
+    databaseManager,
+    _meetingMicStreaming: null,
+    _meetingSystemStreaming: null,
+  };
   return new Proxy(target, {
     get: (value, property) => (property in value ? value[property] : anything()),
   });

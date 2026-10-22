@@ -859,6 +859,8 @@ class IPCHandlers {
   }
 
   _handleAuthTokenChange({ generation, token }) {
+    this._audioFeaturePolicy?.cancelAll();
+    if (!token) this._stopMeetingForPolicy?.();
     this.windowManager.retireMeetingNotificationScope();
     this.enterpriseIdentityManager?.clear();
     if (!token) {
@@ -1546,6 +1548,10 @@ class IPCHandlers {
   }
 
   setupHandlers() {
+    const handleAudioFeature = (channel, purpose, handler) =>
+      ipcMain.handle(channel, (event, ...args) =>
+        this._audioFeaturePolicy.run(event, purpose, () => handler(event, ...args))
+      );
     ipcMain.handle("onboarding-set-window-mode", (_event, mode) =>
       this.windowManager.setOnboardingWindowMode(mode)
     );
@@ -2485,6 +2491,8 @@ class IPCHandlers {
         this.databaseManager.activeAccountId !== accountId ||
         (accountId !== null && previousScope?.accountId !== accountId)
       ) {
+        this._audioFeaturePolicy?.cancelAll();
+        this._stopMeetingForPolicy?.();
         this.windowManager.retireMeetingNotificationScope();
       }
       this.databaseManager.setActiveAccountId(accountId);
@@ -3092,7 +3100,7 @@ class IPCHandlers {
       }
     });
 
-    ipcMain.handle("select-audio-file", async (event, options = {}) => {
+    handleAudioFeature("select-audio-file", "upload", async (event, options = {}) => {
       const { dialog } = require("electron");
       const properties = ["openFile"];
       if (options.multiple === true) properties.push("multiSelections");
@@ -3135,7 +3143,7 @@ class IPCHandlers {
     // Sweep ow-url-*/ow-diarize-* orphans from crashes or windows closed mid-download.
     require("./urlAudioDownloader").sweepStaleTempArtifacts();
 
-    ipcMain.handle("download-url-audio", async (event, url, downloadId) => {
+    handleAudioFeature("download-url-audio", "upload", async (event, url, downloadId) => {
       if (typeof url !== "string" || url.length > 2048) {
         return { success: false, error: "Invalid URL", code: "INVALID_URL" };
       }
@@ -3154,7 +3162,9 @@ class IPCHandlers {
               event.sender.send("url-download-progress", { ...progress, downloadId: id });
             }
           },
-          abortController.signal
+          AbortSignal.any(
+            [abortController.signal, this._audioFeaturePolicy?.signalFor(event)].filter(Boolean)
+          )
         );
         return { success: true, ...result };
       } catch (error) {
@@ -3210,10 +3220,15 @@ class IPCHandlers {
       }
     });
 
-    ipcMain.handle("transcribe-audio-file", async (event, filePath, options = {}) => {
+    handleAudioFeature("transcribe-audio-file", "upload", async (event, filePath, options = {}) => {
       // Uploads pass a requestId so cancel-upload-transcription can abort the
       // local decode; flows without one (voice drafts) register nothing.
-      const { signal, release } = this._uploadCancelRegistry.register(options.requestId);
+      const { signal: cancelSignal, release } = this._uploadCancelRegistry.register(
+        options.requestId
+      );
+      const signal = AbortSignal.any(
+        [cancelSignal, this._audioFeaturePolicy?.signalFor(event)].filter(Boolean)
+      );
       try {
         if (typeof filePath !== "string") {
           return { success: false, error: "Invalid file path" };
@@ -4052,10 +4067,15 @@ class IPCHandlers {
       }
     });
 
-    ipcMain.handle("diarize-audio-file", async (event, filePath, options = {}) => {
+    handleAudioFeature("diarize-audio-file", "upload", async (event, filePath, options = {}) => {
       // Registered under the same requestId as the upload's transcription, so
       // one cancel kills both the decode and the diarization child process.
-      const { signal, release } = this._uploadCancelRegistry.register(options.requestId);
+      const { signal: cancelSignal, release } = this._uploadCancelRegistry.register(
+        options.requestId
+      );
+      const signal = AbortSignal.any(
+        [cancelSignal, this._audioFeaturePolicy?.signalFor(event)].filter(Boolean)
+      );
       try {
         if (!this.diarizationManager) {
           return { success: false, error: "Diarization not available" };
@@ -6537,9 +6557,39 @@ class IPCHandlers {
       getAppVersion: () => app.getVersion(),
       proxyFetch,
       tokenStore,
-      broadcast: (snapshot) => broadcastToWindows("workspace-policy-changed", snapshot),
+      broadcast: (snapshot) => {
+        if (snapshot.authGeneration === tokenStore.getState().generation) {
+          this._audioFeaturePolicy?.update(snapshot);
+          this._syncMeetingDetectorPolicy?.();
+        }
+        broadcastToWindows("workspace-policy-changed", snapshot);
+      },
       logger: debugLogger,
     });
+    const { createAudioFeaturePolicy } = require("./audioFeaturePolicy");
+    this._audioFeaturePolicy = createAudioFeaturePolicy({
+      getPolicy: async (event) => {
+        const generation = tokenStore.getState().generation;
+        const authHeaders = await getAuthHeader(event);
+        if (generation !== tokenStore.getState().generation) return { success: false };
+        if (!authHeaders.Authorization && !authHeaders.Cookie) {
+          return typeof this.databaseManager.activeAccountId === "string"
+            ? { success: false }
+            : { success: true, managed: false };
+        }
+        return workspacePolicyManager.getPolicy({
+          accountId: this.databaseManager.activeAccountId,
+          expectedAuthGeneration: generation,
+          authHeaders,
+        });
+      },
+      onBlocked: (purpose) => {
+        if (purpose === "meeting") this._stopMeetingForPolicy?.();
+      },
+    });
+
+    if (!tokenStore.get()) this._audioFeaturePolicy.update({ success: true, managed: false });
+
     registerProductHelpIpc({
       ipcMain,
       fetch: proxyFetch,
@@ -6739,6 +6789,7 @@ class IPCHandlers {
         // cloud row (filling in text) instead of creating a duplicate.
         const clientTranscriptionId = crypto.randomUUID();
         const multipartFields = {
+          source: "dictation",
           language: opts.language,
           prompt: opts.prompt,
           sendLogs: opts.sendLogs,
@@ -6992,6 +7043,7 @@ class IPCHandlers {
                 const multipartFields = {
                   language,
                   clientType: "desktop",
+                  source: "dictation",
                   appVersion: app.getVersion(),
                   sessionId: this.sessionId,
                 };
@@ -7758,7 +7810,11 @@ class IPCHandlers {
 
           let pairs;
           if (newSystem) {
-            const secrets = await fetchRealtimeToken(tokenEvent, options, { streams: 2 });
+            const secrets = await fetchRealtimeToken(
+              tokenEvent,
+              { ...options, purpose: "meeting" },
+              { streams: 2 }
+            );
             pairs = [
               { streaming: newMic, secret: secrets[0], source: "mic" },
               { streaming: newSystem, secret: secrets[1], source: "system" },
@@ -7767,7 +7823,7 @@ class IPCHandlers {
             pairs = [
               {
                 streaming: newMic,
-                secret: await fetchRealtimeToken(tokenEvent, options),
+                secret: await fetchRealtimeToken(tokenEvent, { ...options, purpose: "meeting" }),
                 source: "mic",
               },
             ];
@@ -7783,6 +7839,7 @@ class IPCHandlers {
             )
           );
 
+          assertMeetingAllowed(tokenEvent);
           if (pairs.some(({ streaming }) => !streaming.isConnected)) {
             throw new Error("Meeting transcription connection closed during reconnect.");
           }
@@ -7855,7 +7912,14 @@ class IPCHandlers {
       });
     };
 
+    const assertMeetingAllowed = (event) => {
+      const denied = this._audioFeaturePolicy.failure("meeting");
+      if (denied) throw Object.assign(new Error(denied.error), { code: denied.code });
+      this._audioFeaturePolicy.signalFor(event)?.throwIfAborted();
+    };
+
     const fetchRealtimeToken = async (event, options, { streams } = {}) => {
+      if (options.purpose === "meeting") assertMeetingAllowed(event);
       const postServerToken = createServerTokenPoster({
         getApiUrl,
         getAuthHeader: () => getAuthHeader(event),
@@ -7864,7 +7928,7 @@ class IPCHandlers {
         classifyAndLog,
       });
 
-      return fetchRealtimeTokenForProvider(
+      const token = await fetchRealtimeTokenForProvider(
         options.provider,
         {
           environmentManager: this.environmentManager,
@@ -7875,6 +7939,8 @@ class IPCHandlers {
         options,
         { streams }
       );
+      if (options.purpose === "meeting") assertMeetingAllowed(event);
+      return token;
     };
 
     const getMeetingSystemAudioCapabilityMode = () => {
@@ -7947,7 +8013,11 @@ class IPCHandlers {
       const { mode: systemAudioMode } = await getMeetingSystemAudioPlan();
       let pairs;
       if (systemAudioMode !== "unsupported") {
-        const secrets = await fetchRealtimeToken(event, options, { streams: 2 });
+        const secrets = await fetchRealtimeToken(
+          event,
+          { ...options, purpose: "meeting" },
+          { streams: 2 }
+        );
         pairs = [
           { ref: "_meetingMicStreaming", secret: secrets[0], source: "mic" },
           { ref: "_meetingSystemStreaming", secret: secrets[1], source: "system" },
@@ -7956,7 +8026,7 @@ class IPCHandlers {
         pairs = [
           {
             ref: "_meetingMicStreaming",
-            secret: await fetchRealtimeToken(event, options),
+            secret: await fetchRealtimeToken(event, { ...options, purpose: "meeting" }),
             source: "mic",
           },
         ];
@@ -7977,6 +8047,7 @@ class IPCHandlers {
             })
           )
         );
+        assertMeetingAllowed(event);
         if (pairs.some(({ ref }) => !this[ref]?.isConnected)) {
           throw new Error("Meeting transcription connection closed during startup.");
         }
@@ -8649,6 +8720,7 @@ class IPCHandlers {
     };
 
     const transcribeAllLocalBuffers = () => {
+      if (this._audioFeaturePolicy.failure("meeting")) return Promise.resolve();
       if (meetingLocalTranscribePromise) return meetingLocalTranscribePromise;
       meetingLocalTranscribePromise = (async () => {
         try {
@@ -9168,7 +9240,7 @@ class IPCHandlers {
     };
 
     // Pre-warm: fetch tokens + connect WebSockets before user hits record
-    ipcMain.handle("meeting-transcription-prepare", async (event, options = {}) => {
+    handleAudioFeature("meeting-transcription-prepare", "meeting", async (event, options = {}) => {
       if (meetingTranscriptionPrepareInProgress || meetingTranscriptionStartInProgress) {
         debugLogger.debug("Meeting transcription prepare already in progress, ignoring");
         return { success: false, error: "Operation in progress" };
@@ -9261,6 +9333,7 @@ class IPCHandlers {
       this.meetingDetectionEngine?.setUserRecording(true);
 
       const completeStart = async (result) => {
+        assertMeetingAllowed(event);
         await this.meetingDetectionEngine?.beginRecordingSession({
           sessionId: recordingSessionId,
           autoEndEligible: options.autoEndEligible === true,
@@ -9270,6 +9343,7 @@ class IPCHandlers {
           // Auto-end stays fail-safe until the renderer confirms a real source.
           systemAudioAvailable: false,
         });
+        assertMeetingAllowed(event);
         setMeetingSystemAudioStrategy(result.systemAudioStrategy);
         // Arms on any active system-audio strategy — capture follows platform
         // capability, not call detection — so the warning copy also covers
@@ -9404,6 +9478,7 @@ class IPCHandlers {
     };
 
     const sendMeetingAudio = (audioBuffer, source, synthetic = false, capturedAt = null) => {
+      if (this._audioFeaturePolicy.failure("meeting")) return;
       const outboundBuffer = Buffer.isBuffer(audioBuffer) ? audioBuffer : Buffer.from(audioBuffer);
       // Auto-end judges "is anyone audible" from the raw chunk of either
       // channel, before AEC/holdback/muting can swallow it.
@@ -9582,6 +9657,7 @@ class IPCHandlers {
       systemAudioStrategy,
       context
     ) => {
+      assertMeetingAllowed(event);
       if (systemAudioMode === "native") {
         try {
           await startManagedMeetingSystemAudio(
@@ -9665,6 +9741,29 @@ class IPCHandlers {
       sendMeetingAudio(buffer, source);
     });
 
+    this._stopMeetingForPolicy = () => {
+      const wasActive =
+        meetingConnectionOptions ||
+        meetingLocalMode ||
+        meetingTranscriptionStartInProgress ||
+        isMeetingStreamingConnected();
+      meetingConnectionOptions = null;
+      for (const stream of [this._meetingMicStreaming, this._meetingSystemStreaming]) {
+        if (stream) {
+          stream.coldStartBuffer = [];
+          stream.disconnect({ commit: false }).catch(() => {});
+        }
+      }
+      if (meetingLocalTimer) {
+        clearInterval(meetingLocalTimer);
+        meetingLocalTimer = null;
+      }
+      if (wasActive) broadcastToWindows("meeting-transcription-error", "policyRestricted");
+      void meetingTranscriptionLifecycle
+        .stopSession()
+        .catch((error) => debugLogger.warn("Policy meeting stop failed", { error: error.message }));
+    };
+
     const stopMeetingTranscription = async (expectedSessionId) => {
       // Only a *different* live session blocks teardown — it owns the shared
       // capture now. With no engine session (e.g. after quit-path engine stop)
@@ -9697,7 +9796,7 @@ class IPCHandlers {
         if (meetingLocalMode) {
           try {
             await settleLocalMeetingTranscription();
-            await transcribeAllLocalBuffers();
+            if (!this._audioFeaturePolicy.failure("meeting")) await transcribeAllLocalBuffers();
           } catch (err) {
             debugLogger.error("Local meeting final transcription failed", { error: err.message });
           }
@@ -9787,7 +9886,7 @@ class IPCHandlers {
       },
     });
 
-    ipcMain.handle("meeting-transcription-start", (event, options = {}) => {
+    handleAudioFeature("meeting-transcription-start", "meeting", (event, options = {}) => {
       const sessionId =
         typeof options.sessionId === "string" && options.sessionId.length > 0
           ? options.sessionId
@@ -10598,97 +10697,105 @@ class IPCHandlers {
 
     ipcMain.handle("get-note-recording-config", handleNoteRecordingConfigRequest);
 
-    ipcMain.handle("transcribe-audio-file-cloud", async (event, filePath, opts = {}) => {
-      const requestId = typeof opts?.requestId === "string" ? opts.requestId : null;
-      const { signal, release } = this._uploadCancelRegistry.register(requestId);
-      let cleanupUpload = null;
-      try {
-        if (typeof filePath !== "string") {
-          return { success: false, error: "Invalid file path" };
-        }
-        const realCloud = resolveAllowedAudioPath(filePath);
-        if (!realCloud) return { success: false, error: "File path not allowed" };
-
-        const apiUrl = getApiUrl();
-        if (!apiUrl) throw new Error("OpenWhispr API URL not configured");
-
-        const authHeader = await getAuthHeader(event);
-        if (!Object.keys(authHeader).length) throw new Error("Not authenticated");
-
-        const multipartFields = {
-          source: "file_upload",
-          clientType: "desktop",
-          appVersion: app.getVersion(),
-          clientVersion: app.getVersion(),
-          sessionId: this.sessionId,
-        };
-
-        const fileSize = fs.statSync(realCloud).size;
-
-        if (fileSize > CLOUD_INLINE_LIMIT) {
-          debugLogger.debug("Large file detected, using client-side chunking", {
-            fileSize,
-            filePath: path.basename(realCloud),
-          });
-          const { text, warning, failedChunks, totalChunks } = await chunkedCloudTranscribe({
-            filePath: realCloud,
-            apiUrl,
-            policyHeaders: withPolicyHeaders(authHeader),
-            multipartFields,
-            onProgress: (payload) => event.sender.send("upload-transcription-progress", payload),
-            signal,
-          });
-          return {
-            success: true,
-            text,
-            ...(warning ? { warning, failedChunks, totalChunks } : {}),
-          };
-        }
-
-        const upload = await prepareProviderUpload(realCloud, { signal });
-        cleanupUpload = upload.cleanup;
-        const { body, boundary } = buildMultipartBody(
-          fs.readFileSync(upload.path),
-          path.basename(upload.path),
-          providerContentType(upload.path),
-          multipartFields
+    handleAudioFeature(
+      "transcribe-audio-file-cloud",
+      "upload",
+      async (event, filePath, opts = {}) => {
+        const requestId = typeof opts?.requestId === "string" ? opts.requestId : null;
+        const { signal: cancelSignal, release } = this._uploadCancelRegistry.register(requestId);
+        const signal = AbortSignal.any(
+          [cancelSignal, this._audioFeaturePolicy?.signalFor(event)].filter(Boolean)
         );
-        const url = new URL(`${apiUrl}/api/transcribe`);
-        const data = await postMultipart(url, body, boundary, withPolicyHeaders(authHeader), {
-          signal: AbortSignal.any([
-            ...(signal ? [signal] : []),
-            AbortSignal.timeout(CLOUD_UPLOAD_TIMEOUT_MS),
-          ]),
-          session: getInlineCloudUploadSession(),
-        });
-        const result = interpretTranscribeResponse(data);
+        let cleanupUpload = null;
+        try {
+          if (typeof filePath !== "string") {
+            return { success: false, error: "Invalid file path" };
+          }
+          const realCloud = resolveAllowedAudioPath(filePath);
+          if (!realCloud) return { success: false, error: "File path not allowed" };
 
-        return { success: true, text: result.text };
-      } catch (error) {
-        if (signal?.aborted) {
-          debugLogger.debug("Cloud audio file transcription cancelled", { requestId });
-          return { success: false, error: "Cancelled", code: "UPLOAD_CANCELLED" };
+          const apiUrl = getApiUrl();
+          if (!apiUrl) throw new Error("OpenWhispr API URL not configured");
+
+          const authHeader = await getAuthHeader(event);
+          if (!Object.keys(authHeader).length) throw new Error("Not authenticated");
+
+          const multipartFields = {
+            source: "file_upload",
+            clientType: "desktop",
+            appVersion: app.getVersion(),
+            clientVersion: app.getVersion(),
+            sessionId: this.sessionId,
+          };
+
+          const fileSize = fs.statSync(realCloud).size;
+
+          if (fileSize > CLOUD_INLINE_LIMIT) {
+            debugLogger.debug("Large file detected, using client-side chunking", {
+              fileSize,
+              filePath: path.basename(realCloud),
+            });
+            const { text, warning, failedChunks, totalChunks } = await chunkedCloudTranscribe({
+              filePath: realCloud,
+              apiUrl,
+              policyHeaders: withPolicyHeaders(authHeader),
+              multipartFields,
+              onProgress: (payload) => event.sender.send("upload-transcription-progress", payload),
+              signal,
+            });
+            return {
+              success: true,
+              text,
+              ...(warning ? { warning, failedChunks, totalChunks } : {}),
+            };
+          }
+
+          const upload = await prepareProviderUpload(realCloud, { signal });
+          cleanupUpload = upload.cleanup;
+          const { body, boundary } = buildMultipartBody(
+            fs.readFileSync(upload.path),
+            path.basename(upload.path),
+            providerContentType(upload.path),
+            multipartFields
+          );
+          const url = new URL(`${apiUrl}/api/transcribe`);
+          const data = await postMultipart(url, body, boundary, withPolicyHeaders(authHeader), {
+            signal: AbortSignal.any([
+              ...(signal ? [signal] : []),
+              AbortSignal.timeout(CLOUD_UPLOAD_TIMEOUT_MS),
+            ]),
+            session: getInlineCloudUploadSession(),
+          });
+          const result = interpretTranscribeResponse(data);
+
+          return { success: true, text: result.text };
+        } catch (error) {
+          if (signal?.aborted) {
+            debugLogger.debug("Cloud audio file transcription cancelled", { requestId });
+            return { success: false, error: "Cancelled", code: "UPLOAD_CANCELLED" };
+          }
+          debugLogger.error("Cloud audio file transcription error", { error: error.message });
+          return toPolicyFailure(error);
+        } finally {
+          cleanupUpload?.();
+          release();
         }
-        debugLogger.error("Cloud audio file transcription error", { error: error.message });
-        return toPolicyFailure(error);
-      } finally {
-        cleanupUpload?.();
-        release();
       }
-    });
+    );
 
-    // Unknown ids are a no-op: BYOK providers don't register a controller,
-    // and the renderer fires this for every cancel.
+    // Unknown or already-finished request ids are a no-op.
     ipcMain.handle("cancel-upload-transcription", async (_event, requestId) => {
       return { success: this._uploadCancelRegistry.cancel(requestId) > 0 };
     });
 
-    ipcMain.handle(
+    handleAudioFeature(
       "transcribe-audio-file-byok",
+      "upload",
       async (
         event,
         {
           filePath,
+          requestId,
           apiKey,
           baseUrl,
           model,
@@ -10705,6 +10812,10 @@ class IPCHandlers {
         }
       ) => {
         const fs = require("fs");
+        const { signal: cancelSignal, release } = this._uploadCancelRegistry.register(requestId);
+        const signal = AbortSignal.any(
+          [cancelSignal, this._audioFeaturePolicy?.signalFor(event)].filter(Boolean)
+        );
         let cleanupUpload = null;
         let providerErrorContext = null;
         try {
@@ -10741,7 +10852,7 @@ class IPCHandlers {
             };
           }
 
-          const upload = await prepareProviderUpload(sourcePath);
+          const upload = await prepareProviderUpload(sourcePath, { signal });
           cleanupUpload = upload.cleanup;
           const realByok = upload.path;
 
@@ -10751,6 +10862,7 @@ class IPCHandlers {
             }
             const text = await this.executeManagedTranscription(event, route, {
               audioBuffer: fs.readFileSync(realByok),
+              signal,
               fileName: path.basename(realByok),
               contentType: providerContentType(realByok),
             });
@@ -10773,7 +10885,13 @@ class IPCHandlers {
               providerContentType(realByok),
               { model: route.model, language: route.language }
             );
-            const data = await postMultipart(new URL(route.endpoint), body, boundary);
+            const data = await postMultipart(
+              new URL(route.endpoint),
+              body,
+              boundary,
+              {},
+              { signal }
+            );
             if (data.statusCode !== 200) {
               debugLogger.warn("Self-hosted file transcription failed", {
                 status: data.statusCode,
@@ -10809,6 +10927,7 @@ class IPCHandlers {
               clientId,
               clientSecret,
               audioBuffer: fs.readFileSync(realByok),
+              signal,
               language: route.language,
             });
             return { success: true, text };
@@ -10817,6 +10936,7 @@ class IPCHandlers {
           if (route.transport === "proxied" && route.provider === "tinfoil") {
             const { text } = await transcribeWithTinfoil({
               audioBuffer: fs.readFileSync(realByok),
+              signal,
               fileName: path.basename(realByok),
               contentType: providerContentType(realByok),
               language: route.language,
@@ -10830,6 +10950,7 @@ class IPCHandlers {
             // branch below, and Gemini's language_codes is a hard constraint.
             const { text } = await transcribeWithGemini({
               audioBuffer: fs.readFileSync(realByok),
+              signal,
               model: route.model,
               contentType: providerContentType(realByok),
               apiKey: apiKey || this.environmentManager.getGeminiKey(),
@@ -10911,7 +11032,7 @@ class IPCHandlers {
                 ? { "api-key": apiKey }
                 : { Authorization: `Bearer ${apiKey}` }
             : undefined;
-          const data = await postMultipart(url, body, boundary, headers);
+          const data = await postMultipart(url, body, boundary, headers, { signal });
 
           if (data.statusCode !== 200) {
             debugLogger.warn("BYOK file transcription failed", {
@@ -10970,6 +11091,7 @@ class IPCHandlers {
           debugLogger.error("BYOK audio file transcription error", { error: error.message });
           return { success: false, ...ipcErrorFields(error) };
         } finally {
+          release();
           cleanupUpload?.();
         }
       }
@@ -12356,6 +12478,16 @@ class IPCHandlers {
       "notifyCalendarReminders",
     ]);
 
+    this._syncMeetingDetectorPolicy = () => {
+      this.meetingDetectionEngine?.setPreferences(
+        deriveDetectorPreferences({
+          ...this.windowManager.notificationPrefs,
+          meetingProcessDetection: this.meetingProcessDetection,
+          meetingRecordingEnabled: !this._audioFeaturePolicy.failure("meeting"),
+        })
+      );
+    };
+
     ipcMain.handle("sync-notification-preferences", async (_event, prefs) => {
       try {
         if (!prefs || typeof prefs !== "object") {
@@ -12369,15 +12501,7 @@ class IPCHandlers {
         if (typeof prefs.meetingProcessDetection === "boolean") {
           this.meetingProcessDetection = prefs.meetingProcessDetection;
         }
-        const { notificationsEnabled, notifyMeetingDetection } =
-          this.windowManager.notificationPrefs;
-        this.meetingDetectionEngine?.setPreferences(
-          deriveDetectorPreferences({
-            notificationsEnabled,
-            notifyMeetingDetection,
-            meetingProcessDetection: this.meetingProcessDetection,
-          })
-        );
+        this._syncMeetingDetectorPolicy();
         return { success: true };
       } catch (error) {
         return { success: false, error: error.message };
@@ -12464,12 +12588,11 @@ class IPCHandlers {
       const owner = this.windowManager.captureMeetingNotificationOwner(event.sender);
       if (!owner || owner.prompt.detectionId !== detectionId)
         return { success: false, code: "STALE_NOTIFICATION" };
-      return this.meetingDetectionEngine.handleNotificationResponse(
-        detectionId,
-        action,
-        options,
-        owner
-      );
+      const respond = () =>
+        this.meetingDetectionEngine.handleNotificationResponse(detectionId, action, options, owner);
+      return action === "dismiss"
+        ? respond()
+        : this._audioFeaturePolicy.run(event, "meeting", respond);
     });
     ipcMain.handle("confirm-meeting-note-navigation", (event, navigationId, status) =>
       this.windowManager.confirmMeetingNoteNavigation(event.sender, navigationId, status)
@@ -12488,7 +12611,9 @@ class IPCHandlers {
       }
     });
 
-    ipcMain.handle("start-manual-meeting", () => this.windowManager.startManualMeeting());
+    handleAudioFeature("start-manual-meeting", "meeting", () =>
+      this.windowManager.startManualMeeting()
+    );
 
     ipcMain.handle("get-meeting-notification-data", async (event) => {
       if (this.windowManager?.notificationWindow?.webContents !== event.sender) return null;

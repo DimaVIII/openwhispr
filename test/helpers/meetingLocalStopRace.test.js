@@ -46,6 +46,7 @@ function harness({
   };
   const context = {
     events,
+    _audioFeaturePolicy: { failure: () => null, signalFor: () => undefined },
     chunkGates,
     lateStreamingFinals,
     win,
@@ -166,6 +167,7 @@ function harness({
 
     ${sliceBetween("const transcribeAllLocalBuffers =", "const dropMeetingMicDiarizationCapture =")}
     ${sliceBetween("const rollbackMeetingTranscriptionStart =", "const setupDictationCallbacks =")}
+    ${sliceBetween("const assertMeetingAllowed =", "const fetchRealtimeToken =")}
     ${sliceBetween("const startMeetingTranscription =", "const sendMeetingAudio =")}
     ${sliceBetween("const stopMeetingTranscription =", "const meetingTranscriptionLifecycle =")}
 

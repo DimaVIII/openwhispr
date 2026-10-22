@@ -824,7 +824,9 @@ export async function startRecording(args: StartRecordingArgs): Promise<boolean>
     isStartingFlag = true;
     activeRecordingSessionId = sessionId;
     const isCurrentStart = () =>
-      startOperation.isCurrent() && activeRecordingSessionId === sessionId;
+      startOperation.isCurrent() &&
+      activeRecordingSessionId === sessionId &&
+      isTranscriptionContextAllowed(usePolicyStore.getState(), getSettings(), "meeting");
 
     const initialEnabled =
       args.diarizationEnabled ??

@@ -2813,6 +2813,7 @@ declare global {
       // BYOK audio file transcription
       transcribeAudioFileByok?: (options: {
         filePath: string;
+        requestId?: string;
         apiKey: string;
         baseUrl: string;
         model: string;

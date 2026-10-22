@@ -112,6 +112,13 @@ Module._load = function loadWithMocks(request, parent, isMain) {
         getTinfoilChatModels: () => [],
       };
     }
+    if (request === "./workspacePolicyManager")
+      return {
+        ...originalLoad.call(this, request, parent, isMain),
+        createWorkspacePolicyManager: () => ({
+          getPolicy: async () => ({ success: true, managed: false }),
+        }),
+      };
     if (request === "./tokenStore") {
       return { ...originalLoad.call(this, request, parent, isMain), get: () => "test-token" };
     }
@@ -157,6 +164,8 @@ function buildFakeThis() {
   ]);
   const target = {
     sessionId: "test-session",
+    _uploadCancelRegistry:
+      require("../../src/helpers/uploadCancelRegistry").createUploadCancelRegistry(),
     audioStorageManager: {
       // 7 is a stored WebM recording, 8 one already in WAV, 9 one too large to
       // upload inline.

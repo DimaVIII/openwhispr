@@ -183,6 +183,7 @@ export async function transcribeFile(
   // (fail-closed on misconfiguration) instead of stale BYOK settings.
   return window.electronAPI.transcribeAudioFileByok!({
     filePath,
+    requestId: opts.requestId,
     managed: managed?.kind === "managed" ? managed : undefined,
     apiKey: cfg.getApiKey(),
     baseUrl: cfg.cloudTranscriptionBaseUrl,

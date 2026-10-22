@@ -151,6 +151,13 @@ Module._load = function (request, parent, isMain) {
     if (request === "./geminiLiveStreaming")
       return { GeminiLiveStreaming: FakeStreaming, GEMINI_LIVE_MODEL: "gemini-live" };
     if (request === "./debugLogger") return new Proxy({}, { get: () => () => {} });
+    if (request === "./workspacePolicyManager")
+      return {
+        ...originalLoad.call(this, request, parent, isMain),
+        createWorkspacePolicyManager: () => ({
+          getPolicy: async () => ({ success: true, managed: false }),
+        }),
+      };
     if (request === "./tokenStore")
       return {
         get: () => "account",
@@ -659,4 +666,47 @@ test("a mic row retracted during a meeting reaches that meeting's diarization on
     ),
     [[["mic", text, timestamp]], []]
   );
+});
+
+test("meeting policy revocation closes live streams and prevents a late warmup from opening sockets", async (t) => {
+  resetMeeting(t);
+  invoke("save-deepgram-key", "A");
+  const options = { provider: "deepgram-realtime", mode: "byok" };
+  assert.equal((await invoke("meeting-transcription-start", options)).success, true);
+  const streams = meetingStreams();
+  target._audioFeaturePolicy.update({
+    success: true,
+    managed: true,
+    policy: { features: { meetingRecordingEnabled: false, audioUploadEnabled: true } },
+  });
+  for (const stream of streams) assert.equal(stream.isConnected, false);
+  assert.equal(target._audioFeaturePolicy.failure("upload"), null);
+  await invoke("meeting-transcription-stop");
+
+  const mintStarted = deferred();
+  const minted = deferred();
+  const previousFetch = fetchToken;
+  fetchToken = async () => {
+    mintStarted.resolve();
+    return minted.promise;
+  };
+  t.after(() => {
+    fetchToken = previousFetch;
+  });
+  invoke("save-assemblyai-key", "A");
+  const preparing = invoke("meeting-transcription-prepare", {
+    provider: "assemblyai-realtime",
+    mode: "byok",
+  });
+  await mintStarted.promise;
+  target._audioFeaturePolicy.update({
+    success: true,
+    managed: true,
+    policy: { features: { meetingRecordingEnabled: false, audioUploadEnabled: true } },
+  });
+  minted.resolve("late-token");
+  const result = await preparing;
+  assert.equal(result.success, false);
+  assert.equal(result.code, "POLICY_MEETING_RECORDING_DISABLED");
+  assert.ok(meetingStreams().every((stream) => !stream?.isConnected));
 });
