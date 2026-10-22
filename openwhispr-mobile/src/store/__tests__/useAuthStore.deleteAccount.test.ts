@@ -23,6 +23,10 @@ jest.mock('@/store/useUsageStore', () => ({
   useUsageStore: { getState: () => ({ reset: jest.fn(), load: jest.fn() }) },
 }));
 jest.mock('@/services/agent/AgentComposerService', () => ({ clearAllSessions: jest.fn() }));
+const mockClearChatHistory = jest.fn();
+jest.mock('@/lib/chat/chatHistory', () => ({
+  clearChatHistory: (...args: unknown[]) => mockClearChatHistory(...args),
+}));
 jest.mock('@/services/providers/ProviderCredentials', () => ({
   clearProviderCredentials: (...args: unknown[]) => mockClearProviderCredentials(...args),
 }));
@@ -84,4 +88,24 @@ it('finishes a completed deletion even if the keys cannot be erased', async () =
 it('keeps provider keys when the user only signs out', async () => {
   await useAuthStore.getState().signOut();
   expect(mockClearProviderCredentials).not.toHaveBeenCalled();
+});
+
+it('clears local chat history on sign-out and on account deletion', async () => {
+  await useAuthStore.getState().signOut();
+  expect(mockClearChatHistory).toHaveBeenCalledTimes(1);
+
+  useAuthStore.setState({ user: member, sessionCookie: 'fixture-session' });
+  await useAuthStore.getState().deleteAccount();
+  expect(mockClearChatHistory).toHaveBeenCalledTimes(2);
+});
+
+it('finishes a completed deletion even if chat history cannot be cleared', async () => {
+  const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  mockClearChatHistory.mockImplementationOnce(() => {
+    throw new Error('database is locked');
+  });
+  await useAuthStore.getState().deleteAccount();
+  expect(useAuthStore.getState()).toMatchObject({ user: null, isLoading: false, error: null });
+  expect(warn).toHaveBeenCalledWith('[auth] chat history was not cleared:', expect.any(Error));
+  warn.mockRestore();
 });
