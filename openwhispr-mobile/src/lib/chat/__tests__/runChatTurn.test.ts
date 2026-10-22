@@ -355,7 +355,7 @@ describe('runChatTurn', () => {
 
     it('reads the “recently” period when no note anywhere matches', async () => {
       const getCandidateNotes = repository([], []);
-      const input = makeInput({ question: 'What did I work on lately?' });
+      const input = makeInput({ question: 'Anything about the roadmap lately?' });
       const deps = makeDeps({ getCandidateNotes });
 
       const result = await runChatTurn(input, deps);
@@ -363,8 +363,8 @@ describe('runChatTurn', () => {
       expect(
         getCandidateNotes.mock.calls.map(([terms, options]) => [terms, !!options.window]),
       ).toEqual([
-        [['work'], true],
-        [['work'], false],
+        [['roadmap'], true],
+        [['roadmap'], false],
         [[], true],
       ]);
       expect(result.sources.map((source) => source.noteId)).toEqual([21, 22]);

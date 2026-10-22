@@ -200,7 +200,9 @@ describe('Chat questions through the real search', () => {
     });
 
     it('reads the last 7 days when no note says the question’s words', async () => {
-      const { deps, ids } = setUp();
+      const { deps, ids, seed } = setUp();
+      // "work" inside "network" must not pull an old note past the period.
+      seed('Old network', 'Network migration work plan.', new Date(2026, 6, 10, 9, 0));
       expect(await sourcesFor('What did I work on lately?', deps)).toEqual([
         ids.contractCall,
         ids.groceries,

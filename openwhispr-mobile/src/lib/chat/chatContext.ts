@@ -25,6 +25,8 @@ const CLOCK_TIME = /\b\d{1,2}:\d{2}(?:\s*[ap]m)?\b/gi;
 const TIME_PHRASE = /\b(?:today|yesterday|this\s+week|last\s+week|recent(?:ly)?|lately)\b/gi;
 const SOFT_PERIOD = /^(?:recent(?:ly)?|lately)$/i;
 const MEETING_WORD = /\bmeetings?\b/gi;
+// "What did I work on lately?" asks for the period; "work" as a substring would match "network".
+const WORK_ON = /\bwork(?:ed|ing)?\s+on\b/gi;
 // A quoted meeting title ("Today's priorities") names the meeting, not a period.
 const QUOTED = /"[^"]*"|“[^”]*”/g;
 // A version or an amount ("1.10", "10,000") is one term, so it can find itself whole. A comma joins
@@ -257,7 +259,7 @@ export const parseChatQuery = (question: string, now: Date): ChatQuery => {
   const phrases = unquoted.match(TIME_PHRASE);
   if (!phrases) return { terms: extractSearchTerms(question), scope: null };
 
-  const withoutPeriod = unquoted.replace(TIME_PHRASE, ' ');
+  const withoutPeriod = unquoted.replace(TIME_PHRASE, ' ').replace(WORK_ON, ' ');
   const withoutMeetings = withoutPeriod.replace(MEETING_WORD, ' ');
   const meetingsOnly = withoutMeetings !== withoutPeriod;
   // A quoted title keeps all its words, a time word or "meeting" included.
