@@ -928,31 +928,31 @@ it('asks for a key when none is saved', async () => {
   await waitFor(() => expect(mockCredentialStatus).toHaveBeenCalled());
 });
 
-describe('the Note Chat page', () => {
+describe('the Chat page', () => {
   beforeEach(() => {
     mockScope = 'noteChat';
   });
 
-  it('shows only the Note Chat switch on the Note Chat page', () => {
+  it('shows only the Chat switch on the Chat page', () => {
     const view = render(<WorkflowSettingsScreen />);
     const page = JSON.stringify(view.toJSON());
-    expect(page.indexOf('Note Chat')).toBeLessThan(page.indexOf('OpenWhispr Cloud'));
+    expect(page.indexOf('Enable Chat')).toBeLessThan(page.indexOf('OpenWhispr Cloud'));
     expect(screen.queryByLabelText('Voice Assistant')).toBeNull();
-    fireEvent(screen.getByLabelText('Note Chat'), 'valueChange', false);
+    fireEvent(screen.getByLabelText('Chat'), 'valueChange', false);
     expect(mockToggle).toHaveBeenCalledWith('noteChatEnabled', false);
   });
 
   it('hides the model choice while note chat is off', () => {
     mockConfig = { defaultMode: 'cloud', noteChatEnabled: false };
     render(<WorkflowSettingsScreen />);
-    expect(screen.getByLabelText('Note Chat').props.value).toBe(false);
+    expect(screen.getByLabelText('Chat').props.value).toBe(false);
     expect(screen.queryByText('OpenWhispr Cloud')).toBeNull();
   });
 
   it('stays on when only the voice assistant is off', () => {
     mockConfig = { defaultMode: 'cloud', dictationAgentEnabled: false };
     render(<WorkflowSettingsScreen />);
-    expect(screen.getByLabelText('Note Chat').props.value).toBe(true);
+    expect(screen.getByLabelText('Chat').props.value).toBe(true);
   });
 
   it('says what switching note chat off does', () => {
@@ -982,7 +982,7 @@ describe('the Voice Assistant page', () => {
     const view = render(<WorkflowSettingsScreen />);
     const page = JSON.stringify(view.toJSON());
     expect(page.indexOf('Voice Assistant Settings')).toBeLessThan(page.indexOf('OpenWhispr Cloud'));
-    expect(screen.queryByLabelText('Note Chat')).toBeNull();
+    expect(screen.queryByLabelText('Chat')).toBeNull();
     fireEvent(screen.getByLabelText('Voice Assistant'), 'valueChange', false);
     expect(mockUpdateConfig).toHaveBeenCalledWith({ dictationAgentEnabled: false });
     fireEvent.press(screen.getByText('Voice Assistant Settings'));

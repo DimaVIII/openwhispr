@@ -1,39 +1,73 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
+import { router } from 'expo-router';
+import { chatRepository } from '@/data';
 import { useChatStore } from '@/store/useChatStore';
-import type { ChatMessage } from '@/lib/chat/types';
+import type { ChatConversation, ChatMessage, NewChatMessage } from '@/lib/chat/types';
 import { ChatConversationScreen } from '../ChatConversationScreen';
 
 let mockParams: Record<string, string> = { id: 'c1' };
+// Off by default, so a test's seeded store state isn't reloaded from the repository.
+let mockRunFocusEffects = false;
+const mockDb: { conversations: ChatConversation[]; messages: ChatMessage[] } = {
+  conversations: [],
+  messages: [],
+};
+const mockVoice = {
+  state: 'idle' as 'idle' | 'listening' | 'transcribing',
+  elapsedSeconds: 3,
+  audioRecorder: {},
+  start: jest.fn(async () => true),
+  finish: jest.fn(async () => undefined),
+  cancel: jest.fn(async () => undefined),
+};
 
 jest.mock('expo-router', () => ({
   router: { push: jest.fn(), setParams: jest.fn(), back: jest.fn(), canGoBack: () => true },
-  useFocusEffect: jest.fn(),
+  useFocusEffect: (effect: () => void | (() => void)) => {
+    const { useEffect } = require('react');
+    useEffect(() => (mockRunFocusEffects ? effect() : undefined), [effect]);
+  },
   useLocalSearchParams: () => mockParams,
 }));
 jest.mock('@/data', () => ({
   chatRepository: {
-    listConversations: jest.fn(() => []),
-    getConversation: jest.fn(() => null),
-    getMessages: jest.fn(() => []),
+    listConversations: () =>
+      mockDb.conversations.map((conversation) => ({ ...conversation, preview: '' })),
+    getConversation: (id: string) =>
+      mockDb.conversations.find((conversation) => conversation.id === id) ?? null,
+    getMessages: (id: string) => mockDb.messages.filter((message) => message.conversationId === id),
+    createConversation: jest.fn((title: string) => {
+      const conversation = { id: 'c-new', title, createdAt: 1, updatedAt: 1 };
+      mockDb.conversations.push(conversation);
+      return conversation;
+    }),
+    appendMessage: jest.fn((input: NewChatMessage) => {
+      const message = {
+        id: `m${mockDb.messages.length + 1}`,
+        steps: [],
+        sources: [],
+        createdAt: Date.now(),
+        ...input,
+      };
+      mockDb.messages.push(message);
+      return message;
+    }),
   },
 }));
-jest.mock('@/lib/chat/runChatTurn', () => ({ runChatTurn: jest.fn() }));
+jest.mock('@/lib/chat/runChatTurn', () => ({
+  runChatTurn: jest.fn(async () => ({ text: 'Answer', steps: [], sources: [] })),
+}));
 jest.mock('@/hooks/useChatSendGate', () => ({
   useChatSendGate: () => ({
     chatEnabled: true,
     gate: (run: (allowCloudFallback: boolean) => void) => run(false),
   }),
 }));
-jest.mock('@/hooks/useChatVoiceInput', () => ({
-  useChatVoiceInput: () => ({
-    state: 'idle',
-    elapsedSeconds: 3,
-    audioRecorder: {},
-    start: jest.fn(async () => true),
-    finish: jest.fn(async () => undefined),
-    cancel: jest.fn(async () => undefined),
-  }),
+jest.mock('@/hooks/useChatVoiceInput', () => ({ useChatVoiceInput: () => mockVoice }));
+jest.mock('@/hooks/useAudioWaveform', () => ({
+  useAudioWaveform: () => ({ waveformData: [], currentAmplitude: 0 }),
 }));
+jest.mock('@/components/features/WaveformVisualizer', () => ({ RecordingBars: () => null }));
 jest.mock('@/store/useProcessingModeStore', () => ({
   useProcessingModeStore: (selector: (state: { activeMode: string }) => unknown) =>
     selector({ activeMode: 'cloud' }),
@@ -74,6 +108,10 @@ const mockEditFailedQuestion = jest.fn(() => 'What did we decide?');
 
 beforeEach(() => {
   mockParams = { id: 'c1' };
+  mockRunFocusEffects = false;
+  mockDb.conversations = [];
+  mockDb.messages = [];
+  mockVoice.state = 'idle';
   jest.clearAllMocks();
   useChatStore.setState({
     conversations: [
@@ -159,5 +197,68 @@ describe('ChatConversationScreen', () => {
     });
     const screen = render(<ChatConversationScreen />);
     expect(screen.queryByLabelText('Retry')).toBeNull();
+  });
+
+  it('ignores Retry and source taps while listening', () => {
+    mockVoice.state = 'listening';
+    useChatStore.setState({
+      messages: [
+        question,
+        {
+          ...question,
+          id: 'm2',
+          role: 'assistant',
+          text: 'We kept $12.',
+          sources: [{ noteId: 7, title: 'Pricing call' }],
+        },
+      ],
+      failure: { conversationId: 'c1', messageId: 'm1', question: 'q', message: 'Offline' },
+    });
+    const screen = render(<ChatConversationScreen />);
+
+    fireEvent.press(screen.getByLabelText('Retry'));
+    fireEvent.press(screen.getByText('Pricing call'));
+    expect(mockRetry).not.toHaveBeenCalled();
+    expect(router.push).not.toHaveBeenCalled();
+  });
+
+  it('cancels listening when the screen loses focus', () => {
+    mockRunFocusEffects = true;
+    mockVoice.state = 'listening';
+    const screen = render(<ChatConversationScreen />);
+    expect(mockVoice.cancel).not.toHaveBeenCalled();
+
+    screen.unmount();
+    expect(mockVoice.cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('adopts the new id after the first send on a new chat', async () => {
+    mockRunFocusEffects = true;
+    mockParams = { id: 'new' };
+    const screen = render(<ChatConversationScreen />);
+
+    fireEvent.changeText(screen.getByPlaceholderText('Reply'), 'First question');
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Send'));
+    });
+    expect(router.setParams).toHaveBeenCalledWith({ id: 'c-new' });
+
+    mockParams = { id: 'c-new' };
+    screen.rerender(<ChatConversationScreen />);
+    // The question titles the new chat and shows as its first message.
+    expect(screen.getAllByText('First question')).toHaveLength(2);
+    expect(screen.getByText('Answer')).toBeTruthy();
+
+    fireEvent.changeText(screen.getByPlaceholderText('Reply'), 'Second question');
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Send'));
+    });
+    expect(chatRepository.createConversation).toHaveBeenCalledTimes(1);
+    expect(chatRepository.appendMessage).toHaveBeenCalledWith({
+      conversationId: 'c-new',
+      role: 'user',
+      text: 'Second question',
+    });
+    expect(router.setParams).toHaveBeenCalledTimes(1);
   });
 });

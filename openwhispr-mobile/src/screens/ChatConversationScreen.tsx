@@ -1,36 +1,29 @@
-import { useCallback, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Keyboard, ScrollView, StyleSheet, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TabScreenHeader } from '@/components/ui/TabScreenHeader';
 import { GlassBackButton } from '@/components/ui/GlassBackButton';
 import { ChatAssistantMessage } from '@/components/chat/ChatAssistantMessage';
-import { ChatComposer } from '@/components/chat/ChatComposer';
 import { ChatErrorRow } from '@/components/chat/ChatErrorRow';
+import { ChatInputBar } from '@/components/chat/ChatInputBar';
 import { ChatSteps } from '@/components/chat/ChatSteps';
 import { ChatTranscribingBubble } from '@/components/chat/ChatTranscribingBubble';
 import { ChatUserBubble } from '@/components/chat/ChatUserBubble';
-import { ChatVoicePanel } from '@/components/chat/ChatVoicePanel';
 import { ChatWatermark } from '@/components/chat/ChatWatermark';
 import { useChatSendGate } from '@/hooks/useChatSendGate';
 import { useChatVoiceInput } from '@/hooks/useChatVoiceInput';
-import { useKeyboardHeight } from '@/hooks/useKeyboardHeight';
 import { chatTabGateOptions } from '@/lib/chat/chatConsent';
 import { CHAT_HOME_ROUTE, NEW_CHAT_ID } from '@/lib/chat/chatRoutes';
-import { safeHaptics } from '@/lib/utils';
 import { useChatStore } from '@/store/useChatStore';
 import { useProcessingModeStore } from '@/store/useProcessingModeStore';
-
-const COMPOSER_KEYBOARD_GAP = 10;
 
 export function ChatConversationScreen(): React.JSX.Element {
   const { id } = useLocalSearchParams<{ id: string }>();
   const conversationId = id && id !== NEW_CHAT_ID ? id : null;
   const insets = useSafeAreaInsets();
-  const keyboardHeight = useKeyboardHeight();
   const scrollRef = useRef<ScrollView>(null);
   const [draft, setDraft] = useState('');
-  const [focusComposer, setFocusComposer] = useState(false);
 
   const messages = useChatStore((s) => s.messages);
   const pending = useChatStore((s) => s.pending);
@@ -48,6 +41,8 @@ export function ChatConversationScreen(): React.JSX.Element {
     [conversationId],
   );
   const voice = useChatVoiceInput({ conversationId, onSent: adoptConversation });
+  const voiceRef = useRef(voice);
+  voiceRef.current = voice;
 
   useFocusEffect(
     useCallback(() => {
@@ -55,9 +50,22 @@ export function ChatConversationScreen(): React.JSX.Element {
       store.loadConversations();
       if (conversationId) store.openConversation(conversationId);
       else store.closeConversation();
-      return () => useChatStore.getState().closeConversation();
+      return () => {
+        // A question still being spoken is dropped; one already transcribing may still send.
+        if (voiceRef.current.state === 'listening')
+          voiceRef.current.cancel().catch(() => undefined);
+        useChatStore.getState().closeConversation();
+      };
     }, [conversationId]),
   );
+
+  // The bar's padding grows with the keyboard, which shrinks the list without changing its content.
+  useEffect(() => {
+    const subscription = Keyboard.addListener('keyboardDidShow', () =>
+      scrollRef.current?.scrollToEnd({ animated: true }),
+    );
+    return () => subscription.remove();
+  }, []);
 
   // A new chat's pending turn carries null until send creates the conversation.
   const pendingHere = pending?.conversationId === conversationId ? pending : null;
@@ -77,22 +85,8 @@ export function ChatConversationScreen(): React.JSX.Element {
     }, gateOptions);
   };
 
-  const handleMicPress = (): void => {
-    if (busy) return;
-    gate((allowCloudFallback) => {
-      setFocusComposer(false);
-      voice.start(allowCloudFallback).then((started) => {
-        if (!started) safeHaptics('light');
-      });
-    }, gateOptions);
-  };
-
-  const handleStop = (): void => {
-    if (voice.state === 'transcribing') voice.cancel().catch(() => undefined);
-    else useChatStore.getState().cancel();
-  };
-
   const handleRetry = (): void => {
+    if (!chatEnabled || voiceRef.current.state !== 'idle') return;
     gate((allowCloudFallback) => {
       useChatStore
         .getState()
@@ -106,17 +100,11 @@ export function ChatConversationScreen(): React.JSX.Element {
     if (question !== null) setDraft(question);
   };
 
-  const handleSwitchToTyping = (): void => {
-    setFocusComposer(true);
-    voice.cancel().catch(() => undefined);
-  };
-
   const openNote = (noteId: number): void => {
+    // Leaving mid-question would drop what's being said.
+    if (voiceRef.current.state !== 'idle') return;
     router.push(`/(tabs)/(notes)/${noteId}`);
   };
-
-  const bottomPad =
-    keyboardHeight > 0 ? keyboardHeight + COMPOSER_KEYBOARD_GAP : Math.max(insets.bottom, 14);
 
   return (
     <View className="flex-1 bg-systemBackground">
@@ -161,30 +149,20 @@ export function ChatConversationScreen(): React.JSX.Element {
         ) : null}
       </ScrollView>
 
-      <View className="px-4 pt-2" style={{ paddingBottom: bottomPad }}>
-        {voice.state === 'listening' ? (
-          <ChatVoicePanel
-            elapsedSeconds={voice.elapsedSeconds}
-            audioRecorder={voice.audioRecorder}
-            isRecording
-            onCancel={() => voice.cancel().catch(() => undefined)}
-            onSwitchToTyping={handleSwitchToTyping}
-            onSend={() => voice.finish().catch(() => undefined)}
-          />
-        ) : (
-          <ChatComposer
-            value={draft}
-            onChangeText={setDraft}
-            placeholder="Reply"
-            busy={busy}
-            disabled={!chatEnabled}
-            onSend={handleSend}
-            onMicPress={handleMicPress}
-            onStop={handleStop}
-            autoFocus={focusComposer}
-          />
-        )}
-      </View>
+      <ChatInputBar
+        voice={voice}
+        value={draft}
+        onChangeText={setDraft}
+        placeholder="Reply"
+        busy={busy}
+        disabled={!chatEnabled}
+        onSend={handleSend}
+        onMicPress={(startVoice) => {
+          if (!busy) gate(startVoice, gateOptions);
+        }}
+        onCancelTurn={() => useChatStore.getState().cancel()}
+        restingBottomPadding={Math.max(insets.bottom, 14)}
+      />
     </View>
   );
 }
