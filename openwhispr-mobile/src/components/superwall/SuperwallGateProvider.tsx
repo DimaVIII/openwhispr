@@ -13,6 +13,7 @@ import { requiresRealAccount } from '@/lib/accountAccess';
 import { useUsageStore } from '@/store/useUsageStore';
 import {
   isTransactionalSuperwallPlacement,
+  resolveSuperwallPlacementName,
   SUPERWALL_PLACEMENTS,
   type SuperwallPlacement,
 } from '@/lib/superwall';
@@ -720,10 +721,11 @@ export function EnabledSuperwallGateProvider({ children }: Props) {
           if (activePlacementRef.current === placement) activePlacementRef.current = null;
         };
 
-        debugLog('registering placement with Superwall', { placement, params });
+        const superwallPlacement = resolveSuperwallPlacementName(placement, Boolean(creatorOffer));
+        debugLog('registering placement with Superwall', { placement, superwallPlacement, params });
         const start = (present: NativeRegister): void => {
           present({
-            placement,
+            placement: superwallPlacement,
             params: { ...params, ...gate.creatorSession?.initialParams },
             feature: () => {
               if (gate.closed) return;

@@ -31,6 +31,8 @@ Saving attribution (`/api/affiliate/claim`) and allocating an Apple offer (`/api
 
 ## Superwall contract
 
+The paywall with the creator-code input runs under its own placement, `creator_code_paywall`. With creator codes configured, every onboarding paywall and Account's verified creator offer register that placement instead of `onboarding_paywall` / `account_billing_open`. Each keeps its own gate rules: onboarding never sends anyone to sign-in and moves on if Superwall fails; Account's offer fails closed. Plans & Billing and the feature paywalls keep their usual placements, and a build without creator codes never uses this one. The placement needs a campaign in Superwall; if Superwall reports it missing, onboarding moves on without a paywall.
+
 Callback variables are flat dictionary keys, including their dots:
 
 | Request | Name                 | Keys                                                                                                   |
