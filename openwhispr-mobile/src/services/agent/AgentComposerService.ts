@@ -1,8 +1,8 @@
 import type { InferenceSelection } from '@/lib/mobileProviders';
 import { ApiError } from '@/lib/apiClient';
-import { buildLlmDictionary } from '@/lib/dictationHints';
 import { isAccountRequiredError } from '@/lib/accountRequiredError';
 import { useConfigStore } from '@/store/useConfigStore';
+import { useDictionaryStore } from '@/store/useDictionaryStore';
 import {
   readKeyboardAgentJob,
   writeKeyboardAgentResult,
@@ -218,13 +218,10 @@ function isCurrentRequest(session: AgentSession, requestId: string): boolean {
 // Config resolution
 // ---------------------------------------------------------------------------
 
-// Personal words, and at most MAX_SHARED_WORDS_IN_LLM_PROMPTS shared ones kept apart.
-function resolveDictionary(): { customDictionary?: string[]; sharedDictionary?: string[] } {
-  const { personal, shared } = buildLlmDictionary(false);
-  return {
-    ...(personal.length > 0 ? { customDictionary: personal } : {}),
-    ...(shared.length > 0 ? { sharedDictionary: shared } : {}),
-  };
+function resolveCustomDictionary(): string[] | undefined {
+  const dictState = useDictionaryStore.getState();
+  if (!dictState.isLoaded || dictState.entries.length === 0) return undefined;
+  return dictState.entries.map((e) => e.word);
 }
 
 /**
@@ -391,7 +388,7 @@ export async function generateForJob(
 
   const systemPrompt = buildComposerSystemPrompt({
     tone,
-    ...resolveDictionary(),
+    customDictionary: resolveCustomDictionary(),
     contextBefore,
     contextAfter,
     selectedText,
@@ -450,7 +447,7 @@ export async function handleAgentAction(
 
   const systemPrompt = buildComposerSystemPrompt({
     tone: undefined,
-    ...resolveDictionary(),
+    customDictionary: resolveCustomDictionary(),
     language: resolveLanguage(),
   });
 

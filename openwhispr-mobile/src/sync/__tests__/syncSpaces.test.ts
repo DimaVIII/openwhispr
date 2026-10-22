@@ -76,7 +76,7 @@ describe('syncSpaces', () => {
 
     const result = await syncSpaces();
 
-    expect(result).toEqual({ capable: false, activeSpaces: [], workspaces: null });
+    expect(result).toEqual({ capable: false, activeSpaces: [] });
     expect(mockSetCapability).toHaveBeenCalledWith(false);
     expect(mockRepo.upsertFromRemote).not.toHaveBeenCalled();
     expect(mockRepo.softDeleteByCloudId).not.toHaveBeenCalled();
@@ -87,7 +87,7 @@ describe('syncSpaces', () => {
 
     const result = await syncSpaces();
 
-    expect(result).toEqual({ capable: false, activeSpaces: [], workspaces: null });
+    expect(result).toEqual({ capable: false, activeSpaces: [] });
     expect(mockSetCapability).toHaveBeenCalledWith(false);
     expect(mockRepo.upsertFromRemote).not.toHaveBeenCalled();
   });
@@ -118,21 +118,7 @@ describe('syncSpaces', () => {
     expect(mockRepo.upsertFromRemote).toHaveBeenCalledWith(remoteSpaces[0], 'Acme');
     expect(mockRepo.softDeleteByCloudId).toHaveBeenCalledTimes(1);
     expect(mockRepo.softDeleteByCloudId).toHaveBeenCalledWith('stale-1');
-    expect(result).toEqual({
-      capable: true,
-      activeSpaces: [privateSpace, keptTeamSpace],
-      workspaces: [{ id: 'w1', name: 'Acme' }],
-    });
-  });
-
-  it('reports no workspaces when that read fails, without failing the pass', async () => {
-    mockFetchMySpaces.mockResolvedValue({ data: [] });
-    mockFetchMyWorkspaces.mockRejectedValue(new Error('offline'));
-
-    const result = await syncSpaces();
-
-    expect(result.capable).toBe(true);
-    expect(result.workspaces).toBeNull();
+    expect(result).toEqual({ capable: true, activeSpaces: [privateSpace, keptTeamSpace] });
   });
 
   it('never soft-deletes the private space, even when the response is empty', async () => {

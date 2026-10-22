@@ -2,7 +2,7 @@ import { uncheckedSync, type SyncCheckpoint } from './syncContext';
 import { spacesRepository } from '@/data';
 import type { Space } from '@/data/spacesTypes';
 import { fetchMySpaces } from '@/data/remote/spacesApi';
-import { fetchMyWorkspaces, type RemoteWorkspace } from '@/data/remote/workspacesApi';
+import { fetchMyWorkspaces } from '@/data/remote/workspacesApi';
 import { ApiError } from '@/lib/apiClient';
 import { setTeamSpacesCapability } from './teamSpacesCapability';
 
@@ -17,28 +17,26 @@ function isEndpointUnavailable(error: unknown): boolean {
 }
 
 /**
- * The caller's workspaces, for the separators the Spaces list groups under.
- * Purely cosmetic here, so every failure degrades to null rather than failing
- * the sync pass: spaces still mirror, they just group unnamed until a later
- * pass resolves the names.
+ * Workspace id → name, for the separators the Spaces list groups under.
+ * Purely cosmetic, so every failure degrades to an empty map rather than
+ * failing the sync pass: spaces still mirror, they just group unnamed until a
+ * later pass resolves the names.
  */
-async function fetchWorkspaces(checkpoint: SyncCheckpoint): Promise<RemoteWorkspace[] | null> {
+async function fetchWorkspaceNames(checkpoint: SyncCheckpoint): Promise<Map<string, string>> {
   try {
     checkpoint();
     const { data } = await fetchMyWorkspaces();
     checkpoint();
-    return data;
+    return new Map(data.map((workspace) => [workspace.id, workspace.name]));
   } catch {
     checkpoint();
-    return null;
+    return new Map();
   }
 }
 
 export interface SyncSpacesResult {
   capable: boolean;
   activeSpaces: Space[];
-  /** GET /api/workspaces as this pass read it; null when it wasn't read or failed. */
-  workspaces: RemoteWorkspace[] | null;
 }
 
 /**
@@ -61,7 +59,7 @@ export async function syncSpaces(
     if (isEndpointUnavailable(err)) {
       // Backend predates team spaces: not an error, just the probe result.
       setTeamSpacesCapability(false);
-      return { capable: false, activeSpaces: [], workspaces: null };
+      return { capable: false, activeSpaces: [] };
     }
     throw err;
   }
@@ -71,9 +69,8 @@ export async function syncSpaces(
   // Only reached once team spaces are known to exist, so accounts without them
   // never pay for this request.
   checkpoint();
-  const workspaces = await fetchWorkspaces(checkpoint);
+  const workspaceNames = await fetchWorkspaceNames(checkpoint);
   checkpoint();
-  const workspaceNames = new Map((workspaces ?? []).map((ws) => [ws.id, ws.name]));
 
   const remoteIds = new Set(remote.data.map((s) => s.id));
   for (const space of remote.data) {
@@ -91,5 +88,5 @@ export async function syncSpaces(
     spacesRepository.softDeleteByCloudId(space.cloudSpaceId as string);
   }
 
-  return { capable: true, activeSpaces: local.filter((s) => !revoked.has(s)), workspaces };
+  return { capable: true, activeSpaces: local.filter((s) => !revoked.has(s)) };
 }

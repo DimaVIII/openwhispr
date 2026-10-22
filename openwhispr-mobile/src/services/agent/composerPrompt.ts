@@ -1,5 +1,4 @@
 import type { KeyboardTone } from '@/types';
-import { sharedDictionaryHint } from '@/lib/sharedDictionaryHints';
 
 // Tone sentences ported verbatim from openwhispr-api/lib/prompts.ts (TONE_INSTRUCTIONS).
 // Any change here must stay in sync with the server-side source.
@@ -36,8 +35,6 @@ Infer the medium from the instruction and any surrounding text. Emails get a gre
 export interface ComposerPromptOptions {
   tone?: KeyboardTone;
   customDictionary?: string[];
-  // Teammates' words, quoted as data after the personal list.
-  sharedDictionary?: string[];
   contextBefore?: string;
   contextAfter?: string;
   selectedText?: string;
@@ -50,7 +47,7 @@ export interface ComposerPromptOptions {
  * Pure and deterministic — all configuration comes via params; no store reads.
  */
 export function buildComposerSystemPrompt(options: ComposerPromptOptions): string {
-  const { tone, customDictionary, sharedDictionary } = options;
+  const { tone, customDictionary } = options;
 
   // Trim once; gate and emit trimmed values so whitespace-only inputs produce no block.
   const selectedText = (options.selectedText ?? '').trim();
@@ -95,9 +92,6 @@ export function buildComposerSystemPrompt(options: ComposerPromptOptions): strin
     parts.push(
       `Custom Dictionary (use these exact spellings when they appear): ${customDictionary.join(', ')}`,
     );
-  }
-  if (sharedDictionary && sharedDictionary.length > 0) {
-    parts.push(sharedDictionaryHint(sharedDictionary));
   }
 
   if (language) {

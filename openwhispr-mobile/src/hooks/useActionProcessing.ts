@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
-import { ReasoningService, resolveReasoningPlacement } from '@/services/reasoning/ReasoningService';
+import { ReasoningService } from '@/services/reasoning/ReasoningService';
 import { useConfigStore } from '@/store/useConfigStore';
 import { generateNoteTitle } from '@/utils/generateTitle';
 import {
@@ -7,8 +7,6 @@ import {
   isDefaultGenerateNotesAction,
   type GenerateNotesInputKind,
 } from '@/lib/notes/generateNotesPrompt';
-import { fitDictionaryOnDevice } from '@/lib/onDeviceDictionary';
-import { splitLlmDictionary, type LlmDictionary } from '@/lib/snippets';
 import type { Action } from '@/data';
 import type { ReasoningRoutingOptions } from '@/types';
 
@@ -16,8 +14,7 @@ export type ProcessingState = 'idle' | 'processing' | 'success';
 
 export interface RunActionOptions {
   inputKind?: GenerateNotesInputKind;
-  /** Dictionary hints by tier (buildDictationHintTiers): personal, space, workspace. */
-  dictionaryTiers?: string[][];
+  customDictionary?: string[];
   routing?: ReasoningRoutingOptions;
 }
 
@@ -44,32 +41,20 @@ export function useActionProcessing({ onSuccess, onError }: UseActionProcessingO
       setState('processing');
 
       try {
-        const buildPrompt = ({ personal, shared }: LlmDictionary): string =>
-          buildActionSystemPrompt({
-            actionPrompt: action.prompt,
-            inputKind: options.inputKind ?? 'plain-note',
-            isDefaultGenerateNotesAction: isDefaultGenerateNotesAction(action),
-            customDictionary: personal,
-            sharedDictionary: shared,
-          });
-        const tiers = options.dictionaryTiers ?? [];
-        const placement = { inferenceScope: 'notes' as const, routing: options.routing };
-        // On this iPhone the prompt has to fit Apple Intelligence's context with the note.
-        const dictionary = resolveReasoningPlacement(placement).localRequired
-          ? await fitDictionaryOnDevice(tiers, (candidate) => ({
-              instructions: buildPrompt(candidate),
-              prompt: noteContent,
-            }))
-          : splitLlmDictionary(tiers);
-        if (cancelledRef.current) return;
-        const systemPrompt = buildPrompt(dictionary);
+        const systemPrompt = buildActionSystemPrompt({
+          actionPrompt: action.prompt,
+          inputKind: options.inputKind ?? 'plain-note',
+          isDefaultGenerateNotesAction: isDefaultGenerateNotesAction(action),
+          customDictionary: options.customDictionary,
+        });
         const cfg = useConfigStore.getState().config;
 
         const result = await ReasoningService.processText({
-          ...placement,
+          inferenceScope: 'notes',
           text: noteContent,
           systemPrompt,
           temperature: 0.3,
+          routing: options.routing,
         });
 
         if (cancelledRef.current) return;
