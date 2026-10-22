@@ -41,6 +41,29 @@ describe('LocalChatRepository', () => {
     );
   });
 
+  it('shows a table answer without its pipes and keeps text that only looks like markdown', () => {
+    const { repo } = createMemoryChatRepository();
+    const a = repo.createConversation('A');
+    const b = repo.createConversation('B');
+    repo.appendMessage({
+      conversationId: a.id,
+      role: 'assistant',
+      text: '| Plan | Price |\n|---|---|\n| Pro | 8 |\n> Billed ~~monthly~~ yearly\n1. Done',
+    });
+    repo.appendMessage({
+      conversationId: b.id,
+      role: 'assistant',
+      text: 'Edit __init__.py, 5 * 3 = 15, see https://x.y/a__b~~c and my_var',
+    });
+
+    const previews = repo.listConversations().map((conversation) => conversation.preview);
+
+    expect(previews).toEqual([
+      'Edit __init__.py, 5 * 3 = 15, see https://x.y/a__b~~c and my_var',
+      'Plan Price Pro 8 Billed monthly yearly Done',
+    ]);
+  });
+
   it('cuts the preview to 120 characters and honors the limit', () => {
     const { repo } = createMemoryChatRepository();
     const a = repo.createConversation('A');

@@ -35,11 +35,17 @@ const parseJsonArray = <T>(raw: string | null): T[] | null => {
 };
 
 // Answers are markdown, so the one-line preview drops its markers rather than showing "**Decision:**".
+// Only paired or line-leading markers go, so "5 * 3", "__init__.py" and URLs read as written.
 const toPreview = (text: string | null): string =>
   (text ?? '')
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    // Table separator rows and horizontal rules.
+    .replace(/^\s*\|?\s*:?-{3,}[-|:\s]*$/gm, '')
+    .replace(/^\s*\|.*$/gm, (row) => row.replace(/\|/g, ' '))
     .replace(/^\s*(?:#{1,6}\s+|>\s*|[-*+]\s+|\d+\.\s+)/gm, '')
-    .replace(/(\*\*|__|`|~~)/g, '')
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/~~(.+?)~~/g, '$1')
+    .replace(/`/g, '')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, PREVIEW_MAX_LENGTH);
