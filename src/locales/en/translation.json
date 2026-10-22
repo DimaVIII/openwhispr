@@ -2049,6 +2049,8 @@
       },
       "rollingWeeklyLimit": "Rolling weekly limit",
       "signOut": {
+        "endMeetingDescription": "Signing out stops the meeting that's recording. What it has captured so far stays in its note.",
+        "endMeetingTitle": "End the meeting recording?",
         "failedDescription": "Something went wrong signing out. Please try again.",
         "failedTitle": "Couldn't sign out",
         "signOut": "Sign Out",

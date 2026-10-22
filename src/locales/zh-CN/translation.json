@@ -1659,6 +1659,8 @@
       },
       "rollingWeeklyLimit": "滚动周限额",
       "signOut": {
+        "endMeetingDescription": "退出登录会结束正在进行的会议录制。已录制的内容会保留在笔记中。",
+        "endMeetingTitle": "结束会议录制？",
         "failedDescription": "退出登录时出错，请重试。",
         "failedTitle": "无法退出登录",
         "signOut": "退出登录",

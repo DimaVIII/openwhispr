@@ -1807,6 +1807,8 @@
       },
       "rollingWeeklyLimit": "Límite semanal móvil",
       "signOut": {
+        "endMeetingDescription": "Al cerrar sesión se detiene la grabación de la reunión en curso. Lo capturado hasta ahora se queda en su nota.",
+        "endMeetingTitle": "¿Detener la grabación de la reunión?",
         "failedDescription": "Algo salió mal al cerrar sesión. Inténtalo de nuevo.",
         "failedTitle": "No se pudo cerrar sesión",
         "signOut": "Cerrar sesión",

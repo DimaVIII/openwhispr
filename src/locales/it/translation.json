@@ -1659,6 +1659,8 @@
       },
       "rollingWeeklyLimit": "Limite settimanale progressivo",
       "signOut": {
+        "endMeetingDescription": "Uscendo dall'account si interrompe la registrazione della riunione in corso. Quanto registrato finora resta nella sua nota.",
+        "endMeetingTitle": "Interrompere la registrazione della riunione?",
         "failedDescription": "Qualcosa è andato storto durante la disconnessione. Riprova.",
         "failedTitle": "Impossibile disconnettersi",
         "signOut": "Disconnetti",

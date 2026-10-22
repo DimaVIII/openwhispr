@@ -1,7 +1,8 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { CreditCard, Settings, UserCircle } from "./icons";
+import { CreditCard, Gift, LogOut, UserCircle } from "./icons";
 import MemberAvatar from "./MemberAvatar";
+import { Badge } from "./ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,6 +11,8 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { useAuth } from "../hooks/useAuth";
+import { useUsage } from "../hooks/useUsage";
+import { useAccountPlan } from "../hooks/useAccountPlan";
 
 const triggerClass =
   "flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-none transition-opacity duration-150 hover:opacity-85 active:opacity-75 focus-visible:ring-2 focus-visible:ring-primary/40";
@@ -18,11 +21,19 @@ const itemIconClass = "shrink-0 text-foreground/60";
 
 interface ProfileMenuProps {
   onOpenSettings: (section: string) => void;
+  onOpenReferrals: () => void;
+  onSignOut: () => void;
 }
 
-export default function ProfileMenu({ onOpenSettings }: ProfileMenuProps): React.ReactElement {
+export default function ProfileMenu({
+  onOpenSettings,
+  onOpenReferrals,
+  onSignOut,
+}: ProfileMenuProps): React.ReactElement {
   const { t } = useTranslation();
   const { isSignedIn, isLoaded, user } = useAuth();
+  const usage = useUsage();
+  const { planLabel } = useAccountPlan(usage);
 
   // Until the session settles a signed-in user reads as signed out; hold the slot instead of
   // flashing Sign in.
@@ -53,10 +64,17 @@ export default function ProfileMenu({ onOpenSettings }: ProfileMenuProps): React
       <DropdownMenuContent align="end" className="w-56">
         <div className="flex items-center gap-2.5 px-2 pt-1 pb-2">
           <MemberAvatar name={user.name} email={user.email} image={user.image} />
-          <div className="min-w-0">
-            <p dir="auto" className="truncate text-[13px] font-medium text-foreground">
-              {name}
-            </p>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <p dir="auto" className="min-w-0 truncate text-[13px] font-medium text-foreground">
+                {name}
+              </p>
+              {planLabel && (
+                <Badge variant="outline" className="shrink-0 px-1.5 py-0 text-[10px] font-medium">
+                  {planLabel}
+                </Badge>
+              )}
+            </div>
             {user.email && (
               <p className="truncate text-[11px] text-muted-foreground">
                 <bdi dir="ltr">{user.email}</bdi>
@@ -73,9 +91,14 @@ export default function ProfileMenu({ onOpenSettings }: ProfileMenuProps): React
           <CreditCard size={15} className={itemIconClass} />
           {t("settingsModal.sections.plansBilling.label")}
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => onOpenSettings("general")} className={itemClass}>
-          <Settings size={15} className={itemIconClass} />
-          {t("sidebar.settings")}
+        <DropdownMenuItem onSelect={onOpenReferrals} className={itemClass}>
+          <Gift size={15} className={itemIconClass} />
+          {t("sidebar.referral")}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={onSignOut} className={itemClass}>
+          <LogOut size={15} className={itemIconClass} />
+          {t("settingsPage.account.signOut.signOut")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

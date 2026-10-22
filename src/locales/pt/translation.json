@@ -1638,6 +1638,8 @@
       },
       "rollingWeeklyLimit": "Limite semanal contínuo",
       "signOut": {
+        "endMeetingDescription": "Sair da conta encerra a gravação da reunião em andamento. O que foi capturado até agora permanece na nota.",
+        "endMeetingTitle": "Encerrar a gravação da reunião?",
         "failedDescription": "Algo deu errado ao sair. Tente novamente.",
         "failedTitle": "Não foi possível sair",
         "signOut": "Sair",

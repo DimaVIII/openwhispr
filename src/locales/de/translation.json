@@ -2049,6 +2049,8 @@
       },
       "rollingWeeklyLimit": "Rollierendes Wochenlimit",
       "signOut": {
+        "endMeetingDescription": "Beim Abmelden wird die laufende Meeting-Aufnahme beendet. Was bisher aufgenommen wurde, bleibt in der Notiz.",
+        "endMeetingTitle": "Meeting-Aufnahme beenden?",
         "failedDescription": "Beim Abmelden ist ein Fehler aufgetreten. Bitte versuchen Sie es erneut.",
         "failedTitle": "Abmeldung fehlgeschlagen",
         "signOut": "Abmelden",

@@ -2049,6 +2049,8 @@
       },
       "rollingWeeklyLimit": "Limite hebdomadaire glissante",
       "signOut": {
+        "endMeetingDescription": "La déconnexion arrête l'enregistrement de la réunion en cours. Ce qui a déjà été capturé reste dans sa note.",
+        "endMeetingTitle": "Arrêter l'enregistrement de la réunion ?",
         "failedDescription": "Un problème est survenu lors de la déconnexion. Veuillez réessayer.",
         "failedTitle": "Impossible de se déconnecter",
         "signOut": "Se déconnecter",

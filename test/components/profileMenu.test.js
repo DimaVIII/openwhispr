@@ -8,12 +8,16 @@ async function loadProfileMenu(t) {
   t.after(() => {
     delete globalThis.__auth;
     delete globalThis.__menuItems;
+    delete globalThis.__planLabel;
   });
   installBrowserGlobals(t);
   const vite = await createRendererServer(t, {
     cachePrefix: "openwhispr-profile-menu-",
     mockModules: {
       "/hooks/useAuth": "export const useAuth = () => globalThis.__auth;",
+      "/hooks/useUsage": "export const useUsage = () => null;",
+      "/hooks/useAccountPlan":
+        "export const useAccountPlan = () => ({ planLabel: globalThis.__planLabel ?? null });",
       "/MemberAvatar": "export default function MemberAvatar() { return null; }",
       // Renders the menu open and records each item's handler under its text.
       "/ui/dropdown-menu": `
@@ -38,7 +42,11 @@ async function loadProfileMenu(t) {
     globalThis.__auth = auth;
     globalThis.__menuItems = new Map();
     return renderToStaticMarkup(
-      createElement(ProfileMenu, { onOpenSettings: (section) => opened.push(section) })
+      createElement(ProfileMenu, {
+        onOpenSettings: (section) => opened.push(section),
+        onOpenReferrals: () => opened.push("referrals"),
+        onSignOut: () => opened.push("sign out"),
+      })
     );
   };
   return { render, opened };
@@ -60,21 +68,33 @@ test("signed out, the avatar offers Sign in", async (t) => {
   assert.match(markup, /aria-label="common\.signIn"/);
 });
 
-test("each menu item opens its own Settings section", async (t) => {
+const signedIn = {
+  isLoaded: true,
+  isSignedIn: true,
+  user: { name: "Chad Piha", email: "chad@example.com", image: null },
+};
+
+test("the menu holds the account's own actions, ending with Sign out", async (t) => {
   const { render, opened } = await loadProfileMenu(t);
 
-  render({
-    isLoaded: true,
-    isSignedIn: true,
-    user: { name: "Chad Piha", email: "chad@example.com", image: null },
-  });
-  for (const label of [
+  render(signedIn);
+  const labels = [...globalThis.__menuItems.keys()];
+  for (const label of labels) globalThis.__menuItems.get(label)();
+
+  assert.deepEqual(labels, [
     "settingsModal.sections.account.label",
     "settingsModal.sections.plansBilling.label",
-    "sidebar.settings",
-  ]) {
-    globalThis.__menuItems.get(label)();
-  }
+    "sidebar.referral",
+    "settingsPage.account.signOut.signOut",
+  ]);
+  assert.deepEqual(opened, ["account", "plansBilling", "referrals", "sign out"]);
+});
 
-  assert.deepEqual(opened, ["account", "plansBilling", "general"]);
+test("the header names the plan once it is known", async (t) => {
+  const { render } = await loadProfileMenu(t);
+
+  assert.doesNotMatch(render(signedIn), />Pro</);
+
+  globalThis.__planLabel = "Pro";
+  assert.match(render(signedIn), />Pro</);
 });

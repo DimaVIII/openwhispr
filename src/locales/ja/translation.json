@@ -1755,6 +1755,8 @@
       },
       "rollingWeeklyLimit": "週間利用上限（ローリング）",
       "signOut": {
+        "endMeetingDescription": "サインアウトすると、録音中の会議が終了します。それまでに記録された内容はノートに残ります。",
+        "endMeetingTitle": "会議の録音を終了しますか？",
         "failedDescription": "サインアウト中に問題が発生しました。もう一度お試しください。",
         "failedTitle": "サインアウトできませんでした",
         "signOut": "サインアウト",

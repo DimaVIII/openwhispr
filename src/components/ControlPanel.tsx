@@ -11,6 +11,7 @@ import PostMigrationOnboarding from "./PostMigrationOnboarding";
 import { RequiredModelsBanner } from "./RequiredModelsBanner";
 import { ConfirmDialog, AlertDialog } from "./ui/dialog";
 import { useDialogs } from "../hooks/useDialogs";
+import { useSignOut } from "../hooks/useSignOut";
 import { useHotkey } from "../hooks/useHotkey";
 import { useToast } from "./ui/useToast";
 import { useUpdater } from "../hooks/useUpdater";
@@ -253,6 +254,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
     hideConfirmDialog,
     hideAlertDialog,
   } = useDialogs();
+  const { requestSignOut } = useSignOut({ showConfirmDialog, showAlertDialog });
 
   const loadTranscriptions = useCallback(
     async (includeDiscarded?: boolean) => {
@@ -933,6 +935,8 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
         description={confirmDialog.description}
         onConfirm={confirmDialog.onConfirm}
         variant={confirmDialog.variant}
+        confirmText={confirmDialog.confirmText}
+        cancelText={confirmDialog.cancelText}
       />
 
       <AlertDialog
@@ -1090,6 +1094,8 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
                       setSettingsSection(section);
                       setShowSettings(true);
                     }}
+                    onOpenReferrals={() => setShowReferrals(true)}
+                    onSignOut={requestSignOut}
                   />
                 </div>
               }
