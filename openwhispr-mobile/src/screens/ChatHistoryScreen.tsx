@@ -21,7 +21,7 @@ export function ChatHistoryScreen(): React.JSX.Element {
     safeHaptics('warning');
     confirmDestructive(
       'Delete this chat?',
-      '',
+      undefined,
       () => useChatStore.getState().deleteConversation(conversationId),
       { onCancel },
     );

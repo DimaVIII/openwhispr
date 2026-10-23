@@ -9,7 +9,8 @@ function runConfirm(callback: ConfirmCallback): void {
 
 export function confirmDestructive(
   title: string,
-  message: string,
+  // iOS draws an empty message as a blank line, so a title-only alert leaves it undefined.
+  message: string | undefined,
   onConfirm: ConfirmCallback,
   options?: { destructiveLabel?: string; onCancel?: () => void },
 ): void {
