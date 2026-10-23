@@ -1011,11 +1011,14 @@ test(
   }
 );
 
-test("every shipped recommended skill is valid", () => {
+// The shipped file names each starter as the app's English copy does, so the two stay in step.
+test("every shipped recommended skill is valid and named as the app names it", () => {
+  const english = require("../../../src/locales/en/translation.json").skills.recommended;
   for (const id of fs.readdirSync(RECOMMENDED_DIR)) {
     const text = fs.readFileSync(path.join(RECOMMENDED_DIR, id, "SKILL.md"), "utf8");
     const parsed = parseSkillMarkdown(text);
     assert.deepEqual([parsed.data.name, parsed.problems, parsed.warnings], [id, [], []], id);
+    assert.equal(parsed.data.metadata.display_name, english[id].title, id);
   }
 });
 

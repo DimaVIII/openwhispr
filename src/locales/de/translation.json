@@ -4848,7 +4848,7 @@
         "description": "Sammelt, was sich seit meinem letzten Einzelgespräch mit jemandem geändert hat. Nutzen, wenn ich mich auf ein 1:1 vorbereiten möchte."
       },
       "decision-log": {
-        "title": "Entscheidungsprotokoll",
+        "title": "Meeting-Entscheidungen",
         "description": "Findet die Entscheidungen in meinen Meeting-Notizen, jeweils mit Datum und Meeting. Nutzen, wenn ich frage, was wir entschieden haben."
       }
     }
