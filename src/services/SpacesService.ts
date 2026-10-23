@@ -26,6 +26,12 @@ export interface MySpace {
   updated_at: string;
 }
 
+// PATCH /api/spaces/:id answers with the space row only, without the caller's access.
+export type SpaceRecord = Pick<
+  MySpace,
+  "id" | "workspace_id" | "name" | "slug" | "description" | "emoji" | "created_at" | "updated_at"
+>;
+
 // Union roster entry: one row per user across direct members and all assigned
 // teams, with attribution of which grant(s) convey the access. via_teams is
 // [] for a direct-only member.
@@ -70,8 +76,8 @@ async function create(
 async function update(
   spaceId: string,
   patch: { name?: string; description?: string; emoji?: string | null }
-): Promise<MySpace> {
-  const res = await cloudPatch<DataWrap<MySpace>>(`/api/spaces/${spaceId}`, patch);
+): Promise<SpaceRecord> {
+  const res = await cloudPatch<DataWrap<SpaceRecord>>(`/api/spaces/${spaceId}`, patch);
   return res.data;
 }
 
