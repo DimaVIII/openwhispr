@@ -170,12 +170,12 @@ test("created, uploaded and added skills start on, newest first", async (t) => {
   const { library } = setup(t);
   await upload(library, [markdownUpload("a.md", skillText("uploaded-one"))]);
   library.create({ title: "Made here", description: "Does it.", instructions: "Go", files: [] });
-  library.addRecommended("decision-log", { title: "Decision log", description: "Keeps them." });
+  library.addRecommended("meeting-decisions", { title: "Meeting decisions", description: "Keeps them." });
 
   assert.deepEqual(
     library.scan().map((skill) => [skill.name, skill.enabled, skill.valid]),
     [
-      ["decision-log", true, true],
+      ["meeting-decisions", true, true],
       ["made-here", true, true],
       ["uploaded-one", true, true],
     ]
@@ -919,21 +919,21 @@ test("create refuses a title one of your skills already shows, naming that skill
 
 test("a hand-made skill never takes a starter skill's folder", (t) => {
   const { library } = setup(t);
-  const copy = { title: "Decision log", description: "Finds decisions." };
+  const copy = { title: "Meeting decisions", description: "Finds decisions." };
 
   const made = library.create({ ...copy, instructions: "Mine", files: [] });
 
-  assert.deepEqual(made, { name: "decision-log-2" });
-  assert.deepEqual(library.addRecommended("decision-log", copy), {
-    problems: [{ code: "nameTaken", values: { name: "Decision log" } }],
+  assert.deepEqual(made, { name: "meeting-decisions-2" });
+  assert.deepEqual(library.addRecommended("meeting-decisions", copy), {
+    problems: [{ code: "nameTaken", values: { name: "Meeting decisions" } }],
   });
-  library.uninstall("decision-log-2");
-  library.create({ ...copy, title: "  decision   LOG ", instructions: "Mine", files: [] });
-  assert.deepEqual(library.addRecommended("decision-log", copy), {
-    problems: [{ code: "nameTaken", values: { name: "decision   LOG" } }],
+  library.uninstall("meeting-decisions-2");
+  library.create({ ...copy, title: "  meeting   DECISIONS ", instructions: "Mine", files: [] });
+  assert.deepEqual(library.addRecommended("meeting-decisions", copy), {
+    problems: [{ code: "nameTaken", values: { name: "meeting   DECISIONS" } }],
   });
-  const translated = { ...copy, title: "Journal des décisions" };
-  assert.deepEqual(library.addRecommended("decision-log", translated), { name: "decision-log" });
+  const translated = { ...copy, title: "Décisions de réunion" };
+  assert.deepEqual(library.addRecommended("meeting-decisions", translated), { name: "meeting-decisions" });
 });
 
 test("create returns the problems instead of writing a skill that can't be used", (t) => {
@@ -987,22 +987,22 @@ test(
   (t) => {
     const { library, skillsDir } = setup(t);
 
-    const result = library.addRecommended("decision-log", {
-      title: "Registro de decisiones",
-      description: "Lleva una lista de las decisiones de mis reuniones.",
+    const result = library.addRecommended("meeting-decisions", {
+      title: "Decisiones de reuniones",
+      description: "Encuentra las decisiones en las notas de mis reuniones.",
     });
 
-    assert.deepEqual(result, { name: "decision-log" });
-    const added = parseSkillMarkdown(readSkill(skillsDir, "decision-log"));
+    assert.deepEqual(result, { name: "meeting-decisions" });
+    const added = parseSkillMarkdown(readSkill(skillsDir, "meeting-decisions"));
     const shipped = parseSkillMarkdown(
-      fs.readFileSync(path.join(RECOMMENDED_DIR, "decision-log", "SKILL.md"), "utf8")
+      fs.readFileSync(path.join(RECOMMENDED_DIR, "meeting-decisions", "SKILL.md"), "utf8")
     );
     assert.deepEqual(
       [added.data.name, added.data.description, added.data.metadata.display_name, added.problems],
       [
-        "decision-log",
-        "Lleva una lista de las decisiones de mis reuniones.",
-        "Registro de decisiones",
+        "meeting-decisions",
+        "Encuentra las decisiones en las notas de mis reuniones.",
+        "Decisiones de reuniones",
         [],
       ]
     );

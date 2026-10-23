@@ -4847,7 +4847,7 @@
         "title": "1:1 prep",
         "description": "Gathers what changed since my last one-on-one with someone. Use when I ask to prep for a 1:1."
       },
-      "decision-log": {
+      "meeting-decisions": {
         "title": "Meeting decisions",
         "description": "Finds the decisions in my meeting notes, with the date and meeting of each. Use when I ask what we decided."
       }

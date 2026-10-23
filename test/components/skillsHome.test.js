@@ -155,7 +155,7 @@ test(
       api: {
         skillsAddRecommended: async (id, copy) => {
           added.push([id, copy]);
-          listed = [skill(id, { displayName: "Decision log" })];
+          listed = [skill(id, { displayName: "Meeting decisions" })];
           return { ok: true, name: id };
         },
         skillsList: async () => ({ skills: listed }),
@@ -165,30 +165,30 @@ test(
       container,
       (node) =>
         ariaLabel(node) ===
-        'skills.pane.addRecommended{"name":"skills.recommended.decision-log.title"}'
+        'skills.pane.addRecommended{"name":"skills.recommended.meeting-decisions.title"}'
     );
 
     await React.act(async () => dispatch(add, "click"));
 
     assert.deepEqual(added, [
       [
-        "decision-log",
+        "meeting-decisions",
         {
-          title: "skills.recommended.decision-log.title",
-          description: "skills.recommended.decision-log.description",
+          title: "skills.recommended.meeting-decisions.title",
+          description: "skills.recommended.meeting-decisions.description",
         },
       ],
     ]);
-    assert.deepEqual(cardNames(container), ["Decision log"]);
-    assert.equal(store.useSkillsStore.getState().iconPlays["decision-log"], 1);
+    assert.deepEqual(cardNames(container), ["Meeting decisions"]);
+    assert.equal(store.useSkillsStore.getState().iconPlays["meeting-decisions"], 1);
     assert.deepEqual(toasts, [
       {
-        title: 'skills.toasts.added{"name":"skills.recommended.decision-log.title"}',
+        title: 'skills.toasts.added{"name":"skills.recommended.meeting-decisions.title"}',
         variant: "success",
       },
     ]);
     assert.equal(container.ownerDocument.activeElement === cards(container)[0], true);
-    assert.equal(recommendedIds(container).includes("decision-log"), false);
+    assert.equal(recommendedIds(container).includes("meeting-decisions"), false);
   }
 );
 
@@ -287,7 +287,7 @@ test("a failed add says why", async (t) => {
 });
 
 test("an add refused because a skill already has that title says so", async (t) => {
-  const refusal = { code: "nameTaken", values: { name: "Decision log" } };
+  const refusal = { code: "nameTaken", values: { name: "Meeting decisions" } };
   const { container, toasts } = await renderHome(t, {
     api: { skillsAddRecommended: async () => ({ ok: false, problems: [refusal] }) },
   });
@@ -300,7 +300,7 @@ test("an add refused because a skill already has that title says so", async (t) 
   assert.deepEqual(toasts, [
     {
       title: "skills.toasts.writeFailed",
-      description: 'skills.problems.nameTaken{"name":"Decision log"}',
+      description: 'skills.problems.nameTaken{"name":"Meeting decisions"}',
       variant: "destructive",
     },
   ]);
