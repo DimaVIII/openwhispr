@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
+  createEnterpriseAudioRuntime,
   createEnterpriseAudioRequestResolver,
 } = require("../../src/helpers/enterpriseAudioRuntime");
 
@@ -97,4 +98,81 @@ test("a workspace switch during lookup cannot replace the newer workspace bindin
   finish([{ id: "workspace-a" }]);
   await assert.rejects(pending, { code: "AUTH_CONTEXT_CHANGED" });
   assert.deepEqual(fixture.calls, []);
+});
+
+function audioRuntime({
+  provider = "openai-compatible",
+  tokenProvider = async () => "token",
+} = {}) {
+  const credentials = { generation: 1, read: async () => "device-key" };
+  const retirement = new AbortController();
+  const calls = [];
+  const resolved = {
+    managed: true,
+    provider,
+    generation: 1,
+    version: 1,
+    identity: { accountId: "account-a", workspaceId: "workspace-a" },
+    config: {
+      endpoint: "https://example.openai.azure.com",
+      apiVersion: "v1",
+      transcription: { defaultDeployment: "speech" },
+      batch: {
+        endpoint: "https://gateway.test/transcribe",
+        defaultDeployment: "speech",
+        authentication: { type: "bearer", credentialSlot: "http" },
+      },
+    },
+    tokenProvider,
+  };
+  const runtime = createEnterpriseAudioRuntime({
+    resolveProvider: async () => resolved,
+    credentials,
+    getRetirementSignal: () => retirement.signal,
+    transport: {
+      request: async (...args) => {
+        calls.push(args);
+        return new Response('{"text":"transcript"}');
+      },
+    },
+  });
+  return { runtime, credentials, retirement, calls };
+}
+
+test(
+  "cancelling an upload during Entra acquisition returns before the shared token resolves",
+  { timeout: 1000 },
+  async (t) => {
+    let release;
+    const fixture = audioRuntime({
+      provider: "azure",
+      tokenProvider: () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    });
+    t.after(() => release?.("late-token"));
+    const profile = await fixture.runtime.resolve({});
+    const controller = new AbortController();
+    const pending = profile.request({ signal: controller.signal });
+    await new Promise(setImmediate);
+    assert.equal(typeof release, "function");
+    controller.abort();
+    await assert.rejects(pending, { name: "AbortError" });
+    release("late-token");
+    await new Promise(setImmediate);
+    assert.equal(fixture.calls.length, 0);
+  }
+);
+
+test("resolved audio profiles cannot adopt rotated credentials", async () => {
+  const fixture = audioRuntime();
+  const profile = await fixture.runtime.resolve({});
+  assert.equal(profile.signal, fixture.retirement.signal);
+  await profile.request({});
+  fixture.credentials.generation++;
+  await assert.rejects(profile.request({}), { code: "MANAGED_CONFIG_CHANGED" });
+  fixture.retirement.abort();
+  await assert.rejects(profile.request({}), { name: "AbortError" });
+  assert.equal(fixture.calls.length, 1);
 });

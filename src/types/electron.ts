@@ -3309,6 +3309,7 @@ declare global {
 
       // Meeting transcription (streaming, dual-channel)
       meetingTranscriptionPrepare?: (options: {
+        enterpriseSetupMode?: ManagedEnterpriseRequestContext["setupMode"];
         enterpriseIdentity?: Pick<
           ManagedEnterpriseRequestContext,
           "accountId" | "workspaceId" | "authGeneration"
@@ -3318,6 +3319,7 @@ declare global {
         language?: string;
       }) => Promise<{ success: boolean; alreadyPrepared?: boolean } & PolicyFailureMetadata>;
       meetingTranscriptionStart?: (options: {
+        enterpriseSetupMode?: ManagedEnterpriseRequestContext["setupMode"];
         enterpriseIdentity?: Pick<
           ManagedEnterpriseRequestContext,
           "accountId" | "workspaceId" | "authGeneration"

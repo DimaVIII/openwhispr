@@ -1,6 +1,9 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
+const path = require("node:path");
+const vm = require("node:vm");
+const { createRequire } = require("node:module");
 const { transcribeManagedAudioFile } = require("../../src/helpers/managedAudioFileTranscription");
 const { silenceWav } = require("../../src/helpers/enterpriseAudioSetup");
 const { getSafeTempDir } = require("../../src/helpers/safeTempDir");
@@ -80,4 +83,51 @@ test("managed chunk failures retain usable text and report the missing chunk", a
   assert.match(result.text, /part-0/);
   assert.doesNotMatch(result.text, /part-1/);
   assert.deepEqual(temporaryFiles(), before);
+});
+
+test("the IPC job retains its original profile lifetime during preparation and between chunks", async () => {
+  const ipcPath = path.join(__dirname, "../../src/helpers/ipcHandlers.js");
+  const source = fs.readFileSync(ipcPath, "utf8");
+  const start = source.indexOf("const transcribeManagedAudio = async");
+  const end = source.indexOf("\n    ipcMain.handle(", start);
+  assert.ok(start >= 0 && end > start);
+  for (const rotationPoint of ["splitting", "between-chunks"]) {
+    const before = temporaryFiles();
+    let retirement = new AbortController();
+    let submitted = 0;
+    const rotate = () => {
+      retirement.abort();
+      retirement = new AbortController();
+    };
+    const run = vm.runInNewContext(`${source.slice(start, end)}\ntranscribeManagedAudio;`, {
+      require: createRequire(ipcPath),
+      AbortSignal,
+      resolveEnterpriseRuntime: async () => ({
+        enterprise: {
+          audioProfile: { signal: retirement.signal, section: { maxUploadBytes: 20000 } },
+        },
+      }),
+      executeManagedTranscription: async () => {
+        submitted++;
+        rotate();
+        return "first chunk";
+      },
+    });
+    await assert.rejects(
+      run(
+        {},
+        { provider: "openai-compatible", context: {} },
+        {
+          audioBuffer: audio(),
+          fileName: "history.wav",
+          onProgress: ({ stage }) => {
+            if (rotationPoint === "splitting" && stage === "splitting") rotate();
+          },
+        }
+      ),
+      { name: "AbortError" }
+    );
+    assert.equal(submitted, rotationPoint === "splitting" ? 0 : 1);
+    assert.deepEqual(temporaryFiles(), before);
+  }
 });

@@ -3,6 +3,7 @@
 // mismatch), mints an Entra token, and posts the audio straight to the
 // workspace's Azure resource. No user-owned API key is involved.
 const DEFAULT_TIMEOUT_MS = 120_000;
+const { runAbortableOperation } = require("./enterpriseProviderErrors");
 
 // Azure keys the accepted-format check off the multipart filename's extension
 // and does not list "opus". Every .opus file is Opus in an Ogg container, so
@@ -31,9 +32,13 @@ function createManagedTranscriptionExecutor({
         messageKey: "hooks.audioRecording.errorDescriptions.managedRouteInvalid",
       });
     }
-    const runtime = await resolveEnterpriseRuntime(event, route.provider, null, {
-      managedContext: route.context,
-    });
+    const runtime = await runAbortableOperation(
+      () =>
+        resolveEnterpriseRuntime(event, route.provider, null, {
+          managedContext: route.context,
+        }),
+      signal
+    );
     const { azureEndpoint, azureApiVersion, managedTokenProvider } = runtime.enterprise;
     const audioProfile = runtime.enterprise.audioProfile;
     // The workspace's default deployment wins over anything the renderer sent.
@@ -43,7 +48,7 @@ function createManagedTranscriptionExecutor({
     if (!endpoint) {
       throw new Error("Managed Azure transcription endpoint could not be built");
     }
-    const token = audioProfile ? null : await managedTokenProvider();
+    const token = audioProfile ? null : await runAbortableOperation(managedTokenProvider, signal);
     const formData = new FormData();
     formData.append(
       "file",

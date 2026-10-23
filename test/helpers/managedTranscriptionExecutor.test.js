@@ -125,6 +125,34 @@ test("propagates MANAGED_CONFIG_CHANGED from runtime revalidation", async () => 
   await assert.rejects(run({}, route, input), (error) => error.code === "MANAGED_CONFIG_CHANGED");
 });
 
+test(
+  "cancellation during per-chunk runtime validation does not wait or send audio",
+  { timeout: 1000 },
+  async (t) => {
+    let release;
+    let sent = 0;
+    const run = executor({
+      resolve: () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+      fetch: async () => {
+        sent++;
+        return new Response('{"text":"late"}');
+      },
+    });
+    t.after(() => release?.(runtime()));
+    const controller = new AbortController();
+    const pending = run({}, route, { ...input, signal: controller.signal });
+    await new Promise(setImmediate);
+    controller.abort();
+    await assert.rejects(pending, { name: "AbortError" });
+    release(runtime());
+    await new Promise(setImmediate);
+    assert.equal(sent, 0);
+  }
+);
+
 test("an empty transcript is reported as no speech", async () => {
   const run = executor({
     fetch: async () => new Response(JSON.stringify({ text: "  " }), { status: 200 }),

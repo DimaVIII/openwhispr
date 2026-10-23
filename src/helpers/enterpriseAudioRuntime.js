@@ -1,3 +1,5 @@
+const { runAbortableOperation } = require("./enterpriseProviderErrors");
+
 const changed = () =>
   Object.assign(new Error("Enterprise audio configuration changed"), {
     code: "MANAGED_CONFIG_CHANGED",
@@ -92,6 +94,7 @@ function createEnterpriseAudioRuntime({
     });
     if (!resolved.managed) return null;
     const retirement = getRetirementSignal();
+    const credentialGeneration = credentials.generation;
     const { config, provider } = resolved;
     const section =
       operation === "realtime"
@@ -137,12 +140,16 @@ function createEnterpriseAudioRuntime({
     }
     if (!endpoint) throw new Error("Enterprise audio endpoint is unavailable");
     async function assertCurrent() {
+      retirement?.throwIfAborted();
+      if (credentials.generation !== credentialGeneration) throw changed();
       const current = await resolveProvider({
         ...request,
         inferenceScope: "transcription",
         operation,
       });
+      retirement?.throwIfAborted();
       if (
+        credentials.generation !== credentialGeneration ||
         !current.managed ||
         current.provider !== provider ||
         current.generation !== resolved.generation ||
@@ -155,7 +162,6 @@ function createEnterpriseAudioRuntime({
       credentials.read(resolved.identity.accountId, resolved.identity.workspaceId, slot);
     async function headers() {
       const current = await assertCurrent();
-      const credentialGeneration = credentials.generation;
       const secret =
         provider === "azure"
           ? await current.tokenProvider()
@@ -179,25 +185,27 @@ function createEnterpriseAudioRuntime({
       section,
       generation: resolved.generation,
       providerVersion: resolved.version,
-      credentialGeneration: credentials.generation,
+      credentialGeneration,
+      signal: retirement,
       protocol: section.protocol,
       async request(init) {
-        const auth = await headers();
+        const signal = AbortSignal.any([retirement, init.signal].filter(Boolean));
+        const auth = await runAbortableOperation(headers, signal);
         const response = await transport.request(endpoint, {
           ...init,
-          signal: AbortSignal.any([retirement, init.signal].filter(Boolean)),
+          signal,
           headers: { ...init.headers, ...auth },
           network,
           readCredential,
           caPem: bundle?.pem,
         });
-        await assertCurrent();
+        await runAbortableOperation(assertCurrent, signal);
         return response;
       },
       async createSocket(signal) {
         signal = AbortSignal.any([retirement, signal].filter(Boolean));
         return transport.createSocket(endpoint, {
-          headers: await headers(),
+          headers: await runAbortableOperation(headers, signal),
           network,
           readCredential,
           caPem: bundle?.pem,

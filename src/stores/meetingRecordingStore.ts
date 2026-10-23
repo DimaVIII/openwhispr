@@ -203,6 +203,7 @@ const getMeetingTranscriptionOptions = () => {
       keyterms: (state.customDictionary ?? []).filter(Boolean),
     }),
     enterpriseIdentity,
+    enterpriseSetupMode: state.enterpriseTranscriptionSetupMode,
   };
 };
 

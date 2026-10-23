@@ -6957,12 +6957,21 @@ class IPCHandlers {
     });
     this.executeManagedTranscription = executeManagedTranscription;
     const transcribeManagedAudio = async (event, route, input) => {
-      const runtime = await resolveEnterpriseRuntime(event, route.provider, null, {
-        managedContext: route.context,
-      });
+      const { runAbortableOperation } = require("./enterpriseProviderErrors");
+      const runtime = await runAbortableOperation(
+        () =>
+          resolveEnterpriseRuntime(event, route.provider, null, {
+            managedContext: route.context,
+          }),
+        input.signal
+      );
+      const signal = AbortSignal.any(
+        [input.signal, runtime.enterprise.audioProfile.signal].filter(Boolean)
+      );
       const { transcribeManagedAudioFile } = require("./managedAudioFileTranscription");
       const result = await transcribeManagedAudioFile({
         ...input,
+        signal,
         maxUploadBytes:
           route.provider === "azure"
             ? 25 * 1024 * 1024
@@ -6976,7 +6985,7 @@ class IPCHandlers {
             fileName,
             contentType,
             prompt: input.prompt,
-            signal: input.signal,
+            signal,
           }),
       });
       return {
@@ -11266,19 +11275,19 @@ class IPCHandlers {
                 };
               }
 
-              const upload = await prepareProviderUpload(sourcePath, { signal });
-              cleanupUpload = upload.cleanup;
-              const realByok = upload.path;
-
               if (route.transport === "managed") {
                 const result = await transcribeManagedAudio(event, route, {
-                  filePath: realByok,
+                  filePath: sourcePath,
                   signal,
                   onProgress: (payload) =>
                     event.sender.send("upload-transcription-progress", payload),
                 });
                 return { success: true, ...result };
               }
+
+              const upload = await prepareProviderUpload(sourcePath, { signal });
+              cleanupUpload = upload.cleanup;
+              const realByok = upload.path;
 
               // Every branch below calls a BYOK provider or the user's own server.
               providerErrorContext = {

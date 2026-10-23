@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { getSafeTempDir } = require("./safeTempDir");
 const { splitAudioFile } = require("./ffmpegUtils");
-const { providerContentType } = require("./providerUploadAudio");
+const { providerContentType, prepareProviderUpload } = require("./providerUploadAudio");
 
 async function transcribeManagedAudioFile({
   filePath,
@@ -31,6 +31,20 @@ async function transcribeManagedAudioFile({
       });
     } finally {
       fs.rmSync(temporary, { recursive: true, force: true });
+    }
+  }
+  const upload = await prepareProviderUpload(filePath, { signal });
+  if (upload.path !== filePath) {
+    try {
+      return await transcribeManagedAudioFile({
+        filePath: upload.path,
+        maxUploadBytes,
+        transcribe,
+        signal,
+        onProgress,
+      });
+    } finally {
+      upload.cleanup();
     }
   }
   if (fs.statSync(filePath).size <= maxUploadBytes)

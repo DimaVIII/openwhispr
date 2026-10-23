@@ -174,8 +174,14 @@ for (const secure of [false, true])
     local,
     async () => {
       const proxy = secure ? https.createServer(certificate) : http.createServer();
+      const unavailable = http.createServer();
       let connections = 0;
+      let failedConnects = 0;
       const tunnels = new Set();
+      unavailable.on("connect", (_req, socket) => {
+        failedConnects++;
+        socket.end("HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n");
+      });
       proxy.on("connect", (req, socket, head) => {
         connections++;
         tunnels.add(socket);
@@ -195,10 +201,11 @@ for (const secure of [false, true])
         socket.on("close", () => upstream.destroy());
       });
       proxy.listen(0, "127.0.0.1");
-      await once(proxy, "listening");
+      unavailable.listen(0, "127.0.0.1");
+      await Promise.all([once(proxy, "listening"), once(unavailable, "listening")]);
       const client = transport(
         async () =>
-          `PROXY 127.0.0.1:1; ${secure ? "HTTPS" : "PROXY"} 127.0.0.1:${proxy.address().port}`,
+          `PROXY 127.0.0.1:${unavailable.address().port}; PROXY 127.0.0.1:1; ${secure ? "HTTPS" : "PROXY"} 127.0.0.1:${proxy.address().port}`,
         async () => JSON.stringify({ username: "user", password: "password" })
       );
       const network = { proxy: { mode: "system", mandatory: true, credentialSlot: "proxy" } };
@@ -216,9 +223,22 @@ for (const secure of [false, true])
         ws.close();
         await once(ws, "close");
         assert.equal(connections, 2);
+        assert.equal(failedConnects, 2);
+        const before = requests.length;
+        await assert.rejects(
+          transport(async () => `PROXY 127.0.0.1:${unavailable.address().port}; DIRECT`).request(
+            `https://127.0.0.1:${port}/must-not-connect-directly`,
+            { caPem: ca, network: { proxy: { mode: "system", mandatory: true } } }
+          ),
+          { code: "PROXY_FAILED" }
+        );
+        assert.equal(requests.length, before);
       } finally {
         for (const tunnel of tunnels) tunnel.destroy();
-        await new Promise((resolve) => proxy.close(resolve));
+        await Promise.all([
+          new Promise((resolve) => proxy.close(resolve)),
+          new Promise((resolve) => unavailable.close(resolve)),
+        ]);
       }
     }
   );

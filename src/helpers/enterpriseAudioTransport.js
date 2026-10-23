@@ -101,6 +101,7 @@ function createEnterpriseAudioTransport({
     agent.connect = async (req, options) => {
       let lastError;
       for (const candidate of candidates) {
+        const attempt = new AbortController();
         try {
           if (!candidate)
             return new https.Agent().createConnection({ ...options, ca, rejectUnauthorized: true });
@@ -111,13 +112,29 @@ function createEnterpriseAudioTransport({
             proxyUrl.password
           )
             throw new Error("Invalid enterprise proxy origin");
-          return await new HttpsProxyAgent(proxyUrl, {
+          const candidateSignal = AbortSignal.any([attempt.signal, signal].filter(Boolean));
+          const proxyAgent = new HttpsProxyAgent(proxyUrl, {
             ca,
             headers: proxyHeaders,
-            signal,
+            signal: candidateSignal,
             rejectUnauthorized: true,
-          }).connect(req, { ...options, ca, signal, rejectUnauthorized: true });
+          });
+          proxyAgent.once("proxyConnect", ({ statusCode }) => {
+            // Reject before the agent installs its failed-CONNECT replay on req.
+            if (statusCode !== 200)
+              throw Object.assign(new Error(`Enterprise proxy CONNECT failed (${statusCode})`), {
+                code: "PROXY_FAILED",
+              });
+          });
+          return await proxyAgent.connect(req, {
+            ...options,
+            ca,
+            signal: candidateSignal,
+            rejectUnauthorized: true,
+          });
         } catch (error) {
+          attempt.abort(error);
+          signal?.throwIfAborted();
           lastError = error;
         }
       }
