@@ -23,7 +23,7 @@ import {
   DropdownMenuSeparator,
 } from "../ui/dropdown-menu";
 import { cn } from "../lib/utils";
-import { canManageWorkspace } from "../../lib/spacePermissions";
+import { workspaceCan } from "../../lib/capabilities";
 import WorkspaceMembersTab from "./WorkspaceMembersTab";
 import WorkspaceTeamsTab from "./WorkspaceTeamsTab";
 import WorkspaceDeveloperTab from "./WorkspaceDeveloperTab";
@@ -151,7 +151,7 @@ export default function WorkspaceSection({ initialSubTab }: Props) {
   }
 
   const workspace = workspaces.find((w) => w.id === activeWorkspaceId) ?? workspaces[0];
-  const canManage = canManageWorkspace(workspace.role);
+  const canManage = workspaceCan(workspace, "manage_settings");
   const visibleTabs = SUB_TABS.filter((id) => id !== "developer" || canManage);
   const tab: WorkspaceTab = visibleTabs.includes(storedTab as WorkspaceTab)
     ? (storedTab as WorkspaceTab)
@@ -245,8 +245,9 @@ function GeneralTab({ workspace }: { workspace: Workspace }) {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [leaving, setLeaving] = useState(false);
-  const isOwner = workspace.role === "owner";
-  const canEdit = canManageWorkspace(workspace.role);
+  const canDelete = workspaceCan(workspace, "delete_workspace");
+  const canLeave = workspaceCan(workspace, "leave");
+  const canEdit = workspaceCan(workspace, "manage_settings");
   const dirty = name !== workspace.name;
 
   useEffect(() => {
@@ -350,7 +351,7 @@ function GeneralTab({ workspace }: { workspace: Workspace }) {
 
       <EnterpriseConsoleRow workspace={workspace} />
 
-      {isOwner ? (
+      {canDelete ? (
         <SettingsPanel>
           <SettingsPanelRow>
             <SettingsRow
@@ -376,7 +377,7 @@ function GeneralTab({ workspace }: { workspace: Workspace }) {
             </SettingsRow>
           </SettingsPanelRow>
         </SettingsPanel>
-      ) : (
+      ) : canLeave ? (
         <SettingsPanel>
           <SettingsPanelRow>
             <SettingsRow
@@ -402,7 +403,7 @@ function GeneralTab({ workspace }: { workspace: Workspace }) {
             </SettingsRow>
           </SettingsPanelRow>
         </SettingsPanel>
-      )}
+      ) : null}
 
       <ConfirmDialog
         open={confirmDialog.open}

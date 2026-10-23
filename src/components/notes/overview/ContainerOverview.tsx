@@ -3,7 +3,7 @@ import { Plus, UserPlus } from "../../icons";
 import { useTranslation } from "react-i18next";
 import InviteTeammateDialog from "../../InviteTeammateDialog";
 import { useWorkspaceStore } from "../../../stores/workspaceStore";
-import { canManageSpace } from "../../../lib/spacePermissions";
+import { spaceCan, workspaceCan } from "../../../lib/capabilities";
 import {
   useNotes,
   useNotesByContainer,
@@ -110,7 +110,7 @@ export function ContainerOverview({
     space.kind === "team" &&
     !!space.cloud_space_id &&
     !!workspace &&
-    canManageSpace(space, workspace.role ?? null);
+    (spaceCan(space, "manage_members") || workspaceCan(workspace, "manage_settings"));
 
   const spaceFolders = useMemo(
     () => folders.filter((f) => f.space_id === space.id),

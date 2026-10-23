@@ -1,18 +1,7 @@
-import type { NoteItem, SpaceItem, SpaceTeamRef, TeamRole, WorkspaceRole } from "../types/electron";
+import type { NoteItem, SpaceItem, SpaceTeamRef, TeamRole, Workspace } from "../types/electron";
+import { spaceCan, workspaceCan } from "./capabilities.ts";
 
-export function canManageWorkspace(workspaceRole: WorkspaceRole | null | undefined): boolean {
-  return workspaceRole === "owner" || workspaceRole === "admin";
-}
-
-/**
- * Whether the current user can manage a team space (rename, delete, assign
- * teams): an explicit space admin (best role across the space's assigned
- * teams, server-computed) or an implicit one via workspace owner/admin.
- * Client checks are cosmetic — the server enforces.
- */
-export function canManageSpace(space: SpaceItem, workspaceRole: WorkspaceRole | null): boolean {
-  return space.my_role === "admin" || canManageWorkspace(workspaceRole);
-}
+type WorkspaceRef = Pick<Workspace, "role" | "capabilities">;
 
 /**
  * Teams the current user can give up to leave a space: those they explicitly
@@ -24,23 +13,14 @@ export function teamsUserCanLeave(space: Pick<SpaceItem, "teams">): SpaceTeamRef
 }
 
 /**
- * Whether the current user holds any grant they can give up: a direct
- * membership or a team they belong to. Workspace owners/admins with implicit
- * access alone have nothing to leave.
- */
-export function canLeaveSpace(space: Pick<SpaceItem, "my_direct_role" | "teams">): boolean {
-  return space.my_direct_role != null || teamsUserCanLeave(space).length > 0;
-}
-
-/**
  * Whether the current user can edit a specific team's roster: an explicit
- * admin of that team, or an implicit one via workspace owner/admin.
+ * admin of that team, or anyone the workspace lets manage teams.
  */
 export function canManageTeamRoster(
   teamMyRole: TeamRole | null | undefined,
-  workspaceRole: WorkspaceRole | null
+  workspace: WorkspaceRef | null | undefined
 ): boolean {
-  return teamMyRole === "admin" || canManageWorkspace(workspaceRole);
+  return teamMyRole === "admin" || workspaceCan(workspace, "manage_teams");
 }
 
 /**
@@ -58,7 +38,10 @@ export function canMoveBetweenSpaces(
 }
 
 type NoteOwnership = Pick<NoteItem, "cloud_id" | "owner_user_id">;
-type SpaceRef = Pick<SpaceItem, "kind" | "cloud_space_id" | "my_role">;
+type SpaceRef = Pick<
+  SpaceItem,
+  "kind" | "cloud_space_id" | "my_role" | "my_direct_role" | "teams" | "capabilities"
+>;
 
 // Only cloud-backed team spaces carry server-enforced roles; private and
 // local-only spaces (no cloud id yet) stay fully manageable by their local
@@ -88,11 +71,13 @@ export function canDeleteSpaceNote(
   note: NoteOwnership,
   space: SpaceRef | null | undefined,
   currentUserId: string | null | undefined,
-  workspaceRole: WorkspaceRole | null
+  workspace: WorkspaceRef | null | undefined
 ): boolean {
   if (!isEnforcedTeamSpace(space)) return true;
   return (
-    ownsNote(note, currentUserId) || space.my_role === "admin" || canManageWorkspace(workspaceRole)
+    ownsNote(note, currentUserId) ||
+    spaceCan(space, "manage_settings") ||
+    workspaceCan(workspace, "manage_settings")
   );
 }
 
@@ -105,10 +90,10 @@ export function canChangeSpaceNoteScope(
   note: NoteOwnership,
   space: SpaceRef | null | undefined,
   currentUserId: string | null | undefined,
-  workspaceRole: WorkspaceRole | null
+  workspace: WorkspaceRef | null | undefined
 ): boolean {
   if (!isEnforcedTeamSpace(space)) return true;
-  return ownsNote(note, currentUserId) || canManageWorkspace(workspaceRole);
+  return ownsNote(note, currentUserId) || workspaceCan(workspace, "manage_settings");
 }
 
 /**
@@ -118,8 +103,8 @@ export function canChangeSpaceNoteScope(
  */
 export function canMoveOrDeleteSpaceFolder(
   space: SpaceRef | null | undefined,
-  workspaceRole: WorkspaceRole | null
+  workspace: WorkspaceRef | null | undefined
 ): boolean {
   if (!isEnforcedTeamSpace(space)) return true;
-  return space.my_role === "admin" || canManageWorkspace(workspaceRole);
+  return spaceCan(space, "manage_settings") || workspaceCan(workspace, "manage_settings");
 }
