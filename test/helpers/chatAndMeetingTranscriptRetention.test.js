@@ -227,6 +227,37 @@ test("a meeting note recorded into again recently keeps its transcript", (t) => 
   assert.equal(noteRow(db, resumed).transcript, TRANSCRIPT);
 });
 
+test("an imported meeting's transcript ages from the import, not the meeting date", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+
+  const meetingDate = "2025-03-04 15:00:00";
+  const { noteIds } = db.importNotes([
+    {
+      clientNoteId: "9f0c6a52-5d1b-4f43-9a3e-2b7d0c1e8a41",
+      sourceFile: "granola:quarterly-review",
+      title: "Quarterly review",
+      content: "Imported notes",
+      transcript: TRANSCRIPT,
+      participants: null,
+      createdAt: meetingDate,
+    },
+  ]);
+  const [imported] = noteIds;
+
+  assert.equal(db.countMeetingTranscriptsExpiredBefore(30), 0);
+  assert.deepEqual(db.clearMeetingTranscriptsExpiredBefore(30).ids, []);
+  assert.equal(noteRow(db, imported).transcript, TRANSCRIPT);
+  // The meeting keeps its own date, so its place in the notes list is unchanged.
+  assert.equal(noteRow(db, imported).updated_at, meetingDate);
+
+  // Forty days after the import, the period has passed.
+  db.db
+    .prepare("UPDATE notes SET imported_at = datetime('now', '-40 days') WHERE id = ?")
+    .run(imported);
+  assert.deepEqual(db.clearMeetingTranscriptsExpiredBefore(30).ids, [imported]);
+});
+
 test("clearing a meeting transcript queues nothing for cloud sync", (t) => {
   const db = createDb(t);
   if (!db) return;

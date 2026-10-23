@@ -1555,6 +1555,13 @@ class DatabaseManager {
       } catch (err) {
         if (!err.message.includes("duplicate column")) throw err;
       }
+      // When an import (e.g. a Granola CSV) brought the note to this computer.
+      // Imports keep the meeting's own dates, so retention ages them from here.
+      try {
+        this.db.exec("ALTER TABLE notes ADD COLUMN imported_at TEXT");
+      } catch (err) {
+        if (!err.message.includes("duplicate column")) throw err;
+      }
 
       // Space vector purges owed to Qdrant while the sidecar was down/booting;
       // drained on the next semantic search activation.
@@ -2332,13 +2339,15 @@ class DatabaseManager {
   // notes and notes recorded from New note alike. An upload's transcript is also the
   // note's own text, so uploads are left out. A recording resumed into an older note
   // moves updated_at, so its fresh transcript never expires by the note's creation
-  // date. Team space notes belong to their workspace, so a personal retention period
-  // leaves them alone.
+  // date. An imported meeting keeps its own dates, so it ages from its import unless
+  // edited since. Team space notes belong to their workspace, so a personal retention
+  // period leaves them alone.
   _expiredMeetingTranscriptsWhere(cutoff) {
     const accountScope = this._accountScopeCondition("notes");
     return {
       sql: `deleted_at IS NULL AND note_type <> 'upload' AND COALESCE(transcript, '') <> ''
-        AND datetime(updated_at) < ? AND ${accountScope.sql}
+        AND max(datetime(updated_at), datetime(COALESCE(imported_at, updated_at))) < ?
+        AND ${accountScope.sql}
         AND NOT EXISTS (SELECT 1 FROM spaces team WHERE team.id = notes.space_id AND team.kind = 'team')`,
       params: [cutoff, ...accountScope.params],
     };
@@ -3252,8 +3261,9 @@ class DatabaseManager {
   /**
    * Bulk-insert externally imported notes (e.g. a Granola CSV export).
    * Unlike saveNote, rows carry their own client_note_id and original
-   * created_at/updated_at; the UNIQUE client_note_id index makes re-imports
-   * idempotent (duplicates are skipped, never overwritten).
+   * created_at/updated_at, and imported_at records the import itself; the UNIQUE
+   * client_note_id index makes re-imports idempotent (duplicates are skipped,
+   * never overwritten).
    */
   importNotes(rows, { noteType = "meeting", folderName = "Imported" } = {}) {
     try {
@@ -3281,9 +3291,10 @@ class DatabaseManager {
 
       const insert = this.db.prepare(`
         INSERT INTO notes (client_note_id, title, content, content_sync_operation, note_type, source_file,
-          folder_id, space_id, account_id, transcript, participants, sync_status, created_at, updated_at)
+          folder_id, space_id, account_id, transcript, participants, sync_status, created_at, updated_at,
+          imported_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending',
-          COALESCE(?, datetime('now')), COALESCE(?, datetime('now')))
+          COALESCE(?, datetime('now')), COALESCE(?, datetime('now')), datetime('now'))
         ON CONFLICT(client_note_id) DO NOTHING
       `);
 
