@@ -36,7 +36,8 @@ export default function WorkspaceBillingCard({ workspace, onRefreshEntitlement }
     void onRefreshEntitlement?.();
   });
   const canManageBilling = workspaceCan(workspace, "manage_billing");
-  // Owners receive the Stripe id; `has_subscription` also covers manual plans with no Stripe sub.
+  // Add seat and Manage in Stripe need a Stripe subscription, so they read the raw id:
+  // `has_subscription` is also true for a paid plan provisioned without Stripe.
   const subscribed = Boolean(workspace.stripe_subscription_id);
   const canAddSeats = subscribed && hasActiveWorkspaceSubscription(workspace);
   const seatsUsed = workspace.seats_used ?? workspace.seats;
