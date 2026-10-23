@@ -376,6 +376,7 @@ describe('buildChatPayload', () => {
       'Cut the budget by 15%.\n\n### Sources\n- Untitled\n- Pricing sync',
       'Cut the budget by 15%.\n\n**Sources:**\n1. Untitled\n2. Pricing sync',
       'Cut the budget by 15%.\nSource(s): Untitled, Pricing sync',
+      'Cut the budget by 15%.\n\nSources:\n\n- Untitled\n\n- Pricing sync',
     ])('leave out a closing source block: %j', (answer) => {
       const text = historyText(answer);
       expect(text).toContain('Assistant: Cut the budget by 15%.');
@@ -391,6 +392,7 @@ describe('buildChatPayload', () => {
       '**Source:** the CFO forecast in Pricing sync',
       'Pipeline:\n- Sources: CRM and Stripe exports\n- Owner: Dana',
       'Article:\n- Title: X\n- Source: Reuters\n- Date: Oct 1',
+      'Here is what was decided.\n\n**Source:** Pricing sync\n- Cut the budget 15%\n- Launch moved to May',
     ])('keep text that only mentions a source: %j', (answer) => {
       expect(historyText(answer)).toContain(answer);
     });

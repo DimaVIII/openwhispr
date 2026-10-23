@@ -67,11 +67,16 @@ const withoutClosingSources = (text: string): string => {
   // A closing list counts only under a label line of its own ("Sources:" then "- Untitled"); a
   // "- Source: X" item inside the answer's own list is content.
   skipBlank();
-  while (index >= 0 && LIST_LINE.test(lines[index])) index -= 1;
+  const listEnd = index;
+  while (index >= 0 && (LIST_LINE.test(lines[index]) || !lines[index].trim())) index -= 1;
+  const underList = index < listEnd;
   let cut = -1;
   for (skipBlank(); index >= 0; skipBlank()) {
     const line = lines[index];
     if (!SOURCE_LABEL.test(line) || LIST_LINE.test(line)) break;
+    // "Source: Pricing sync" above a list leads into the answer's own points; only a bare
+    // "Sources:" heads a closing list.
+    if (underList && cut < 0 && line.replace(SOURCE_LABEL, '').replace(/[*_\s]/g, '')) break;
     cut = index;
     index -= 1;
   }
