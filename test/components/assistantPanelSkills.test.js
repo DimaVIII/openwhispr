@@ -288,13 +288,103 @@ test("voice panel code blocks offer Paste into app", async (t) => {
   ];
   installBrowserGlobals(t);
   const { AssistantPanel } = await loadPanel(t, { messages, realMarkdown: true });
+  const render = (props) =>
+    renderToStaticMarkup(
+      React.createElement(AssistantPanel, { ...PANEL_PROPS, pendingCommand: null, ...props })
+    );
 
-  const markup = renderToStaticMarkup(
-    React.createElement(AssistantPanel, { ...PANEL_PROPS, pendingCommand: null })
-  );
-
+  const markup = render({ canPasteIntoApp: true });
   assert.match(markup, /skills\.code\.paste/);
   assert.match(markup, /common\.copy/);
+
+  // Opened from the tray or the pill menu, or over OpenWhispr itself: no app to paste into.
+  const copyOnly = render({ canPasteIntoApp: false });
+  assert.doesNotMatch(copyOnly, /skills\.code\.paste/);
+  assert.match(copyOnly, /common\.copy/);
+});
+
+test("Paste into app waits for the answer to finish streaming", async (t) => {
+  // Half a command can read as another one, and a one-line block can still grow lines.
+  const messages = [
+    {
+      id: "assistant-1",
+      role: "assistant",
+      content: "Run this:\n\n```sh\nrm -rf ./",
+      isStreaming: true,
+    },
+  ];
+  installBrowserGlobals(t);
+  const { AssistantPanel } = await loadPanel(t, { messages, realMarkdown: true });
+
+  const markup = renderToStaticMarkup(
+    React.createElement(AssistantPanel, {
+      ...PANEL_PROPS,
+      pendingCommand: null,
+      canPasteIntoApp: true,
+    })
+  );
+
+  assert.doesNotMatch(markup, /skills\.code\.paste/);
+  assert.match(markup, /common\.copy/);
+});
+
+test("a voice command adopts its app as the paste target; the tray and a close drop it", async (t) => {
+  let root = null;
+  t.after(async () => {
+    if (root) await React.act(async () => root.unmount());
+  });
+  const calls = [];
+  let available = true;
+  installBrowserGlobals(t, {
+    window: {
+      setInterval: () => 1,
+      clearInterval() {},
+      electronAPI: {
+        assistantPasteTarget: async (action) => {
+          calls.push(action);
+          return action === "adopt" && available;
+        },
+      },
+    },
+  });
+  const container = installInteractiveDom(t);
+  const { createRoot } = require("react-dom/client");
+  const vite = await createRendererServer(t, {
+    cachePrefix: "openwhispr-assistant-panel-paste-target-test-",
+  });
+  const { useAssistantPanel } = await vite.ssrLoadModule("/hooks/useAssistantPanel.js");
+  let assistant;
+  function Harness() {
+    assistant = useAssistantPanel({
+      requestMainWindowSize: async () => ({ success: true }),
+      dictationErrorActionCount: 0,
+      recordingControlsRef: { current: null },
+    });
+    return null;
+  }
+  root = createRoot(container);
+  await React.act(async () => root.render(React.createElement(Harness)));
+
+  await React.act(async () => assistant.handleCommand({ text: "How do I list files?" }));
+  assert.deepEqual(calls, ["adopt"]);
+  assert.equal(assistant.canPasteIntoApp, true);
+
+  await React.act(async () => assistant.handleClose());
+  await React.act(async () => assistant.completeContentFade());
+  assert.equal(assistant.canPasteIntoApp, false);
+
+  // Main finds no usable app (OpenWhispr was in front): Copy only.
+  available = false;
+  await React.act(async () => assistant.handleCommand({ text: "And hidden files?" }));
+  assert.equal(assistant.canPasteIntoApp, false);
+
+  await React.act(async () => assistant.handleClose());
+  await React.act(async () => assistant.completeContentFade());
+  // The panel unmounts once its closing transition ends.
+  await React.act(() => new Promise((resolve) => setTimeout(resolve, 400)));
+  await React.act(async () => assistant.openPanel());
+  assert.equal(calls.at(-1), "forget");
+  assert.equal(assistant.canPasteIntoApp, false);
 });
 
 test("the panel's owner keeps the skill choice through a close, and resets it", async (t) => {
@@ -336,4 +426,3 @@ test("the panel's owner keeps the skill choice through a close, and resets it", 
   await React.act(async () => assistant.setConversationId(null));
   assert.deepEqual(assistant.skillChoice, { picked: null, pickOff: false });
 });
-

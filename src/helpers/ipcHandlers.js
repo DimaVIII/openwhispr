@@ -3293,14 +3293,29 @@ class IPCHandlers {
         return { success: true, pasted: false };
       }
 
+      // A raw paste (a command from a code block) lands exactly as given: no smart
+      // space, and no AutoLearn watching the user edit it. One for the assistant panel goes
+      // only to the app its voice command was spoken over, never to wherever the last
+      // dictation went or to OpenWhispr itself (assistantPasteTarget.js).
+      const { raw, assistantTarget: toAssistantTarget, ...pasteOptions } = options ?? {};
+      const assistantPasteTarget = this.windowManager?.assistantPasteTarget;
+      const assistantTarget =
+        toAssistantTarget === true ? ((await assistantPasteTarget?.current()) ?? null) : undefined;
+      const noTarget = { success: false, pasted: false, reason: "no-target" };
+      if (assistantTarget === null) return noTarget;
+
       const mainWindow = this.windowManager?.mainWindow;
-      const targetPid = this.textEditMonitor?.lastTargetPid || null;
+      const targetPid = assistantTarget?.pid ?? (this.textEditMonitor?.lastTargetPid || null);
 
       // Activating the target by PID is more reliable than hide()'s implicit
       // focus hand-off for Chromium apps like Claude desktop and Brave (#668).
       let activated = false;
       if (process.platform === "darwin" && this.textEditMonitor) {
-        activated = await this.textEditMonitor.activateTargetPid();
+        activated = assistantTarget
+          ? await this.textEditMonitor.activatePid(assistantTarget.pid)
+          : await this.textEditMonitor.activateTargetPid();
+        // The command's app couldn't be brought forward; whatever is in front isn't it.
+        if (assistantTarget && !activated) return noTarget;
       }
 
       if (!activated && mainWindow && !mainWindow.isDestroyed() && mainWindow.isFocused()) {
@@ -3317,9 +3332,14 @@ class IPCHandlers {
         }
       }
 
-      // A raw paste (a command from a code block) lands exactly as given: no smart
-      // space, and no AutoLearn watching the user edit it.
-      const { raw, ...pasteOptions } = options ?? {};
+      if (
+        process.platform === "linux" &&
+        assistantTarget &&
+        !(await assistantPasteTarget.isFocused(assistantTarget))
+      ) {
+        return noTarget;
+      }
+
       // Smart spacing (#856): append a trailing space so the next paste's leading
       // space self-corrects the gap. Reading the char before the cursor to space
       // the front instead would take a macOS Accessibility read costing hundreds
@@ -3332,7 +3352,7 @@ class IPCHandlers {
       // activateTargetPid above; Linux re-detects the target inside pasteLinux.
       const winTarget =
         process.platform === "win32"
-          ? ((await this.selectionManager?.getWinTarget?.()) ?? null)
+          ? (assistantTarget?.window ?? (await this.selectionManager?.getWinTarget?.()) ?? null)
           : null;
       const targetWindow =
         winTarget &&
@@ -6143,6 +6163,17 @@ class IPCHandlers {
       }
       this.windowManager.setAssistantPanelOpen(open);
       return { success: true };
+    });
+
+    // The panel takes the app its voice command was spoken over as Paste into app's target
+    // ("adopt"), or drops any target when it opens without one ("forget"). True when there is
+    // a target that isn't OpenWhispr.
+    ipcMain.handle("assistant-paste-target", async (event, action) => {
+      const target = this.windowManager?.assistantPasteTarget;
+      if (!target || event.sender !== this.windowManager?.mainWindow?.webContents) return false;
+      if (action === "adopt") return target.adopt();
+      target.clear();
+      return false;
     });
 
     // Busy state is enforced in the main process so a hotkey cannot trigger

@@ -819,6 +819,7 @@ export default function App() {
             onConversationIdChange={assistant.setConversationId}
             skillChoice={assistant.skillChoice}
             onSkillChoiceChange={assistant.setSkillChoice}
+            canPasteIntoApp={assistant.canPasteIntoApp}
             voiceState={assistantVoiceState}
             thinking={assistant.thinking && assistant.open}
             open={assistant.open}
