@@ -138,10 +138,11 @@ export function MeetingTranscriptionPanel() {
       requestSignIn();
       return;
     }
+    useSettingsStore
+      .getState()
+      .setEnterpriseTranscriptionSetupMode(mode === "enterprise" ? "managed" : "manual");
     if (mode === effectiveTranscriptionMode) return;
     setMeetingTranscriptionMode(mode);
-    if (mode === "enterprise")
-      useSettingsStore.getState().setEnterpriseTranscriptionSetupMode("managed");
     setMeetingUseLocalWhisper(mode === "local");
     setMeetingCloudTranscriptionMode(mode === "openwhispr" ? "openwhispr" : "byok");
   };

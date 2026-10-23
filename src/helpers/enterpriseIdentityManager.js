@@ -587,6 +587,8 @@ function createEnterpriseIdentityManager({
       managed: true,
       identity,
       provider: resolution.provider,
+      mode: resolution.mode,
+      allowManualSetup: resolution.allowManualSetup,
       model: resolution.model,
       config: resolution.record.config,
       certificateBundles: config.certificateBundles,

@@ -598,12 +598,12 @@ function TranscriptionSection({
       requestSignIn();
       return;
     }
+    setEnterpriseTranscriptionSetupMode(mode === "enterprise" ? "managed" : "manual");
     if (mode === effectiveTranscriptionMode) return;
     setTranscriptionMode(mode);
     setUseLocalWhisper(mode === "local");
     updateTranscriptionSettings({ useLocalWhisper: mode === "local" });
     setCloudTranscriptionMode(mode === "openwhispr" ? "openwhispr" : "byok");
-    if (mode === "enterprise") setEnterpriseTranscriptionSetupMode("managed");
 
     const toastKey = {
       openwhispr: "switchedCloud",

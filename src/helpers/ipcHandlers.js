@@ -6837,7 +6837,34 @@ class IPCHandlers {
     this.getEnterpriseAudioRequest = getEnterpriseAudioRequest;
     this.enterpriseAudioTransport = enterpriseAudioTransport;
     this.enterpriseAudioRuntime = createEnterpriseAudioRuntime({
-      resolveProvider: (request) => this.enterpriseIdentityManager.resolveProvider(request),
+      resolveProvider: async (request) => {
+        const resolved = await this.enterpriseIdentityManager.resolveProvider(request);
+        if (!resolved.managed) return resolved;
+        const snapshot = await workspacePolicyManager.getPolicy(request);
+        if (!snapshot.success || (snapshot.managed && !snapshot.policy))
+          throw Object.assign(new Error(i18nMain.t("common.policyUnresolved")), {
+            code: "POLICY_UNRESOLVABLE",
+          });
+        const { isTranscriptionSelectionAllowed } = await import("../stores/policyRules.ts");
+        if (
+          !isTranscriptionSelectionAllowed(
+            {
+              status: snapshot.managed ? "managed" : "unmanaged",
+              policy: snapshot.policy ?? null,
+              appVersion: app.getVersion(),
+            },
+            { mode: "enterprise", provider: resolved.provider }
+          )
+        ) {
+          if (resolved.mode !== "managed_required" && resolved.allowManualSetup)
+            return { ...resolved, managed: false };
+          throw Object.assign(new Error(i18nMain.t("common.managedPolicyConflict")), {
+            code: "PROVIDER_POLICY_CONFLICT",
+            messageKey: "common.managedPolicyConflict",
+          });
+        }
+        return resolved;
+      },
       transport: enterpriseAudioTransport,
       credentials: this.enterpriseAudioCredentials,
       getRetirementSignal: () => audioRetirement.signal,
@@ -8157,7 +8184,17 @@ class IPCHandlers {
           }
 
           const canRestoreOld =
-            restoreOldOnFailure && !!oldMic?.isConnected && (!oldSystem || oldSystem.isConnected);
+            restoreOldOnFailure &&
+            !(
+              options.provider === "enterprise-realtime" &&
+              [
+                "PROVIDER_POLICY_CONFLICT",
+                "POLICY_UNRESOLVABLE",
+                "MANAGED_CONFIG_CHANGED",
+              ].includes(error.code)
+            ) &&
+            !!oldMic?.isConnected &&
+            (!oldSystem || oldSystem.isConnected);
           if (canRestoreOld) {
             this._meetingMicStreaming = oldMic;
             this._meetingSystemStreaming = oldSystem;

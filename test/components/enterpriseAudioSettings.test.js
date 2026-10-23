@@ -88,3 +88,123 @@ test("equal-generation workspace changes clear credentials and consent and ignor
   assert.equal(password().props.value, "");
   assert.equal(consent().props.checked, false);
 });
+
+test("meeting and upload selectors route explicit personal choices locally while required enterprise still wins", async (t) => {
+  let root;
+  t.after(() => root && React.act(async () => root.unmount()));
+  const meetings = [];
+  const uploads = [];
+  installBrowserGlobals(t, {
+    initialStorage: { _providerSettingsMigrated: "1", uploadTranscriptionMigrated: "true" },
+    window: {
+      electronAPI: {
+        meetingTranscriptionPrepare: async (options) => {
+          meetings.push(options);
+          return { success: false };
+        },
+        transcribeAudioFile: async (_path, options) => {
+          uploads.push(options);
+          return { success: true, text: "local" };
+        },
+        transcribeAudioFileByok: async (options) => {
+          uploads.push(options);
+          return { success: true, text: "managed" };
+        },
+      },
+    },
+  });
+  const container = installHookDom(t);
+  const vite = await createRendererServer(t, {
+    cachePrefix: "openwhispr-enterprise-audio-selection-",
+    noExternal: ["react-i18next"],
+    mockModules: {
+      "react-i18next": `
+        const t = (key) => key;
+        export function useTranslation() { return { t }; }
+        export const initReactI18next = { type: "3rdParty", init() {} };
+      `,
+      TranscriptionModelPicker: "export default function Picker() { return null; }",
+    },
+  });
+  const { usePolicyStore } = await vite.ssrLoadModule("/stores/policyStore.ts");
+  const { useWorkspaceStore } = await vite.ssrLoadModule("/stores/workspaceStore.ts");
+  const { getSettings, useSettingsStore, selectResolvedUploadTranscription } =
+    await vite.ssrLoadModule("/stores/settingsStore.ts");
+  const { useEnterpriseIdentityStore } = await vite.ssrLoadModule(
+    "/stores/enterpriseIdentityStore.ts"
+  );
+  const { MeetingTranscriptionPanel } = await vite.ssrLoadModule(
+    "/components/settings/MeetingSettings.tsx"
+  );
+  const { UploadTranscriptionPanel } = await vite.ssrLoadModule(
+    "/components/settings/UploadSettings.tsx"
+  );
+  const { prepareTranscription } = await vite.ssrLoadModule("/stores/meetingRecordingStore.ts");
+  const { transcribeFile } = await vite.ssrLoadModule("/services/fileTranscription.ts");
+  usePolicyStore.setState({ status: "unmanaged", accountId: "account-a", authGeneration: 1 });
+  useWorkspaceStore.setState({ activeWorkspaceId: "workspace-a" });
+  const record = {
+    provider: "openai-compatible",
+    mode: "managed_default",
+    allowManualSetup: true,
+    version: 1,
+    config: {
+      batch: { defaultDeployment: "company-batch" },
+      realtime: { defaultDeployment: "company-realtime" },
+    },
+  };
+  useEnterpriseIdentityStore.setState({
+    status: "ready",
+    accountId: "account-a",
+    workspaceId: "workspace-a",
+    authGeneration: 1,
+    config: { generation: 1, providers: [record] },
+  });
+  let Panel;
+  let tree;
+  root = createRoot(container);
+  function Harness() {
+    tree = Panel();
+    return null;
+  }
+  const selector = () => elements(tree).find((node) => node.props.modes && node.props.onSelect);
+  for (Panel of [MeetingTranscriptionPanel, UploadTranscriptionPanel]) {
+    const meeting = Panel === MeetingTranscriptionPanel;
+    await React.act(async () => root.render(React.createElement(Harness, { key: Panel.name })));
+    for (const [selected, choice, mode, allowManualSetup, enterprise] of [
+      ["enterprise", "local", "managed_default", true, false],
+      ["local", "local", "managed_default", true, false],
+      ["local", "enterprise", "managed_default", true, true],
+      ["enterprise", "local", "managed_required", true, true],
+      ["enterprise", "local", "managed_default", false, true],
+    ]) {
+      await React.act(async () => {
+        useSettingsStore.setState({
+          isSignedIn: true,
+          meetingFollowsTranscription: false,
+          meetingTranscriptionMode: selected,
+          uploadTranscriptionMode: selected,
+          enterpriseTranscriptionSetupMode: "managed",
+          uploadUseLocalWhisper: true,
+        });
+        useEnterpriseIdentityStore.setState({
+          config: { generation: 1, providers: [{ ...record, mode, allowManualSetup }] },
+        });
+      });
+      await React.act(async () => selector().props.onSelect(choice));
+      if (meeting) {
+        await prepareTranscription();
+        assert.equal(meetings.at(-1).provider, enterprise ? "enterprise-realtime" : "local");
+      } else {
+        const settings = selectResolvedUploadTranscription(getSettings());
+        await transcribeFile(
+          "/recording.wav",
+          { ...settings, isOpenWhisprCloud: false, getApiKey: () => "", language: "auto" },
+          false
+        );
+        assert.equal(Boolean(uploads.at(-1).managed), enterprise);
+        if (!enterprise) assert.equal(uploads.at(-1).provider, "whisper");
+      }
+    }
+  }
+});

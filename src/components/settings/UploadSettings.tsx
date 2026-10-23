@@ -102,11 +102,11 @@ export function UploadTranscriptionPanel() {
       requestSignIn();
       return;
     }
+    setEnterpriseTranscriptionSetupMode(mode === "enterprise" ? "managed" : "manual");
     if (mode === effectiveTranscriptionMode) return;
     setUploadTranscriptionMode(mode);
     setUploadUseLocalWhisper(mode === "local");
     setUploadCloudTranscriptionMode(mode === "openwhispr" ? "openwhispr" : "byok");
-    if (mode === "enterprise") setEnterpriseTranscriptionSetupMode("managed");
   };
 
   const handleLocalTranscriptionModelSelect = useCallback(
