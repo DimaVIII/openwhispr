@@ -107,6 +107,71 @@ test("maps Azure failures to coded errors", async () => {
   }
 });
 
+test("managed HTTP failures expose status and codes without reading provider diagnostics", async () => {
+  const { ipcErrorFields } = require("../../src/helpers/ipcErrorFields");
+  const marker = "provider-private-diagnostic-marker";
+  for (const provider of ["azure", "openai-compatible"]) {
+    for (const [status, code] of [
+      [400, undefined],
+      [401, "MANAGED_AUTH_REJECTED"],
+      [403, "MANAGED_AUTH_REJECTED"],
+      [429, "PROVIDER_RATE_LIMITED"],
+      [503, "SERVER_ERROR"],
+    ]) {
+      let bodyRead = false;
+      const response = {
+        ok: false,
+        status,
+        text: async () => {
+          bodyRead = true;
+          return marker;
+        },
+      };
+      const run = executor({
+        fetch: async () => response,
+        ...(provider === "openai-compatible"
+          ? {
+              resolve: async () => ({
+                model: "gateway-speech",
+                enterprise: {
+                  audioProfile: {
+                    endpoint: "https://gateway.test/transcribe",
+                    section: {},
+                    request: async () => response,
+                  },
+                },
+              }),
+            }
+          : {}),
+      });
+      await assert.rejects(run({}, { ...route, provider }, input), (error) => {
+        assert.equal(error.code, code);
+        assert.equal(error.status, status);
+        assert.equal(error.message, `Enterprise transcription error: ${status}`);
+        assert.equal(JSON.stringify(ipcErrorFields(error)).includes(marker), false);
+        if ([401, 403].includes(status))
+          assert.equal(
+            error.messageKey,
+            "hooks.audioRecording.errorDescriptions.managedAuthRejected"
+          );
+        return true;
+      });
+      assert.equal(bodyRead, false);
+    }
+  }
+});
+
+test("malformed successful responses do not expose the provider body in parse errors", async () => {
+  const { ipcErrorFields } = require("../../src/helpers/ipcErrorFields");
+  const marker = "provider-private-diagnostic-marker";
+  const run = executor({ fetch: async () => new Response(marker) });
+  await assert.rejects(run({}, route, input), (error) => {
+    assert.equal(error.message, "Managed transcription response was malformed");
+    assert.equal(JSON.stringify(ipcErrorFields(error)).includes(marker), false);
+    return true;
+  });
+});
+
 test("rejects routes that are not a managed transcription route", async () => {
   const run = executor({ fetch: async () => new Response("{}", { status: 200 }) });
   await assert.rejects(

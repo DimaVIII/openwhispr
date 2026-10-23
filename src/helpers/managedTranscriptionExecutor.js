@@ -81,8 +81,8 @@ function createManagedTranscriptionExecutor({
       ? await audioProfile.request(request)
       : await proxyFetch(endpoint, request);
     if (!response.ok) {
-      const errorText = await response.text();
-      const err = new Error(`Enterprise transcription error: ${response.status} ${errorText}`);
+      const err = new Error(`Enterprise transcription error: ${response.status}`);
+      err.status = response.status;
       if (response.status === 429) {
         err.code = "PROVIDER_RATE_LIMITED";
         err.messageKey = "hooks.audioRecording.errorDescriptions.providerRateLimited";
@@ -94,7 +94,13 @@ function createManagedTranscriptionExecutor({
       }
       throw err;
     }
-    const result = await response.json();
+    let result;
+    try {
+      result = await response.json();
+    } catch {
+      request.signal?.throwIfAborted();
+      throw new Error("Managed transcription response was malformed");
+    }
     if (typeof result?.text !== "string") {
       throw new Error("Managed transcription response was malformed");
     }

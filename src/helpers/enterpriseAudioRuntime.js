@@ -1,6 +1,6 @@
 const { runAbortableOperation } = require("./enterpriseProviderErrors");
 
-const changed = () =>
+const createEnterpriseAudioConfigChangedError = () =>
   Object.assign(new Error("Enterprise audio configuration changed"), {
     code: "MANAGED_CONFIG_CHANGED",
     messageKey: "common.managedConfigUnavailable",
@@ -57,7 +57,7 @@ function createEnterpriseAudioRequestResolver({
         authHeaders,
       });
       assertIdentity();
-      if (!snapshot.success || !snapshot.config) throw changed();
+      if (!snapshot.success || !snapshot.config) throw createEnterpriseAudioConfigChangedError();
       binding = { ...snapshot, generation: snapshot.config.generation };
       setBinding(binding);
     }
@@ -141,7 +141,8 @@ function createEnterpriseAudioRuntime({
     if (!endpoint) throw new Error("Enterprise audio endpoint is unavailable");
     async function assertCurrent() {
       retirement?.throwIfAborted();
-      if (credentials.generation !== credentialGeneration) throw changed();
+      if (credentials.generation !== credentialGeneration)
+        throw createEnterpriseAudioConfigChangedError();
       const current = await resolveProvider({
         ...request,
         inferenceScope: "transcription",
@@ -155,7 +156,7 @@ function createEnterpriseAudioRuntime({
         current.generation !== resolved.generation ||
         current.version !== resolved.version
       )
-        throw changed();
+        throw createEnterpriseAudioConfigChangedError();
       return current;
     }
     const readCredential = (slot) =>
@@ -171,7 +172,8 @@ function createEnterpriseAudioRuntime({
               section.authentication.credentialSlot
             );
       await assertCurrent();
-      if (credentials.generation !== credentialGeneration) throw changed();
+      if (credentials.generation !== credentialGeneration)
+        throw createEnterpriseAudioConfigChangedError();
       return provider === "azure" || section.authentication.type === "bearer"
         ? { Authorization: `Bearer ${secret}` }
         : { "api-key": secret };
@@ -191,14 +193,18 @@ function createEnterpriseAudioRuntime({
       async request(init) {
         const signal = AbortSignal.any([retirement, init.signal].filter(Boolean));
         const auth = await runAbortableOperation(headers, signal);
-        const response = await transport.request(endpoint, {
-          ...init,
-          signal,
-          headers: { ...init.headers, ...auth },
-          network,
-          readCredential,
-          caPem: bundle?.pem,
-        });
+        const response = await runAbortableOperation(
+          () =>
+            transport.request(endpoint, {
+              ...init,
+              signal,
+              headers: { ...init.headers, ...auth },
+              network,
+              readCredential,
+              caPem: bundle?.pem,
+            }),
+          signal
+        );
         await runAbortableOperation(assertCurrent, signal);
         return response;
       },
@@ -218,4 +224,8 @@ function createEnterpriseAudioRuntime({
   return { resolve };
 }
 
-module.exports = { createEnterpriseAudioRuntime, createEnterpriseAudioRequestResolver };
+module.exports = {
+  createEnterpriseAudioRuntime,
+  createEnterpriseAudioRequestResolver,
+  createEnterpriseAudioConfigChangedError,
+};

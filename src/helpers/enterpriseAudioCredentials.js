@@ -3,6 +3,7 @@ const path = require("node:path");
 const { createHash, randomUUID } = require("node:crypto");
 
 function createEnterpriseAudioCredentials({ directory, crypto, onChanged = () => {} }) {
+  const encryption = crypto ?? require("./secretCrypto");
   let generation = 0;
   let writes = Promise.resolve();
   const storePath = (accountId, workspaceId) => {
@@ -24,8 +25,16 @@ function createEnterpriseAudioCredentials({ directory, crypto, onChanged = () =>
       throw new Error("Invalid enterprise credential slot");
   };
   async function load(accountId, workspaceId) {
+    if (
+      !crypto &&
+      process.platform === "linux" &&
+      require("electron").safeStorage.getSelectedStorageBackend() === "basic_text"
+    )
+      throw new Error("OS-protected enterprise credential storage is unavailable");
     try {
-      return JSON.parse(crypto.decrypt(await fs.readFile(storePath(accountId, workspaceId))).value);
+      return JSON.parse(
+        encryption.decrypt(await fs.readFile(storePath(accountId, workspaceId))).value
+      );
     } catch (error) {
       if (error.code === "ENOENT") return {};
       throw error;
@@ -41,7 +50,7 @@ function createEnterpriseAudioCredentials({ directory, crypto, onChanged = () =>
         await fs.mkdir(directory, { recursive: true, mode: 0o700 });
         const temporary = `${target}.${randomUUID()}.tmp`;
         try {
-          await fs.writeFile(temporary, crypto.encrypt(JSON.stringify(values)), {
+          await fs.writeFile(temporary, encryption.encrypt(JSON.stringify(values)), {
             mode: 0o600,
             flag: "wx",
           });

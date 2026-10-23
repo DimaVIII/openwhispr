@@ -1132,3 +1132,46 @@ test("cancelling during policy lookup prevents every upload handler's later side
   assert.equal(download.mock.callCount(), 0);
   assert.equal(diarization.mock.callCount(), 0);
 });
+
+test("enterprise credential retirement preserves an actionable string code through IPC serialization", async (t) => {
+  const { deferred } = require("./harness/deferred");
+  const { ipcErrorFields } = require("../../src/helpers/ipcErrorFields");
+  const credential = deferred();
+  const activeMeeting = fakeThis._activeEnterpriseAudioMeeting;
+  fakeThis._activeEnterpriseAudioMeeting = false;
+  t.after(() => {
+    fakeThis._activeEnterpriseAudioMeeting = activeMeeting;
+    credential.resolve("rotated-key");
+  });
+  t.mock.method(fakeThis.enterpriseIdentityManager, "resolveProvider", async () => ({
+    managed: true,
+    provider: "openai-compatible",
+    generation: 1,
+    version: 1,
+    identity: { accountId: "account-a", workspaceId: "workspace-a" },
+    config: {
+      batch: {
+        endpoint: "https://gateway.test/transcribe",
+        defaultDeployment: "speech",
+        authentication: { type: "bearer", credentialSlot: "http" },
+      },
+    },
+  }));
+  const read = t.mock.method(fakeThis.enterpriseAudioCredentials, "read", () => credential.promise);
+  const request = t.mock.method(fakeThis.enterpriseAudioTransport, "request", async () => {
+    throw new Error("Retired audio must not be sent");
+  });
+  const profile = await fakeThis.enterpriseAudioRuntime.resolve({});
+  const pending = profile.request({});
+  await new Promise(setImmediate);
+  assert.equal(read.mock.callCount(), 1);
+  fakeThis._retireEnterpriseAudio();
+  await assert.rejects(pending, (error) => {
+    const result = ipcErrorFields(error);
+    assert.equal(result.code, "MANAGED_CONFIG_CHANGED");
+    assert.equal(result.messageKey, "common.managedConfigUnavailable");
+    assert.equal(result.error, "Enterprise audio configuration changed");
+    return true;
+  });
+  assert.equal(request.mock.callCount(), 0);
+});

@@ -6720,16 +6720,16 @@ class IPCHandlers {
     const {
       createEnterpriseAudioRuntime,
       createEnterpriseAudioRequestResolver,
+      createEnterpriseAudioConfigChangedError,
     } = require("./enterpriseAudioRuntime");
     let audioRetirement = new AbortController();
     this._retireEnterpriseAudio = (required = false) => {
-      audioRetirement.abort();
+      audioRetirement.abort(createEnterpriseAudioConfigChangedError());
       audioRetirement = new AbortController();
       if (required || this._activeEnterpriseAudioMeeting) void this._stopMeetingForPolicy?.();
     };
     this.enterpriseAudioCredentials = createEnterpriseAudioCredentials({
       directory: path.join(app.getPath("userData"), "enterprise-audio-keys"),
-      crypto: require("./secretCrypto"),
       onChanged: () => this._retireEnterpriseAudio(),
     });
     const enterpriseAudioTransport = createEnterpriseAudioTransport({

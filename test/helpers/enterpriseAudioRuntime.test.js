@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const {
   createEnterpriseAudioRuntime,
   createEnterpriseAudioRequestResolver,
+  createEnterpriseAudioConfigChangedError,
 } = require("../../src/helpers/enterpriseAudioRuntime");
 
 function setup(overrides = {}) {
@@ -103,6 +104,7 @@ test("a workspace switch during lookup cannot replace the newer workspace bindin
 function audioRuntime({
   provider = "openai-compatible",
   tokenProvider = async () => "token",
+  request,
 } = {}) {
   const credentials = { generation: 1, read: async () => "device-key" };
   const retirement = new AbortController();
@@ -132,7 +134,7 @@ function audioRuntime({
     transport: {
       request: async (...args) => {
         calls.push(args);
-        return new Response('{"text":"transcript"}');
+        return request ? request(...args) : new Response('{"text":"transcript"}');
       },
     },
   });
@@ -175,4 +177,32 @@ test("resolved audio profiles cannot adopt rotated credentials", async () => {
   fixture.retirement.abort();
   await assert.rejects(profile.request({}), { name: "AbortError" });
   assert.equal(fixture.calls.length, 1);
+});
+
+test("retirement preserves the managed error when the HTTP transport wraps cancellation", async () => {
+  const fixture = audioRuntime({
+    request: (_endpoint, { signal }) =>
+      new Promise((_resolve, reject) => {
+        signal.addEventListener(
+          "abort",
+          () =>
+            reject(
+              Object.assign(new Error("The operation was aborted"), {
+                code: "ABORT_ERR",
+                cause: signal.reason,
+              })
+            ),
+          { once: true }
+        );
+      }),
+  });
+  const profile = await fixture.runtime.resolve({});
+  const pending = profile.request({});
+  await new Promise(setImmediate);
+  assert.equal(fixture.calls.length, 1);
+  fixture.retirement.abort(createEnterpriseAudioConfigChangedError());
+  await assert.rejects(pending, {
+    code: "MANAGED_CONFIG_CHANGED",
+    messageKey: "common.managedConfigUnavailable",
+  });
 });

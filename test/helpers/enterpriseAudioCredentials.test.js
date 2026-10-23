@@ -4,6 +4,9 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const os = require("node:os");
 const crypto = require("node:crypto");
+const { readFileSync } = require("node:fs");
+const vm = require("node:vm");
+const { createRequire } = require("node:module");
 const {
   createEnterpriseAudioCredentials,
 } = require("../../src/helpers/enterpriseAudioCredentials");
@@ -30,6 +33,124 @@ function encryption() {
     },
   };
 }
+
+function defaultVault(directory, { platform = "linux", backend, available = true }) {
+  const cipher = encryption();
+  let encryptions = 0;
+  const electron = {
+    app: { getPath: () => directory },
+    safeStorage: {
+      getSelectedStorageBackend: () => backend,
+      isEncryptionAvailable: () => available,
+      encryptString: (value) => {
+        encryptions++;
+        return cipher.encrypt(value);
+      },
+      decryptString: (value) => cipher.decrypt(value).value,
+    },
+  };
+  const modules = new Map();
+  const load = (filename) => {
+    if (modules.has(filename)) return modules.get(filename).exports;
+    const module = { exports: {} };
+    modules.set(filename, module);
+    const nativeRequire = createRequire(filename);
+    vm.runInNewContext(
+      readFileSync(filename, "utf8"),
+      {
+        module,
+        Buffer,
+        process: { platform },
+        require: (name) => {
+          if (name === "electron") return electron;
+          if (name === "@napi-rs/keyring") throw new Error("OS keyring unavailable");
+          if (name === "./debugLogger") return { warn() {}, info() {} };
+          if (name === "./secretCrypto") return load(nativeRequire.resolve(name));
+          return nativeRequire(name);
+        },
+      },
+      { filename }
+    );
+    return module.exports;
+  };
+  return {
+    vault: load(
+      require.resolve("../../src/helpers/enterpriseAudioCredentials")
+    ).createEnterpriseAudioCredentials({ directory }),
+    encryptions: () => encryptions,
+  };
+}
+
+test("the production vault rejects Linux basic_text before provisioning or importing plaintext", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "ow-audio-default-secrets-"));
+  const source = path.join(directory, "enterprise-audio-bootstrap.json");
+  const fixture = defaultVault(path.join(directory, "encrypted"), { backend: "basic_text" });
+  try {
+    await assert.rejects(fixture.vault.save("account-a", "workspace-a", "http", "device-key"), {
+      message: "OS-protected enterprise credential storage is unavailable",
+    });
+    await fs.writeFile(
+      source,
+      JSON.stringify({
+        version: 1,
+        accountId: "account-a",
+        workspaceId: "workspace-a",
+        credentials: { http: "device-key" },
+      }),
+      { mode: 0o600 }
+    );
+    await assert.rejects(
+      importEnterpriseAudioBootstrap({
+        directory,
+        accountId: "account-a",
+        workspaceId: "workspace-a",
+        allowedSlots: ["http"],
+        credentials: fixture.vault,
+      }),
+      { message: "OS-protected enterprise credential storage is unavailable" }
+    );
+    await fs.access(source);
+    assert.equal(fixture.encryptions(), 0);
+    assert.equal(fixture.vault.generation, 0);
+    await assert.rejects(fs.access(path.join(directory, "encrypted")));
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("the production vault uses protected OS fallback storage and fails when none is available", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "ow-audio-default-secrets-"));
+  try {
+    for (const [platform, backend] of [
+      ["linux", "gnome_libsecret"],
+      ["darwin", undefined],
+      ["win32", undefined],
+    ]) {
+      const encryptedDirectory = path.join(directory, platform);
+      const fixture = defaultVault(encryptedDirectory, { platform, backend });
+      await fixture.vault.save("account-a", "workspace-a", "http", "device-key");
+      assert.equal(await fixture.vault.read("account-a", "workspace-a", "http"), "device-key");
+      assert.equal(fixture.encryptions(), 1);
+      const files = await fs.readdir(encryptedDirectory);
+      assert.equal(
+        (await fs.readFile(path.join(encryptedDirectory, files[0]))).includes(
+          Buffer.from("device-key")
+        ),
+        false
+      );
+    }
+    const unavailable = defaultVault(path.join(directory, "unavailable"), {
+      backend: "gnome_libsecret",
+      available: false,
+    });
+    await assert.rejects(unavailable.vault.save("account-a", "workspace-a", "http", "key"), {
+      message: "no encryption backend available",
+    });
+    assert.equal(unavailable.encryptions(), 0);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
 
 test("encrypted enterprise credentials are atomic, isolated by account/workspace and invalidate on rotation", async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "ow-audio-secrets-"));
