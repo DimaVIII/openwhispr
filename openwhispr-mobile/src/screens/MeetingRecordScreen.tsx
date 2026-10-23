@@ -259,7 +259,10 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
   // since processMeeting may have set 'failed' directly).
   const markNoteFailed = useCallback(
     (id: number): void => {
-      const status = useNotesStore.getState().notes.find((n) => n.id === id)?.transcriptionStatus;
+      const status =
+        Platform.OS === 'android'
+          ? notesRepository.getNoteById(id)?.transcriptionStatus
+          : useNotesStore.getState().notes.find((n) => n.id === id)?.transcriptionStatus;
       if (status != null && canTransition(status as TranscriptionStatus, 'failed')) {
         transitionStatus(id, 'failed');
       }
@@ -272,9 +275,17 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
     if (!run) return;
     localCapture.current = null;
     run.controller.abort();
-    run.recorder.stop().catch(Sentry.captureException);
+    const stopped = run.recorder.stop().catch(Sentry.captureException);
     try {
       if (run.context.ownsSavedNote()) markNoteFailed(run.noteId);
+      else
+        stopped
+          .then(() =>
+            run.context.recoverInterruptedNoteWhenOwnerReturns(run.recorder.uri, () =>
+              markNoteFailed(run.noteId),
+            ),
+          )
+          .catch(Sentry.captureException);
     } catch (error) {
       Sentry.captureException(error);
     } finally {

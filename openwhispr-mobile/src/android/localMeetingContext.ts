@@ -1,6 +1,7 @@
 import { useAuthStore } from '@/store/useAuthStore';
 import { useProcessingModeStore } from '@/store/useProcessingModeStore';
 import { notesRepository } from '@/data';
+import { Sentry } from '@/lib/sentry';
 
 /** Observe transitions, including A -> B -> A, for the whole asynchronous job. */
 export function createLocalMeetingContext(noteId: number, signal?: AbortSignal) {
@@ -8,10 +9,13 @@ export function createLocalMeetingContext(noteId: number, signal?: AbortSignal) 
   const userId = owner.user?.id;
   const cookie = owner.sessionCookie;
   const mode = useProcessingModeStore.getState().activeMode;
-  const privateNote = notesRepository.getNoteById(noteId)?.isPrivate === 1;
+  const savedNote = notesRepository.getNoteById(noteId);
+  const originalNote = savedNote ? { ...savedNote } : null;
+  const privateNote = originalNote?.isPrivate === 1;
   let invalidated = false;
   let identityInvalidated = false;
   let disposed = false;
+  let recoveryRequested = false;
   const controller = new AbortController();
   const cancel = () => controller.abort();
   if (signal?.aborted) cancel();
@@ -48,6 +52,44 @@ export function createLocalMeetingContext(noteId: number, signal?: AbortSignal) 
   return {
     signal: controller.signal,
     ownsSavedNote,
+    // A stopped recording may outlive its screen/account. This one-shot recovery
+    // only restores Retry; it never revives the invalidated processing context.
+    // Call after native Stop settles, including when this context is disposed.
+    recoverInterruptedNoteWhenOwnerReturns(sourceFile: string, recover: () => void) {
+      if (recoveryRequested || !originalNote || !privateNote) return;
+      recoveryRequested = true;
+      let unsubscribe = () => {};
+      const attempt = () => {
+        const current = useAuthStore.getState();
+        if (current.user?.id !== userId) return;
+        // With no account ID, only the original local guest session is an owner.
+        if (
+          userId == null &&
+          (current.sessionCookie !== cookie || current.isGuest !== owner.isGuest)
+        )
+          return;
+        unsubscribe();
+        try {
+          const note = notesRepository.getNoteById(noteId);
+          if (
+            !note ||
+            note.deletedAt ||
+            note.noteType !== 'meeting' ||
+            note.isPrivate !== 1 ||
+            note.clientNoteId !== originalNote.clientNoteId ||
+            note.createdAt !== originalNote.createdAt ||
+            note.ownerUserId !== originalNote.ownerUserId ||
+            note.sourceFile !== sourceFile
+          )
+            return;
+          recover();
+        } catch (error) {
+          Sentry.captureException(error);
+        }
+      };
+      unsubscribe = useAuthStore.subscribe(attempt);
+      attempt();
+    },
     ownsNote: () =>
       !invalidated && useProcessingModeStore.getState().activeMode === mode && ownsSavedNote(),
     checkpoint() {

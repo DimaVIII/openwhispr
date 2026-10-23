@@ -43,6 +43,18 @@ const mockDurableStart = jest.fn(async (): Promise<void> => undefined);
 const mockDurableStop = jest.fn(async () => 'file:///app/documents/meeting-7.wav');
 let mockNativeStopped: ((error?: Error) => void) | undefined;
 let mockOwnerValid = true;
+let mockUseRealLocalContext = false;
+const mockAuthListeners = new Set<(state: unknown, previous: unknown) => void>();
+let mockSavedNote = {
+  id: 7,
+  clientNoteId: 'local-a7',
+  createdAt: '2026-10-23 13:00:00',
+  noteType: 'meeting',
+  isPrivate: 1,
+  deletedAt: null,
+  sourceFile: 'file:///app/documents/meeting-7.wav',
+  transcriptionStatus: 'recording',
+};
 jest.mock('@/android/LocalMeetingRecorder', () => ({
   LocalMeetingRecorder: jest.fn().mockImplementation((_id, onStopped) => {
     mockNativeStopped = onStopped;
@@ -54,16 +66,20 @@ jest.mock('@/android/LocalMeetingRecorder', () => ({
   }),
 }));
 jest.mock('@/android/localMeetingContext', () => ({
-  createLocalMeetingContext: (_id: number, signal: AbortSignal) => ({
-    signal,
-    ownsNote: () => mockOwnerValid,
-    ownsSavedNote: () => mockOwnerValid,
-    checkpoint: () => {
-      if (!mockOwnerValid || signal.aborted)
-        throw Object.assign(new Error('Cancelled'), { name: 'AbortError' });
-    },
-    dispose: jest.fn(),
-  }),
+  createLocalMeetingContext: (_id: number, signal: AbortSignal) =>
+    mockUseRealLocalContext
+      ? jest.requireActual('@/android/localMeetingContext').createLocalMeetingContext(_id, signal)
+      : {
+          signal,
+          ownsNote: () => mockOwnerValid,
+          ownsSavedNote: () => mockOwnerValid,
+          recoverInterruptedNoteWhenOwnerReturns: jest.fn(),
+          checkpoint: () => {
+            if (!mockOwnerValid || signal.aborted)
+              throw Object.assign(new Error('Cancelled'), { name: 'AbortError' });
+          },
+          dispose: jest.fn(),
+        },
 }));
 
 jest.mock('expo-router', () => ({
@@ -120,7 +136,12 @@ jest.mock('@/components/notes/CloudMeetingRecording', () => ({
     ),
 }));
 jest.mock('@/config/colors', () => ({ BRAND: '#222', iosColor: () => '#222' }));
-jest.mock('@/data', () => ({ notesRepository: { updateNoteMeta: jest.fn() } }));
+jest.mock('@/data', () => ({
+  notesRepository: {
+    updateNoteMeta: jest.fn(),
+    getNoteById: () => mockSavedNote,
+  },
+}));
 jest.mock('@/data/calendarRepository', () => ({ calendarRepository: {} }));
 jest.mock('@/lib/calendar/meetingContext', () => ({ buildCalendarMeetingContext: jest.fn() }));
 jest.mock('@/lib/calendar/meetingSuggestions', () => ({
@@ -152,8 +173,13 @@ jest.mock('@/store/useAuthStore', () => ({
   useAuthStore: {
     getState: () => ({ user: mockUser }),
     subscribe: (listener: typeof mockAuthListener) => {
-      mockAuthListener = listener;
-      return jest.fn();
+      if (listener) mockAuthListeners.add(listener);
+      mockAuthListener = (state, previous) => {
+        for (const callback of mockAuthListeners) callback(state, previous);
+      };
+      return () => {
+        if (listener) mockAuthListeners.delete(listener);
+      };
     },
   },
 }));
@@ -195,6 +221,11 @@ beforeEach(() => {
   jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
   jest.spyOn(PermissionsAndroid, 'request').mockResolvedValue(PermissionsAndroid.RESULTS.GRANTED);
   mockOwnerValid = true;
+  mockUseRealLocalContext = false;
+  mockAuthListeners.clear();
+  mockNotes.transitionStatus.mockReset();
+  mockNotes.notes = [{ id: 7, transcriptionStatus: 'recording' }];
+  mockSavedNote = { ...mockSavedNote, transcriptionStatus: 'recording' };
   mockNativeStopped = undefined;
   mockDurableStart.mockReset().mockResolvedValue(undefined);
   mockDurableStop.mockReset().mockResolvedValue('file:///app/documents/meeting-7.wav');
@@ -557,4 +588,61 @@ it('allows saving for later during local processing and retains a retryable note
   expect(mockReplace).toHaveBeenCalledWith('/(tabs)/(notes)/7');
   await act(async () => processed());
   expect(mockReplace).toHaveBeenCalledTimes(1);
+});
+
+// Regression: canceling on account change must expose Retry when A returns,
+// without letting the old capture/pipeline write while B is active.
+it('makes the stopped local note retryable when its original account returns without restart', async () => {
+  mockUseRealLocalContext = true;
+  mockNotes.notes = [mockSavedNote];
+  mockNotes.transitionStatus.mockImplementation((_id: number, status: string) => {
+    mockSavedNote.transcriptionStatus = status;
+  });
+  const view = await startPrivateMeeting();
+  await act(async () => {
+    const previous = { user: mockUser };
+    mockUser = { id: 'b' };
+    mockAuthListener?.({ user: mockUser }, previous);
+  });
+  expect(mockDurableStop).toHaveBeenCalledTimes(1);
+  expect(mockSavedNote.transcriptionStatus).toBe('recording');
+  view.unmount();
+  await act(async () => {
+    const previous = { user: mockUser };
+    mockUser = { id: 'a' };
+    mockAuthListener?.({ user: mockUser }, previous);
+  });
+  expect(mockSavedNote.transcriptionStatus).toBe('failed');
+  expect(mockNotes.runMeetingPipeline).not.toHaveBeenCalled();
+});
+
+it('waits for native Stop before recovering after a rapid account return', async () => {
+  mockUseRealLocalContext = true;
+  mockNotes.notes = [mockSavedNote];
+  mockNotes.transitionStatus.mockImplementation((_id: number, status: string) => {
+    mockSavedNote.transcriptionStatus = status;
+  });
+  let stopped!: (uri: string) => void;
+  mockDurableStop.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        stopped = resolve;
+      }),
+  );
+  const view = await startPrivateMeeting();
+  await act(async () => {
+    const previous = { user: mockUser };
+    mockUser = { id: 'b' };
+    mockAuthListener?.({ user: mockUser }, previous);
+  });
+  view.unmount();
+  await act(async () => {
+    const previous = { user: mockUser };
+    mockUser = { id: 'a' };
+    mockAuthListener?.({ user: mockUser }, previous);
+  });
+  expect(mockSavedNote.transcriptionStatus).toBe('recording');
+  await act(async () => stopped('file:///app/documents/meeting-7.wav'));
+  expect(mockSavedNote.transcriptionStatus).toBe('failed');
+  expect(mockNotes.runMeetingPipeline).not.toHaveBeenCalled();
 });

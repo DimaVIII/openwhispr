@@ -21,8 +21,10 @@ observe account/session and mode transitions (including A -> B -> A), reject sta
 transcript/title/summary results, and clean up subscriptions. An explicit abort
 leaves a current owner's recording retryable. The screen supplies that abort signal for navigation, account/mode changes and
 cancellation. A same-account mode change can mark the saved recording retryable;
-account transitions cannot write into the replacement account. An old account’s
-interrupted note may still need restart recovery when returning in the same runtime. No private retry uploads audio.
+account transitions cannot write into the replacement account. After native Stop settles, an interrupted private note becomes retryable when its
+original account returns, without a restart. This status-only recovery checks the
+saved note identity, privacy and audio path; the cancelled job stays invalid and
+never resumes automatically. Installed account-return validation is still pending. No private retry uploads audio.
 
 Preflight requires the user to select and download Parakeet v3 for word timing.
 Requests for word timings with Moonshine fail before loading its runtime; ordinary
