@@ -1309,6 +1309,14 @@ export interface ConversationCreateAckResult {
   cloud_id?: string | null;
 }
 
+// Main refused a sync write because the sign-in that read or fetched it was
+// replaced.
+export interface StaleSyncWrite {
+  success: false;
+  changes: 0;
+  stale: true;
+}
+
 export type OnboardingDemoKind = "dictation" | "assistant";
 /**
  * "partial" streams the transcript, "processing" carries the final transcript,
@@ -3713,24 +3721,28 @@ declare global {
       getConversationByClientId?: (clientId: string) => Promise<ConversationPreview | null>;
       upsertConversationFromCloud?: (
         cloudConv: Record<string, unknown>,
-        messages: Array<Record<string, unknown>>
-      ) => Promise<void>;
+        messages: Array<Record<string, unknown>>,
+        expectedAuthGeneration?: number
+      ) => Promise<ConversationPreview | StaleSyncWrite | null>;
       acknowledgeConversationCreate?: (
         id: number,
         snapshot: ConversationCreateSnapshot,
-        cloudId: string
+        cloudId: string,
+        accountId?: string
       ) => Promise<ConversationCreateAckResult | undefined>;
       markConversationSynced?: (
         id: number,
-        cloudId: string
+        cloudId: string,
+        accountId?: string
       ) => Promise<{ success: boolean } | undefined>;
       hardDeleteConversation?: (id: number) => Promise<void>;
 
       getPendingTranscriptions?: () => Promise<TranscriptionItem[]>;
       getTranscriptionByClientId?: (clientId: string) => Promise<TranscriptionItem | null>;
       upsertTranscriptionFromCloud?: (
-        cloudTranscription: Record<string, unknown>
-      ) => Promise<TranscriptionItem>;
+        cloudTranscription: Record<string, unknown>,
+        expectedAuthGeneration?: number
+      ) => Promise<TranscriptionItem | StaleSyncWrite | null>;
       markTranscriptionSynced?: (
         id: number,
         cloudId: string,
@@ -3743,8 +3755,9 @@ declare global {
       getPendingDictionaryDeletes?: () => Promise<DictionaryEntryItem[]>;
       getDictionaryByClientId?: (clientDictId: string) => Promise<DictionaryEntryItem | null>;
       upsertDictionaryFromCloud?: (
-        cloudEntry: Record<string, unknown>
-      ) => Promise<DictionaryEntryItem | null>;
+        cloudEntry: Record<string, unknown>,
+        expectedAuthGeneration?: number
+      ) => Promise<DictionaryEntryItem | StaleSyncWrite | null>;
       markDictionarySynced?: (
         id: number,
         cloudId: string,
@@ -3764,8 +3777,9 @@ declare global {
         cloudEntry: Record<string, unknown>
       ) => Promise<SnippetEntryItem | null>;
       upsertSnippetFromCloud?: (
-        cloudEntry: Record<string, unknown>
-      ) => Promise<SnippetEntryItem | null>;
+        cloudEntry: Record<string, unknown>,
+        expectedAuthGeneration?: number
+      ) => Promise<SnippetEntryItem | StaleSyncWrite | null>;
       markSnippetSynced?: (
         id: number,
         cloudId: string,
