@@ -1265,10 +1265,17 @@ contextBridge.exposeInMainWorld("electronAPI", {
       messages,
       expectedAuthGeneration
     ),
-  acknowledgeConversationCreate: (id, snapshot, cloudId, accountId) =>
-    ipcRenderer.invoke("db-acknowledge-conversation-create", id, snapshot, cloudId, accountId),
-  markConversationSynced: (id, cloudId, accountId) =>
-    ipcRenderer.invoke("db-mark-conversation-synced", id, cloudId, accountId),
+  acknowledgeConversationCreate: (id, snapshot, cloudId, accountId, authGeneration) =>
+    ipcRenderer.invoke(
+      "db-acknowledge-conversation-create",
+      id,
+      snapshot,
+      cloudId,
+      accountId,
+      authGeneration
+    ),
+  markConversationSynced: (id, cloudId, accountId, authGeneration) =>
+    ipcRenderer.invoke("db-mark-conversation-synced", id, cloudId, accountId, authGeneration),
   hardDeleteConversation: (id) => ipcRenderer.invoke("db-hard-delete-conversation", id),
 
   getPendingTranscriptions: () => ipcRenderer.invoke("db-get-pending-transcriptions"),
