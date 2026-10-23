@@ -4866,6 +4866,7 @@
       "chipRemove": "Retirer {{name}} de ce chat",
       "placeholderWith": "Posez une question — ce chat utilise {{name}}",
       "usingSkill": "Compétence utilisée · {{name}}",
+      "usingSkillFailed": "Impossible d'utiliser la compétence · {{name}}",
       "creatorName": "Créateur de compétences",
       "creatorOpening": "Que faites-vous encore et encore ? Racontez-moi la dernière fois, ou choisissez une note pour commencer.",
       "draftPrompt": "Aidez-moi à terminer cette compétence.\nNom : {{name}}\nDescription : {{description}}",

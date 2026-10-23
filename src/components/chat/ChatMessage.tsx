@@ -25,6 +25,7 @@ import { SkillApprovalCard } from "./SkillApprovalCard";
 import { CodeBlockActions } from "./CodeBlockActions";
 import { approvalKey, useConnectorApprovalStore } from "../../stores/connectorApprovalStore";
 import { useSkillApprovalStore } from "../../stores/skillApprovalStore";
+import { loadSkillTarget } from "../../utils/skillContext";
 
 // Their card stands in for their step: once the call is over, a call that showed no card
 // (the proposal went back to the model to fix) leaves nothing behind.
@@ -52,11 +53,19 @@ function ToolCallStep({ toolCall }: { toolCall: ToolCallInfo }) {
   const isError = toolCall.status === "error";
   const isCompleted = toolCall.status === "completed";
   const isClipboard = toolCall.name === "copy_to_clipboard" && isCompleted;
-  // A loaded skill's result is its name, labelled in the current language.
-  const label =
-    toolCall.name === "load_skill" && isCompleted && toolCall.result
-      ? t("skills.chat.usingSkill", { name: toolCall.result })
-      : toolCall.result || toolCall.name;
+  // A loaded skill's result is its name; a failed load's is the error, so its step names the
+  // skill the call asked for. Both are labelled in the current language.
+  const skillName =
+    toolCall.name === "load_skill" && isCompleted
+      ? toolCall.failed
+        ? loadSkillTarget(toolCall.arguments)?.name
+        : toolCall.result
+      : undefined;
+  const label = skillName
+    ? t(toolCall.failed ? "skills.chat.usingSkillFailed" : "skills.chat.usingSkill", {
+        name: skillName,
+      })
+    : toolCall.result || toolCall.name;
 
   const resultLines = toolCall.result?.split("\n") ?? [];
   const hasDetail = resultLines.length > 1 && !isClipboard;

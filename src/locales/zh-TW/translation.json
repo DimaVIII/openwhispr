@@ -4696,6 +4696,7 @@
       "chipRemove": "從此對話中移除 {{name}}",
       "placeholderWith": "隨便問點什麼——此對話使用 {{name}}",
       "usingSkill": "正在使用技能 · {{name}}",
+      "usingSkillFailed": "無法使用技能 · {{name}}",
       "creatorName": "技能建立工具",
       "creatorOpening": "您經常反覆做什麼事？跟我說說上一次的情況，或選一則筆記作為起點。",
       "draftPrompt": "幫我完成這個技能。\n名稱：{{name}}\n描述：{{description}}",

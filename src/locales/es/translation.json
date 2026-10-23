@@ -4748,6 +4748,7 @@
       "chipRemove": "Quitar {{name}} de este chat",
       "placeholderWith": "Pregunta lo que quieras — este chat usa {{name}}",
       "usingSkill": "Usando habilidad · {{name}}",
+      "usingSkillFailed": "No se pudo usar la habilidad · {{name}}",
       "creatorName": "Creador de habilidades",
       "creatorOpening": "¿Qué haces una y otra vez? Cuéntame cómo fue la última vez o elige una nota para empezar.",
       "draftPrompt": "Ayúdame a terminar esta habilidad.\nNombre: {{name}}\nDescripción: {{description}}",

@@ -768,6 +768,7 @@ export function useChatStreaming({
                     return {
                       data: `Unknown tool: ${name}`,
                       displayText: t("agentMode.tools.unknownTool", { name }),
+                      failed: true,
                     };
                   let args: Record<string, unknown>;
                   try {
@@ -776,6 +777,7 @@ export function useChatStreaming({
                     return {
                       data: `Invalid tool arguments for ${name}`,
                       displayText: t("agentMode.tools.invalidArgs", { name }),
+                      failed: true,
                     };
                   }
                   const result = await executeTool(
@@ -792,7 +794,12 @@ export function useChatStreaming({
                     result.success && result.data && typeof result.data === "object"
                       ? (result.data as Record<string, unknown> | Array<Record<string, unknown>>)
                       : undefined;
-                  return { data, displayText: result.displayText, metadata };
+                  return {
+                    data,
+                    displayText: result.displayText,
+                    metadata,
+                    ...(result.success ? {} : { failed: true }),
+                  };
                 }
               : undefined;
 
@@ -890,6 +897,7 @@ export function useChatStreaming({
                                 ...tc,
                                 status: "completed" as const,
                                 result: toolDisplayTexts.get(chunk.callId) ?? chunk.displayText,
+                                ...(chunk.failed ? { failed: true } : {}),
                                 ...(chunk.metadata && !isQueryResultData(chunk.metadata)
                                   ? {
                                       metadata:

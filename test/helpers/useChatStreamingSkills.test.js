@@ -548,6 +548,52 @@ test("the cached load_skill knows which skills each send already carries", async
   ]);
 });
 
+test("a load_skill that fails is marked failed, and its step keeps the mark", async (t) => {
+  const { api } = skillsApi();
+  const { captured, reasoningService, getMessages } = await renderChat(t, SKILLS_ON, {
+    electronAPI: api,
+  });
+  const results = [];
+  reasoningService.processTextStreamingCloud.mock.mockImplementation(async function* (_m, c) {
+    const calls = [
+      { id: "call-1", name: "load_skill", arguments: '{"name":"meeting-prep"}' },
+      { id: "call-2", name: "load_skill", arguments: '{"name":"meeting-perp"}' },
+    ];
+    yield { type: "tool_calls", calls };
+    for (const call of calls) {
+      const result = await c.executeToolCall(call.name, call.arguments, call.id);
+      results.push(result);
+      // What ReasoningService yields for the executor's result.
+      yield {
+        type: "tool_result",
+        callId: call.id,
+        toolName: call.name,
+        displayText: result.displayText,
+        ...(result.failed ? { failed: true } : {}),
+      };
+    }
+    yield { type: "done", finishReason: "stop" };
+  });
+
+  await captured.sendToAI("prep me", [userMessage("u1", "prep me")]);
+
+  assert.deepEqual(
+    results.map((result) => [result.displayText, result.failed]),
+    [
+      ["Meeting prep", undefined],
+      ['No skill named "meeting-perp"', true],
+    ]
+  );
+  const steps = getMessages().find((message) => message.role === "assistant").toolCalls;
+  assert.deepEqual(
+    steps.map((step) => [step.status, step.result, step.failed]),
+    [
+      ["completed", "Meeting prep", undefined],
+      ["completed", 'No skill named "meeting-perp"', true],
+    ]
+  );
+});
+
 test("a skill cut to fit is left to load_skill, not marked loaded", async (t) => {
   // About 5 tokens a line: Meeting prep takes most of the 16,000, and Weekly recap can't fit.
   const lines = (count, word) =>

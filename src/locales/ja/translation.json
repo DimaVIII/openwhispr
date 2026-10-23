@@ -4696,6 +4696,7 @@
       "chipRemove": "{{name}}をこのチャットから外す",
       "placeholderWith": "何でも聞いてください — このチャットでは{{name}}を使います",
       "usingSkill": "スキルを使用中 · {{name}}",
+      "usingSkillFailed": "スキルを使用できませんでした · {{name}}",
       "creatorName": "スキル作成ツール",
       "creatorOpening": "何度も繰り返していることは何ですか？前回どうだったか教えてください。ノートを選んで始めることもできます。",
       "draftPrompt": "このスキルの仕上げを手伝ってください。\n名前: {{name}}\n説明: {{description}}",

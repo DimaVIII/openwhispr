@@ -4866,6 +4866,7 @@
       "chipRemove": "{{name}} aus diesem Chat entfernen",
       "placeholderWith": "Frag etwas – dieser Chat nutzt {{name}}",
       "usingSkill": "Nutzt Skill · {{name}}",
+      "usingSkillFailed": "Skill konnte nicht genutzt werden · {{name}}",
       "creatorName": "Skill-Ersteller",
       "creatorOpening": "Was machst du immer wieder? Erzähl mir, wie es beim letzten Mal lief, oder wähle eine Notiz als Ausgangspunkt.",
       "draftPrompt": "Hilf mir, diesen Skill fertigzustellen.\nName: {{name}}\nBeschreibung: {{description}}",
