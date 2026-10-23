@@ -72,7 +72,11 @@ it('sends the desktop default prompt to Android note inference', async () => {
   expect(ReasoningService.processText).toHaveBeenCalledWith(
     expect.objectContaining({ text: 'we was there', systemPrompt: desktopPrompt }),
   );
-  expect(onSuccess).toHaveBeenCalledWith('Clean notes.', desktopAction.prompt, undefined);
+  expect(onSuccess).toHaveBeenCalledWith(
+    'Clean notes.',
+    desktopAction.prompt || desktopPrompt,
+    undefined,
+  );
 });
 
 it('retains normalized dictionary spellings with the desktop prompt', async () => {
@@ -140,6 +144,6 @@ it('publishes substantive notes that mention the empty-content marker', async ()
   const onError = jest.fn();
   const { result } = renderHook(() => useActionProcessing({ onSuccess, onError }));
   await act(() => result.current.runAction(action, 'Document the protocol token.'));
-  expect(onSuccess).toHaveBeenCalledWith(text, desktopAction.prompt, undefined);
+  expect(onSuccess).toHaveBeenCalledWith(text, desktopAction.prompt || desktopPrompt, undefined);
   expect(onError).not.toHaveBeenCalled();
 });

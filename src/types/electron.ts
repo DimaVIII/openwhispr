@@ -15,6 +15,8 @@ import type {
 import type {
   CalendarAvailabilityRequest,
   CalendarAvailabilityResult,
+  CalendarEvent,
+  LinkableCalendarEvent,
   MicrosoftCalendarAccount,
 } from "./calendar";
 import type {
@@ -3249,14 +3251,11 @@ declare global {
       >;
       gcalGetEvent?: (eventId: string) => Promise<{
         success: boolean;
-        event: {
-          id: string;
-          summary: string | null;
-          start_time: string;
-          end_time: string;
-          attendees_count: number;
-          attendees: string | null;
-        } | null;
+        event: CalendarEvent | null;
+      }>;
+      calendarGetLinkableEvents?: () => Promise<{
+        success: boolean;
+        events: LinkableCalendarEvent[];
       }>;
 
       // Contacts

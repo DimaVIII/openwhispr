@@ -37,7 +37,7 @@ it('lets RevenueCat own Android purchases and serializes identity across a store
   for (let index = 0; index < 5; index++) await Promise.resolve();
   const switchAccount = identifyRevenueCatUser('b');
   const reset = resetRevenueCatUser();
-  await Promise.resolve();
+  await new Promise<void>((resolve) => setImmediate(resolve));
   expect(Purchases.logIn).toHaveBeenCalledTimes(1);
   expect(Purchases.logOut).not.toHaveBeenCalled();
   release();

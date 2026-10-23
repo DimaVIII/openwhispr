@@ -591,14 +591,14 @@ describe('NoteEditorScreen generated meeting context', () => {
         expect(systemPrompt).toContain('OpenWhispr');
         if (usesDesktopInstructions) {
           expect(systemPrompt).toContain("Preserve the source's meaning when summarizing");
-          expect(systemPrompt).toContain('You are a note enhancement assistant.');
+          expect(systemPrompt).toContain("The material is the user's own notes");
           expect(systemPrompt).not.toContain('Transform this meeting into notes.');
           await waitFor(() =>
             expect(mockUpdateNote).toHaveBeenCalledWith(
               7,
               expect.objectContaining({
                 enhancementPrompt: expect.stringContaining(
-                  'Transform the provided content into clean, well-structured notes',
+                  'Convert the provided material into accurate, comprehensive, easy-to-scan notes',
                 ),
               }),
             ),

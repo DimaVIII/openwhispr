@@ -1,6 +1,10 @@
 import { Platform } from 'react-native';
 import type { UsageInfo } from '@/data/remote/usageApi';
-import { getUsageOwnerKey, useUsageStore } from '@/store/useUsageStore';
+import {
+  getBillingIdentity,
+  isBillingIdentityCurrent,
+  type BillingIdentity,
+} from './billingIdentity';
 
 const inFlight = new Map<string, Promise<UsageInfo>>();
 
@@ -12,49 +16,52 @@ export function reconcileStoreBilling(): Promise<UsageInfo> {
   }
 
   const platform = Platform.OS;
-  const billingUserId = useUsageStore.getState().usage?.billingUserId;
-  if (!billingUserId) {
+  const identity = getBillingIdentity();
+  if (!identity) {
     return Promise.reject(new Error('Billing identity is unavailable'));
   }
 
-  const owner = getUsageOwnerKey();
-  if (!owner) return Promise.reject(new Error('Sign in to check billing.'));
-  const key = `${platform}:${owner}:${billingUserId}`;
+  const key = JSON.stringify([
+    platform,
+    identity.userId,
+    identity.sessionCookie,
+    identity.billingUserId,
+  ]);
   const existing = inFlight.get(key);
   if (existing) return existing;
-  const request = performReconciliation(billingUserId, platform, owner).finally(() =>
-    inFlight.delete(key),
-  );
-  inFlight.set(key, request);
-  return request;
+  const promise = performReconciliation(identity, platform).finally(() => inFlight.delete(key));
+  inFlight.set(key, promise);
+  return promise;
 }
 
 async function performReconciliation(
-  billingUserId: string,
+  identity: BillingIdentity,
   platform: 'ios' | 'android',
-  owner: string,
 ): Promise<UsageInfo> {
   // Load the native billing path only when reconciliation actually runs. This
   // keeps screens that merely import a usage gate independent of native SDKs.
-  const [{ reconcileMobileBilling }, { withRevenueCatUser, syncRevenueCatPurchases }] =
-    await Promise.all([import('@/data/remote/billingApi'), import('@/lib/revenuecat')]);
+  const { reconcileMobileBilling } =
+    require('@/data/remote/billingApi') as typeof import('@/data/remote/billingApi');
+  const { reconcileRevenueCatPurchases, withRevenueCatUser } =
+    require('@/lib/revenuecat') as typeof import('@/lib/revenuecat');
 
-  const checkIdentity = () => {
-    if (
-      getUsageOwnerKey() !== owner ||
-      useUsageStore.getState().usage?.billingUserId !== billingUserId
-    )
-      throw new Error('Billing account changed.');
-  };
-  checkIdentity();
+  const current = () => isBillingIdentityCurrent(identity);
   if (platform === 'ios') {
-    const synced = await syncRevenueCatPurchases(billingUserId, checkIdentity);
+    const synced = await reconcileRevenueCatPurchases(identity.billingUserId, current);
     if (!synced) throw new Error('RevenueCat purchase sync is unavailable');
   } else {
-    await withRevenueCatUser(billingUserId, async () => undefined, checkIdentity);
+    // Android restores explicitly through its purchase controller. A status
+    // retry must not perform an unsolicited store-wide receipt synchronization.
+    await withRevenueCatUser(
+      identity.billingUserId,
+      async () => undefined,
+      () => {
+        if (!current()) throw new Error('Billing account changed');
+      },
+    );
   }
-  checkIdentity();
-  const usage = await reconcileMobileBilling(platform);
-  checkIdentity();
+  if (!current()) throw new Error('Billing account changed');
+  const usage = await reconcileMobileBilling(platform, identity.sessionCookie);
+  if (!current()) throw new Error('Billing account changed');
   return usage;
 }

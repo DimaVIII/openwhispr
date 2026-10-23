@@ -2,9 +2,9 @@
 
 ## Current source — 23 October 2026
 
-At Josh's request, Android ordinary notes using the default action now receive the desktop default AI Summary prompt. The full system prompt is byte-identical to the desktop compiler output at source `7aaef955`, before the existing optional mobile dictionary suffix. An inference-boundary test protects this parity. Meetings, custom actions, iOS, model selection and sampling keep their previous behavior. The desktop `NOTHING_TO_SUMMARIZE` response is intercepted so it does not replace the original note.
+At Josh's request, Android ordinary notes using the default action now receive the desktop default AI Summary prompt. The 3,588-character section-based system prompt is byte-identical to the desktop compiler output at source `7e7c46275`, before the existing optional mobile dictionary suffix. An inference-boundary test protects this parity. Meetings, custom actions, iOS, model selection and sampling keep their previous behavior. The desktop `NOTHING_TO_SUMMARIZE` response is intercepted so it does not replace the original note.
 
-**Quality remains unaccepted.** Two repeated host Qwen3 1.7B Q4_K_M cases with this prompt produced tables and invented owners or dates. These reproduce the earlier desktop-prompt comparison; they are not evidence about the shipped desktop app's own model/runtime. The prompt choice does not waive source-fidelity or paragraph acceptance. The change is not yet in an installed candidate.
+**Quality remains unaccepted.** Four repeated host Qwen3 1.7B Q4_K_M cases with the current template still invent tasks/owners, including copying the example proposal task assigned to Alice into unrelated notes. The preceding flat desktop prompt separately produced tables and invented dates; they are not evidence about the shipped desktop app's own model/runtime. The prompt choice does not waive source-fidelity or paragraph acceptance. The change is not yet in an installed candidate.
 
 ## Historical Qwen3 candidate and cleanup experiments
 

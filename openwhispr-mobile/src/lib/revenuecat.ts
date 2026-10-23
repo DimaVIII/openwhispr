@@ -7,6 +7,40 @@ import Purchases, {
 import { Sentry } from '@/lib/sentry';
 
 let configured = false;
+let identityQueue: Promise<unknown> = Promise.resolve();
+
+const IDENTITY_CALL_TIMEOUT_MS = 10_000;
+// Restoring purchases can take far longer than a login on a slow network or a
+// long purchase history, and reconciliation must not give up on it early.
+const PURCHASE_SYNC_TIMEOUT_MS = 60_000;
+// Longer than any one call's deadline, so ordinary queueing behind a sync never fails.
+const IDENTITY_QUEUE_WAIT_MS = 90_000;
+
+// Identity changes run one at a time and in order, so the last login or logout
+// always wins; queued work is never skipped. A call's own deadline starts when it
+// runs, so ordinary queueing never fails it, and a separate cap on the wait
+// releases callers stuck behind a native call that never settles. Native calls
+// cannot be cancelled: a released call still runs, and holds the lock until it
+// settles.
+function withIdentity<T>(
+  operation: () => Promise<T>,
+  timeoutMs = IDENTITY_CALL_TIMEOUT_MS,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const tooLong = () => reject(new Error('RevenueCat identity call timed out'));
+    const waiting = setTimeout(tooLong, IDENTITY_QUEUE_WAIT_MS);
+    const run = () => {
+      clearTimeout(waiting);
+      const timer = setTimeout(tooLong, timeoutMs);
+      const work = Promise.resolve()
+        .then(operation)
+        .finally(() => clearTimeout(timer));
+      work.then(resolve, reject);
+      return work;
+    };
+    identityQueue = identityQueue.then(run).catch(() => {});
+  });
+}
 
 function getRevenueCatApiKey(): string | undefined {
   const key =
@@ -48,10 +82,11 @@ export function configureRevenueCat(): void {
   }
 }
 
-let billingQueue: Promise<unknown> = Promise.resolve();
+// Store UI can stay open longer than an identity call deadline, but it must
+// hold the same queue as timed login/logout and receipt synchronization.
 function enqueueBilling<T>(operation: () => Promise<T>): Promise<T> {
-  const next = billingQueue.then(operation, operation);
-  billingQueue = next.catch(() => undefined);
+  const next = identityQueue.then(operation, operation);
+  identityQueue = next.catch(() => undefined);
   return next;
 }
 
@@ -75,7 +110,7 @@ export async function identifyRevenueCatUser(userId: string): Promise<boolean> {
   if (!configured) configureRevenueCat();
   if (!configured) return false;
   try {
-    await withRevenueCatUser(userId, async () => undefined);
+    await withIdentity(() => Purchases.logIn(userId));
     return true;
   } catch (error) {
     reportRevenueCatError('identify', error);
@@ -86,30 +121,30 @@ export async function identifyRevenueCatUser(userId: string): Promise<boolean> {
 export async function resetRevenueCatUser(): Promise<void> {
   if (!configured) return;
   try {
-    await enqueueBilling(() => Purchases.logOut());
+    await withIdentity(() => Purchases.logOut());
   } catch (error) {
     reportRevenueCatError('reset', error);
   }
 }
 
-export async function syncRevenueCatPurchases(
-  userId: string,
-  checkIdentity?: () => void,
+// Keep the login and sync together: a sign-out or another account's login must
+// not change the SDK owner halfway through restoring a purchase.
+export async function reconcileRevenueCatPurchases(
+  billingUserId: string,
+  isCurrent: () => boolean,
 ): Promise<boolean> {
   if (!configured) configureRevenueCat();
   if (!configured) return false;
   try {
-    await withRevenueCatUser(
-      userId,
-      async () => {
-        await Purchases.syncPurchasesForResult();
-        checkIdentity?.();
-      },
-      checkIdentity,
-    );
-    return true;
+    return await withIdentity(async () => {
+      if (!isCurrent()) return false;
+      await Purchases.logIn(billingUserId);
+      if (!isCurrent()) return false;
+      await Purchases.syncPurchasesForResult();
+      return isCurrent();
+    }, PURCHASE_SYNC_TIMEOUT_MS);
   } catch (error) {
-    reportRevenueCatError('sync-purchases', error);
+    reportRevenueCatError('reconcile-purchases', error);
     return false;
   }
 }
@@ -120,21 +155,20 @@ export async function syncRevenueCatPurchases(
 // New purchases only; renewals and restores are covered by syncPurchases.
 export async function recordRevenueCatPurchase(
   productId: string,
-  userId: string,
+  userId?: string,
   checkIdentity?: () => void,
 ): Promise<boolean> {
   if (Platform.OS !== 'ios') return false;
   if (!configured) configureRevenueCat();
   if (!configured) return false;
   try {
-    await withRevenueCatUser(
-      userId,
-      async () => {
-        await Purchases.recordPurchase(productId);
-        checkIdentity?.();
-      },
-      checkIdentity,
-    );
+    await withIdentity(async () => {
+      checkIdentity?.();
+      if (userId) await Purchases.logIn(userId);
+      checkIdentity?.();
+      await Purchases.recordPurchase(productId);
+      checkIdentity?.();
+    });
     return true;
   } catch (error) {
     reportRevenueCatError('record-purchase', error);

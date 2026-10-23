@@ -2,6 +2,14 @@
 
 This is a requirements audit against the 15 October 2026 goal brief, including the Android-only correction. It is not a completion certificate. The [implementation plan](premium-experience-plan.md) preserves the chronological checkpoints; [acceptance](acceptance.md) distinguishes baseline checks from later builds. A checked implementation item does not establish physical-device or provider acceptance.
 
+## 23 October — current-main billing integration and prompt refresh
+
+Integrated main `7e7c46275` into the Android review branch. The creator-code billing merge now shares one identity queue with Android's native purchase controller, retains timed identity/sync calls, and sends billing reconciliation with the captured session cookie. Android access retries do not implicitly restore store purchases. A strengthened deferred-purchase test failed when separate queues allowed the second login through and passes with the shared queue. Both existing iOS timeout cases and Android controller cases pass.
+
+Main also changed desktop's default AI Summary to a section-based template. The parity test detected that drift; Android's bundled prompt now matches the current compiler output (3,588 characters), and saved enhancement metadata retains the compiled instructions. Four host-only Qwen3 Q4 checks still fail fidelity, including copied example tasks assigned to Alice. These are diagnostic outputs, not accepted note quality or installed-device evidence.
+
+Validation: 320 mobile suites / 3,888 tests pass; TypeScript and formatting pass; scoped lint has zero errors and two inherited warnings (shadowed state and an assertion awaited through a saved promise). New-head CI and a current-source candidate remain required. Code20 is finished from older source and no new build has been submitted at this checkpoint. The earlier prompt and counts below describe their respective historical heads.
+
 ## 23 October — desktop default prompt on Android
 
 Android's default action for ordinary notes now uses the desktop AI Summary system prompt, including its source-fidelity rules and default action instructions, as requested. An inference-boundary test compiles the desktop source independently and checks exact parity with the mobile bundled copy. Custom dictionary spellings still append after the prompt. Meeting, custom-action and iOS routes keep their existing behavior. The desktop empty-content marker is handled before publishing a result, preserving the original note instead of saving the marker.
