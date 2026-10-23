@@ -367,15 +367,31 @@ describe('buildChatPayload', () => {
     expect(newest).toContain('NOTES (1 of 1 meeting from this week, newest first):');
   });
 
-  it('leaves earlier answers\u2019 source lines out of the recent chat', () => {
-    const answer = {
-      ...makeMessage(1),
-      text: 'Cut the budget by 15%.\n\n**Source:** Untitled\nNotes used: Pricing sync',
-    };
-    const { text } = buildPayload({ history: [makeMessage(0), answer] });
-    expect(text).toContain('Assistant: Cut the budget by 15%.');
-    expect(text).not.toContain('Untitled');
-    expect(text).not.toContain('Pricing sync');
+  describe('earlier answers in the recent chat', () => {
+    const historyText = (answer: string): string =>
+      buildPayload({ history: [makeMessage(0), { ...makeMessage(1), text: answer }] }).text;
+
+    it.each([
+      'Cut the budget by 15%.\n\n**Source:** Untitled\nNotes used: Pricing sync',
+      'Cut the budget by 15%.\n\n### Sources\n- Untitled\n- Pricing sync',
+      'Cut the budget by 15%.\n\n**Sources:**\n1. Untitled\n2. Pricing sync',
+      'Cut the budget by 15%.\nSource(s): Untitled, Pricing sync',
+    ])('leave out a closing source block: %j', (answer) => {
+      const text = historyText(answer);
+      expect(text).toContain('Assistant: Cut the budget by 15%.');
+      expect(text).not.toContain('Untitled');
+      expect(text).not.toContain('Pricing sync');
+    });
+
+    it.each([
+      'Sources of revenue: ads and subscriptions.',
+      'Source code: see the repo.\n\nNotes: none.',
+      '- Sources: CRM and Stripe exports\n- Owner: Dana',
+      '```yaml\n- source: ./data\n```',
+      '**Source:** the CFO forecast in Pricing sync',
+    ])('keep text that only mentions a source: %j', (answer) => {
+      expect(historyText(answer)).toContain(answer.split('\n')[0]);
+    });
   });
 
   it('says when there are no matching notes', () => {

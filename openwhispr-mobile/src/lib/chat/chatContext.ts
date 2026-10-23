@@ -52,17 +52,33 @@ Rules:
 const NO_NOTES_SENT =
   "Don't name or cite any note in this answer, including notes named earlier in RECENT CHAT.";
 
-// An earlier answer's "Source: …" line is the cue a follow-up with no notes of its own copies.
-const SOURCE_LINE = /^[\s>*_-]*(?:sources?|notes? used)\b[*_]*\s*:.*$/gim;
+// An earlier answer's closing "Source: …" block is the cue a follow-up with no notes of its own
+// copies. Only a block at the very end goes, so a source mentioned in the answer itself, or in its
+// code, stays; other languages' labels rely on NO_NOTES_SENT alone.
+const SOURCE_LABEL = /^[\s>#*_-]*(?:\d+\.\s*)?(?:sources?|source\(s\)|notes? used)[*_]*\s*(?::|$)/i;
+const LIST_LINE = /^\s*(?:[-*+]|\d+\.)\s+\S/;
+
+const withoutClosingSources = (text: string): string => {
+  const lines = text.split('\n');
+  let cut = lines.length;
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const line = lines[index];
+    if (SOURCE_LABEL.test(line)) cut = index;
+    else if (line.trim() && !LIST_LINE.test(line)) break;
+  }
+  const kept = lines.slice(0, cut).join('\n').trim();
+  // An answer that was nothing but its source is kept whole, or a follow-up has nothing to refer to.
+  return kept || text;
+};
 
 const withoutSourceLines = (history: ChatMessage[]): ChatMessage[] =>
   history.map((message) =>
     message.role === 'assistant'
-      ? { ...message, text: message.text.replace(SOURCE_LINE, '').trim() }
+      ? { ...message, text: withoutClosingSources(message.text) }
       : message,
   );
 
-const NO_TOPIC_NOTES = `None. The question names no topic or time period, so no notes were included. If the recent chat already shows what they mean, answer from it. ${NO_NOTES_SENT} Otherwise, if it is about the user's own notes, meetings or commitments, reply with one short question asking which topic or time period they mean, such as "Which meeting or time period do you mean — like today or this week?", instead of saying the notes don't cover it. If it is a general-knowledge question, just answer it.`;
+const NO_TOPIC_NOTES = `None. The question names no topic or time period, so no notes were included. If the recent chat already shows what they mean, answer from it. Otherwise, if it is about the user's own notes, meetings or commitments, reply with one short question asking which topic or time period they mean, such as "Which meeting or time period do you mean — like today or this week?", instead of saying the notes don't cover it. If it is a general-knowledge question, just answer it. ${NO_NOTES_SENT}`;
 
 const STOPWORDS = new Set([
   'the',
