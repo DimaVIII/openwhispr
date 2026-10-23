@@ -1,5 +1,6 @@
 const WebSocket = require("ws");
 const debugLogger = require("./debugLogger");
+const { i18nMain } = require("./i18nMain");
 
 const WEBSOCKET_TIMEOUT_MS = 15000;
 const DISCONNECT_TIMEOUT_MS = 3000;
@@ -145,6 +146,7 @@ class OpenAIRealtimeStreaming {
     this.model = model || "gpt-4o-mini-transcribe";
     this.language = normalizeLanguage(language);
     this.preconfigured = !!preconfigured;
+    this.managed = options.mode === "enterprise";
     this.protocol = options.protocol ?? "openai-transcription-ga";
     this.connectTimeoutMs = options.connectTimeoutMs ?? WEBSOCKET_TIMEOUT_MS;
     this.sessionMaxMs = options.sessionMaxMs ?? SESSION_PREEMPT_MS;
@@ -176,7 +178,7 @@ class OpenAIRealtimeStreaming {
     } catch (err) {
       this.isConnecting = false;
       this.cleanup();
-      throw err;
+      throw this._safeError(err);
     }
 
     return new Promise((resolve, reject) => {
@@ -200,6 +202,7 @@ class OpenAIRealtimeStreaming {
       });
 
       this.ws.on("error", (error) => {
+        error = this._safeError(error);
         const wasActive = this.isConnected;
         debugLogger.error(
           `${this.providerLabel} WebSocket error`,
@@ -226,7 +229,7 @@ class OpenAIRealtimeStreaming {
           `${this.providerLabel} WebSocket closed`,
           this._logContext({
             code,
-            reason: reason?.toString(),
+            reason: this.managed ? undefined : reason?.toString(),
             wasActive,
           })
         );
@@ -378,7 +381,9 @@ class OpenAIRealtimeStreaming {
             `${this.providerLabel} turn transcription failed`,
             this._logContext({
               itemId: event.item_id,
-              error: event.error?.message || event.error?.code || null,
+              error: this.managed
+                ? "Enterprise realtime transcription failed"
+                : event.error?.message || event.error?.code || null,
             })
           );
           this.pendingTranscriptions.delete(event.item_id);
@@ -403,13 +408,13 @@ class OpenAIRealtimeStreaming {
 
         case "error": {
           const errCode = event.error?.code;
-          const errMsg = event.error?.message || `${this.providerLabel} error`;
+          const rawMessage = event.error?.message || `${this.providerLabel} error`;
           // Only consumers that attach onSessionExpired (meetings) get the
           // reconnect path; others (dictation) keep the onError/onSessionEnd flow.
           if (errCode === "session_expired" && this.onSessionExpired) {
             debugLogger.warn(
               `${this.providerLabel} session expired`,
-              this._logContext({ message: errMsg })
+              this._logContext({ message: this.managed ? "Session expired" : rawMessage })
             );
             this._sessionExpired = true;
             this.onSessionExpired({ proactive: false });
@@ -417,20 +422,25 @@ class OpenAIRealtimeStreaming {
           }
           const isEmptyBuffer =
             errCode === "input_audio_buffer_commit_empty" ||
-            errMsg.includes("buffer too small") ||
-            errMsg.includes("commit_empty");
+            rawMessage.includes("buffer too small") ||
+            rawMessage.includes("commit_empty");
+          const errMsg = this.managed
+            ? isEmptyBuffer
+              ? "input_audio_buffer_commit_empty"
+              : i18nMain.t("notes.upload.transcriptionFailed")
+            : rawMessage;
           if (isEmptyBuffer) {
             debugLogger.debug(
               `${this.providerLabel} empty buffer (server VAD already committed)`,
               this._logContext({
-                code: errCode,
+                code: this.managed ? "input_audio_buffer_commit_empty" : errCode,
               })
             );
           } else {
             debugLogger.error(
               `${this.providerLabel} error event`,
               this._logContext({
-                code: errCode,
+                code: this.managed ? undefined : errCode,
                 message: errMsg,
               })
             );
@@ -445,9 +455,18 @@ class OpenAIRealtimeStreaming {
     } catch (err) {
       debugLogger.error(
         `${this.providerLabel} message parse error`,
-        this._logContext({ error: err.message })
+        this._logContext({ error: this._safeError(err).message })
       );
     }
+  }
+
+  _safeError(error) {
+    if (!this.managed || error.messageKey) return error;
+    return Object.assign(new Error(i18nMain.t("notes.upload.transcriptionFailed")), {
+      code: /^Unexpected server response: (401|403)$/.test(error.message)
+        ? "MANAGED_AUTH_REJECTED"
+        : error.code,
+    });
   }
 
   // Unlabelled sockets (dictation) keep their pre-label log shape exactly.
@@ -541,7 +560,7 @@ class OpenAIRealtimeStreaming {
         } catch (err) {
           debugLogger.debug(
             `${this.providerLabel} keep-alive ping failed`,
-            this._logContext({ error: err.message })
+            this._logContext({ error: this._safeError(err).message })
           );
           socket.terminate();
         }

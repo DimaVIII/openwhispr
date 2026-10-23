@@ -49,6 +49,7 @@ import {
   getParakeetModelInfo,
   getTranscriptionProviders,
   isSherpaLocalProvider,
+  enterpriseProviderName,
 } from "../../models/ModelRegistry";
 import {
   useSettingsStore,
@@ -327,11 +328,11 @@ export default function UploadAudioView({ onNoteCreated, onOpenSettings }: Uploa
   const enterpriseTranscriptionSetupMode = useSettingsStore(
     (s) => s.enterpriseTranscriptionSetupMode
   );
-  const managedActive =
-    useManagedScopeResolution("transcription", enterpriseTranscriptionSetupMode).kind === "managed";
+  const managed = useManagedScopeResolution("transcription", enterpriseTranscriptionSetupMode);
+  const managedActive = managed.kind === "managed";
 
   const isOpenWhisprCloud =
-    isSignedIn && cloudTranscriptionMode === "openwhispr" && !useLocalWhisper;
+    !managedActive && isSignedIn && cloudTranscriptionMode === "openwhispr" && !useLocalWhisper;
 
   // Mode detection
   const isSelfHosted = transcriptionMode === "self-hosted" && !useLocalWhisper;
@@ -351,8 +352,8 @@ export default function UploadAudioView({ onNoteCreated, onOpenSettings }: Uploa
   let isLargeFile = false;
 
   if (file) {
-    if (useLocalWhisper) {
-      // Local transcription: no file size restrictions
+    if (managedActive || useLocalWhisper) {
+      // Managed audio is prepared/chunked to its endpoint cap; local decoding has no size limit.
     } else if (isSelfHosted || cloudTranscriptionProvider === "custom") {
       // Self-hosted / custom endpoints (e.g. local whisper.cpp): no file size restrictions
     } else if (isByok) {
@@ -371,6 +372,7 @@ export default function UploadAudioView({ onNoteCreated, onOpenSettings }: Uploa
   useEffect(() => {
     return () => {
       if (progressRef.current) clearInterval(progressRef.current);
+      progressCleanupRef.current?.();
     };
   }, []);
 
@@ -495,6 +497,8 @@ export default function UploadAudioView({ onNoteCreated, onOpenSettings }: Uploa
   ]);
 
   const getActiveModelLabel = (): string => {
+    if (managed.kind === "managed")
+      return `${enterpriseProviderName(managed.provider)} · ${managed.model}`;
     if (isOpenWhisprCloud) return t("notes.upload.openwhisprCloud");
     if (useLocalWhisper) {
       if (localTranscriptionProvider === "nvidia")
@@ -536,6 +540,7 @@ export default function UploadAudioView({ onNoteCreated, onOpenSettings }: Uploa
 
   // Batch counterpart of the single-file size gating above; returns keys under notes.upload.*.
   const getBatchSizeErrorKey = (sizeBytes: number): string | null => {
+    if (managedActive) return null;
     if (useLocalWhisper || isSelfHosted || cloudTranscriptionProvider === "custom") return null;
     if (isByok) return sizeBytes > byokMaxFileSize ? "byokTooLarge" : null;
     if (sizeBytes > CLOUD_PRO_MAX_FILE_SIZE) return "fileTooLarge";
@@ -697,7 +702,7 @@ export default function UploadAudioView({ onNoteCreated, onOpenSettings }: Uploa
     setChunkProgress(null);
     setDiarizationWarning(false);
 
-    const useChunkProgress = isOpenWhisprCloud && isLargeFile;
+    const useChunkProgress = managedActive || (isOpenWhisprCloud && isLargeFile);
 
     if (useChunkProgress) {
       progressCleanupRef.current =
@@ -979,6 +984,10 @@ export default function UploadAudioView({ onNoteCreated, onOpenSettings }: Uploa
   };
 
   const getTranscribingLabel = (): string => {
+    if (managed.kind === "managed")
+      return t("notes.upload.transcribingProvider", {
+        provider: enterpriseProviderName(managed.provider),
+      });
     if (isOpenWhisprCloud) return t("notes.upload.transcribingCloud");
     if (useLocalWhisper) return t("notes.upload.transcribingLocal");
     if (isSelfHosted) {

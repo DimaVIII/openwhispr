@@ -34,7 +34,8 @@ function safeCheckCode(error) {
     ["TimeoutError", "AbortError"].includes(error?.name)
   )
     return "TIMEOUT";
-  if (/401|403/.test(error?.message ?? "")) return "AUTH_REJECTED";
+  if (error?.code === "MANAGED_AUTH_REJECTED" || /401|403/.test(error?.message ?? ""))
+    return "AUTH_REJECTED";
   return "NETWORK_FAILED";
 }
 
@@ -274,6 +275,7 @@ function registerEnterpriseAudioSetup({
           const streaming = new OpenAIRealtimeStreaming();
           try {
             await streaming.connect({
+              mode: "enterprise",
               model: profile.model,
               protocol: profile.protocol,
               createSocket: () => profile.createSocket(signal),

@@ -14,7 +14,10 @@ import type { InferenceModeOption } from "../ui/SettingsSection";
 import { Toggle } from "../ui/toggle";
 import TranscriptionModelPicker from "../TranscriptionModelPicker";
 import type { InferenceMode } from "../../types/electron";
-import { getMeetingStreamingTranscriptionProviders } from "../../models/ModelRegistry";
+import {
+  getMeetingStreamingTranscriptionProviders,
+  enterpriseProviderName,
+} from "../../models/ModelRegistry";
 
 const MEETING_BYOK_PROVIDER_IDS = getMeetingStreamingTranscriptionProviders().map(
   (provider) => provider.id
@@ -78,7 +81,16 @@ export function MeetingTranscriptionPanel() {
     meetingCloudTranscriptionBaseUrl,
     setMeetingCloudTranscriptionBaseUrl,
     setMeetingCloudTranscriptionMode,
+    enterpriseTranscriptionSetupMode,
   } = useSettingsStore();
+  const managed = useManagedScopeResolution(
+    "transcription",
+    enterpriseTranscriptionSetupMode,
+    "realtime"
+  );
+  const managedActive = managed.kind === "managed";
+  const managedRequired =
+    managedActive && (managed.mode === "managed_required" || !managed.allowManualSetup);
   const {
     modes: transcriptionModes,
     effectiveMode: effectiveTranscriptionMode,
@@ -203,18 +215,38 @@ export function MeetingTranscriptionPanel() {
   return (
     <div className="space-y-3">
       <EnterpriseAudioSettings />
+      {managedActive && (
+        <div className="rounded-lg border border-primary/20 bg-primary/[0.03] p-3">
+          <p className="text-sm font-medium">
+            {t("settingsPage.aiModels.managedEnterprise.title")}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {enterpriseProviderName(managed.provider)} · {managed.model}
+          </p>
+        </div>
+      )}
       {emptyListIsEnterpriseOnly && (
         <p className="text-sm text-muted-foreground">
           {t("settingsPage.transcription.meetingEnterpriseOnly")}
         </p>
       )}
-      <InferenceModeSelector
-        modes={transcriptionModes}
-        activeMode={effectiveTranscriptionMode}
-        onSelect={handleTranscriptionModeSelect}
-      />
+      {managed.kind === "error" ? (
+        <p role="alert" className="text-sm text-destructive">
+          {managed.messageKey ? t(managed.messageKey) : managed.message}
+        </p>
+      ) : (
+        <InferenceModeSelector
+          modes={
+            managedRequired
+              ? transcriptionModes.filter((mode) => mode.id === "enterprise")
+              : transcriptionModes
+          }
+          activeMode={managedActive ? "enterprise" : effectiveTranscriptionMode}
+          onSelect={handleTranscriptionModeSelect}
+        />
+      )}
 
-      {effectiveTranscriptionMode === "openwhispr" && !isSignedIn && (
+      {managed.kind === "manual" && effectiveTranscriptionMode === "openwhispr" && !isSignedIn && (
         <p className="text-sm text-muted-foreground">
           {t("settingsPage.transcription.meetingCloudSignedOut")}{" "}
           <Button variant="link" className="h-auto p-0" onClick={requestSignIn}>
@@ -222,8 +254,12 @@ export function MeetingTranscriptionPanel() {
           </Button>
         </p>
       )}
-      {effectiveTranscriptionMode === "providers" && renderTranscriptionPicker("cloud")}
-      {effectiveTranscriptionMode === "local" && renderTranscriptionPicker("local")}
+      {managed.kind === "manual" &&
+        effectiveTranscriptionMode === "providers" &&
+        renderTranscriptionPicker("cloud")}
+      {managed.kind === "manual" &&
+        effectiveTranscriptionMode === "local" &&
+        renderTranscriptionPicker("local")}
       <MeetingSpeakerDetectionRow />
       <MeetingEchoCancellationRow />
     </div>

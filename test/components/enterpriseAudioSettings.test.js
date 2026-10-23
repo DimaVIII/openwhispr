@@ -192,6 +192,12 @@ test("meeting and upload selectors route explicit personal choices locally while
         });
       });
       await React.act(async () => selector().props.onSelect(choice));
+      assert.equal(selector().props.activeMode, enterprise ? "enterprise" : choice);
+      if (enterprise && (mode === "managed_required" || !allowManualSetup))
+        assert.deepEqual(
+          selector().props.modes.map((option) => option.id),
+          ["enterprise"]
+        );
       if (meeting) {
         await prepareTranscription();
         assert.equal(meetings.at(-1).provider, enterprise ? "enterprise-realtime" : "local");
