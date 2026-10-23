@@ -35,6 +35,49 @@ function writeActiveWorkspaceId(id: string | null): void {
   else localStorage.removeItem(ACTIVE_WORKSPACE_KEY);
 }
 
+// Last successful workspace list, kept so the switcher and settings still work offline. It is
+// only read for the account that wrote it.
+export const WORKSPACE_LIST_CACHE_KEY = "workspaceListCache";
+
+function writeWorkspaceListCache(accountId: string | null, workspaces: Workspace[]): void {
+  if (typeof window === "undefined" || !accountId) return;
+  try {
+    localStorage.setItem(
+      WORKSPACE_LIST_CACHE_KEY,
+      JSON.stringify({ accountId, fetchedAt: Date.now(), workspaces })
+    );
+  } catch {
+    // Storage can be full or blocked; the cache is only a convenience.
+  }
+}
+
+function readWorkspaceListCache(accountId: string | null): Workspace[] | null {
+  if (typeof window === "undefined" || !accountId) return null;
+  try {
+    const raw = localStorage.getItem(WORKSPACE_LIST_CACHE_KEY);
+    if (!raw) return null;
+    const cached: unknown = JSON.parse(raw);
+    if (!cached || typeof cached !== "object") return null;
+    const { accountId: cachedAccountId, workspaces } = cached as {
+      accountId?: unknown;
+      workspaces?: unknown;
+    };
+    if (cachedAccountId !== accountId || !Array.isArray(workspaces)) return null;
+    return workspaces as Workspace[];
+  } catch {
+    return null;
+  }
+}
+
+function clearWorkspaceListCache(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(WORKSPACE_LIST_CACHE_KEY);
+  } catch {
+    // Nothing to clear if storage is unreachable.
+  }
+}
+
 let refreshPromise: Promise<void> | null = null;
 let membersRequestSeq = 0;
 let accountGeneration = 0;
@@ -93,6 +136,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     // old request prevents its result/finally block from touching new state.
     refreshPromise = null;
     writeActiveWorkspaceId(null);
+    clearWorkspaceListCache();
     useEnterpriseIdentityStore.getState().clear();
     set({
       workspaces: [],
@@ -124,6 +168,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
           activeWorkspaceId: resolvedActiveId,
         });
         if (resolvedActiveId !== activeId) writeActiveWorkspaceId(resolvedActiveId);
+        writeWorkspaceListCache(usePolicyStore.getState().accountId, workspaces);
         refreshForWorkspace(resolvedActiveId);
       } catch (error) {
         if (generation !== accountGeneration) return;
@@ -132,7 +177,18 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
           { error: (error as Error).message },
           "workspaces"
         );
-        set({ loading: false, loaded: true, error: true });
+        // Offline with nothing in memory: show the last list this account saw. `error` stays
+        // true so the reconnect retry replaces it with the server's answer.
+        const cached =
+          get().workspaces.length === 0
+            ? readWorkspaceListCache(usePolicyStore.getState().accountId)
+            : null;
+        set({
+          ...(cached ? { workspaces: cached } : {}),
+          loading: false,
+          loaded: true,
+          error: true,
+        });
       } finally {
         if (refreshPromise === request) refreshPromise = null;
       }
