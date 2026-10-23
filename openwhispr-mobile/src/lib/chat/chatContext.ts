@@ -48,7 +48,21 @@ Rules:
 // A question naming neither a topic nor a period ("What did we decide?") finds no notes, and "the
 // notes don't cover it" would be the wrong answer, so the model asks what the user means, unless
 // the chat so far already says ("Who decided that?" after an answer).
-const NO_TOPIC_NOTES = `None. The question names no topic or time period, so no notes were included. If the recent chat already shows what they mean, answer from it. Otherwise, if it is about the user's own notes, meetings or commitments, reply with one short question asking which topic or time period they mean, such as "Which meeting or time period do you mean — like today or this week?", instead of saying the notes don't cover it. If it is a general-knowledge question, just answer it.`;
+// With no notes sent, the model would otherwise re-cite the note an earlier answer named.
+const NO_NOTES_SENT =
+  "Don't name or cite any note in this answer, including notes named earlier in RECENT CHAT.";
+
+// An earlier answer's "Source: …" line is the cue a follow-up with no notes of its own copies.
+const SOURCE_LINE = /^[\s>*_-]*(?:sources?|notes? used)\b[*_]*\s*:.*$/gim;
+
+const withoutSourceLines = (history: ChatMessage[]): ChatMessage[] =>
+  history.map((message) =>
+    message.role === 'assistant'
+      ? { ...message, text: message.text.replace(SOURCE_LINE, '').trim() }
+      : message,
+  );
+
+const NO_TOPIC_NOTES = `None. The question names no topic or time period, so no notes were included. If the recent chat already shows what they mean, answer from it. ${NO_NOTES_SENT} Otherwise, if it is about the user's own notes, meetings or commitments, reply with one short question asking which topic or time period they mean, such as "Which meeting or time period do you mean — like today or this week?", instead of saying the notes don't cover it. If it is a general-knowledge question, just answer it.`;
 
 const STOPWORDS = new Set([
   'the',
@@ -442,14 +456,14 @@ export const buildChatPayload = (input: ChatPayloadInput): ChatPayload => {
     noteCharBudget,
     transcripts,
     period,
-    terms.length === 0 && !scope ? NO_TOPIC_NOTES : 'No matching notes.',
+    terms.length === 0 && !scope ? NO_TOPIC_NOTES : `No matching notes. ${NO_NOTES_SENT}`,
   );
 
   const text = [
     `TODAY:\n${today}`,
     `CALENDAR (next 48 hours):\n${formatCalendarSection(calendar, now)}`,
     notesSection,
-    `RECENT CHAT:\n${formatChatHistory(history)}`,
+    `RECENT CHAT:\n${formatChatHistory(withoutSourceLines(history))}`,
     `USER QUESTION:\n${question.trim()}`,
   ].join('\n\n');
 

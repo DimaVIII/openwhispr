@@ -367,9 +367,22 @@ describe('buildChatPayload', () => {
     expect(newest).toContain('NOTES (1 of 1 meeting from this week, newest first):');
   });
 
+  it('leaves earlier answers\u2019 source lines out of the recent chat', () => {
+    const answer = {
+      ...makeMessage(1),
+      text: 'Cut the budget by 15%.\n\n**Source:** Untitled\nNotes used: Pricing sync',
+    };
+    const { text } = buildPayload({ history: [makeMessage(0), answer] });
+    expect(text).toContain('Assistant: Cut the budget by 15%.');
+    expect(text).not.toContain('Untitled');
+    expect(text).not.toContain('Pricing sync');
+  });
+
   it('says when there are no matching notes', () => {
     const { text } = buildPayload({ question: 'What is the capital of France?' });
-    expect(text).toContain('NOTES:\nNo matching notes.\n\nRECENT CHAT:');
+    expect(text).toContain(
+      "NOTES:\nNo matching notes. Don't name or cite any note in this answer, including notes named earlier in RECENT CHAT.\n\nRECENT CHAT:",
+    );
   });
 
   describe('a question naming no topic or period', () => {
@@ -393,6 +406,8 @@ describe('buildChatPayload', () => {
         history: [makeMessage(0), makeMessage(1)],
       });
       expect(text).toContain('If the recent chat already shows what they mean, answer from it.');
+      // Answered from the chat, the follow-up still cites no note: none were sent with it.
+      expect(text).toContain("Don't name or cite any note in this answer");
       expect(text).toContain('message 1');
     });
 
