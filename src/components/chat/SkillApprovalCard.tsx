@@ -66,6 +66,10 @@ function CreateSkillBody({
 }): ReactElement {
   const { t } = useTranslation();
   const playKey = useSkillsStore((state) => state.iconPlays[entry.name] ?? 0);
+  // Saving switches the skill on, which only needs saying for one that is off now.
+  const existingOff = useSkillsStore((state) =>
+    state.skills.some((skill) => skill.name === entry.name && !(skill.enabled && skill.valid))
+  );
   const [showFull, setShowFull] = useState(false);
   const { draft } = entry;
   return (
@@ -73,7 +77,11 @@ function CreateSkillBody({
       <p className="font-medium text-foreground">{t("skills.approval.createHeader")}</p>
       <p className="text-xs text-muted-foreground">
         {entry.replacesExisting
-          ? t("skills.approval.replacesExisting")
+          ? t(
+              existingOff
+                ? "skills.approval.replacesExistingTurnsOn"
+                : "skills.approval.replacesExisting"
+            )
           : t("skills.approval.newSkill")}
       </p>
       <div className="mt-2 flex items-start gap-2.5">

@@ -71,7 +71,7 @@ test("load_skill asks to be called before a follow-up question", () => {
 test("a call naming a disabled skill returns no text", async () => {
   const { tool, reads, used } = loadTool();
 
-  const result = await tool.execute({ name: "decision-log" });
+  const result = await tool.execute({ name: "meeting-decisions" });
 
   assert.equal(result.success, false);
   assert.equal(result.data, null);

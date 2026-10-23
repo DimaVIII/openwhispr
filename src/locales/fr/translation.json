@@ -2049,6 +2049,8 @@
       },
       "rollingWeeklyLimit": "Limite hebdomadaire glissante",
       "signOut": {
+        "endMeetingDescription": "La déconnexion arrête l'enregistrement de la réunion en cours. Ce qui a déjà été capturé reste dans sa note.",
+        "endMeetingTitle": "Arrêter l'enregistrement de la réunion ?",
         "failedDescription": "Un problème est survenu lors de la déconnexion. Veuillez réessayer.",
         "failedTitle": "Impossible de se déconnecter",
         "signOut": "Se déconnecter",
@@ -3000,7 +3002,6 @@
     "upload": "Importer",
     "dictionary": "Dictionnaire",
     "referral": "Obtenir un mois gratuit",
-    "inviteTeam": "Invitez votre équipe",
     "settings": "Paramètres",
     "support": "Assistance",
     "limitReached": "Limite cloud hebdomadaire atteinte",
@@ -3014,7 +3015,7 @@
     "learnMore": "En savoir plus",
     "integrations": "Intégrations",
     "defaultUser": "Utilisateur",
-    "notSignedIn": "Non connecté",
+    "accountMenu": "Compte : {{name}}",
     "chat": "Chat",
     "collapse": "Réduire la barre latérale",
     "expand": "Développer la barre latérale"
@@ -3022,7 +3023,9 @@
   "workspaces": {
     "switcher": {
       "workspaces": "Espaces de travail",
-      "create": "Créer un espace de travail…"
+      "create": "Créer un espace de travail…",
+      "add": "Ajouter un espace de travail",
+      "invitePeople": "Inviter des personnes"
     },
     "create": {
       "title": "Créer un espace de travail",
@@ -4859,8 +4862,8 @@
         "title": "Préparation de 1:1",
         "description": "Rassemble ce qui a changé depuis mon dernier entretien individuel avec quelqu'un. À utiliser quand je demande de préparer un 1:1."
       },
-      "decision-log": {
-        "title": "Journal des décisions",
+      "meeting-decisions": {
+        "title": "Décisions de réunion",
         "description": "Retrouve les décisions dans les notes de mes réunions, avec la date et la réunion de chacune. À utiliser quand je demande ce que nous avons décidé."
       }
     },
@@ -4868,6 +4871,7 @@
       "chipRemove": "Retirer {{name}} de ce chat",
       "placeholderWith": "Posez une question — ce chat utilise {{name}}",
       "usingSkill": "Compétence utilisée · {{name}}",
+      "usingSkillFailed": "Impossible d'utiliser la compétence · {{name}}",
       "creatorName": "Créateur de compétences",
       "creatorOpening": "Que faites-vous encore et encore ? Racontez-moi la dernière fois, ou choisissez une note pour commencer.",
       "draftPrompt": "Aidez-moi à terminer cette compétence.\nNom : {{name}}\nDescription : {{description}}",
@@ -4877,6 +4881,7 @@
       "createHeader": "Créer une compétence",
       "newSkill": "Nouvelle compétence",
       "replacesExisting": "Vous avez déjà cette compétence. L'enregistrer la met à jour.",
+      "replacesExistingTurnsOn": "Vous avez déjà cette compétence. L'enregistrer la met à jour et l'active.",
       "nameLabel": "Nom de la compétence",
       "descriptionLabel": "Quand l'utiliser",
       "seeFull": "Voir la compétence complète",

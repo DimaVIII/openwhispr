@@ -34,7 +34,7 @@ function fakeLibrary(overrides = {}) {
     discardUploads: record("discardUploads"),
     discardUploadsFrom: record("discardUploadsFrom"),
     create: record("create", { name: "weekly-recap" }),
-    addRecommended: record("addRecommended", { name: "decision-log" }),
+    addRecommended: record("addRecommended", { name: "meeting-decisions" }),
     readForModel: record("readForModel", { name: "meeting-prep", body: "Steps", files: [] }),
     checkProposal: record("checkProposal", { name: "weekly-recap", existing: false, problems: [] }),
     saveProposal: record("saveProposal", { name: "weekly-recap", versionId: "1760950800000" }),
@@ -97,7 +97,7 @@ test("a malformed name or upload item is refused before the library runs", async
   for (const input of [null, { ...draft, title: 3 }, { ...draft, files: [upload({ data: [] })] }]) {
     assert.deepEqual(await call("skills-create", input), INVALID);
   }
-  assert.deepEqual(await call("skills-add-recommended", "decision-log", { title: 1 }), INVALID);
+  assert.deepEqual(await call("skills-add-recommended", "meeting-decisions", { title: 1 }), INVALID);
   const copy = { title: "a", description: "b" };
   assert.deepEqual(await call("skills-add-recommended", "../x", copy), INVALID);
 
@@ -188,10 +188,10 @@ test("every write broadcasts skills-changed", async () => {
     failed: [],
   });
   assert.deepEqual(await call("skills-create", draft), { ok: true, name: "weekly-recap" });
-  const copy = { title: "Decision log", description: "Keeps decisions." };
-  assert.deepEqual(await call("skills-add-recommended", "decision-log", copy), {
+  const copy = { title: "Meeting decisions", description: "Keeps decisions." };
+  assert.deepEqual(await call("skills-add-recommended", "meeting-decisions", copy), {
     ok: true,
-    name: "decision-log",
+    name: "meeting-decisions",
   });
   assert.deepEqual(broadcasts, Array(5).fill("skills-changed"));
 });

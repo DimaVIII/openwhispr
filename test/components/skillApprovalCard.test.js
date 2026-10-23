@@ -26,7 +26,7 @@ const SAVED = { ok: true, name: "follow-up-email-from-notes" };
 // The card on its store entry, as ToolCallItem shows it, with the skills IPC faked.
 async function mountCard(
   t,
-  { request = CREATE, saveResult = SAVED, undoResult = { ok: true }, openSkill } = {}
+  { request = CREATE, saveResult = SAVED, undoResult = { ok: true }, openSkill, skills = [] } = {}
 ) {
   let root = null;
   let approvals = null;
@@ -74,6 +74,8 @@ async function mountCard(
     mockModules: SKILLS_MOCKS,
   });
   approvals = await vite.ssrLoadModule("/stores/skillApprovalStore.ts");
+  const skillsStore = await vite.ssrLoadModule("/stores/skillsStore.ts");
+  skillsStore.useSkillsStore.setState({ skills, loaded: true });
   const { SkillApprovalCard } = await vite.ssrLoadModule("/components/chat/SkillApprovalCard.tsx");
   const { SkillChatActionsContext } = await vite.ssrLoadModule(
     "/components/chat/skillChatActions.ts"
@@ -188,6 +190,26 @@ test("without a way to open skills, a saved card offers no Open skill", async (t
 
   assert.match(container.textContent, /skills\.approval\.saved/);
   assert.equal(buttonLabelled("skills.approval.openSkill"), undefined);
+});
+
+// The assistant only sees the skills that are on, so the one it names is one switched off.
+test("a proposal over a skill that's switched off says saving turns it on", async (t) => {
+  const off = {
+    name: CREATE.name,
+    displayName: PROPOSAL.title,
+    description: PROPOSAL.description,
+    enabled: false,
+    valid: true,
+    addedAt: null,
+    updatedAt: null,
+    lastUsedAt: null,
+  };
+  const { container } = await mountCard(t, {
+    request: { ...CREATE, replacesExisting: true },
+    skills: [off],
+  });
+
+  assert.match(container.textContent, /skills\.approval\.replacesExistingTurnsOn/);
 });
 
 test("a replacing save shows Updated with Undo", async (t) => {

@@ -1638,6 +1638,8 @@
       },
       "rollingWeeklyLimit": "Limite semanal contínuo",
       "signOut": {
+        "endMeetingDescription": "Sair da conta encerra a gravação da reunião em andamento. O que foi capturado até agora permanece na nota.",
+        "endMeetingTitle": "Encerrar a gravação da reunião?",
         "failedDescription": "Algo deu errado ao sair. Tente novamente.",
         "failedTitle": "Não foi possível sair",
         "signOut": "Sair",
@@ -3692,7 +3694,6 @@
     "upload": "Enviar",
     "dictionary": "Dicionário",
     "referral": "Ganhe um mês grátis",
-    "inviteTeam": "Convide sua equipe",
     "settings": "Configurações",
     "support": "Suporte",
     "limitReached": "Limite semanal da nuvem atingido",
@@ -3706,7 +3707,7 @@
     "learnMore": "Saiba mais",
     "integrations": "Integrações",
     "defaultUser": "Usuário",
-    "notSignedIn": "Não conectado",
+    "accountMenu": "Conta: {{name}}",
     "chat": "Chat",
     "collapse": "Recolher barra lateral",
     "expand": "Expandir barra lateral"
@@ -4689,8 +4690,8 @@
         "title": "Preparação para 1:1",
         "description": "Reúne o que mudou desde a minha última reunião individual com alguém. Use quando eu pedir para me preparar para um 1:1."
       },
-      "decision-log": {
-        "title": "Registro de decisões",
+      "meeting-decisions": {
+        "title": "Decisões das reuniões",
         "description": "Encontra as decisões nas notas das minhas reuniões, com a data e a reunião de cada uma. Use quando eu perguntar o que decidimos."
       }
     },
@@ -4698,6 +4699,7 @@
       "chipRemove": "Remover {{name}} deste chat",
       "placeholderWith": "Pergunte o que quiser — este chat usa {{name}}",
       "usingSkill": "Usando habilidade · {{name}}",
+      "usingSkillFailed": "Não foi possível usar a habilidade · {{name}}",
       "creatorName": "Criador de habilidades",
       "creatorOpening": "O que você faz repetidamente? Conte como foi da última vez ou escolha uma nota para começar.",
       "draftPrompt": "Me ajude a terminar esta habilidade.\nNome: {{name}}\nDescrição: {{description}}",
@@ -4707,6 +4709,7 @@
       "createHeader": "Criar habilidade",
       "newSkill": "Nova habilidade",
       "replacesExisting": "Você já tem esta habilidade. Salvar vai atualizá-la.",
+      "replacesExistingTurnsOn": "Você já tem esta habilidade. Salvar vai atualizá-la e ativá-la.",
       "nameLabel": "Nome da habilidade",
       "descriptionLabel": "Quando é usada",
       "seeFull": "Ver a habilidade completa",
@@ -4980,7 +4983,9 @@
   "workspaces": {
     "switcher": {
       "workspaces": "Espaços de trabalho",
-      "create": "Criar espaço de trabalho…"
+      "create": "Criar espaço de trabalho…",
+      "add": "Adicionar espaço de trabalho",
+      "invitePeople": "Convidar pessoas"
     },
     "create": {
       "title": "Criar espaço de trabalho",

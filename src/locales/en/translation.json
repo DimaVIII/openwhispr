@@ -2049,6 +2049,8 @@
       },
       "rollingWeeklyLimit": "Rolling weekly limit",
       "signOut": {
+        "endMeetingDescription": "Signing out stops the meeting that's recording. What it has captured so far stays in its note.",
+        "endMeetingTitle": "End the meeting recording?",
         "failedDescription": "Something went wrong signing out. Please try again.",
         "failedTitle": "Couldn't sign out",
         "signOut": "Sign Out",
@@ -2874,7 +2876,6 @@
     "upload": "Upload",
     "dictionary": "Dictionary",
     "referral": "Get a free month",
-    "inviteTeam": "Invite your team",
     "settings": "Settings",
     "support": "Support",
     "limitReached": "Weekly Cloud limit reached",
@@ -2888,7 +2889,7 @@
     "learnMore": "Learn More",
     "integrations": "Integrations",
     "defaultUser": "User",
-    "notSignedIn": "Not signed in",
+    "accountMenu": "Account: {{name}}",
     "chat": "Chat",
     "collapse": "Collapse sidebar",
     "expand": "Expand sidebar"
@@ -3022,7 +3023,9 @@
   "workspaces": {
     "switcher": {
       "workspaces": "Workspaces",
-      "create": "Create workspace…"
+      "create": "Create workspace…",
+      "add": "Add workspace",
+      "invitePeople": "Invite people"
     },
     "create": {
       "title": "Create workspace",
@@ -4859,8 +4862,8 @@
         "title": "1:1 prep",
         "description": "Gathers what changed since my last one-on-one with someone. Use when I ask to prep for a 1:1."
       },
-      "decision-log": {
-        "title": "Decision log",
+      "meeting-decisions": {
+        "title": "Meeting decisions",
         "description": "Finds the decisions in my meeting notes, with the date and meeting of each. Use when I ask what we decided."
       }
     },
@@ -4868,6 +4871,7 @@
       "chipRemove": "Remove {{name}} from this chat",
       "placeholderWith": "Ask anything — this chat uses {{name}}",
       "usingSkill": "Using skill · {{name}}",
+      "usingSkillFailed": "Couldn't use skill · {{name}}",
       "creatorName": "Skill creator",
       "creatorOpening": "What do you do over and over? Talk me through the last time, or pick a note to start from.",
       "draftPrompt": "Help me finish this skill.\nName: {{name}}\nDescription: {{description}}",
@@ -4877,6 +4881,7 @@
       "createHeader": "Create skill",
       "newSkill": "New skill",
       "replacesExisting": "You already have this skill. Saving updates it.",
+      "replacesExistingTurnsOn": "You already have this skill. Saving updates it and turns it on.",
       "nameLabel": "Skill name",
       "descriptionLabel": "When it's used",
       "seeFull": "See full skill",

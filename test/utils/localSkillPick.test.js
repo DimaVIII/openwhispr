@@ -62,7 +62,7 @@ test("a score under 2 picks nothing", () => {
 });
 
 test("Japanese requests match without spaces", () => {
-  assert.equal(pickName("決定事項ログに追加して", skillsFor("ja")), "decision-log");
+  assert.equal(pickName("決定事項ログに追加して", skillsFor("ja")), "meeting-decisions");
   assert.equal(pickName("週次まとめを書いて", skillsFor("ja")), "weekly-recap");
 });
 

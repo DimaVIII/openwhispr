@@ -152,10 +152,11 @@ export function buildSkillFileBlock(skill: SkillForModel, path: string, maxToken
   return render(cutToFit(content, maxTokens - estimateNoteTokens(render("")), FILE_CUT));
 }
 
-function loadedSkillName(argumentsJson: string): string | null {
+/** What a load_skill call asked for: a skill by name, whole or one of its files. */
+export function loadSkillTarget(argumentsJson: string): { name: string; file: boolean } | null {
   try {
     const args = JSON.parse(argumentsJson);
-    return typeof args?.name === "string" && !args.file ? args.name : null;
+    return typeof args?.name === "string" ? { name: args.name, file: Boolean(args.file) } : null;
   } catch {
     return null;
   }
@@ -171,10 +172,10 @@ export function activeSkillNames(history: Message[], attached?: SkillRef): Skill
   for (const message of history.slice(-HISTORY_LIMIT).reverse()) {
     for (const call of [...(message.toolCalls ?? [])].reverse()) {
       if (call.name !== "load_skill" || call.status !== "completed") continue;
-      const name = loadedSkillName(call.arguments);
-      if (!name || seen.has(name)) continue;
-      seen.add(name);
-      active.push({ name });
+      const target = loadSkillTarget(call.arguments);
+      if (!target || target.file || seen.has(target.name)) continue;
+      seen.add(target.name);
+      active.push({ name: target.name });
     }
   }
   return active;

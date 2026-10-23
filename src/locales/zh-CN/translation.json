@@ -1659,6 +1659,8 @@
       },
       "rollingWeeklyLimit": "滚动周限额",
       "signOut": {
+        "endMeetingDescription": "退出登录会结束正在进行的会议录制。已录制的内容会保留在笔记中。",
+        "endMeetingTitle": "结束会议录制？",
         "failedDescription": "退出登录时出错，请重试。",
         "failedTitle": "无法退出登录",
         "signOut": "退出登录",
@@ -3692,7 +3694,6 @@
     "upload": "上传",
     "dictionary": "词典",
     "referral": "获取免费一个月",
-    "inviteTeam": "邀请你的团队",
     "settings": "设置",
     "support": "支持",
     "limitReached": "已达本周云端上限",
@@ -3706,7 +3707,7 @@
     "learnMore": "了解更多",
     "integrations": "集成",
     "defaultUser": "用户",
-    "notSignedIn": "未登录",
+    "accountMenu": "账户：{{name}}",
     "chat": "聊天",
     "collapse": "折叠侧边栏",
     "expand": "展开侧边栏"
@@ -4689,8 +4690,8 @@
         "title": "1 对 1 准备",
         "description": "汇总自我上次与某人一对一会议以来的变化。当我要准备 1 对 1 时使用。"
       },
-      "decision-log": {
-        "title": "决策记录",
+      "meeting-decisions": {
+        "title": "会议决策",
         "description": "在我的会议笔记中查找决策，并注明每项决策的日期和会议。当我问我们决定了什么时使用。"
       }
     },
@@ -4698,6 +4699,7 @@
       "chipRemove": "从此对话中移除 {{name}}",
       "placeholderWith": "随便问点什么——此对话使用 {{name}}",
       "usingSkill": "正在使用技能 · {{name}}",
+      "usingSkillFailed": "无法使用技能 · {{name}}",
       "creatorName": "技能创建器",
       "creatorOpening": "您经常反复做什么事？跟我讲讲上一次的情况，或者选一条笔记作为起点。",
       "draftPrompt": "帮我完成这个技能。\n名称：{{name}}\n描述：{{description}}",
@@ -4707,6 +4709,7 @@
       "createHeader": "创建技能",
       "newSkill": "新技能",
       "replacesExisting": "您已经有这个技能，保存后会更新它。",
+      "replacesExistingTurnsOn": "您已经有这个技能，保存后会更新并开启它。",
       "nameLabel": "技能名称",
       "descriptionLabel": "何时使用",
       "seeFull": "查看完整技能",
@@ -4980,7 +4983,9 @@
   "workspaces": {
     "switcher": {
       "workspaces": "工作区",
-      "create": "创建工作区…"
+      "create": "创建工作区…",
+      "add": "添加工作区",
+      "invitePeople": "邀请成员"
     },
     "create": {
       "title": "创建工作区",

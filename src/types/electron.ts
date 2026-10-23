@@ -3800,7 +3800,11 @@ declare global {
       ) => Promise<DictionaryEntryItem | null>;
       markDictionarySynced?: (
         id: number,
-        cloudId: string
+        cloudId: string,
+        serverUpdatedAt?: string,
+        expectedWord?: string,
+        expectedSource?: DictionaryEntryItem["source"],
+        serverSource?: DictionaryEntryItem["source"]
       ) => Promise<{ success: boolean; changes: number }>;
       hardDeleteDictionary?: (id: number) => Promise<{ success: boolean; id: number }>;
       clearDictionaryCloudId?: (id: number) => Promise<{ success: boolean }>;

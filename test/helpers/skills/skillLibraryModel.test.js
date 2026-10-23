@@ -42,7 +42,7 @@ test("the built-in creator is readable but never listed", (t) => {
   assert.deepEqual(creator.files, []);
   assert.deepEqual(library.scan(), []);
   assert.equal(library.readForModel({ name: "skill-creator" }), null);
-  assert.equal(library.readForModel({ name: "decision-log", builtin: true }), null);
+  assert.equal(library.readForModel({ name: "meeting-decisions", builtin: true }), null);
 });
 
 test("a disabled or invalid skill can't be read for the model", (t) => {
@@ -231,11 +231,11 @@ test("two proposals with non-Latin titles become two skills", (t) => {
 test("a new proposal never takes a starter skill's folder", (t) => {
   const { library } = setup(t);
 
-  const saved = library.saveProposal(proposal({ title: "Decision log" }));
+  const saved = library.saveProposal(proposal({ title: "Meeting decisions" }));
 
-  assert.deepEqual(saved, { name: "decision-log-2" });
-  const copy = { title: "Journal des décisions", description: "Finds decisions." };
-  assert.deepEqual(library.addRecommended("decision-log", copy), { name: "decision-log" });
+  assert.deepEqual(saved, { name: "meeting-decisions-2" });
+  const copy = { title: "Décisions de réunion", description: "Finds decisions." };
+  assert.deepEqual(library.addRecommended("meeting-decisions", copy), { name: "meeting-decisions" });
 });
 
 test("a title shown by one of the user's skills updates that skill", (t) => {

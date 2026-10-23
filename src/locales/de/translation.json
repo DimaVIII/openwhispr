@@ -2049,6 +2049,8 @@
       },
       "rollingWeeklyLimit": "Rollierendes Wochenlimit",
       "signOut": {
+        "endMeetingDescription": "Beim Abmelden wird die laufende Meeting-Aufnahme beendet. Was bisher aufgenommen wurde, bleibt in der Notiz.",
+        "endMeetingTitle": "Meeting-Aufnahme beenden?",
         "failedDescription": "Beim Abmelden ist ein Fehler aufgetreten. Bitte versuchen Sie es erneut.",
         "failedTitle": "Abmeldung fehlgeschlagen",
         "signOut": "Abmelden",
@@ -3000,7 +3002,6 @@
     "upload": "Hochladen",
     "dictionary": "Wörterbuch",
     "referral": "Gratis-Monat erhalten",
-    "inviteTeam": "Team einladen",
     "settings": "Einstellungen",
     "support": "Support",
     "limitReached": "Wöchentliches Cloud-Limit erreicht",
@@ -3014,7 +3015,7 @@
     "learnMore": "Mehr erfahren",
     "integrations": "Integrationen",
     "defaultUser": "Benutzer",
-    "notSignedIn": "Nicht angemeldet",
+    "accountMenu": "Konto: {{name}}",
     "chat": "Chat",
     "collapse": "Seitenleiste einklappen",
     "expand": "Seitenleiste ausklappen"
@@ -3022,7 +3023,9 @@
   "workspaces": {
     "switcher": {
       "workspaces": "Workspaces",
-      "create": "Workspace erstellen…"
+      "create": "Workspace erstellen…",
+      "add": "Workspace hinzufügen",
+      "invitePeople": "Personen einladen"
     },
     "create": {
       "title": "Workspace erstellen",
@@ -4859,8 +4862,8 @@
         "title": "1:1-Vorbereitung",
         "description": "Sammelt, was sich seit meinem letzten Einzelgespräch mit jemandem geändert hat. Nutzen, wenn ich mich auf ein 1:1 vorbereiten möchte."
       },
-      "decision-log": {
-        "title": "Entscheidungsprotokoll",
+      "meeting-decisions": {
+        "title": "Meeting-Entscheidungen",
         "description": "Findet die Entscheidungen in meinen Meeting-Notizen, jeweils mit Datum und Meeting. Nutzen, wenn ich frage, was wir entschieden haben."
       }
     },
@@ -4868,6 +4871,7 @@
       "chipRemove": "{{name}} aus diesem Chat entfernen",
       "placeholderWith": "Frag etwas – dieser Chat nutzt {{name}}",
       "usingSkill": "Nutzt Skill · {{name}}",
+      "usingSkillFailed": "Skill konnte nicht genutzt werden · {{name}}",
       "creatorName": "Skill-Ersteller",
       "creatorOpening": "Was machst du immer wieder? Erzähl mir, wie es beim letzten Mal lief, oder wähle eine Notiz als Ausgangspunkt.",
       "draftPrompt": "Hilf mir, diesen Skill fertigzustellen.\nName: {{name}}\nBeschreibung: {{description}}",
@@ -4877,6 +4881,7 @@
       "createHeader": "Skill erstellen",
       "newSkill": "Neuer Skill",
       "replacesExisting": "Diesen Skill hast du schon. Beim Speichern wird er aktualisiert.",
+      "replacesExistingTurnsOn": "Diesen Skill hast du schon. Beim Speichern wird er aktualisiert und eingeschaltet.",
       "nameLabel": "Name des Skills",
       "descriptionLabel": "Wann er genutzt wird",
       "seeFull": "Ganzen Skill ansehen",

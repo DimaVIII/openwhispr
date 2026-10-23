@@ -69,7 +69,7 @@ const searchBox = (container) =>
   find(container, (node) => node.tagName === "INPUT" && ariaLabel(node) === "skills.pane.search");
 
 test("Esc in Manage's search clears it first, then goes back", async (t) => {
-  const { container } = await renderPane(t, [skill("meeting-prep"), skill("decision-log")]);
+  const { container } = await renderPane(t, [skill("meeting-prep"), skill("meeting-decisions")]);
   await click(gear(container));
   await typeInto(searchBox(container), "decision");
 

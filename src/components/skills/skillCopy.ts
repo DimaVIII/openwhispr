@@ -15,7 +15,7 @@ export const RECOMMENDED_SKILL_IDS = [
   "action-items-to-linear",
   "meeting-summary-to-slack",
   "one-on-one-prep",
-  "decision-log",
+  "meeting-decisions",
 ] as const;
 
 const WRITE_ERROR_REASONS: Partial<Record<SkillWriteError | "exists", string>> = {
