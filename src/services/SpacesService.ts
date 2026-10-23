@@ -6,7 +6,7 @@ import {
   cloudDelete,
   type DataWrap,
 } from "./cloudApi.js";
-import type { SpaceTeamRef, TeamMember, TeamRole } from "../types/electron";
+import type { SpaceCapabilities, SpaceTeamRef, TeamMember, TeamRole } from "../types/electron";
 
 export interface MySpace {
   id: string;
@@ -20,6 +20,8 @@ export interface MySpace {
   my_direct_role: TeamRole | null;
   member_count: number;
   teams: SpaceTeamRef[];
+  // Server-computed permissions; absent from older APIs.
+  capabilities?: SpaceCapabilities;
   created_at: string;
   updated_at: string;
 }
