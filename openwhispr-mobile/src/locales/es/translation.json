@@ -185,6 +185,7 @@
     "responseTooLong": "La respuesta local era demasiado larga. Prueba una petición más breve.",
     "emptyResponse": "El modelo local no ha devuelto texto. Inténtalo de nuevo.",
     "unsupportedLanguage": "Parakeet admite 25 idiomas europeos. Elige un idioma compatible o un flujo en la nube o con proveedor para este idioma.",
+    "meetingSpeechNeeded": "Elige y descarga Parakeet v3 en Modelos antes de grabar una reunión en Modo local. Las etiquetas de hablantes requieren sus tiempos por palabra.",
     "meetingModelNeeded": "Descarga primero los modelos de identificación de hablantes.",
     "speechUnavailable": "El modelo Parakeet no está disponible. Descárgalo primero en Modelos.",
     "editSeed": "Manzanas, pan y leche.",

@@ -185,6 +185,7 @@
     "responseTooLong": "Die lokale Antwort war zu lang. Versuche eine kürzere Anfrage.",
     "emptyResponse": "Das lokale Modell hat keinen Text zurückgegeben. Versuche es erneut.",
     "unsupportedLanguage": "Parakeet unterstützt 25 europäische Sprachen. Wähle eine unterstützte Sprache oder nutze für diese Sprache die Cloud oder einen Anbieter.",
+    "meetingSpeechNeeded": "Wähle Parakeet v3 unter Modelle und lade es vor einer Aufnahme im lokalen Modus herunter. Sprecherzuordnungen benötigen dessen Wortzeitstempel.",
     "meetingModelNeeded": "Lade zuerst die Modelle zur Sprechererkennung herunter.",
     "speechUnavailable": "Das Parakeet-Modell ist nicht verfügbar. Lade es zuerst unter Modelle herunter.",
     "editSeed": "Äpfel, Brot und Milch.",

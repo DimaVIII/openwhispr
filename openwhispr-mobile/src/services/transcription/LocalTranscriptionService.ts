@@ -22,6 +22,8 @@ export interface LocalTranscribeOptions {
   /** Single-language hint for the Whisper branch (today's behavior, passed through verbatim). */
   language?: string;
   wordTimestamps?: boolean;
+  /** Android local work observes cancellation while queued and during native ASR. */
+  signal?: AbortSignal;
   /** Whisper initial prompt (dictionary/snippet hints). Parakeet has no prompt input — dropped there. */
   prompt?: string;
   /** The model picked for this workflow; unset or unusable means the automatic choice. */

@@ -27,6 +27,8 @@ export const LocalSpeechModel = {
     const model = options.androidModel ?? selectedSpeechModel();
     return withAndroidInference(async () => {
       if (job !== generation || options.signal?.aborted) throw new Error(i18n.t('cancelled'));
+      if (options.wordTimestamps && model !== 'parakeet-v3')
+        throw new Error(i18n.t('meetingSpeechNeeded'));
       const languages =
         options.language && options.language !== 'auto'
           ? [options.language]

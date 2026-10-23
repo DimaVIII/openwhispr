@@ -357,8 +357,10 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
       if (!isCurrent()) return;
       if (!speechReady) {
         Alert.alert(
-          'Speech model needed',
-          'Download a local speech model in Settings → AI Models → Dictation, then try again.',
+          Platform.OS === 'android' ? t('speechModels') : 'Speech model needed',
+          Platform.OS === 'android'
+            ? t('meetingSpeechNeeded')
+            : 'Download a local speech model in Settings → AI Models → Dictation, then try again.',
         );
         setPhase('prompt');
         return;

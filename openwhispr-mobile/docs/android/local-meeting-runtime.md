@@ -6,10 +6,24 @@ digests are in `src/android/meetingModels.ts`; the existing downloader verifies
 both files before the adapter runs. Notices are included in Android Licenses.
 
 This is the processing foundation, not a completed meeting feature. Android's
-Local Mode meeting setup still does not offer Start. Recording, recovery,
-account/mode changes, timestamp-capable ASR selection and model-management UI
-must be integrated and tested before enabling it or building a release candidate.
+Local Mode meeting setup still does not offer Start. Durable recording,
+screen cancellation/leave behavior and model-management UI must be integrated
+and tested before enabling it or building a release candidate.
 The adapter returns within-meeting speaker labels, not reusable voice identities.
+
+Private saved-meeting retry now uses the local pipeline, including when the
+current processing mode is Cloud or the user is signed out. Job ownership checks
+observe account/session and mode transitions (including A -> B -> A), reject stale
+transcript/title/summary results, and clean up subscriptions. An explicit abort
+leaves a current owner's recording retryable. The screen still needs to supply
+that abort signal for navigation and cancel actions. No private retry uploads audio.
+
+Preflight requires the user to select and download Parakeet v3 for word timing.
+Requests for word timings with Moonshine fail before loading its runtime; ordinary
+Moonshine transcription remains available. There is no automatic model switch.
+If local note generation is unavailable, the saved transcript remains available
+for a later explicit action rather than retaining an automatic cloud-fallback
+callback past the job's lifetime. Existing iOS routing and prompts are retained.
 
 The shared inference queue unloads idle text and speech models before speaker
 processing. Native decoding creates a temporary 16 kHz mono WAV. The original
@@ -27,6 +41,8 @@ processing returns. UI cancellation and persistence must respect that distinctio
 
 - TypeScript adapter tests exercise platform routing, timed turns, missing models,
   queued cancellation and stale-result rejection.
+- Pipeline/store tests cover private retry, account and mode changes, explicit
+  abort, late title/summary writes and required word-timing preflight.
 - JVM tests cover memory refusal, including quadratic clustering allocation.
 - `DiarizationRuntimeTest` runs in the separate `com.openwhispr.dictation.test`
   instrumentation app, with no microphone permission or network needed. It checks

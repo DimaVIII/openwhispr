@@ -1,3 +1,7 @@
+const mockSelectedMeetingSpeech = jest.fn(() => 'parakeet-v3');
+jest.mock('@/android/speechSelection', () => ({
+  selectedSpeechModel: () => mockSelectedMeetingSpeech(),
+}));
 jest.mock('expo-file-system/legacy', () => ({ documentDirectory: 'file:///app/documents/' }));
 const mockProcessMeeting = jest.fn();
 const mockGetDiarizer = jest.fn();
@@ -18,6 +22,8 @@ const mockConfigState: {
 } = {
   config: { autoGenerateNoteTitle: false },
 };
+const mockAuthListeners = new Set<() => void>();
+const mockModeListeners = new Set<(state: { activeMode: 'cloud' | 'private' }) => void>();
 const mockProcessingModeState: { activeMode: 'cloud' | 'private' } = {
   activeMode: 'cloud',
 };
@@ -76,10 +82,22 @@ jest.mock('@/data', () => ({
   },
 }));
 jest.mock('@/store/useProcessingModeStore', () => ({
-  useProcessingModeStore: { getState: () => mockProcessingModeState },
+  useProcessingModeStore: {
+    getState: () => mockProcessingModeState,
+    subscribe: (fn: (state: { activeMode: 'cloud' | 'private' }) => void) => {
+      mockModeListeners.add(fn);
+      return () => mockModeListeners.delete(fn);
+    },
+  },
 }));
 jest.mock('@/store/useAuthStore', () => ({
-  useAuthStore: { getState: () => mockAuthState, subscribe: () => () => {} },
+  useAuthStore: {
+    getState: () => mockAuthState,
+    subscribe: (fn: () => void) => {
+      mockAuthListeners.add(fn);
+      return () => mockAuthListeners.delete(fn);
+    },
+  },
 }));
 jest.mock('@/store/useConfigStore', () => ({
   useConfigStore: { getState: () => mockConfigState, subscribe: () => () => {} },
@@ -1566,4 +1584,195 @@ it('retains remote deletion retry identifiers when making a note private fails o
   await expect(useNotesStore.getState().setNotePrivacy(1, true)).rejects.toThrow('offline');
   expect(notesRepository.clearNoteRemoteId).not.toHaveBeenCalled();
   expect(notesRepository.clearNoteClientId).not.toHaveBeenCalled();
+});
+
+describe('Android private meeting recovery ownership', () => {
+  const originalPlatform = Platform.OS;
+  beforeEach(() => {
+    Platform.OS = 'android';
+    mockProcessingModeState.activeMode = 'private';
+    mockAuthState.user = { id: 'owner-a', email: 'test@example.invalid', emailVerified: true };
+    (notesRepository.getNoteById as jest.Mock).mockReturnValue({
+      id: 7,
+      noteType: 'meeting',
+      isPrivate: 1,
+      title: 'Saved meeting',
+      content: 'Original notes',
+      sourceFile: 'file:///app/documents/meeting-7.wav',
+      expectedSpeakerCount: 2,
+    });
+  });
+  afterEach(() => {
+    Platform.OS = originalPlatform;
+    mockAuthListeners.clear();
+    mockModeListeners.clear();
+  });
+
+  it.each(['private', 'cloud'] as const)(
+    'retries private audio locally while the current mode is %s, without requiring sign-in',
+    async (mode) => {
+      mockProcessingModeState.activeMode = mode;
+      mockAuthState.user = null;
+      await useNotesStore.getState().retryMeetingTranscription(7);
+      expect(mockProcessMeeting).toHaveBeenCalled();
+      expect(notesRepository.updateNoteMeta).toHaveBeenCalledWith(7, {
+        sourceFile: 'file:///app/documents/meeting-7.wav',
+      });
+      expect(ReasoningService.processText).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['account', 'account-return', 'mode'] as const)(
+    'drops the result after a %s change',
+    async (change) => {
+      let finish!: (value: { speakerEmbeddingsByLabel: Record<string, number[]> }) => void;
+      mockProcessMeeting.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      );
+      const pending = useNotesStore
+        .getState()
+        .runMeetingPipeline(7, 'file:///app/documents/meeting-7.wav', 2);
+      const rejected = pending.catch((error: unknown) => error);
+      if (change === 'mode') {
+        mockProcessingModeState.activeMode = 'cloud';
+        mockModeListeners.forEach((fn) => fn(mockProcessingModeState));
+      } else {
+        const owner = mockAuthState.user;
+        mockAuthState.user = { id: 'owner-b', email: 'other@example.invalid', emailVerified: true };
+        mockAuthListeners.forEach((fn) => fn());
+        if (change === 'account-return') {
+          mockAuthState.user = owner;
+          mockAuthListeners.forEach((fn) => fn());
+        }
+      }
+      finish({ speakerEmbeddingsByLabel: { speaker_0: [1, 0] } });
+      expect(await rejected).toBeInstanceOf(Error);
+      expect(useNotesStore.getState().meetingSpeakerEmbeddingsByNoteId[7]).toBeUndefined();
+      expect(notesRepository.updateNote).not.toHaveBeenCalled();
+      expect(notesRepository.updateSpeaker).not.toHaveBeenCalled();
+      expect(mockLogTranscriptionCompleted).not.toHaveBeenCalled();
+      expect(mockAuthListeners.size).toBe(0);
+      expect(mockModeListeners.size).toBe(0);
+    },
+  );
+  it('preserves the saved source and marks an explicitly cancelled job retryable', async () => {
+    const controller = new AbortController();
+    let finish!: (value: { speakerEmbeddingsByLabel: Record<string, number[]> }) => void;
+    mockProcessMeeting.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    (notesRepository.getTranscriptionStatus as jest.Mock).mockReturnValue('diarizing');
+    const pending = useNotesStore
+      .getState()
+      .runMeetingPipeline(7, 'file:///app/documents/meeting-7.wav', 2, {
+        signal: controller.signal,
+      });
+    const rejected = pending.catch((error: unknown) => error);
+    controller.abort();
+    finish({ speakerEmbeddingsByLabel: {} });
+    expect(await rejected).toBeInstanceOf(Error);
+    expect(notesRepository.setTranscriptionStatus).toHaveBeenLastCalledWith(7, 'failed');
+    expect(notesRepository.updateNoteMeta).toHaveBeenCalledTimes(1);
+    expect(notesRepository.updateNote).not.toHaveBeenCalled();
+  });
+
+  it('does not save a title generated after the account changes', async () => {
+    mockConfigState.config.autoGenerateNoteTitle = true;
+    (notesRepository.getSegments as jest.Mock).mockReturnValue([
+      segment('A real meeting transcript'),
+    ]);
+    jest.spyOn(localReasoning, 'shouldUseLocalReasoning').mockResolvedValue(true);
+    let finish!: (title: string) => void;
+    let started!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    mockGenerateNoteTitle.mockImplementationOnce(() => {
+      started();
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
+    });
+    const pending = useNotesStore
+      .getState()
+      .runMeetingPipeline(7, 'file:///app/documents/meeting-7.wav', 2);
+    const rejected = pending.catch((error: unknown) => error);
+    await ready;
+    mockAuthState.user = null;
+    mockAuthListeners.forEach((fn) => fn());
+    finish('Late title');
+    expect(await rejected).toBeInstanceOf(Error);
+    expect(notesRepository.updateNote).not.toHaveBeenCalled();
+  });
+
+  it('requires an explicitly selected timestamp-capable model before local meeting capture', async () => {
+    mockSelectedMeetingSpeech.mockReturnValue('moonshine-small');
+    await expect(useNotesStore.getState().isLocalAsrModelReady()).resolves.toBe(false);
+    mockSelectedMeetingSpeech.mockReturnValue('parakeet-v3');
+    await expect(useNotesStore.getState().isLocalAsrModelReady()).resolves.toBe(true);
+  });
+  it('does not save a generated summary after a mode change', async () => {
+    mockConfigState.config.inference = { notes: { mode: 'local' } };
+    (notesRepository.getActions as jest.Mock).mockReturnValue([
+      { id: 1, name: 'Generate Notes', prompt: 'Transform this meeting.', isDefault: 1 },
+    ]);
+    (notesRepository.getSegments as jest.Mock).mockReturnValue([
+      segment('A real meeting transcript'),
+    ]);
+    jest
+      .spyOn(localReasoning, 'getLocalReasoningReadiness')
+      .mockResolvedValue({ status: 'ready', tokenCounting: false });
+    let finish!: (text: string) => void;
+    let started!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    (generateLocalMeetingNotes as jest.Mock).mockImplementationOnce(() => {
+      started();
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
+    });
+    const pending = useNotesStore
+      .getState()
+      .runMeetingPipeline(7, 'file:///app/documents/meeting-7.wav', 2);
+    const rejected = pending.catch((error: unknown) => error);
+    await ready;
+    mockProcessingModeState.activeMode = 'cloud';
+    mockModeListeners.forEach((fn) => fn(mockProcessingModeState));
+    finish('Late summary');
+    expect(await rejected).toBeInstanceOf(Error);
+    expect(notesRepository.updateNote).not.toHaveBeenCalled();
+    expect(ReasoningService.processText).not.toHaveBeenCalled();
+  });
+  it('drops a job whose note privacy changed while it was processing', async () => {
+    let finish!: (value: { speakerEmbeddingsByLabel: Record<string, number[]> }) => void;
+    mockProcessMeeting.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const pending = useNotesStore
+      .getState()
+      .runMeetingPipeline(7, 'file:///app/documents/meeting-7.wav', 2);
+    const rejected = pending.catch((error: unknown) => error);
+    (notesRepository.getNoteById as jest.Mock).mockReturnValue({
+      id: 7,
+      noteType: 'meeting',
+      isPrivate: 0,
+      content: 'Changed privacy',
+    });
+    finish({ speakerEmbeddingsByLabel: {} });
+    expect(await rejected).toBeInstanceOf(Error);
+    expect(mockLogTranscriptionCompleted).not.toHaveBeenCalled();
+    expect(notesRepository.updateNote).not.toHaveBeenCalled();
+    expect(ReasoningService.processText).not.toHaveBeenCalled();
+  });
 });

@@ -78,12 +78,12 @@ it('refuses missing model weights without invoking the runtime', async () => {
 });
 
 it.each(['moonshine-tiny', 'moonshine-small'] as const)(
-  'routes to %s without inventing word timestamps',
+  'keeps ordinary %s transcription available without requesting word timings',
   async (model) => {
     jest.mocked(selectedSpeechModel).mockReturnValue(model);
     const result = await LocalSpeechModel.transcribe('file:///sample.wav', {
       language: 'en-GB',
-      wordTimestamps: true,
+      wordTimestamps: false,
     });
     expect(result).toMatchObject({ endpoint: model, text: 'Hello.' });
     expect(result.segments).toBeUndefined();
@@ -173,3 +173,16 @@ it('does not cancel another job when an aborted sample is waiting in the inferen
   await expect(waiting).rejects.toThrow();
   expect(AndroidDictation!.transcribeParakeet).not.toHaveBeenCalled();
 });
+
+it.each(['moonshine-tiny', 'moonshine-small'] as const)(
+  'rejects required word timing for %s before loading a model',
+  async (model) => {
+    jest.mocked(selectedSpeechModel).mockReturnValue(model);
+    await expect(
+      LocalSpeechModel.transcribe('file:///meeting.wav', { wordTimestamps: true }),
+    ).rejects.toThrow(/Parakeet/);
+    expect(AndroidDictation!.transcribeMoonshine).not.toHaveBeenCalled();
+    expect(AndroidDictation!.transcribeParakeet).not.toHaveBeenCalled();
+    expect(LocalTextModel.release).not.toHaveBeenCalled();
+  },
+);

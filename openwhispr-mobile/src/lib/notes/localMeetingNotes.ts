@@ -378,8 +378,10 @@ async function reduceStructuredNotes(input: {
 
 export async function generateLocalMeetingNotes(
   noteId: number,
-  options: { actionPrompt?: string } = {},
+  options: { actionPrompt?: string; checkpoint?: () => void } = {},
 ): Promise<string> {
+  const checkpoint = options.checkpoint ?? (() => {});
+  checkpoint();
   const note = notesRepository.getNoteById(noteId);
   if (!note || note.deletedAt || note.noteType !== 'meeting') return '';
 
@@ -409,6 +411,7 @@ export async function generateLocalMeetingNotes(
     prompt: buildChunkInput({ note, lines: [], meetingContext }),
   });
   const chunkBudget = Math.min(budget, chunkOverhead + LOCAL_MEETING_CHUNK_MAX_TRANSCRIPT_TOKENS);
+  checkpoint();
   const lines = transcriptLines(segments, notesRepository.getSpeakers(noteId));
   const chunks = await buildTranscriptChunks({
     note,
@@ -421,6 +424,7 @@ export async function generateLocalMeetingNotes(
 
   const mapped: StructuredMeetingNotes[] = [];
   for (const linesInChunk of chunks) {
+    checkpoint();
     const previousSummary = mapped[mapped.length - 1]?.summary;
     mapped.push(
       ...(await mapChunkWithRetry({
@@ -433,11 +437,13 @@ export async function generateLocalMeetingNotes(
     );
   }
 
+  checkpoint();
   const reduced = await reduceStructuredNotes({
     notes: mapped,
     instructions,
     budget: Math.min(budget, LOCAL_MEETING_MERGE_MAX_INPUT_TOKENS),
   });
+  checkpoint();
   const markdown = renderStructuredMeetingNotesToMarkdown(reduced);
 
   if (__DEV__) {

@@ -185,6 +185,7 @@
     "responseTooLong": "本機回應過長。請縮短要求。",
     "emptyResponse": "本機模型未傳回文字。請重試。",
     "unsupportedLanguage": "Parakeet 支援 25 種歐洲語言。請選擇支援的語言，或為此語言選擇雲端或服務供應商處理流程。",
+    "meetingSpeechNeeded": "錄製本地模式會議前，請在「模型」中選擇並下載 Parakeet v3。說話者標籤需要它提供的逐詞時間戳。",
     "meetingModelNeeded": "請先下載會議說話者辨識模型。",
     "speechUnavailable": "Parakeet 模型無法使用。請先在「模型」中下載。",
     "editSeed": "蘋果、麵包和牛奶。",
