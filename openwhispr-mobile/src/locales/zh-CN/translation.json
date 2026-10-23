@@ -185,6 +185,7 @@
     "responseTooLong": "本地响应过长。请缩短请求。",
     "emptyResponse": "本地模型未返回文字。请重试。",
     "unsupportedLanguage": "Parakeet 支持 25 种欧洲语言。请选择支持的语言，或为此语言选择云端或服务商处理流程。",
+    "meetingModelNeeded": "请先下载会议说话人识别模型。",
     "speechUnavailable": "Parakeet 模型不可用。请先在“模型”中下载。",
     "editSeed": "苹果、面包和牛奶。",
     "retentionConfirm": "超出保留期限的听写记录将从此手机删除。“不保存”会删除所有听写历史。笔记单独保存。",

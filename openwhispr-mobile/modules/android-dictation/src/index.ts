@@ -19,6 +19,11 @@ export interface LocalSpeechResult {
   processingMs: number;
   tokenTimings?: { token: string; startTime: number; endTime: number }[];
 }
+export interface LocalDiarizationResult {
+  speakerCount: number;
+  segments: { start: number; end: number; speakerId: number | null }[];
+  embeddings: Record<number, number[]>;
+}
 export interface DeviceProfile {
   manufacturer: string;
   model: string;
@@ -60,6 +65,12 @@ interface NativeDictation {
   ): Promise<LocalSpeechResult>;
   cancelMoonshine(): void;
   releaseMoonshine(): Promise<void>;
+  diarize(
+    uri: string,
+    modelDirectory: string,
+    numberOfSpeakers: number,
+  ): Promise<LocalDiarizationResult>;
+  cancelDiarization(): void;
 }
 export const AndroidDictation =
   Platform.OS === 'android' ? requireNativeModule<NativeDictation>('AndroidDictation') : null;

@@ -185,6 +185,7 @@
     "responseTooLong": "The local response was too long. Try a shorter request.",
     "emptyResponse": "The local model returned no text. Try again.",
     "unsupportedLanguage": "Parakeet supports 25 European languages. Choose a supported language or a cloud/provider workflow for this language.",
+    "meetingModelNeeded": "Download the meeting speaker models first.",
     "speechUnavailable": "Parakeet model is not available. Please download it first from Models.",
     "editSeed": "Apples, bread and milk.",
     "retentionConfirm": "Dictations outside this retention period will be deleted from this phone. “Don’t save” deletes all dictation history. Notes are kept separately.",

@@ -101,7 +101,7 @@ def main():
             ):
                 archive.extract(info, ort)
     for abi in abis:
-        build = cache / f"build-{abi}"
+        build = cache / f"build-meetings-{abi}"
         env = {
             **os.environ,
             "SHERPA_ONNXRUNTIME_LIB_DIR": str(ort / "jni" / abi),
@@ -112,7 +112,7 @@ def main():
             f"-DANDROID_ABI={abi}", "-DANDROID_PLATFORM=android-24",
             "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON", "-DCMAKE_BUILD_TYPE=Release",
             "-DBUILD_SHARED_LIBS=ON", "-DSHERPA_ONNX_ENABLE_JNI=ON",
-            "-DSHERPA_ONNX_ENABLE_TTS=OFF", "-DSHERPA_ONNX_ENABLE_SPEAKER_DIARIZATION=OFF",
+            "-DSHERPA_ONNX_ENABLE_TTS=OFF", "-DSHERPA_ONNX_ENABLE_SPEAKER_DIARIZATION=ON",
             "-DSHERPA_ONNX_ENABLE_C_API=OFF", "-DSHERPA_ONNX_ENABLE_BINARY=OFF",
             "-DSHERPA_ONNX_ENABLE_PYTHON=OFF", "-DSHERPA_ONNX_ENABLE_TESTS=OFF",
             "-DSHERPA_ONNX_ENABLE_PORTAUDIO=OFF", "-DSHERPA_ONNX_ENABLE_WEBSOCKET=OFF",

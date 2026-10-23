@@ -5,9 +5,11 @@ import i18n from './strings';
 import { withAndroidInference } from './inferenceQueue';
 import { MOONSHINE_MODELS } from './moonshineModels';
 import { Platform } from 'react-native';
+import { MEETING_MODELS } from './meetingModels';
 
 export const ANDROID_MODELS = {
   ...MOONSHINE_MODELS,
+  ...MEETING_MODELS,
   'parakeet-v3': {
     title: 'Parakeet v3',
     kind: 'speech',
@@ -71,7 +73,7 @@ const active = new Map<
 >();
 const verifiedFiles = new Map<string, { modified: number; sha256: string }>();
 export function modelPath(id: AndroidModelId): string {
-  return `${FileSystem.documentDirectory}android-models/${id}${ANDROID_MODELS[id].kind === 'speech' ? '' : '.gguf'}`;
+  return `${FileSystem.documentDirectory}android-models/${id}${ANDROID_MODELS[id].kind === 'text' ? '.gguf' : ''}`;
 }
 function filesFor(id: AndroidModelId) {
   if (id === 'parakeet-v3')

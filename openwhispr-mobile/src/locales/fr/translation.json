@@ -185,6 +185,7 @@
     "responseTooLong": "La réponse locale était trop longue. Essayez une demande plus courte.",
     "emptyResponse": "Le modèle local n’a renvoyé aucun texte. Réessayez.",
     "unsupportedLanguage": "Parakeet prend en charge 25 langues européennes. Choisissez une langue compatible ou un traitement cloud ou fournisseur pour cette langue.",
+    "meetingModelNeeded": "Téléchargez d’abord les modèles d’identification des intervenants.",
     "speechUnavailable": "Le modèle Parakeet n’est pas disponible. Téléchargez-le d’abord dans Modèles.",
     "editSeed": "Pommes, pain et lait.",
     "retentionConfirm": "Les dictées dépassant cette durée seront supprimées de ce téléphone. « Ne pas enregistrer » supprime tout l’historique des dictées. Les notes sont conservées séparément.",

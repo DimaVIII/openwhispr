@@ -23,6 +23,7 @@ class AndroidDictationModule : Module() {
   private val providerRuntime = lazy { ProviderTransport(context) }
   private val speechRuntime = lazy { ParakeetEngine(context) }
   private val moonshineRuntime = lazy { MoonshineEngine(context) }
+  private val diarizationRuntime = lazy { DiarizationEngine(context) }
   private val providers by providerRuntime
   private val parakeet by speechRuntime
   private val moonshine by moonshineRuntime
@@ -54,6 +55,7 @@ class AndroidDictationModule : Module() {
       if (providerRuntime.isInitialized()) providers.close()
       if (speechRuntime.isInitialized()) parakeet.close()
       if (moonshineRuntime.isInitialized()) moonshine.close()
+      if (diarizationRuntime.isInitialized()) diarizationRuntime.value.close()
       recorder?.close(); DictationService.emit = null
     }
     AsyncFunction("startPCM") { sampleRate: Int, noteId: Int?, promise: Promise ->
@@ -91,6 +93,10 @@ class AndroidDictationModule : Module() {
       moonshine.transcribe(localFile(uri), localFile(modelDirectory), model, promise)
     }
     Function("cancelMoonshine") { if (moonshineRuntime.isInitialized()) moonshine.cancel() }
+    AsyncFunction("diarize") { uri: String, modelDirectory: String, numberOfSpeakers: Int, promise: Promise ->
+      diarizationRuntime.value.diarize(localFile(uri), localFile(modelDirectory), numberOfSpeakers, promise)
+    }
+    Function("cancelDiarization") { if (diarizationRuntime.isInitialized()) diarizationRuntime.value.cancel() }
     AsyncFunction("releaseMoonshine") { promise: Promise ->
       if (moonshineRuntime.isInitialized()) moonshine.release(promise) else promise.resolve(null)
     }
