@@ -43,6 +43,22 @@ function resolveAuthScheme(): string {
 
 const client = createAuthClient({
   baseURL: API_URL,
+  fetchOptions: {
+    onResponse({ request, response }) {
+      // A captive portal or preview gateway can redirect get-session to 200
+      // HTML. Reject it before Expo's onSuccess replaces the cached session;
+      // it is a transport outage, not an authoritative signed-out response.
+      if (
+        Platform.OS === 'android' &&
+        new URL(request.url).pathname.endsWith('/get-session') &&
+        response.ok &&
+        response.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !==
+          'application/json'
+      ) {
+        throw new TypeError('Session endpoint returned an unexpected response type');
+      }
+    },
+  },
   plugins: [
     anonymousClient(),
     expoClient({
