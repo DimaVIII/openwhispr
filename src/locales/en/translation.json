@@ -3969,9 +3969,10 @@
         "invalid": "{{list}} only takes short terms: up to 64 characters and 6 words, with no commas, sentence punctuation or symbols like < > { } [ ] ` |",
         "recentlyDeleted": "That word was just deleted from {{list}}. Add it again instead."
       },
-      "deleteOneTitle": "Delete \"{{word}}\" for everyone in {{list}}?",
-      "deleteManyTitle_one": "Delete {{count}} word for everyone in {{list}}?",
-      "deleteManyTitle_other": "Delete {{count}} words for everyone in {{list}}?",
+      "deleteOneTitle": "Delete \"{{word}}\"?",
+      "deleteDescription": "This applies to everyone in {{list}}.",
+      "deleteManyTitle_one": "Delete {{count}} word?",
+      "deleteManyTitle_other": "Delete {{count}} words?",
       "deletedManyForEveryone_one": "Deleted {{count}} word for everyone",
       "deletedManyForEveryone_other": "Deleted {{count}} words for everyone",
       "deletedPersonalMany_one": "Deleted {{count}} word",

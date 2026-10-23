@@ -105,11 +105,16 @@ const MOCKS = {
   `,
   "/ui/dialog": `
     import { createElement } from "react";
-    export const ConfirmDialog = ({ open, title, onConfirm, onOpenChange, confirmText, cancelText }) =>
+    export const ConfirmDialog = ({ open, title, description, onConfirm, onOpenChange, confirmText, cancelText }) =>
       open
         ? createElement(
             "div",
-            { "data-dialog": title, "data-confirm-text": confirmText, "data-cancel-text": cancelText },
+            {
+              "data-dialog": title,
+              "data-description": description,
+              "data-confirm-text": confirmText,
+              "data-cancel-text": cancelText,
+            },
             createElement("button", {
               "data-confirm": "",
               onClick: () => {
@@ -402,7 +407,11 @@ test("Delete for everyone runs only after confirming, then offers Undo", async (
   await click(deleteButton());
   assert.equal(
     dialog().getAttribute("data-dialog"),
-    'dictionary.shared.deleteOneTitle{"word":"Qdrant","list":"Engineering"}'
+    'dictionary.shared.deleteOneTitle{"word":"Qdrant"}'
+  );
+  assert.equal(
+    dialog().getAttribute("data-description"),
+    'dictionary.shared.deleteDescription{"list":"Engineering"}'
   );
   await click(byAttribute(dialog(), "data-cancel"));
   assert.equal(dialog(), null);
@@ -870,9 +879,13 @@ test("a shared list's bar hides for me and deletes for everyone after confirming
   const dialog = byAttribute(
     container,
     "data-dialog",
-    'dictionary.shared.deleteManyTitle{"count":2,"list":"Engineering"}'
+    'dictionary.shared.deleteManyTitle{"count":2}'
   );
   assert.ok(dialog);
+  assert.equal(
+    dialog.getAttribute("data-description"),
+    'dictionary.shared.deleteDescription{"list":"Engineering"}'
+  );
   assert.equal(
     calls.find(([name]) => name === "deleteSharedWords"),
     undefined
@@ -1208,7 +1221,7 @@ test("All words shows a word in two lists once, and hiding it hides both copies"
   const dialog = findElement(container, (node) =>
     node.getAttribute?.("data-dialog")?.includes("deleteOneTitle")
   );
-  assert.ok(dialog.getAttribute("data-dialog").includes("Engineering"));
+  assert.ok(dialog.getAttribute("data-description").includes("Engineering"));
   await click(byAttribute(dialog, "data-confirm"));
   assert.deepEqual(
     calls.find(([name]) => name === "deleteSharedWords"),

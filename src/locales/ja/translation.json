@@ -3546,9 +3546,10 @@
         "invalid": "{{list}} に追加できるのは短い用語だけです（64 文字・6 語まで。カンマ、文末の句読点、< > { } [ ] ` | などの記号は使えません）",
         "recentlyDeleted": "この単語は {{list}} から削除されたばかりです。もう一度追加してください。"
       },
-      "deleteOneTitle": "{{list}} の全員から「{{word}}」を削除しますか？",
-      "deleteManyTitle_one": "{{list}} の全員から {{count}} 個の単語を削除しますか？",
-      "deleteManyTitle_other": "{{list}} の全員から {{count}} 個の単語を削除しますか？",
+      "deleteOneTitle": "「{{word}}」を削除しますか？",
+      "deleteDescription": "{{list}} の全員に適用されます。",
+      "deleteManyTitle_one": "{{count}} 個の単語を削除しますか？",
+      "deleteManyTitle_other": "{{count}} 個の単語を削除しますか？",
       "deletedManyForEveryone_one": "{{count}} 個の単語を全員から削除しました",
       "deletedManyForEveryone_other": "{{count}} 個の単語を全員から削除しました",
       "deletedPersonalMany_one": "{{count}} 個の単語を削除しました",

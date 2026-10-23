@@ -439,9 +439,14 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
     ? t("dictionary.shared.memberCount", { count: openScope.member_count })
     : String(rows.length);
 
-  // The dialog animates out after the request clears, so it keeps showing the last title.
-  const lastDeleteTitle = useRef("");
-  if (actions.deleteTitle !== null) lastDeleteTitle.current = actions.deleteTitle;
+  // The dialog animates out after the request clears, so it keeps showing the last text.
+  const lastDeleteDialog = useRef({ title: "", description: "" });
+  if (actions.deleteTitle !== null && actions.deleteDescription !== null) {
+    lastDeleteDialog.current = {
+      title: actions.deleteTitle,
+      description: actions.deleteDescription,
+    };
+  }
 
   const emptyPersonalState = (
     <div className="flex min-h-64 items-start px-6 py-6">
@@ -564,7 +569,8 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
         onOpenChange={(open) => {
           if (!open) actions.cancelDelete();
         }}
-        title={actions.deleteTitle ?? lastDeleteTitle.current}
+        title={actions.deleteTitle ?? lastDeleteDialog.current.title}
+        description={actions.deleteDescription ?? lastDeleteDialog.current.description}
         confirmText={t("dictionary.shared.actions.deleteForEveryone")}
         cancelText={t("common.cancel")}
         onConfirm={actions.confirmDelete}
@@ -678,7 +684,7 @@ export default function DictionaryView({ onUpgrade }: DictionaryViewProps): Reac
                       onChange={(e) => setBulkText(e.target.value)}
                       placeholder={t("dictionary.importPlaceholder")}
                       rows={4}
-                      className="min-h-[72px] resize-none border-0 shadow-none rounded-none bg-transparent p-0 text-xs text-foreground placeholder:text-foreground/45 hover:border-0 focus:border-0 focus:ring-0"
+                      className="input-inline min-h-[72px] resize-none border-0 shadow-none rounded-none bg-transparent p-0 text-xs text-foreground placeholder:text-foreground/45 hover:border-0 focus:border-0 focus:ring-0"
                     />
                     <div className="flex items-center justify-between pt-1.5">
                       <p className="text-xs text-foreground/45">

@@ -3969,9 +3969,10 @@
         "invalid": "{{list}} nimmt nur kurze Begriffe auf: höchstens 64 Zeichen und 6 Wörter, ohne Kommas, Satzzeichen oder Zeichen wie < > { } [ ] ` |",
         "recentlyDeleted": "Dieses Wort wurde gerade aus {{list}} gelöscht. Füge es stattdessen erneut hinzu."
       },
-      "deleteOneTitle": "„{{word}}“ für alle in {{list}} löschen?",
-      "deleteManyTitle_one": "{{count}} Wort für alle in {{list}} löschen?",
-      "deleteManyTitle_other": "{{count}} Wörter für alle in {{list}} löschen?",
+      "deleteOneTitle": "„{{word}}“ löschen?",
+      "deleteDescription": "Das gilt für alle in {{list}}.",
+      "deleteManyTitle_one": "{{count}} Wort löschen?",
+      "deleteManyTitle_other": "{{count}} Wörter löschen?",
       "deletedManyForEveryone_one": "{{count}} Wort für alle gelöscht",
       "deletedManyForEveryone_other": "{{count}} Wörter für alle gelöscht",
       "deletedPersonalMany_one": "{{count}} Wort gelöscht",

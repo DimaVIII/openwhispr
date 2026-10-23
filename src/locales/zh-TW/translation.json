@@ -3618,9 +3618,10 @@
         "invalid": "{{list}} 只接受簡短詞語：不超過 64 個字元和 6 個詞，且不含逗號、句末標點或 < > { } [ ] ` | 等符號",
         "recentlyDeleted": "這個詞語剛從 {{list}} 中刪除，請重新新增。"
       },
-      "deleteOneTitle": "要為 {{list}} 中的所有人刪除「{{word}}」嗎？",
-      "deleteManyTitle_one": "要為 {{list}} 中的所有人刪除 {{count}} 個詞語嗎？",
-      "deleteManyTitle_other": "要為 {{list}} 中的所有人刪除 {{count}} 個詞語嗎？",
+      "deleteOneTitle": "要刪除「{{word}}」嗎？",
+      "deleteDescription": "這會影響 {{list}} 中的所有人。",
+      "deleteManyTitle_one": "要刪除 {{count}} 個詞語嗎？",
+      "deleteManyTitle_other": "要刪除 {{count}} 個詞語嗎？",
       "deletedManyForEveryone_one": "已為所有人刪除 {{count}} 個詞語",
       "deletedManyForEveryone_other": "已為所有人刪除 {{count}} 個詞語",
       "deletedPersonalMany_one": "已刪除 {{count}} 個詞語",

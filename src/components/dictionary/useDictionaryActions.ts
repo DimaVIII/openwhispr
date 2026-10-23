@@ -82,7 +82,7 @@ export interface DictionaryActions {
   setRowsHidden: (rows: DictionaryRow[], hidden: boolean) => Promise<boolean>;
   // Hides one row's word, with an Undo toast.
   hideRow: (row: DictionaryRow) => Promise<void>;
-  // Delete for everyone always asks first; the dialog reads `deleteTitle`.
+  // Delete for everyone always asks first; the dialog reads `deleteTitle` and `deleteDescription`.
   // onDeleted runs once the confirmed delete fully succeeded.
   requestDeleteForEveryone: (rows: DictionaryRow[], onDeleted?: () => void) => void;
   // Moves personal words into the lists; resolves true when all of them went.
@@ -90,6 +90,7 @@ export interface DictionaryActions {
   // Removes personal words; several at once come with an Undo toast.
   deletePersonalWords: (words: string[]) => void;
   deleteTitle: string | null;
+  deleteDescription: string | null;
   confirmDelete: () => void;
   cancelDelete: () => void;
   syncing: boolean;
@@ -535,14 +536,11 @@ export function useDictionaryActions({
   const liveDelete = pendingDelete?.workspaceId === workspaceId ? pendingDelete : null;
   const deleteTitle = liveDelete
     ? liveDelete.words.length === 1
-      ? t("dictionary.shared.deleteOneTitle", {
-          word: liveDelete.words[0],
-          list: liveDelete.listName,
-        })
-      : t("dictionary.shared.deleteManyTitle", {
-          count: liveDelete.words.length,
-          list: liveDelete.listName,
-        })
+      ? t("dictionary.shared.deleteOneTitle", { word: liveDelete.words[0] })
+      : t("dictionary.shared.deleteManyTitle", { count: liveDelete.words.length })
+    : null;
+  const deleteDescription = liveDelete
+    ? t("dictionary.shared.deleteDescription", { list: liveDelete.listName })
     : null;
 
   const confirmDelete = (): void => {
@@ -598,6 +596,7 @@ export function useDictionaryActions({
     shareWords,
     deletePersonalWords,
     deleteTitle,
+    deleteDescription,
     confirmDelete,
     cancelDelete: () => setPendingDelete(null),
     syncing,
