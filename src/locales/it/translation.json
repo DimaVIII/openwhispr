@@ -4687,7 +4687,7 @@
         "title": "Preparazione 1:1",
         "description": "Raccoglie cosa è cambiato dal mio ultimo incontro individuale con una persona. Da usare quando chiedo di prepararmi a un 1:1."
       },
-      "decision-log": {
+      "meeting-decisions": {
         "title": "Decisioni delle riunioni",
         "description": "Trova le decisioni nelle note delle mie riunioni, con la data e la riunione di ciascuna. Da usare quando chiedo cosa abbiamo deciso."
       }
