@@ -4,12 +4,14 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 const { createRequire } = require("node:module");
+const { execFileSync } = require("node:child_process");
 const { transcribeManagedAudioFile } = require("../../src/helpers/managedAudioFileTranscription");
+const { getFFmpegPath } = require("../../src/helpers/ffmpegUtils");
 const { silenceWav } = require("../../src/helpers/enterpriseAudioSetup");
 const { getSafeTempDir } = require("../../src/helpers/safeTempDir");
 
-function audio() {
-  const buffer = Buffer.alloc(44 + 24000 * 2 * 3);
+function audio(durationSeconds = 3) {
+  const buffer = Buffer.alloc(44 + Math.round(24000 * 2 * durationSeconds));
   silenceWav().copy(buffer, 0, 0, 44);
   buffer.writeUInt32LE(buffer.length - 8, 4);
   buffer.writeUInt32LE(buffer.length - 44, 40);
@@ -20,6 +22,39 @@ const temporaryFiles = () =>
     .readdirSync(getSafeTempDir())
     .filter((name) => /^enterprise-(buffer|chunks)-/.test(name))
     .sort();
+
+for (const durationSeconds of [3, 3.05]) {
+  test(`managed chunks keep a valid final clip for ${durationSeconds}s at an exact split boundary`, async () => {
+    const before = temporaryFiles();
+    const source = audio(durationSeconds);
+    for (let frame = 24000 * 3; frame < (source.length - 44) / 2; frame++) {
+      source.writeInt16LE(
+        Math.round(12000 * Math.sin((2 * Math.PI * 600 * frame) / 24000)),
+        44 + frame * 2
+      );
+    }
+    const decoded = [];
+    await transcribeManagedAudioFile({
+      audioBuffer: source,
+      fileName: "boundary.wav",
+      maxUploadBytes: 20000,
+      transcribe: async (buffer) => {
+        assert.ok(buffer.length <= 20000);
+        const pcm = execFileSync(
+          getFFmpegPath(),
+          ["-v", "error", "-i", "pipe:0", "-ar", "16000", "-ac", "1", "-f", "s16le", "pipe:1"],
+          { input: buffer, windowsHide: true }
+        );
+        assert.ok(pcm.length >= 3200, `Azure rejects a ${pcm.length / 32000}s clip`);
+        decoded.push(pcm);
+        return `part-${decoded.length}`;
+      },
+    });
+    assert.ok(decoded.length >= 3);
+    if (durationSeconds > 3) assert.ok(decoded.at(-1).some((byte) => byte !== 0));
+    assert.deepEqual(temporaryFiles(), before);
+  });
+}
 
 test("oversized managed buffers use real ffmpeg chunks in order and clean temporary audio", async () => {
   const before = temporaryFiles();

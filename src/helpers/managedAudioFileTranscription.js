@@ -1,7 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { getSafeTempDir } = require("./safeTempDir");
-const { splitAudioFile } = require("./ffmpegUtils");
+const { splitAudioFile, convertToMp3 } = require("./ffmpegUtils");
 const { providerContentType, prepareProviderUpload } = require("./providerUploadAudio");
 
 async function transcribeManagedAudioFile({
@@ -65,7 +65,23 @@ async function transcribeManagedAudioFile({
       1,
       Math.min(600, Math.floor((maxUploadBytes - 65536) / 16000))
     );
-    const { chunkPaths } = await splitAudioFile(filePath, directory, { segmentDuration, signal });
+    const { chunkPaths, durationSeconds } = await splitAudioFile(filePath, directory, {
+      segmentDuration,
+      signal,
+    });
+    const tailDuration =
+      durationSeconds === null ? null : durationSeconds - (chunkPaths.length - 1) * segmentDuration;
+    // Encoder padding can create a trailing clip Azure cannot decode. Keep any
+    // final speech and pad it with silence instead of dropping the short tail.
+    if (tailDuration === null || tailDuration < 1) {
+      const paddedTail = path.join(directory, "final-chunk.mp3");
+      await convertToMp3(chunkPaths.at(-1), paddedTail, {
+        audioBitrate: "128k",
+        minimumDurationSeconds: 1,
+        signal,
+      });
+      chunkPaths[chunkPaths.length - 1] = paddedTail;
+    }
     for (const [index, chunkPath] of chunkPaths.entries()) {
       signal?.throwIfAborted();
       onProgress?.({
