@@ -156,7 +156,8 @@ test("meeting connects forward the credential mode", () => {
   // as managed (#2140). Scoped by sample rate so an unrelated connectOpts cannot
   // drag the assertion off target.
   const connectOptsBlocks =
-    source.match(/const connectOpts = \{[^}]*sampleRate: MEETING_STREAM_SAMPLE_RATE,\s*\};/g) ?? [];
+    source.match(/const connectOpts = \{[^}]*sampleRate: MEETING_STREAM_SAMPLE_RATE,[^}]*\};/g) ??
+    [];
   assert.equal(connectOptsBlocks.length, 2, "initial connect and reconnect each build connectOpts");
   for (const block of connectOptsBlocks) {
     // Anchored: an unanchored match also accepts the key commented out.

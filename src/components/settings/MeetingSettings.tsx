@@ -1,3 +1,6 @@
+import { useManagedScopeResolution } from "../../stores/enterpriseIdentityStore";
+import { ShieldCheck } from "../icons";
+import { EnterpriseAudioSettings } from "./EnterpriseAudioSettings";
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { Cloud, Key, Cpu, Network } from "../icons";
@@ -52,6 +55,8 @@ const noop = () => {};
 export function MeetingTranscriptionPanel() {
   const { t } = useTranslation();
   const policySnapshot = usePolicySnapshot();
+  const enterprise = useManagedScopeResolution("transcription", "managed", "realtime");
+  const enterpriseAvailable = enterprise.kind === "managed";
 
   const {
     isSignedIn,
@@ -100,6 +105,16 @@ export function MeetingTranscriptionPanel() {
         description: t("settingsPage.transcription.modes.localDesc"),
         icon: <Cpu className="w-4 h-4" />,
       },
+      ...(enterpriseAvailable
+        ? [
+            {
+              id: "enterprise" as const,
+              label: t("settingsPage.transcription.modes.enterprise"),
+              description: t("settingsPage.transcription.modes.enterpriseDesc"),
+              icon: <ShieldCheck className="w-4 h-4" />,
+            },
+          ]
+        : []),
       {
         id: "self-hosted",
         label: t("settingsPage.transcription.modes.selfHosted"),
@@ -111,7 +126,10 @@ export function MeetingTranscriptionPanel() {
     ],
     "transcription",
     meetingTranscriptionMode,
-    { byokProviders: MEETING_BYOK_PROVIDER_IDS }
+    {
+      byokProviders: MEETING_BYOK_PROVIDER_IDS,
+      enterpriseProviders: ["azure", "openai-compatible"],
+    }
   );
   const handleTranscriptionModeSelect = (mode: InferenceMode) => {
     if (!isModeAllowed(mode)) return;
@@ -122,6 +140,8 @@ export function MeetingTranscriptionPanel() {
     }
     if (mode === effectiveTranscriptionMode) return;
     setMeetingTranscriptionMode(mode);
+    if (mode === "enterprise")
+      useSettingsStore.getState().setEnterpriseTranscriptionSetupMode("managed");
     setMeetingUseLocalWhisper(mode === "local");
     setMeetingCloudTranscriptionMode(mode === "openwhispr" ? "openwhispr" : "byok");
   };
@@ -181,6 +201,7 @@ export function MeetingTranscriptionPanel() {
 
   return (
     <div className="space-y-3">
+      <EnterpriseAudioSettings />
       {emptyListIsEnterpriseOnly && (
         <p className="text-sm text-muted-foreground">
           {t("settingsPage.transcription.meetingEnterpriseOnly")}

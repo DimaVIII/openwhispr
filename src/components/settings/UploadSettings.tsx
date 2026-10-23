@@ -1,3 +1,4 @@
+import { EnterpriseAudioSettings } from "./EnterpriseAudioSettings";
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { Cloud, Key, Cpu, Network, ShieldCheck } from "../icons";
@@ -155,6 +156,7 @@ export function UploadTranscriptionPanel() {
 
   return (
     <div className="space-y-3">
+      <EnterpriseAudioSettings />
       <InferenceModeSelector
         modes={transcriptionModes}
         activeMode={effectiveTranscriptionMode}

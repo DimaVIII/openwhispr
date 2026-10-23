@@ -130,7 +130,7 @@ class OpenAIRealtimeStreaming {
       streamLabel,
       vadThreshold,
     } = options;
-    if (!apiKey) throw new Error(`${this.providerLabel} API key is required`);
+    if (!apiKey && !createSocket) throw new Error(`${this.providerLabel} API key is required`);
 
     if (this.isConnected || this.isConnecting) {
       debugLogger.debug(`${this.providerLabel} already connected/connecting`, this._logContext());
@@ -145,6 +145,10 @@ class OpenAIRealtimeStreaming {
     this.model = model || "gpt-4o-mini-transcribe";
     this.language = normalizeLanguage(language);
     this.preconfigured = !!preconfigured;
+    this.protocol = options.protocol ?? "openai-transcription-ga";
+    this.connectTimeoutMs = options.connectTimeoutMs ?? WEBSOCKET_TIMEOUT_MS;
+    this.sessionMaxMs = options.sessionMaxMs ?? SESSION_PREEMPT_MS;
+    this.idleTimeoutMs = options.idleTimeoutMs;
     this.inputRate = inputRate || SAMPLE_RATE;
     this.captureRate = captureRate || this.inputRate;
     this.streamLabel = streamLabel || null;
@@ -167,7 +171,7 @@ class OpenAIRealtimeStreaming {
     let ws;
     try {
       ws = createSocket
-        ? await createSocketWithTimeout(createSocket, WEBSOCKET_TIMEOUT_MS)
+        ? await createSocketWithTimeout(createSocket, this.connectTimeoutMs)
         : new WebSocket(url, { headers: { Authorization: `Bearer ${apiKey}` } });
     } catch (err) {
       this.isConnecting = false;
@@ -183,7 +187,7 @@ class OpenAIRealtimeStreaming {
         this.isConnecting = false;
         this.cleanup();
         reject(new Error(`${this.providerLabel} connection timeout`));
-      }, WEBSOCKET_TIMEOUT_MS);
+      }, this.connectTimeoutMs);
 
       this.ws = ws;
 
@@ -245,6 +249,7 @@ class OpenAIRealtimeStreaming {
       const event = JSON.parse(data.toString());
 
       switch (event.type) {
+        case "transcription_session.created":
         case "session.created": {
           if (this.preconfigured) {
             // Server-side ephemeral token already configured the session;
@@ -276,26 +281,40 @@ class OpenAIRealtimeStreaming {
             );
             if (!this.ws || this.ws.readyState !== WebSocket.OPEN) break;
             this.ws.send(
-              JSON.stringify({
-                type: "session.update",
-                session: {
-                  type: "transcription",
-                  audio: {
-                    input: {
-                      format: { type: "audio/pcm", rate: this.inputRate },
-                      transcription: this.language
-                        ? { model: this.model, language: this.language }
-                        : { model: this.model },
-                      turn_detection: turnDetectionFor(this.model, this.vadThreshold),
-                    },
-                  },
-                },
-              })
+              JSON.stringify(
+                this.protocol === "openai-transcription-preview"
+                  ? {
+                      type: "transcription_session.update",
+                      session: {
+                        input_audio_format: "pcm16",
+                        input_audio_transcription: this.language
+                          ? { model: this.model, language: this.language }
+                          : { model: this.model },
+                        turn_detection: turnDetectionFor(this.model, this.vadThreshold),
+                      },
+                    }
+                  : {
+                      type: "session.update",
+                      session: {
+                        type: "transcription",
+                        audio: {
+                          input: {
+                            format: { type: "audio/pcm", rate: this.inputRate },
+                            transcription: this.language
+                              ? { model: this.model, language: this.language }
+                              : { model: this.model },
+                            turn_detection: turnDetectionFor(this.model, this.vadThreshold),
+                          },
+                        },
+                      },
+                    }
+              )
             );
           }
           break;
         }
 
+        case "transcription_session.updated":
         case "session.updated": {
           if (this.pendingResolve) {
             debugLogger.debug(
@@ -485,7 +504,7 @@ class OpenAIRealtimeStreaming {
         this._logContext()
       );
       this.onSessionExpired?.({ proactive: true });
-    }, SESSION_PREEMPT_MS);
+    }, this.sessionMaxMs ?? SESSION_PREEMPT_MS);
   }
 
   // A warm connection sits idle between dictations for up to 5 minutes and is
@@ -502,30 +521,35 @@ class OpenAIRealtimeStreaming {
       socket.isAlive = true;
     });
 
-    this.keepAliveInterval = setInterval(() => {
-      if (socket !== this.ws || socket.readyState !== WebSocket.OPEN) {
-        this.stopKeepAlive();
-        return;
-      }
-      if (socket.isAlive === false) {
-        debugLogger.debug(
-          `${this.providerLabel} keep-alive missed pong, terminating stale connection`,
-          this._logContext()
-        );
-        socket.terminate();
-        return;
-      }
-      socket.isAlive = false;
-      try {
-        socket.ping();
-      } catch (err) {
-        debugLogger.debug(
-          `${this.providerLabel} keep-alive ping failed`,
-          this._logContext({ error: err.message })
-        );
-        socket.terminate();
-      }
-    }, KEEPALIVE_INTERVAL_MS);
+    this.keepAliveInterval = setInterval(
+      () => {
+        if (socket !== this.ws || socket.readyState !== WebSocket.OPEN) {
+          this.stopKeepAlive();
+          return;
+        }
+        if (socket.isAlive === false) {
+          debugLogger.debug(
+            `${this.providerLabel} keep-alive missed pong, terminating stale connection`,
+            this._logContext()
+          );
+          socket.terminate();
+          return;
+        }
+        socket.isAlive = false;
+        try {
+          socket.ping();
+        } catch (err) {
+          debugLogger.debug(
+            `${this.providerLabel} keep-alive ping failed`,
+            this._logContext({ error: err.message })
+          );
+          socket.terminate();
+        }
+      },
+      this.idleTimeoutMs
+        ? Math.min(KEEPALIVE_INTERVAL_MS, Math.floor(this.idleTimeoutMs / 2))
+        : KEEPALIVE_INTERVAL_MS
+    );
   }
 
   stopKeepAlive() {

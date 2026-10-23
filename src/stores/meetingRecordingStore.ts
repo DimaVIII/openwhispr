@@ -1,3 +1,4 @@
+import { getManagedTranscriptionResolution } from "../services/managedTranscription";
 import { create } from "zustand";
 import { getSettings, selectResolvedMeetingTranscription } from "./settingsStore";
 import { useStreamingProvidersStore } from "./streamingProvidersStore";
@@ -31,6 +32,7 @@ import {
 import logger from "../utils/logger";
 import { isTranscriptionContextAllowed } from "./policyRules";
 import { usePolicyStore } from "./policyStore";
+import { useWorkspaceStore } from "./workspaceStore";
 import {
   lockTranscriptSpeaker,
   normalizeTranscriptSegment,
@@ -159,25 +161,49 @@ const isSegmentWithinIdentificationWindow = (
 };
 
 const getMeetingTranscriptionOptions = () => {
+  const { accountId, authGeneration } = usePolicyStore.getState();
+  const workspaceId = useWorkspaceStore.getState().activeWorkspaceId;
+  const enterpriseIdentity =
+    accountId && workspaceId && authGeneration != null
+      ? { accountId, workspaceId, authGeneration }
+      : undefined;
+  const managed = getManagedTranscriptionResolution("realtime");
+  if (managed?.kind === "error")
+    throw Object.assign(new Error(managed.message), {
+      code: managed.code,
+      messageKey: managed.messageKey,
+    });
+  if (managed?.kind === "managed")
+    return {
+      provider: "enterprise-realtime",
+      mode: "enterprise",
+      model: managed.deployment,
+      managedContext: managed.context,
+      enterpriseIdentity,
+      language: getBaseLanguageCode(getSettings().preferredLanguage),
+    };
   const state = getSettings();
   const resolved = selectResolvedMeetingTranscription(state);
   const language = getBaseLanguageCode(state.preferredLanguage);
 
-  return resolveMeetingTranscriptionOptions({
-    transcriptionMode: resolved.transcriptionMode,
-    language,
-    localProvider: resolved.localTranscriptionProvider,
-    whisperModel: resolved.whisperModel,
-    parakeetModel: resolved.parakeetModel,
-    cohereModel: resolved.cohereModel,
-    selectedProvider: resolved.cloudTranscriptionProvider,
-    selectedModel: resolved.cloudTranscriptionModel,
-    byokProviders: getMeetingStreamingTranscriptionProviders(),
-    managedProviders: useStreamingProvidersStore.getState().providers,
-    cortiEnvironment: state.cortiEnvironment,
-    cortiTenant: state.cortiTenant,
-    keyterms: (state.customDictionary ?? []).filter(Boolean),
-  });
+  return {
+    ...resolveMeetingTranscriptionOptions({
+      transcriptionMode: resolved.transcriptionMode,
+      language,
+      localProvider: resolved.localTranscriptionProvider,
+      whisperModel: resolved.whisperModel,
+      parakeetModel: resolved.parakeetModel,
+      cohereModel: resolved.cohereModel,
+      selectedProvider: resolved.cloudTranscriptionProvider,
+      selectedModel: resolved.cloudTranscriptionModel,
+      byokProviders: getMeetingStreamingTranscriptionProviders(),
+      managedProviders: useStreamingProvidersStore.getState().providers,
+      cortiEnvironment: state.cortiEnvironment,
+      cortiTenant: state.cortiTenant,
+      keyterms: (state.customDictionary ?? []).filter(Boolean),
+    }),
+    enterpriseIdentity,
+  };
 };
 
 const stopMediaStream = (stream: MediaStream | null) => {

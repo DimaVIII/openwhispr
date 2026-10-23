@@ -1,3 +1,4 @@
+import { EnterpriseAudioSettings } from "./settings/EnterpriseAudioSettings";
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "./ui/button";
@@ -748,6 +749,7 @@ function TranscriptionSection({
     <div className="space-y-4">
       {errorCard}
       {managedCard}
+      <EnterpriseAudioSettings />
       {!errorCard && !managedCard && (
         <>
           {enterpriseTranscriptionSetupMode === "manual" && managedAvailable.kind === "managed" && (

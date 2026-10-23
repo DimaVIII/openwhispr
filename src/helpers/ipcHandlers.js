@@ -862,6 +862,10 @@ class IPCHandlers {
     this._audioFeaturePolicy?.cancelAll();
     if (!token) this._stopMeetingForPolicy?.();
     this.windowManager.retireMeetingNotificationScope();
+    this._retireEnterpriseAudio?.();
+    this._enterpriseAudioBinding = null;
+    this._enterpriseAudioScope = null;
+    this._enterpriseAudioScopeRevision = (this._enterpriseAudioScopeRevision ?? 0) + 1;
     this.enterpriseIdentityManager?.clear();
     if (!token) {
       this.databaseManager.setActiveAccountId(null);
@@ -4447,6 +4451,17 @@ class IPCHandlers {
       } catch (e) {
         errors.push(`Device setting files: ${e.message}`);
       }
+      try {
+        fs.rmSync(path.join(app.getPath("userData"), "enterprise-audio-keys"), {
+          recursive: true,
+          force: true,
+        });
+        fs.rmSync(path.join(app.getPath("userData"), "enterprise-audio-bootstrap.json"), {
+          force: true,
+        });
+      } catch (error) {
+        errors.push(`Enterprise audio credentials: ${error.message}`);
+      }
       // "connectors" holds encrypted connector logins (Slack, Gmail), all
       // revoked above.
       for (const directoryName of ["bin", "llama-cpp", "connectors"]) {
@@ -6700,14 +6715,159 @@ class IPCHandlers {
         }),
       });
     }
+    const { createEnterpriseAudioCredentials } = require("./enterpriseAudioCredentials");
+    const { createEnterpriseAudioTransport } = require("./enterpriseAudioTransport");
+    const {
+      createEnterpriseAudioRuntime,
+      createEnterpriseAudioRequestResolver,
+    } = require("./enterpriseAudioRuntime");
+    let audioRetirement = new AbortController();
+    this._retireEnterpriseAudio = (required = false) => {
+      audioRetirement.abort();
+      audioRetirement = new AbortController();
+      if (required || this._activeEnterpriseAudioMeeting) void this._stopMeetingForPolicy?.();
+    };
+    this.enterpriseAudioCredentials = createEnterpriseAudioCredentials({
+      directory: path.join(app.getPath("userData"), "enterprise-audio-keys"),
+      crypto: require("./secretCrypto"),
+      onChanged: () => this._retireEnterpriseAudio(),
+    });
+    const enterpriseAudioTransport = createEnterpriseAudioTransport({
+      resolveProxy: (url) => require("electron").session.defaultSession.resolveProxy(url),
+    });
+    const getEnterpriseAudioRequest = createEnterpriseAudioRequestResolver({
+      getScopeRevision: () => this._enterpriseAudioScopeRevision ?? 0,
+      getIdentity: () => {
+        const state = tokenStore.getState();
+        const scope = accountScopeBinding.resolveActiveAccountScope({
+          ...state,
+          binding: accountScopeBinding.read(),
+        });
+        return {
+          accountId: scope?.accountId ?? null,
+          authGeneration: state.generation,
+          signedIn: Boolean(state.token || this.databaseManager.activeAccountId),
+        };
+      },
+      getBinding: () => this._enterpriseAudioBinding,
+      setBinding: (binding) => {
+        this._enterpriseAudioBinding = binding;
+      },
+      getAuthHeaders: getAuthHeader,
+      getWorkspaces: async (authHeaders) => {
+        const response = await proxyFetch(`${getApiUrl()}/api/workspaces`, {
+          headers: { ...authHeaders, "x-openwhispr-version": app.getVersion() },
+          signal: AbortSignal.timeout(15000),
+        });
+        if (!response.ok) throw new Error("Enterprise workspace lookup failed");
+        const workspaces = (await response.json()).data;
+        if (!Array.isArray(workspaces)) throw new Error("Enterprise workspace response is invalid");
+        return workspaces;
+      },
+      getConfig: (request) => {
+        this._enterpriseAudioScope = {
+          accountId: request.accountId,
+          workspaceId: request.workspaceId,
+          authGeneration: request.expectedAuthGeneration,
+        };
+        return this.enterpriseIdentityManager.getConfig(request);
+      },
+    });
+    const matchesEnterpriseAudioScope = (snapshot) => {
+      const scope = this._enterpriseAudioScope;
+      return (
+        scope &&
+        scope.accountId === snapshot.accountId &&
+        scope.workspaceId === snapshot.workspaceId &&
+        scope.authGeneration === snapshot.authGeneration
+      );
+    };
     this.enterpriseIdentityManager = createEnterpriseIdentityManager({
       cachePath: path.join(app.getPath("userData"), "managed-enterprise-config.json"),
       getApiUrl,
       getAppVersion: () => app.getVersion(),
       proxyFetch,
       tokenStore,
-      broadcast: (snapshot) => broadcastToWindows("managed-enterprise-config-changed", snapshot),
+      enterpriseFetch: (url, init, network, bundles) => {
+        const caPem = network.caBundleId
+          ? bundles?.find((bundle) => bundle.id === network.caBundleId)?.pem
+          : undefined;
+        if (network.caBundleId && !caPem)
+          throw Object.assign(new Error("Certificate bundle is unavailable"), {
+            code: "MANAGED_CA_UNAVAILABLE",
+          });
+        const binding = this._enterpriseAudioBinding;
+        return enterpriseAudioTransport.request(url, {
+          ...init,
+          network,
+          caPem,
+          readCredential: (slot) =>
+            this.enterpriseAudioCredentials.read(binding.accountId, binding.workspaceId, slot),
+        });
+      },
+      broadcast: (snapshot) => {
+        if (!matchesEnterpriseAudioScope(snapshot)) return;
+        const old = this._enterpriseAudioBinding;
+        const required =
+          snapshot.enforcedScopes?.includes("transcription") ||
+          snapshot.config?.providers.some(
+            (record) =>
+              record.mode !== "disabled" &&
+              (record.mode === "managed_required" || !record.allowManualSetup) &&
+              (record.config.transcription || record.config.batch || record.config.realtime)
+          );
+        if (
+          old &&
+          (old.workspaceId !== snapshot.workspaceId ||
+            old.accountId !== snapshot.accountId ||
+            old.generation !== snapshot.config?.generation)
+        )
+          this._retireEnterpriseAudio(required);
+        else if (!old && required) this._retireEnterpriseAudio(true);
+        if (snapshot.config)
+          this._enterpriseAudioBinding = { ...snapshot, generation: snapshot.config.generation };
+        else {
+          this._enterpriseAudioBinding = null;
+          this._retireEnterpriseAudio(required);
+        }
+        broadcastToWindows("managed-enterprise-config-changed", snapshot);
+      },
       logger: debugLogger,
+    });
+    this.getEnterpriseAudioRequest = getEnterpriseAudioRequest;
+    this.enterpriseAudioTransport = enterpriseAudioTransport;
+    this.enterpriseAudioRuntime = createEnterpriseAudioRuntime({
+      resolveProvider: (request) => this.enterpriseIdentityManager.resolveProvider(request),
+      transport: enterpriseAudioTransport,
+      credentials: this.enterpriseAudioCredentials,
+      getRetirementSignal: () => audioRetirement.signal,
+    });
+    require("./enterpriseAudioSetup").registerEnterpriseAudioSetup({
+      ipcMain,
+      getRequest: getEnterpriseAudioRequest,
+      credentials: this.enterpriseAudioCredentials,
+      runtime: this.enterpriseAudioRuntime,
+      transport: enterpriseAudioTransport,
+      getVersion: () => app.getVersion(),
+      bootstrapDirectory: app.getPath("userData"),
+      getRetirementSignal: () => audioRetirement.signal,
+      fetchApi: async (request, endpoint, { method = "GET", body } = {}) => {
+        const response = await proxyFetch(`${getApiUrl()}${endpoint}`, {
+          method,
+          headers: {
+            ...request.authHeaders,
+            "x-openwhispr-version": app.getVersion(),
+            ...(body ? { "Content-Type": "application/json" } : {}),
+          },
+          ...(body ? { body: JSON.stringify(body) } : {}),
+          signal: AbortSignal.timeout(15000),
+        });
+        if (!response.ok)
+          throw Object.assign(new Error(`Enterprise setup request failed (${response.status})`), {
+            status: response.status,
+          });
+        return (await response.json()).data;
+      },
     });
     const resolveEnterpriseRuntime = async (event, provider, model, config = {}) => {
       const manual = {
@@ -6743,6 +6903,27 @@ class IPCHandlers {
           { code: "MANAGED_CONFIG_CHANGED" }
         );
       }
+      if (context.inferenceScope === "transcription") {
+        const audio = await this.enterpriseAudioRuntime.resolve(
+          await getEnterpriseAudioRequest(event, context),
+          "batch"
+        );
+        if (
+          !audio ||
+          audio.generation !== context.generation ||
+          audio.providerVersion !== context.providerVersion ||
+          audio.provider !== context.provider
+        )
+          throw Object.assign(new Error("Enterprise audio configuration changed"), {
+            code: "MANAGED_CONFIG_CHANGED",
+          });
+        return {
+          provider: audio.provider,
+          model: audio.model,
+          apiKey: "",
+          enterprise: { audioProfile: audio },
+        };
+      }
       if (resolved.provider === "bedrock") {
         return {
           provider: resolved.provider,
@@ -6775,12 +6956,44 @@ class IPCHandlers {
       },
     });
     this.executeManagedTranscription = executeManagedTranscription;
+    const transcribeManagedAudio = async (event, route, input) => {
+      const runtime = await resolveEnterpriseRuntime(event, route.provider, null, {
+        managedContext: route.context,
+      });
+      const { transcribeManagedAudioFile } = require("./managedAudioFileTranscription");
+      const result = await transcribeManagedAudioFile({
+        ...input,
+        maxUploadBytes:
+          route.provider === "azure"
+            ? 25 * 1024 * 1024
+            : Math.min(
+                runtime.enterprise.audioProfile.section.maxUploadBytes ?? 25 * 1024 * 1024,
+                100 * 1024 * 1024
+              ),
+        transcribe: (audioBuffer, fileName, contentType) =>
+          executeManagedTranscription(event, route, {
+            audioBuffer,
+            fileName,
+            contentType,
+            prompt: input.prompt,
+            signal: input.signal,
+          }),
+      });
+      return {
+        ...result,
+        ...(result.failedChunks
+          ? {
+              warning: i18nMain.t("enterprise.audio.partialUpload", { count: result.failedChunks }),
+            }
+          : {}),
+      };
+    };
 
     ipcMain.handle(
       "managed-transcribe",
       serializeIpcError(
         async (event, { audioBuffer, fileName, mimeType, language, prompt, managed }) => {
-          const text = await executeManagedTranscription(
+          return transcribeManagedAudio(
             event,
             { provider: managed.provider, context: managed.context, language },
             {
@@ -6790,7 +7003,6 @@ class IPCHandlers {
               prompt,
             }
           );
-          return { text };
         }
       )
     );
@@ -7015,12 +7227,16 @@ class IPCHandlers {
         }
 
         if (route.transport === "managed") {
-          const text = await this.executeManagedTranscription(event, route, {
+          const transcription = await transcribeManagedAudio(event, route, {
             audioBuffer: buffer,
             fileName: "audio.webm",
             contentType: "audio/webm",
           });
-          result = { text, source: "azure-managed", model: route.deployment };
+          result = {
+            ...transcription,
+            source: `${route.provider}-managed`,
+            model: route.deployment,
+          };
         } else if (route.transport === "http-batch" && route.provider === "self-hosted") {
           const formData = new FormData();
           formData.append("file", new Blob([buffer], { type: "audio/webm" }), "audio.webm");
@@ -7824,6 +8040,15 @@ class IPCHandlers {
         let newSystem = null;
 
         try {
+          const tokenEvent = { sender: win.webContents };
+          const currentOptions = await resolveEnterpriseMeetingOptions(tokenEvent, options);
+          if (
+            getMeetingConnectionKey(currentOptions, credentialGeneration) !==
+            getMeetingConnectionKey(options, credentialGeneration)
+          ) {
+            this._stopMeetingForPolicy();
+            return true;
+          }
           const StreamingClass = getMeetingStreamingClient(options.provider);
           newMic = new StreamingClass();
           attachMeetingStreamingHandlers(newMic, win, "mic");
@@ -7837,7 +8062,6 @@ class IPCHandlers {
             maxAttempts: MAX_MEETING_RECONNECTS,
           });
 
-          const tokenEvent = { sender: win.webContents };
           const connectOpts = {
             model: options.model,
             language: options.language,
@@ -7847,6 +8071,7 @@ class IPCHandlers {
             tenant: options.tenant,
             keyterms: options.keyterms,
             sampleRate: MEETING_STREAM_SAMPLE_RATE,
+            ...(await enterpriseMeetingConnectOptions(tokenEvent, options)),
           };
 
           let pairs;
@@ -7959,8 +8184,85 @@ class IPCHandlers {
       this._audioFeaturePolicy.signalFor(event)?.throwIfAborted();
     };
 
+    const resolveEnterpriseMeetingOptions = async (event, options) => {
+      const request = await getEnterpriseAudioRequest(
+        event,
+        options.managedContext ?? options.enterpriseIdentity,
+        true
+      );
+      if (!request) {
+        if (options.provider === "enterprise-realtime" || options.managedContext)
+          throw Object.assign(new Error("Enterprise audio configuration is unavailable"), {
+            code: "MANAGED_CONFIG_CHANGED",
+            messageKey: "common.managedConfigUnavailable",
+          });
+        this._activeEnterpriseAudioMeeting = false;
+        return options;
+      }
+      if (!options.managedContext && options.enterpriseSetupMode === "manual")
+        request.setupMode = "manual";
+      const runtime = await this.enterpriseAudioRuntime.resolve(request, "realtime");
+      this._activeEnterpriseAudioMeeting = Boolean(runtime);
+      if (!runtime) return options;
+      return {
+        ...options,
+        provider: "enterprise-realtime",
+        mode: "enterprise",
+        model: runtime.model,
+        managedContext: {
+          accountId: request.accountId,
+          workspaceId: request.workspaceId,
+          authGeneration: request.expectedAuthGeneration,
+          setupMode: request.setupMode,
+          inferenceScope: "transcription",
+          operation: "realtime",
+          provider: runtime.provider,
+          generation: runtime.generation,
+          providerVersion: runtime.providerVersion,
+        },
+        enterpriseConnection: {
+          endpoint: runtime.endpoint,
+          protocol: runtime.protocol,
+          generation: runtime.generation,
+          credentialGeneration: runtime.credentialGeneration,
+        },
+      };
+    };
+    const enterpriseMeetingConnectOptions = async (event, options) => {
+      if (options.provider !== "enterprise-realtime") return {};
+      const runtime = await this.enterpriseAudioRuntime.resolve(
+        await getEnterpriseAudioRequest(event, options.managedContext),
+        "realtime"
+      );
+      const context = options.managedContext;
+      if (
+        !runtime ||
+        runtime.generation !== context?.generation ||
+        runtime.providerVersion !== context?.providerVersion ||
+        runtime.provider !== context?.provider
+      )
+        throw Object.assign(new Error("Enterprise audio configuration changed"), {
+          code: "MANAGED_CONFIG_CHANGED",
+        });
+      return {
+        preconfigured: false,
+        protocol: runtime.protocol,
+        inputRate: runtime.section.sampleRate,
+        connectTimeoutMs: runtime.network.connectTimeoutMs,
+        sessionMaxMs: runtime.network.sessionMaxMs,
+        idleTimeoutMs: runtime.network.idleTimeoutMs,
+        createSocket: () => runtime.createSocket(),
+      };
+    };
     const fetchRealtimeToken = async (event, options, { streams } = {}) => {
       if (options.purpose === "meeting") assertMeetingAllowed(event);
+      if (options.provider === "enterprise-realtime") {
+        await enterpriseMeetingConnectOptions(event, options);
+        assertMeetingAllowed(event);
+        return streams
+          ? Array.from({ length: streams }, () => "enterprise-device-credential")
+          : "enterprise-device-credential";
+      }
       const postServerToken = createServerTokenPoster({
         getApiUrl,
         getAuthHeader: () => getAuthHeader(event),
@@ -8050,6 +8352,7 @@ class IPCHandlers {
         tenant: options.tenant,
         keyterms: options.keyterms,
         sampleRate: MEETING_STREAM_SAMPLE_RATE,
+        ...(await enterpriseMeetingConnectOptions(event, options)),
       };
       const { mode: systemAudioMode } = await getMeetingSystemAudioPlan();
       let pairs;
@@ -9283,6 +9586,7 @@ class IPCHandlers {
 
     // Pre-warm: fetch tokens + connect WebSockets before user hits record
     handleAudioFeature("meeting-transcription-prepare", "meeting", async (event, options = {}) => {
+      options = await resolveEnterpriseMeetingOptions(event, options);
       if (meetingTranscriptionPrepareInProgress || meetingTranscriptionStartInProgress) {
         debugLogger.debug("Meeting transcription prepare already in progress, ignoring");
         return { success: false, error: "Operation in progress" };
@@ -9343,6 +9647,7 @@ class IPCHandlers {
     });
 
     const startMeetingTranscription = async (event, options = {}) => {
+      options = await resolveEnterpriseMeetingOptions(event, options);
       // Wait for any in-flight prepare to finish before starting
       if (meetingTranscriptionPreparePromise) {
         debugLogger.debug("Meeting transcription start: waiting for in-flight prepare");
@@ -10756,17 +11061,47 @@ class IPCHandlers {
     ipcMain.handle(
       "get-managed-enterprise-config",
       async (event, accountId, workspaceId, expectedAuthGeneration, forceRefresh = false) => {
+        const active = accountScopeBinding.resolveActiveAccountScope({
+          ...tokenStore.getState(),
+          binding: accountScopeBinding.read(),
+        });
+        if (active?.accountId !== accountId || active?.authGeneration !== expectedAuthGeneration)
+          throw Object.assign(new Error("Enterprise audio identity changed"), {
+            code: "AUTH_CONTEXT_CHANGED",
+          });
+        const scope = { accountId, workspaceId, authGeneration: expectedAuthGeneration };
+        if (!matchesEnterpriseAudioScope(scope)) {
+          this._enterpriseAudioScopeRevision = (this._enterpriseAudioScopeRevision ?? 0) + 1;
+          this._enterpriseAudioScope = scope;
+          this._enterpriseAudioBinding = null;
+          this._retireEnterpriseAudio(true);
+        }
         const authHeaders = await getAuthHeader(event);
-        return this.enterpriseIdentityManager.getConfig({
+        const snapshot = await this.enterpriseIdentityManager.getConfig({
           accountId,
           workspaceId,
           expectedAuthGeneration,
           authHeaders,
           forceRefresh,
         });
+        if (snapshot.success && snapshot.config && matchesEnterpriseAudioScope(snapshot)) {
+          if (
+            this._enterpriseAudioBinding &&
+            (this._enterpriseAudioBinding.accountId !== snapshot.accountId ||
+              this._enterpriseAudioBinding.workspaceId !== snapshot.workspaceId ||
+              this._enterpriseAudioBinding.generation !== snapshot.config.generation)
+          )
+            this._retireEnterpriseAudio();
+          this._enterpriseAudioBinding = { ...snapshot, generation: snapshot.config.generation };
+        }
+        return snapshot;
       }
     );
     ipcMain.handle("clear-managed-enterprise-identity", async () => {
+      this._retireEnterpriseAudio();
+      this._enterpriseAudioBinding = null;
+      this._enterpriseAudioScope = null;
+      this._enterpriseAudioScopeRevision = (this._enterpriseAudioScopeRevision ?? 0) + 1;
       this.enterpriseIdentityManager.clear();
     });
 
@@ -10936,16 +11271,13 @@ class IPCHandlers {
               const realByok = upload.path;
 
               if (route.transport === "managed") {
-                if (fs.statSync(realByok).size > route.sizeCapBytes) {
-                  return { success: false, error: byokSizeCapError(route.sizeCapBytes) };
-                }
-                const text = await this.executeManagedTranscription(event, route, {
-                  audioBuffer: fs.readFileSync(realByok),
+                const result = await transcribeManagedAudio(event, route, {
+                  filePath: realByok,
                   signal,
-                  fileName: path.basename(realByok),
-                  contentType: providerContentType(realByok),
+                  onProgress: (payload) =>
+                    event.sender.send("upload-transcription-progress", payload),
                 });
-                return { success: true, text };
+                return { success: true, ...result };
               }
 
               // Every branch below calls a BYOK provider or the user's own server.
