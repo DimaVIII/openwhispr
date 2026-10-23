@@ -176,7 +176,7 @@ function createElectronApi(db, options = {}) {
     getPendingDictionaryDeletes: async () => db.getPendingDictionaryDeletes(),
     getDictionaryByClientId: async (clientDictId) => db.getDictionaryEntryByClientId(clientDictId),
     upsertDictionaryFromCloud: async (cloudEntry) => db.upsertDictionaryFromCloud(cloudEntry),
-    markDictionarySynced: async (id, cloudId) => db.markDictionaryEntrySynced(id, cloudId),
+    markDictionarySynced: async (...args) => db.markDictionaryEntrySynced(...args),
     hardDeleteDictionary: async (id) => db.hardDeleteDictionaryEntry(id),
     clearDictionaryCloudId: async (id) => db.clearDictionaryCloudId(id),
     // The real handler re-reads the words to broadcast them; there are no windows here.
