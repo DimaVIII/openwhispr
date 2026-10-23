@@ -1,4 +1,4 @@
-const test = require("node:test");
+const nodeTest = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -9,6 +9,7 @@ const { transcribeManagedAudioFile } = require("../../src/helpers/managedAudioFi
 const { getFFmpegPath } = require("../../src/helpers/ffmpegUtils");
 const { silenceWav } = require("../../src/helpers/enterpriseAudioSetup");
 const { getSafeTempDir } = require("../../src/helpers/safeTempDir");
+const test = getFFmpegPath() ? nodeTest : nodeTest.skip;
 
 function audio(durationSeconds = 3) {
   const buffer = Buffer.alloc(44 + Math.round(24000 * 2 * durationSeconds));
