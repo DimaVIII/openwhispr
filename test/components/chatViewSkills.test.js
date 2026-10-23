@@ -16,8 +16,12 @@ const MOCKS = {
       const sendToAI = useCallback(async (text, _messages, sendOptions) => {
         globalThis.__sends.push({ text, options: sendOptions });
       }, []);
-      const idle = { agentState: "idle", toolStatus: "", activeToolName: "" };
-      return { ...idle, sendToAI, cancelStream() {} };
+      const state = {
+        agentState: globalThis.__agentState ?? "idle",
+        toolStatus: "",
+        activeToolName: "",
+      };
+      return { ...state, sendToAI, cancelStream() {} };
     }
   `,
   "/useChatPersistence": `
@@ -79,6 +83,7 @@ async function renderChatView(t, skillRequest = null) {
       "__conversationList",
       "__chatStreamingOptions",
       "__skillChatActions",
+      "__agentState",
     ]) {
       delete globalThis[key];
     }
@@ -142,20 +147,17 @@ test("Try now opens a new chat with the skill's chip and placeholder", async (t)
   assert.equal(options.allowSkillPick, true);
 });
 
-test(
-  "Create with assistant opens a new chat with the creator chip and its opening line",
-  async (t) => {
-    const { container, chip, send } = await renderChatView(t, { id: 2, kind: "create" });
+test("Create with assistant opens a new chat with the creator chip and its opening line", async (t) => {
+  const { container, chip, send } = await renderChatView(t, { id: 2, kind: "create" });
 
-    assert.equal(ariaLabel(chip()), chipLabel("skills.chat.creatorName"));
-    assert.match(container.textContent, /skills\.chat\.creatorOpening/);
-    assert.doesNotMatch(container.textContent, /chat\.starters\./, "no starter prompts");
-    assert.equal(globalThis.__chatInput.placeholder, "chat.inputPlaceholder");
+  assert.equal(ariaLabel(chip()), chipLabel("skills.chat.creatorName"));
+  assert.match(container.textContent, /skills\.chat\.creatorOpening/);
+  assert.doesNotMatch(container.textContent, /chat\.starters\./, "no starter prompts");
+  assert.equal(globalThis.__chatInput.placeholder, "chat.inputPlaceholder");
 
-    const options = await send("I write the same weekly report every Friday");
-    assert.deepEqual(options.attachedSkill, { name: "skill-creator", builtin: true });
-  }
-);
+  const options = await send("I write the same weekly report every Friday");
+  assert.deepEqual(options.attachedSkill, { name: "skill-creator", builtin: true });
+});
 
 test("Draft with assistant sends the name and description into the creator chat", async (t) => {
   const draft = { title: "Weekly report", description: "" };
@@ -243,6 +245,39 @@ test("Open skill on a saved card goes to the skill", async (t) => {
   assert.deepEqual(calls.opened, ["meeting-prep"]);
 });
 
+test("Open skill waits for the turn to finish", async (t) => {
+  // Leaving the chat ends a running turn, and a turn holding only the card isn't saved then.
+  globalThis.__agentState = "streaming";
+  await renderChatView(t);
+
+  assert.equal(globalThis.__skillChatActions.openSkill, undefined);
+});
+
+test("a conversation's skills come back when the user returns to it", async (t) => {
+  const { chip, send } = await renderChatView(t);
+  const select = async (id) => {
+    await React.act(async () => globalThis.__conversationList.onSelectConversation(id));
+    await settle();
+  };
+
+  await select(7);
+  await React.act(async () => (await send("Prep my 3pm with Dana")).onSkillPicked(picks));
+  await select(8);
+  assert.equal(chip(), undefined);
+  await select(7);
+  assert.equal(ariaLabel(chip()), chipLabel("Meeting prep"));
+  assert.deepEqual((await send("And the 4pm")).attachedSkill, { name: "meeting-prep" });
+
+  // Removed, it stays off this chat, and picking stays off too.
+  await click(chip());
+  await select(8);
+  await select(7);
+  assert.equal(chip(), undefined);
+  const afterReturn = await send("And the 5pm");
+  assert.equal(afterReturn.allowSkillPick, false);
+  assert.deepEqual(afterReturn.removedSkills, ["meeting-prep"]);
+});
+
 test("a request is handled once, however often the chat re-renders", async (t) => {
   const { calls, chip } = await renderChatView(t, TRY_MEETING_PREP);
 
@@ -301,4 +336,3 @@ test("Draft with assistant sends once under React's development double mount", a
   assert.equal(globalThis.__sends.length, 1);
   assert.equal(created.length, 1, "one conversation, and no empty one left behind");
 });
-
