@@ -38,4 +38,8 @@ class MeetingCaptureRouteTest {
     assertFalse(route.acceptsStop(7, "other-attempt"))
     assertTrue(route.acceptsStop(7, "owner"))
   }
+  @Test fun localCaptureStopsBeforeTheDecoderOneHourLimit() {
+    assertEquals(3540, MeetingCaptureRoute(7, true, "owner").maximumSeconds)
+    assertEquals(7200, MeetingCaptureRoute(7, false).maximumSeconds)
+  }
 }

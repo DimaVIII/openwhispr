@@ -10,6 +10,7 @@ export function createLocalMeetingContext(noteId: number, signal?: AbortSignal) 
   const mode = useProcessingModeStore.getState().activeMode;
   const privateNote = notesRepository.getNoteById(noteId)?.isPrivate === 1;
   let invalidated = false;
+  let identityInvalidated = false;
   let disposed = false;
   const controller = new AbortController();
   const cancel = () => controller.abort();
@@ -21,6 +22,7 @@ export function createLocalMeetingContext(noteId: number, signal?: AbortSignal) 
   };
   const unsubscribeAuth = useAuthStore.subscribe(() => {
     if (!identityMatches()) {
+      identityInvalidated = true;
       invalidated = true;
       cancel();
     }
@@ -31,14 +33,10 @@ export function createLocalMeetingContext(noteId: number, signal?: AbortSignal) 
       cancel();
     }
   });
-  const ownsNote = () => {
-    if (
-      disposed ||
-      invalidated ||
-      !identityMatches() ||
-      useProcessingModeStore.getState().activeMode !== mode
-    )
-      return false;
+  // Only for retaining audio / marking an interrupted recording retryable.
+  // A mode change stops processing but does not transfer ownership of the saved note.
+  const ownsSavedNote = () => {
+    if (disposed || identityInvalidated || !identityMatches()) return false;
     const note = notesRepository.getNoteById(noteId);
     return (
       !!note &&
@@ -49,9 +47,16 @@ export function createLocalMeetingContext(noteId: number, signal?: AbortSignal) 
   };
   return {
     signal: controller.signal,
-    ownsNote,
+    ownsSavedNote,
+    ownsNote: () =>
+      !invalidated && useProcessingModeStore.getState().activeMode === mode && ownsSavedNote(),
     checkpoint() {
-      if (!ownsNote() || controller.signal.aborted) {
+      if (
+        invalidated ||
+        useProcessingModeStore.getState().activeMode !== mode ||
+        !ownsSavedNote() ||
+        controller.signal.aborted
+      ) {
         throw Object.assign(new Error('Meeting processing cancelled.'), { name: 'AbortError' });
       }
     },

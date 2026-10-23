@@ -699,6 +699,12 @@
       "cloudName": "云端",
       "cloudAI": "云端 AI",
       "models": "模型"
-    }
+    },
+    "meetingLocalBody": "音频保留在此手机上。录音结束后，Parakeet v3 会转录内容，说话人模型会区分声音。请先在模型中选择 Parakeet v3。录音会在 59 分钟后停止。",
+    "meetingSpeakerModels": "会议说话人",
+    "meetingSpeakerModelBody": "区分每场会议中的声音，不会跨会议识别人物。",
+    "meetingDownloadBody": "一次下载 42 MB，之后在此手机上运行。",
+    "meetingCancelProcessingBody": "停止处理并保留录音，以便从已保存的笔记重试？",
+    "meetingSaveForLater": "保存以便稍后处理"
   }
 }

@@ -699,6 +699,12 @@
       "cloudName": "Cloud",
       "cloudAI": "Cloud-KI",
       "models": "Modelle"
-    }
+    },
+    "meetingLocalBody": "Das Audio bleibt auf diesem Telefon. Nach der Aufnahme transkribiert Parakeet v3 den Ton und ein Modell trennt die Stimmen. Wähle zuerst Parakeet v3 unter Modelle. Aufnahmen enden nach 59 Minuten.",
+    "meetingSpeakerModels": "Meeting-Stimmen",
+    "meetingSpeakerModelBody": "Trennt Stimmen innerhalb eines Meetings. Erkennt Personen nicht über mehrere Meetings hinweg.",
+    "meetingDownloadBody": "Einmaliger Download von 42 MB, danach Verarbeitung auf diesem Telefon.",
+    "meetingCancelProcessingBody": "Verarbeitung stoppen und die Aufnahme für einen neuen Versuch in der gespeicherten Notiz behalten?",
+    "meetingSaveForLater": "Für später speichern"
   }
 }

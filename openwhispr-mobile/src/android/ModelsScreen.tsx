@@ -132,9 +132,17 @@ export function ModelsContent({ onNavigate }: { onNavigate?: () => void } = {}) 
           router.push({ pathname: '/(account)/ai-workflow', params: { scope: 'dictation' } });
         }}
       />
-      {(['speech', 'text'] as const).map((kind) => (
+      {(['speech', 'text', 'diarization'] as const).map((kind) => (
         <View key={kind} style={{ gap: 12 }}>
-          <Text style={styles.heading}>{t(kind === 'speech' ? 'speechModels' : 'textModels')}</Text>
+          <Text style={styles.heading}>
+            {t(
+              kind === 'speech'
+                ? 'speechModels'
+                : kind === 'text'
+                  ? 'textModels'
+                  : 'meetingSpeakerModels',
+            )}
+          </Text>
           {(
             Object.entries(ANDROID_MODELS) as [
               AndroidModelId,
@@ -150,9 +158,11 @@ export function ModelsContent({ onNavigate }: { onNavigate?: () => void } = {}) 
                   getPreferredTranscriptionLanguages(),
                 );
               const chosen =
-                kind === 'speech'
-                  ? (config?.androidSpeechModel ?? 'parakeet-v3') === id
-                  : (config?.androidTextModel ?? 'qwen-balanced') === id;
+                kind === 'diarization'
+                  ? false
+                  : kind === 'speech'
+                    ? (config?.androidSpeechModel ?? 'parakeet-v3') === id
+                    : (config?.androidTextModel ?? 'qwen-balanced') === id;
               return (
                 <Card key={id}>
                   <Row
@@ -164,13 +174,15 @@ export function ModelsContent({ onNavigate }: { onNavigate?: () => void } = {}) 
                     <>
                       <Text style={styles.caption}>
                         {t(
-                          id === 'qwen-small'
-                            ? 'modelLight'
-                            : id === 'parakeet-v3'
-                              ? 'modelParakeet'
-                              : id.startsWith('moonshine-')
-                                ? 'modelMoonshine'
-                                : 'modelBalanced',
+                          kind === 'diarization'
+                            ? 'meetingSpeakerModelBody'
+                            : id === 'qwen-small'
+                              ? 'modelLight'
+                              : id === 'parakeet-v3'
+                                ? 'modelParakeet'
+                                : id.startsWith('moonshine-')
+                                  ? 'modelMoonshine'
+                                  : 'modelBalanced',
                         )}
                       </Text>
                       {!languageSupported && (
@@ -193,18 +205,20 @@ export function ModelsContent({ onNavigate }: { onNavigate?: () => void } = {}) 
                         </>
                       ) : ready[id] ? (
                         <>
-                          <Button
-                            secondary
-                            disabled={chosen || removing || saving || !languageSupported}
-                            label={t(chosen ? 'selected' : 'choose')}
-                            onPress={() => {
-                              void save(
-                                kind === 'speech'
-                                  ? { androidSpeechModel: id as AndroidSpeechModelId }
-                                  : { androidTextModel: id as 'qwen-small' | 'qwen-balanced' },
-                              );
-                            }}
-                          />
+                          {kind !== 'diarization' && (
+                            <Button
+                              secondary
+                              disabled={chosen || removing || saving || !languageSupported}
+                              label={t(chosen ? 'selected' : 'choose')}
+                              onPress={() => {
+                                void save(
+                                  kind === 'speech'
+                                    ? { androidSpeechModel: id as AndroidSpeechModelId }
+                                    : { androidTextModel: id as 'qwen-small' | 'qwen-balanced' },
+                                );
+                              }}
+                            />
+                          )}
                           <Button
                             secondary
                             disabled={removing}

@@ -33,6 +33,8 @@ import { useMeetingLiveActivity, type MeetingActivityPhase } from '@/hooks/useMe
 import { CloudMeetingRecording } from '@/components/notes/CloudMeetingRecording';
 import { canTransition } from '@/lib/diarization/transcriptionStatus';
 import { MeetingSetup } from '@/android/MeetingSetup';
+import { LocalMeetingRecorder } from '@/android/LocalMeetingRecorder';
+import { createLocalMeetingContext } from '@/android/localMeetingContext';
 import { Sentry } from '@/lib/sentry';
 import { SUPERWALL_PLACEMENTS } from '@/lib/superwall';
 import type { TranscriptionStatus } from '@/types';
@@ -48,6 +50,15 @@ type Phase =
   | 'cloud-save-failed'
   | 'processing';
 
+type LocalCapture = {
+  recorder: LocalMeetingRecorder;
+  context: ReturnType<typeof createLocalMeetingContext>;
+  controller: AbortController;
+  noteId: number;
+  expected: number | undefined;
+  finishing: boolean;
+};
+
 const formatClock = (seconds: number): string =>
   `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
 
@@ -61,6 +72,9 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
   const requestGeneration = useRef(0);
   const requestBusy = useRef(false);
   const preparingLocalRecording = useRef(false);
+  const localCapture = useRef<LocalCapture | null>(null);
+  const cancelLocalCapture = useRef<() => void>(() => undefined);
+  const finishLocalCapture = useRef<(error?: Error) => Promise<void>>(async () => undefined);
   const resumeAfterDownload = useRef<(() => Promise<void>) | null>(null);
   const [phase, setPhase] = useState<Phase>('prompt');
   const [noteId, setNoteId] = useState<number | null>(null);
@@ -140,7 +154,8 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
     requestGeneration.current += 1;
     requestBusy.current = false;
     resumeAfterDownload.current = null;
-    if (preparingLocalRecording.current)
+    cancelLocalCapture.current();
+    if (Platform.OS !== 'android' && preparingLocalRecording.current)
       void cancelLocalPreparation.current().catch(Sentry.captureException);
     if (focused.current) setStarting(false);
   }, []);
@@ -155,7 +170,8 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
   );
   useEffect(() => {
     const unsubscribeAccount = useAuthStore.subscribe((state, previous) => {
-      if (state.user?.id !== previous.user?.id) invalidateStart();
+      if (state.user?.id !== previous.user?.id || state.sessionCookie !== previous.sessionCookie)
+        invalidateStart();
     });
     const unsubscribeMode = useProcessingModeStore.subscribe((state, previous) => {
       if (state.activeMode !== previous.activeMode) invalidateStart();
@@ -215,6 +231,12 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
     }
 
     const timeout = setTimeout(() => {
+      if (
+        Platform.OS === 'android' &&
+        phase === 'recording' &&
+        !localCapture.current?.context.ownsNote()
+      )
+        return;
       updateNote(noteId, { content: rawNotes });
       lastSavedRawNotesRef.current = rawNotes;
     }, 800);
@@ -223,9 +245,15 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
 
   const saveRawNotesNow = useCallback((): void => {
     if (noteId == null || rawNotes === lastSavedRawNotesRef.current) return;
+    if (
+      Platform.OS === 'android' &&
+      (phase === 'recording' || phase === 'processing') &&
+      !localCapture.current?.context.ownsNote()
+    )
+      return;
     updateNote(noteId, { content: rawNotes });
     lastSavedRawNotesRef.current = rawNotes;
-  }, [noteId, rawNotes, updateNote]);
+  }, [noteId, rawNotes, updateNote, phase]);
 
   // Mark an in-flight note failed when we abandon a recording (guarded: skip if already terminal,
   // since processMeeting may have set 'failed' directly).
@@ -239,12 +267,102 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
     [transitionStatus],
   );
 
+  cancelLocalCapture.current = () => {
+    const run = localCapture.current;
+    if (!run) return;
+    localCapture.current = null;
+    run.controller.abort();
+    run.recorder.stop().catch(Sentry.captureException);
+    try {
+      if (run.context.ownsSavedNote()) markNoteFailed(run.noteId);
+    } catch (error) {
+      Sentry.captureException(error);
+    } finally {
+      run.context.dispose();
+    }
+    if (focused.current) setPhase('prompt');
+  };
+
+  const startAndroidLocalRecording = async (
+    expected: number | undefined,
+    isCurrent: () => boolean,
+  ) => {
+    if (!isCurrent() || preparingLocalRecording.current || localCapture.current) return;
+    preparingLocalRecording.current = true;
+    setStarting(true);
+    let run: LocalCapture | null = null;
+    let createdNoteId: number | null = null;
+    try {
+      const permission = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+      );
+      if (!isCurrent()) return;
+      if (permission !== PermissionsAndroid.RESULTS.GRANTED) {
+        Alert.alert(t('errorTitle'), t('permissionDenied'));
+        return;
+      }
+      // Native capture needs the durable note ID, but denial must not create a note.
+      const note = createMeetingNote({
+        ...startedIn,
+        expectedSpeakerCount: expected,
+        calendarEventId: selectedMeetingContext?.calendarEventId ?? null,
+        title: selectedMeetingContext?.title ?? null,
+        participants: selectedMeetingContext?.participants ?? null,
+      });
+      createdNoteId = note.id;
+      const controller = new AbortController();
+      const recorder = new LocalMeetingRecorder(note.id, (error) => {
+        if (localCapture.current === run)
+          finishLocalCapture.current(error).catch(Sentry.captureException);
+      });
+      const context = createLocalMeetingContext(note.id, controller.signal);
+      run = { recorder, context, controller, noteId: note.id, expected, finishing: false };
+      localCapture.current = run;
+      notesRepository.updateNoteMeta(note.id, { sourceFile: recorder.uri });
+      context.signal.addEventListener(
+        'abort',
+        () => {
+          if (localCapture.current === run) cancelLocalCapture.current();
+        },
+        { once: true },
+      );
+      await recorder.start();
+      if (!isCurrent() || localCapture.current !== run) {
+        if (localCapture.current === run) cancelLocalCapture.current();
+        return;
+      }
+      context.checkpoint();
+      setRawNotes(note.content);
+      lastSavedRawNotesRef.current = note.content;
+      setNoteId(note.id);
+      const startedAt = Date.now();
+      recordingStartedAtRef.current = startedAt;
+      setMeetingStartedAt(startedAt);
+      setPhase('recording');
+    } catch (error) {
+      if (run && localCapture.current === run) cancelLocalCapture.current();
+      if (!run && createdNoteId != null && isCurrent()) markNoteFailed(createdNoteId);
+      if (isCurrent()) {
+        setPhase('prompt');
+        Alert.alert(
+          t('errorTitle'),
+          error instanceof Error ? error.message : t('meetingInterrupted'),
+        );
+      }
+      Sentry.captureException(error);
+    } finally {
+      preparingLocalRecording.current = false;
+      if (isCurrent()) setStarting(false);
+    }
+  };
+
   // Create the note only AFTER recording actually starts, so a denied mic permission / recorder
   // failure doesn't leave an orphan "recording" note behind (startRecording re-throws on failure).
   const startRecording = async (
     expected: number | undefined,
     isCurrent: () => boolean,
   ): Promise<void> => {
+    if (Platform.OS === 'android') return startAndroidLocalRecording(expected, isCurrent);
     if (!isCurrent()) return;
     preparingLocalRecording.current = true;
     try {
@@ -297,7 +415,13 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
   };
 
   const begin = async (expected: number | undefined): Promise<void> => {
-    if (!focused.current || requestBusy.current) return;
+    if (
+      !focused.current ||
+      requestBusy.current ||
+      preparingLocalRecording.current ||
+      localCapture.current
+    )
+      return;
     const requestId = ++requestGeneration.current;
     const ownerId = useAuthStore.getState().user?.id;
     const mode = useProcessingModeStore.getState().activeMode;
@@ -376,7 +500,7 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
     } finally {
       if (requestId === requestGeneration.current) {
         requestBusy.current = false;
-        if (focused.current) setStarting(false);
+        if (focused.current && !preparingLocalRecording.current) setStarting(false);
       }
     }
   };
@@ -395,7 +519,39 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
     }
   };
 
+  finishLocalCapture.current = async (interrupted?: Error) => {
+    const run = localCapture.current;
+    if (!run || run.finishing) return;
+    run.finishing = true;
+    setPhase('processing');
+    try {
+      const uri = await run.recorder.stop();
+      run.context.checkpoint();
+      saveRawNotesNow();
+      if (interrupted) throw interrupted;
+      await runMeetingPipeline(run.noteId, uri, run.expected, { signal: run.controller.signal });
+      run.context.checkpoint();
+      if (localCapture.current === run && focused.current) {
+        setPhase('prompt');
+        setExitToNote(run.noteId);
+      }
+    } catch (error) {
+      if (run.context.ownsNote()) markNoteFailed(run.noteId);
+      if (localCapture.current === run && focused.current) {
+        setPhase('prompt');
+        setExitToNote(run.noteId);
+        if (error instanceof Error && error.name !== 'AbortError')
+          Alert.alert(t('meetingInterrupted'), error.message);
+      }
+      if (!(error instanceof Error && error.name === 'AbortError')) Sentry.captureException(error);
+    } finally {
+      if (localCapture.current === run) localCapture.current = null;
+      run.context.dispose();
+    }
+  };
+
   const finish = async (): Promise<void> => {
+    if (Platform.OS === 'android') return finishLocalCapture.current();
     setPhase('processing');
     try {
       const uri = await recording.stopRecordingRaw();
@@ -498,8 +654,37 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
     if (exitToNote != null && phase === 'prompt') router.replace(`/(tabs)/(notes)/${exitToNote}`);
   }, [exitToNote, phase]);
   usePreventRemove(
-    phase === 'cloud-save-failed' || phase === 'cloud-recording' || phase === 'cloud-finalizing',
+    phase === 'cloud-save-failed' ||
+      phase === 'cloud-recording' ||
+      phase === 'cloud-finalizing' ||
+      (Platform.OS === 'android' && (phase === 'recording' || phase === 'processing')),
     () => {
+      if (Platform.OS === 'android' && phase === 'processing') {
+        Alert.alert(t('meetingInterrupted'), t('meetingCancelProcessingBody'), [
+          { text: t('cancel'), style: 'cancel' },
+          {
+            text: t('meetingSaveForLater'),
+            onPress: () => {
+              const id = localCapture.current?.noteId;
+              cancelLocalCapture.current();
+              if (id != null) setExitToNote(id);
+            },
+          },
+        ]);
+        return;
+      }
+      if (Platform.OS === 'android' && phase === 'recording') {
+        Alert.alert(t('meetingLeaveTitle'), t('meetingLeaveBody'), [
+          { text: t('meetingKeepRecording'), style: 'cancel' },
+          {
+            text: t('meetingStopSave'),
+            onPress: () => {
+              finishLocalCapture.current().catch(Sentry.captureException);
+            },
+          },
+        ]);
+        return;
+      }
       if (phase === 'cloud-finalizing') return;
       if (phase === 'cloud-save-failed') {
         Alert.alert(t('meetingSaveFailedTitle'), t('meetingSaveFailedBody'), [
@@ -616,10 +801,12 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
     return (
       <View className="flex-1 gap-4 bg-systemBackground px-6" style={{ paddingTop: headerHeight }}>
         <Text accessibilityRole="header" className="text-2xl font-bold text-label">
-          Download diarization model
+          {Platform.OS === 'android' ? t('meetingSpeakerModels') : 'Download diarization model'}
         </Text>
         <Text className="text-base text-secondaryLabel">
-          A one-time ~100 MB download. Runs fully on-device after that.
+          {Platform.OS === 'android'
+            ? t('meetingDownloadBody')
+            : 'A one-time ~100 MB download. Runs fully on-device after that.'}
         </Text>
         <Button
           testID="model-download"
@@ -745,10 +932,27 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
           {phase === 'cloud-finalizing'
             ? t('meetingFinishingBody')
             : phase === 'downloading'
-              ? 'One-time ~100 MB · then fully on-device'
+              ? Platform.OS === 'android'
+                ? t('meetingDownloadBody')
+                : 'One-time ~100 MB · then fully on-device'
               : 'Transcribing · separating voices · finalizing note'}
         </Text>
       </View>
+      {Platform.OS === 'android' && phase === 'downloading' && (
+        <Button
+          testID="model-download-cancel"
+          variant="secondary"
+          onPress={() => {
+            invalidateStart();
+            setPhase('prompt');
+            const { cancelAndroidDownload } =
+              require('@/android/models') as typeof import('@/android/models');
+            cancelAndroidDownload('meeting-speakers').catch(Sentry.captureException);
+          }}
+        >
+          {t('cancel')}
+        </Button>
+      )}
     </View>
   );
 };

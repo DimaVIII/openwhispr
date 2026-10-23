@@ -23,7 +23,7 @@ const mockNotes = {
   isLocalAsrModelReady: jest.fn(async () => true),
   isDiarizerModelReady: jest.fn(async () => true),
   downloadDiarizerModel: jest.fn(),
-  notes: [],
+  notes: [{ id: 7, transcriptionStatus: 'recording' }],
 };
 const mockLoadCalendars = jest.fn(async () => undefined);
 const mockAccounts: unknown[] = [];
@@ -34,6 +34,37 @@ let mockBlur: (() => void) | undefined;
 let mockAuthListener: ((state: unknown, previous: unknown) => void) | undefined;
 let mockModeListener: ((state: unknown, previous: unknown) => void) | undefined;
 let mockParams = { folderId: '2' };
+
+const mockCancelDownload = jest.fn(async (_id: string) => undefined);
+jest.mock('@/android/models', () => ({
+  cancelAndroidDownload: (id: string) => mockCancelDownload(id),
+}));
+const mockDurableStart = jest.fn(async (): Promise<void> => undefined);
+const mockDurableStop = jest.fn(async () => 'file:///app/documents/meeting-7.wav');
+let mockNativeStopped: ((error?: Error) => void) | undefined;
+let mockOwnerValid = true;
+jest.mock('@/android/LocalMeetingRecorder', () => ({
+  LocalMeetingRecorder: jest.fn().mockImplementation((_id, onStopped) => {
+    mockNativeStopped = onStopped;
+    return {
+      uri: 'file:///app/documents/meeting-7.wav',
+      start: mockDurableStart,
+      stop: mockDurableStop,
+    };
+  }),
+}));
+jest.mock('@/android/localMeetingContext', () => ({
+  createLocalMeetingContext: (_id: number, signal: AbortSignal) => ({
+    signal,
+    ownsNote: () => mockOwnerValid,
+    ownsSavedNote: () => mockOwnerValid,
+    checkpoint: () => {
+      if (!mockOwnerValid || signal.aborted)
+        throw Object.assign(new Error('Cancelled'), { name: 'AbortError' });
+    },
+    dispose: jest.fn(),
+  }),
+}));
 
 jest.mock('expo-router', () => ({
   router: { replace: (...args: unknown[]) => mockReplace(...args), back: jest.fn() },
@@ -163,6 +194,13 @@ beforeEach(() => {
   Platform.OS = 'android';
   jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
   jest.spyOn(PermissionsAndroid, 'request').mockResolvedValue(PermissionsAndroid.RESULTS.GRANTED);
+  mockOwnerValid = true;
+  mockNativeStopped = undefined;
+  mockDurableStart.mockReset().mockResolvedValue(undefined);
+  mockDurableStop.mockReset().mockResolvedValue('file:///app/documents/meeting-7.wav');
+  mockNotes.runMeetingPipeline.mockReset().mockResolvedValue(undefined);
+  mockNotes.isDiarizerModelReady.mockReset().mockResolvedValue(true);
+  mockNotes.downloadDiarizerModel.mockReset().mockResolvedValue(undefined);
   mockUser = { id: 'a' };
   mockUseRealCloudHook = false;
   mockMode = 'cloud';
@@ -350,4 +388,173 @@ it('retries repeated save failures with the real hook without reopening micropho
     expect(mockFinalize).toHaveBeenLastCalledWith(7, mockParts, 0, { incomplete: true });
   }
   expect(mockReplace).toHaveBeenCalledWith('/(tabs)/(notes)/7');
+});
+
+async function startPrivateMeeting() {
+  mockMode = 'private';
+  const view = render(<MeetingRecordScreen />);
+  await act(async () => fireEvent.press(view.getByTestId('begin')));
+  await act(async () => mockFeature?.());
+  return view;
+}
+
+it('uses durable Android capture and persists its source before processing', async () => {
+  const view = await startPrivateMeeting();
+  expect(PermissionsAndroid.request).toHaveBeenCalled();
+  expect(mockLocalStart).not.toHaveBeenCalled();
+  expect(mockDurableStart).toHaveBeenCalledTimes(1);
+  expect(require('@/data').notesRepository.updateNoteMeta).toHaveBeenCalledWith(7, {
+    sourceFile: 'file:///app/documents/meeting-7.wav',
+  });
+  await act(async () => fireEvent.press(view.getByTestId('meeting-stop')));
+  expect(mockDurableStop).toHaveBeenCalledTimes(1);
+  expect(mockNotes.runMeetingPipeline).toHaveBeenCalledWith(
+    7,
+    'file:///app/documents/meeting-7.wav',
+    undefined,
+    { signal: expect.any(AbortSignal) },
+  );
+  expect(mockReplace).toHaveBeenCalledWith('/(tabs)/(notes)/7');
+});
+
+it('does not create a local note when Android microphone permission is denied', async () => {
+  jest.mocked(PermissionsAndroid.request).mockResolvedValueOnce(PermissionsAndroid.RESULTS.DENIED);
+  await startPrivateMeeting();
+  expect(mockCreateNote).not.toHaveBeenCalled();
+  expect(mockDurableStart).not.toHaveBeenCalled();
+});
+
+it.each(['blur', 'account', 'mode'] as const)(
+  'stops local capture and suppresses stale work after %s',
+  async (change) => {
+    const view = await startPrivateMeeting();
+    act(() => {
+      if (change === 'blur') mockBlur?.();
+      else {
+        mockOwnerValid = false;
+        if (change === 'account') mockAuthListener?.({ user: { id: 'b' } }, { user: mockUser });
+        else mockModeListener?.({ activeMode: 'cloud' }, { activeMode: 'private' });
+      }
+    });
+    await act(async () => undefined);
+    expect(mockDurableStop).toHaveBeenCalledTimes(1);
+    expect(mockNotes.runMeetingPipeline).not.toHaveBeenCalled();
+    if (change !== 'blur') expect(mockNotes.transitionStatus).not.toHaveBeenCalled();
+    view.unmount();
+  },
+);
+
+it('handles native notification Stop once using the saved local recording', async () => {
+  await startPrivateMeeting();
+  await act(async () => {
+    mockNativeStopped?.();
+    mockNativeStopped?.();
+  });
+  expect(mockNotes.runMeetingPipeline).toHaveBeenCalledTimes(1);
+  expect(mockReplace).toHaveBeenCalledWith('/(tabs)/(notes)/7');
+});
+
+it('retains an interrupted local note for retry without running the pipeline', async () => {
+  await startPrivateMeeting();
+  await act(async () => mockNativeStopped?.(new Error('Microphone interrupted')));
+  expect(mockDurableStop).toHaveBeenCalled();
+  expect(mockNotes.transitionStatus).toHaveBeenCalledWith(7, 'failed');
+  expect(mockNotes.runMeetingPipeline).not.toHaveBeenCalled();
+});
+
+it('aborts local processing on leave and ignores its late completion', async () => {
+  let finish!: () => void;
+  mockNotes.runMeetingPipeline.mockImplementationOnce(
+    () =>
+      new Promise<void>((done) => {
+        finish = done;
+      }),
+  );
+  const view = await startPrivateMeeting();
+  await act(async () => fireEvent.press(view.getByTestId('meeting-stop')));
+  const signal = mockNotes.runMeetingPipeline.mock.calls[0]?.[3]?.signal;
+  act(() => mockBlur?.());
+  expect(signal?.aborted).toBe(true);
+  await act(async () => finish());
+  expect(mockReplace).not.toHaveBeenCalled();
+});
+
+it('cancels the speaker-model download and never starts from its late completion', async () => {
+  mockMode = 'private';
+  mockNotes.isDiarizerModelReady.mockResolvedValue(false);
+  let downloaded!: () => void;
+  mockNotes.downloadDiarizerModel.mockImplementationOnce(
+    () =>
+      new Promise<void>((done) => {
+        downloaded = done;
+      }),
+  );
+  const view = render(<MeetingRecordScreen />);
+  await act(async () => fireEvent.press(view.getByTestId('begin')));
+  await act(async () => fireEvent.press(view.getByTestId('model-download')));
+  await act(async () => fireEvent.press(view.getByTestId('model-download-cancel')));
+  expect(mockCancelDownload).toHaveBeenCalledWith('meeting-speakers');
+  await act(async () => downloaded());
+  await act(async () => mockFeature?.());
+  expect(mockCreateNote).not.toHaveBeenCalled();
+});
+
+it('preserves a failed native start as a retryable note with its durable source', async () => {
+  mockDurableStart.mockRejectedValueOnce(new Error('Microphone busy'));
+  const view = await startPrivateMeeting();
+  expect(mockDurableStop).toHaveBeenCalled();
+  expect(mockNotes.transitionStatus).toHaveBeenCalledWith(7, 'failed');
+  expect(view.getByTestId('begin')).toBeTruthy();
+});
+
+it('stops pending native startup on leave and never revives the recording screen', async () => {
+  let started!: () => void;
+  mockDurableStart.mockImplementationOnce(
+    () =>
+      new Promise<void>((done) => {
+        started = done;
+      }),
+  );
+  const view = await startPrivateMeeting();
+  act(() => mockBlur?.());
+  await act(async () => started());
+  expect(mockDurableStop).toHaveBeenCalledTimes(1);
+  expect(mockNotes.transitionStatus).toHaveBeenCalledWith(7, 'failed');
+  expect(view.queryByTestId('meeting-stop')).toBeNull();
+  expect(mockNotes.runMeetingPipeline).not.toHaveBeenCalled();
+});
+
+it('offers to stop and save before leaving a local recording', async () => {
+  await startPrivateMeeting();
+  const guard = jest.mocked(require('@react-navigation/native').usePreventRemove).mock.calls.at(-1);
+  expect(guard?.[0]).toBe(true);
+  act(() => (guard?.[1] as () => void)());
+  const buttons = jest.mocked(Alert.alert).mock.calls.at(-1)?.[2];
+  expect(buttons?.some((button) => button.text === 'meetingKeepRecording')).toBe(true);
+  await act(async () => buttons?.find((button) => button.text === 'meetingStopSave')?.onPress?.());
+  expect(mockNotes.runMeetingPipeline).toHaveBeenCalledTimes(1);
+});
+
+it('allows saving for later during local processing and retains a retryable note', async () => {
+  let processed!: () => void;
+  mockNotes.runMeetingPipeline.mockImplementationOnce(
+    () =>
+      new Promise<void>((done) => {
+        processed = done;
+      }),
+  );
+  const view = await startPrivateMeeting();
+  await act(async () => fireEvent.press(view.getByTestId('meeting-stop')));
+  const signal = mockNotes.runMeetingPipeline.mock.calls[0]?.[3]?.signal;
+  const guard = jest.mocked(require('@react-navigation/native').usePreventRemove).mock.calls.at(-1);
+  act(() => (guard?.[1] as () => void)());
+  const buttons = jest.mocked(Alert.alert).mock.calls.at(-1)?.[2];
+  await act(async () =>
+    buttons?.find((button) => button.text === 'meetingSaveForLater')?.onPress?.(),
+  );
+  expect(signal?.aborted).toBe(true);
+  expect(mockNotes.transitionStatus).toHaveBeenCalledWith(7, 'failed');
+  expect(mockReplace).toHaveBeenCalledWith('/(tabs)/(notes)/7');
+  await act(async () => processed());
+  expect(mockReplace).toHaveBeenCalledTimes(1);
 });

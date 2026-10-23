@@ -699,6 +699,12 @@
       "cloudName": "Cloud",
       "cloudAI": "cloud AI",
       "models": "Models"
-    }
+    },
+    "meetingLocalBody": "Audio stays on this phone. After recording, Parakeet v3 transcribes it and a speaker model separates voices. Select Parakeet v3 in Models first. Recordings stop at 59 minutes.",
+    "meetingSpeakerModels": "Meeting speakers",
+    "meetingSpeakerModelBody": "Separates voices within each meeting. Does not recognize people across meetings.",
+    "meetingDownloadBody": "One-time 42 MB download, then runs on this phone.",
+    "meetingCancelProcessingBody": "Stop processing and keep the recording to retry from the saved note?",
+    "meetingSaveForLater": "Save for later"
   }
 }

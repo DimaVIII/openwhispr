@@ -17,11 +17,16 @@ export function MeetingSetup({ onStart, busy }: { onStart: () => void; busy: boo
         {t('meetingSetupTitle')}
       </Text>
       <Card>
-        <Text style={styles.body}>
-          {t(privateMode ? 'meetingPrivateBody' : 'meetingCloudBody')}
-        </Text>
+        <Text style={styles.body}>{t(privateMode ? 'meetingLocalBody' : 'meetingCloudBody')}</Text>
         {privateMode ? (
-          <Button label={t('models')} onPress={() => router.push('/(account)/ai-models')} />
+          <>
+            <Button label={t('meetingStart')} busy={busy} onPress={onStart} />
+            <Button
+              secondary
+              label={t('models')}
+              onPress={() => router.push('/(account)/ai-models')}
+            />
+          </>
         ) : requiresRealAccount(user) ? (
           <Button label={t('signIn')} onPress={() => router.push('/auth')} />
         ) : (

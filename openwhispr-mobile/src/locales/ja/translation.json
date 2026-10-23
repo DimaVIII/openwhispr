@@ -699,6 +699,12 @@
       "cloudName": "クラウド",
       "cloudAI": "クラウドAI",
       "models": "モデル"
-    }
+    },
+    "meetingLocalBody": "音声はこの端末に保存されます。録音後、Parakeet v3 が文字起こしを行い、話者モデルが声を区別します。先にモデル設定で Parakeet v3 を選択してください。録音は59分で停止します。",
+    "meetingSpeakerModels": "会議の話者",
+    "meetingSpeakerModelBody": "各会議内の声を区別します。別の会議の人物は識別しません。",
+    "meetingDownloadBody": "初回のみ42 MBをダウンロードし、その後はこの端末で処理します。",
+    "meetingCancelProcessingBody": "処理を停止し、保存済みノートから再試行できるよう録音を残しますか？",
+    "meetingSaveForLater": "後で処理するために保存"
   }
 }

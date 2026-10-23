@@ -72,7 +72,7 @@ class MeetingCaptureService : Service() {
         getSharedPreferences("meeting-capture", MODE_PRIVATE).edit().putString("lastUri", lastUri).apply()
       }
       var frameNumber = 0
-      recorder = WavRecorder(this, sampleRate, destination, 7200,
+      recorder = WavRecorder(this, sampleRate, destination, captureRoute.maximumSeconds,
         onFrame = captureRoute.frameListener { bytes, timestamp -> DictationService.emit?.invoke("pcm-frame", mapOf("audio" to Base64.encodeToString(bytes, Base64.NO_WRAP), "frameNumber" to frameNumber++, "timestampMs" to timestamp)) },
         onFailure = { error -> handler.post {
           emitError(error)

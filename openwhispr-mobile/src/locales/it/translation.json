@@ -699,6 +699,12 @@
       "cloudName": "Cloud",
       "cloudAI": "IA nel cloud",
       "models": "Modelli"
-    }
+    },
+    "meetingLocalBody": "L’audio resta su questo telefono. Dopo la registrazione, Parakeet v3 lo trascrive e un modello separa le voci. Seleziona prima Parakeet v3 in Modelli. Le registrazioni si fermano dopo 59 minuti.",
+    "meetingSpeakerModels": "Voci delle riunioni",
+    "meetingSpeakerModelBody": "Separa le voci in ogni riunione. Non riconosce le persone tra riunioni diverse.",
+    "meetingDownloadBody": "Download unico di 42 MB, poi elaborazione su questo telefono.",
+    "meetingCancelProcessingBody": "Interrompere l’elaborazione e conservare la registrazione per riprovare dalla nota salvata?",
+    "meetingSaveForLater": "Salva per dopo"
   }
 }
