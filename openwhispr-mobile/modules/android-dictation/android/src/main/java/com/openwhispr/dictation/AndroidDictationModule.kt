@@ -33,9 +33,36 @@ class AndroidDictationModule : Module() {
     require(listOf(context.filesDir, context.cacheDir).any { file.path.startsWith(it.canonicalPath + "/") }) { "File is outside app storage." }
     return file
   }
+  private fun startMeetingCapture(sampleRate: Int, noteId: Int, localOnly: Boolean, captureId: String?, promise: Promise) {
+    check(MeetingCaptureService.instance == null && MeetingCaptureService.pendingStart == null) { "A meeting is already recording." }
+    require(!localOnly || !captureId.isNullOrBlank()) { "Invalid recording attempt." }
+    val token = captureId ?: UUID.randomUUID().toString()
+    val route = MeetingCaptureRoute(noteId, localOnly, token)
+    MeetingCaptureService.pendingRoute = route
+    MeetingCaptureService.pendingToken = token
+    MeetingCaptureService.pendingStart = { error ->
+      if (error == null) promise.resolve(null) else promise.reject("MICROPHONE", error.message, error)
+    }
+    try {
+      context.startForegroundService(Intent(context, MeetingCaptureService::class.java)
+        .putExtra("sampleRate", sampleRate).putExtra("captureToken", token))
+    } catch (error: Exception) { MeetingCaptureService.finishStart(error) }
+  }
+  private fun stopMeetingCapture(localNoteId: Int?, captureId: String?, promise: Promise) {
+    if (MeetingCaptureService.pendingRoute?.acceptsStop(localNoteId, captureId) == true)
+      MeetingCaptureService.finishStart(IllegalStateException("Recording cancelled."))
+    val service = MeetingCaptureService.instance?.takeIf { it.route?.acceptsStop(localNoteId, captureId) == true }
+    Thread {
+      try {
+        service?.stopCapture()
+        service?.stopSelf()
+        promise.resolve(null)
+      } catch (error: Exception) { promise.reject("MICROPHONE", error.message, error) }
+    }.start()
+  }
   override fun definition() = ModuleDefinition {
     Name("AndroidDictation")
-    Events("onStart", "onRecording", "onError", "onCancel", "onOpenResult", "onStatusChange", "pcm-frame", "pcm-error", "pcm-stopped")
+    Events("onStart", "onRecording", "onError", "onCancel", "onOpenResult", "onStatusChange", "pcm-frame", "pcm-error", "pcm-stopped", "local-meeting-stopped", "local-meeting-error")
     OnCreate { DictationService.emit = { event, data -> sendEvent(event, data) } }
     OnActivityEntersForeground {
       DictationService.appVisible = true
@@ -59,27 +86,17 @@ class AndroidDictationModule : Module() {
       recorder?.close(); DictationService.emit = null
     }
     AsyncFunction("startPCM") { sampleRate: Int, noteId: Int?, promise: Promise ->
-      check(MeetingCaptureService.instance == null && MeetingCaptureService.pendingStart == null) { "A meeting is already recording." }
-      MeetingCaptureService.pendingStart = { error ->
-        if (error == null) promise.resolve(null) else promise.reject("MICROPHONE", error.message, error)
-      }
-      try {
-        context.startForegroundService(Intent(context, MeetingCaptureService::class.java).putExtra("sampleRate", sampleRate).putExtra("noteId", noteId ?: 0))
-      } catch (error: Exception) { MeetingCaptureService.pendingStart = null; promise.reject("MICROPHONE", error.message, error) }
+      startMeetingCapture(sampleRate, noteId ?: 0, false, null, promise)
     }.runOnQueue(Queues.MAIN)
-    AsyncFunction("stopPCM") { promise: Promise ->
-      MeetingCaptureService.pendingStart?.invoke(IllegalStateException("Recording cancelled."))
-      MeetingCaptureService.pendingStart = null
-      val service = MeetingCaptureService.instance
-      Thread {
-        try {
-          service?.stopCapture()
-          service?.stopSelf()
-          promise.resolve(null)
-        } catch (error: Exception) { promise.reject("MICROPHONE", error.message, error) }
-      }.start()
+    AsyncFunction("stopPCM") { promise: Promise -> stopMeetingCapture(null, null, promise) }.runOnQueue(Queues.MAIN)
+    AsyncFunction("startLocalMeeting") { noteId: Int, captureId: String, promise: Promise ->
+      startMeetingCapture(24000, noteId, true, captureId, promise)
     }.runOnQueue(Queues.MAIN)
-    Function("isPCMRecording") { MeetingCaptureService.instance != null }
+    AsyncFunction("stopLocalMeeting") { noteId: Int, captureId: String, promise: Promise ->
+      require(noteId > 0) { "Invalid meeting note." }
+      stopMeetingCapture(noteId, captureId, promise)
+    }.runOnQueue(Queues.MAIN)
+    Function("isPCMRecording") { MeetingCaptureService.instance?.route?.localOnly == false }
     Function("getPCMRecordingUri") { MeetingCaptureService.lastUri ?: context.getSharedPreferences("meeting-capture", android.content.Context.MODE_PRIVATE).getString("lastUri", null) }
     AsyncFunction("transcribeParakeet") { uri: String, modelDirectory: String, promise: Promise ->
       parakeet.transcribe(localFile(uri), localFile(modelDirectory), promise)

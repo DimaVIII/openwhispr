@@ -50,6 +50,8 @@ interface NativeDictation {
   insert(text: string): Promise<boolean>;
   startRecording(): Promise<void>;
   stopRecording(cancel: boolean): Promise<Recording>;
+  startLocalMeeting(noteId: number, captureId: string): Promise<void>;
+  stopLocalMeeting(noteId: number, captureId: string): Promise<void>;
   decodeAudio(uri: string): Promise<Recording>;
   prepareSampleDecode(): string;
   cancelSampleDecode(id: string): void;
@@ -85,5 +87,11 @@ export const dictationEvents = AndroidDictation
       onCancel: () => void;
       onOpenResult: () => void;
       onStatusChange: () => void;
+      'local-meeting-stopped': (event: { noteId: number; captureId: string }) => void;
+      'local-meeting-error': (event: {
+        noteId: number;
+        captureId: string;
+        message: string;
+      }) => void;
     }>(AndroidDictation as never)
   : null;
