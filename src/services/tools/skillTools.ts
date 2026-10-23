@@ -130,6 +130,8 @@ function outcomeText(outcome: SkillApprovalOutcome, done: "Saved" | "Updated"): 
       return "The user skipped it. Nothing was saved.";
     case "failed":
       return "It couldn't be saved. Say so and offer to try again.";
+    case "changed":
+      return "Nothing was saved: the skill changed after the card was made. Say so, and load the skill again before proposing the change again.";
     case "not_saved":
       return "Nothing was saved.";
   }
@@ -194,6 +196,7 @@ export function createProposeSkillTool(): ToolDefinition {
         kind: "create",
         name: check.name,
         replacesExisting: check.existing,
+        baseHash: check.hash,
         draft: proposal,
       });
       // The card stands in for the step, so the step has no text of its own.
@@ -322,6 +325,7 @@ export function createUpdateSkillTool(usable: SkillSummary[]): ToolDefinition {
         intent: asText(args.intent),
         removals: removals.slice(0, 5),
         learnedFrom: await learnedFromNote(args.learned_from_note_id),
+        baseHash: check.hash,
       });
       return { success: true, data: outcomeText(outcome, "Updated"), displayText: "" };
     },

@@ -281,7 +281,9 @@ test("an update needs a switched-on, valid skill and is checked like a proposal"
   const { library, database } = playbook(t);
   const check = (update) => library.checkProposal({ kind: "update", update });
 
-  assert.deepEqual(check(SSO), { name: NAME, existing: true, problems: [] });
+  const { hash, ...checked } = check(SSO);
+  assert.deepEqual(checked, { name: NAME, existing: true, problems: [] });
+  assert.match(hash, /^[0-9a-f]{64}$/);
   assert.deepEqual(check({ ...SSO, instructions: "[TODO: ask]" }).problems, [
     { code: "placeholder" },
   ]);
@@ -298,4 +300,33 @@ test("an update needs a switched-on, valid skill and is checked like a proposal"
   database.setSkillEnabled(NAME, false);
   assert.equal(check(SSO), null);
   assert.equal(library.applyUpdate(SSO), null);
+});
+
+test("an update is refused once the skill changed after its card was made", (t) => {
+  const { library, skillsDir } = playbook(t);
+  const { hash } = library.checkProposal({ kind: "update", update: SSO });
+  // Another card for the same skill is saved first.
+  library.applyUpdate({ ...SSO, instructions: "## Steps\nFirst card." });
+  const afterFirst = snapshot(path.join(skillsDir, NAME));
+
+  assert.deepEqual(library.applyUpdate({ ...SSO, baseHash: hash }), { changed: true });
+  assert.deepEqual(snapshot(path.join(skillsDir, NAME)), afterFirst);
+});
+
+test("a save whose Undo note can't be written still saves, without Undo", (t) => {
+  const { library, skillsDir, versionsDir } = playbook(t);
+  const writeFileSync = fs.writeFileSync;
+  t.mock.method(fs, "writeFileSync", (file, ...rest) => {
+    if (String(file).endsWith(".json")) {
+      throw Object.assign(new Error("disk full"), { code: "ENOSPC" });
+    }
+    return writeFileSync(file, ...rest);
+  });
+
+  const saved = library.applyUpdate(SSO);
+  t.mock.restoreAll();
+
+  assert.deepEqual(saved, { name: NAME, versionId: undefined });
+  assert.match(readSkill(skillsDir, NAME), /Have the SSO answer ready\./);
+  assert.deepEqual(listDir(versionsDir), []);
 });

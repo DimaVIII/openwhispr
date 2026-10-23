@@ -4772,6 +4772,7 @@
       "undo": "Deshacer",
       "undone": "Deshecho. La habilidad volvió a como estaba.",
       "undoStale": "No se pudo deshacer. La habilidad ha cambiado desde entonces.",
+      "outdated": "No se guardó. La habilidad cambió después de crear esta tarjeta.",
       "undoFailed": "No se pudo deshacer. Inténtalo de nuevo.",
       "failed": "No se pudo guardar la habilidad.",
       "notSaved": "No se guardó nada.",

@@ -150,11 +150,14 @@ test("a proposal whose title matches a skill updates it and keeps a version", (t
   });
   const before = readSkill(skillsDir, "weekly-recap");
 
-  assert.deepEqual(check(library, { title: "Weekly  recap " }), {
+  const checked = check(library, { title: "Weekly  recap " });
+  assert.deepEqual(checked, {
     name: "weekly-recap",
     existing: true,
     problems: [],
+    hash: checked.hash,
   });
+  assert.match(checked.hash, /^[0-9a-f]{64}$/);
   const saved = library.saveProposal(proposal({ instructions: "New steps" }));
 
   assert.equal(saved.name, "weekly-recap");
@@ -222,10 +225,13 @@ test("two proposals with non-Latin titles become two skills", (t) => {
 
   assert.notEqual(second.name, first.name);
   assert.equal(second.versionId, undefined, "nothing was replaced");
-  assert.deepEqual(library.scan().map((skill) => skill.displayName).sort(), [
-    "メール返信",
-    "会議の準備",
-  ]);
+  assert.deepEqual(
+    library
+      .scan()
+      .map((skill) => skill.displayName)
+      .sort(),
+    ["メール返信", "会議の準備"]
+  );
 });
 
 test("a new proposal never takes a starter skill's folder", (t) => {
@@ -235,7 +241,9 @@ test("a new proposal never takes a starter skill's folder", (t) => {
 
   assert.deepEqual(saved, { name: "meeting-decisions-2" });
   const copy = { title: "Décisions de réunion", description: "Finds decisions." };
-  assert.deepEqual(library.addRecommended("meeting-decisions", copy), { name: "meeting-decisions" });
+  assert.deepEqual(library.addRecommended("meeting-decisions", copy), {
+    name: "meeting-decisions",
+  });
 });
 
 test("a title shown by one of the user's skills updates that skill", (t) => {
@@ -244,9 +252,64 @@ test("a title shown by one of the user's skills updates that skill", (t) => {
 
   // Its folder name alone is not enough: this title only shares the slug.
   assert.deepEqual(check(library, { title: "Weekly-recap!" }).existing, false);
-  assert.deepEqual(check(library, { title: "weekly RECAP" }), {
-    name: "weekly-recap",
-    existing: true,
-    problems: [],
+  const { hash, ...checked } = check(library, { title: "weekly RECAP" });
+  assert.deepEqual(checked, { name: "weekly-recap", existing: true, problems: [] });
+  assert.ok(hash);
+});
+
+test("a proposal that updates a skill keeps its other files and header lines", (t) => {
+  const { library, skillsDir } = setup(t);
+  writeFolder(skillsDir, "meeting-prep", {
+    "SKILL.md": [
+      "---",
+      "name: meeting-prep",
+      "description: Old.",
+      "license: MIT",
+      "metadata:",
+      '  display_name: "Meeting prep"',
+      "---",
+      "",
+      "Old steps",
+      "",
+    ].join("\n"),
+    "references/template.md": "# Template\n",
+    "scripts/x.py": "print(1)\n",
   });
+  library.scan();
+
+  const saved = library.saveProposal(
+    proposal({
+      title: "Meeting prep",
+      description: "Preps me for meetings.",
+      instructions: "New steps",
+      files: [{ path: "references/extra.md", content: "Extra\n" }],
+    })
+  );
+
+  assert.ok(saved.versionId);
+  assert.deepEqual(listDir(path.join(skillsDir, "meeting-prep", "references")), [
+    "extra.md",
+    "template.md",
+  ]);
+  assert.equal(
+    fs.readFileSync(path.join(skillsDir, "meeting-prep", "scripts", "x.py"), "utf8"),
+    "print(1)\n"
+  );
+  const markdown = readSkill(skillsDir, "meeting-prep");
+  assert.match(markdown, /\nlicense: MIT\n/);
+  assert.match(markdown, /\ndescription: "?Preps me for meetings\."?\n/);
+  assert.match(markdown, /\nNew steps\n$/);
+});
+
+test("a proposal that updates a skill is refused once the skill changed after its card", (t) => {
+  const { library, skillsDir } = setup(t);
+  library.create({ title: "Weekly recap", description: "Recaps.", instructions: "Old", files: [] });
+  const { hash } = check(library, {});
+  fs.appendFileSync(path.join(skillsDir, "weekly-recap", "SKILL.md"), "Added by hand\n");
+
+  assert.deepEqual(library.saveProposal(proposal({ baseHash: hash })), { changed: true });
+  assert.match(readSkill(skillsDir, "weekly-recap"), /Added by hand\n$/);
+
+  const fresh = check(library, {}).hash;
+  assert.equal(library.saveProposal(proposal({ baseHash: fresh })).name, "weekly-recap");
 });

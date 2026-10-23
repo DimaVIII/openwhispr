@@ -106,6 +106,8 @@ export type SkillSaveResult =
     }
   | { ok: false; problems: SkillIssue<SkillProblemCode>[] }
   | { ok: false; error: SkillWriteError }
+  /** A save from a card made before the skill last changed; nothing was written. */
+  | { ok: false; error: "changed" }
   | SkillInvalidRequest;
 
 /** A skill a chat uses: one of the user's, or the app's built-in skill creator. */
@@ -144,6 +146,8 @@ export interface SkillProposal {
   description: string;
   instructions: string;
   files: { path: string; content: string }[];
+  /** For a proposal that updates a skill: the skill's hash when its card was made. */
+  baseHash?: string;
 }
 
 /** A change the assistant proposes to one of the user's skills; nothing changes until approved. */
@@ -153,6 +157,8 @@ export interface SkillUpdate {
   instructions?: string;
   /** The full new text of each file it changes or adds. */
   files: { path: string; content: string }[];
+  /** The skill's hash when its card was made; a save after the skill changed is refused. */
+  baseHash?: string;
 }
 
 export interface SkillProposalCheck {
@@ -161,4 +167,6 @@ export interface SkillProposalCheck {
   /** A skill already has that name, so saving updates it. */
   existing: boolean;
   problems: SkillIssue<SkillProblemCode>[];
+  /** The hash of the skill saving would change, for its save to compare. */
+  hash?: string;
 }

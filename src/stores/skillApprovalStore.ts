@@ -16,7 +16,9 @@ export type SkillApprovalState =
   | "not_saved"
   | "undone"
   /** Undo refused: the skill changed again after this card saved it. */
-  | "changed_since";
+  | "changed_since"
+  /** Save refused: the skill changed after this card was made, so it would undo that change. */
+  | "outdated";
 
 interface SkillApprovalBase {
   /** approvalKey(messageId, toolCallId). */
@@ -32,6 +34,8 @@ interface SkillApprovalBase {
   undoFailed?: boolean;
   /** Why main refused the last Save; the card stays open so the user can fix it. */
   problems?: SkillIssue<SkillProblemCode>[];
+  /** The hash of the skill this card changes, as the card shows it; Save is refused if it moved. */
+  baseHash?: string;
 }
 
 /** A new skill. One named like a skill the user has updates it. */
@@ -62,16 +66,25 @@ export interface SkillUpdateApproval extends SkillApprovalBase {
 export type SkillApprovalEntry = SkillCreateApproval | SkillUpdateApproval;
 
 type SkillApprovalRequest =
-  | Pick<SkillCreateApproval, "kind" | "name" | "replacesExisting" | "draft">
+  | Pick<SkillCreateApproval, "kind" | "name" | "replacesExisting" | "draft" | "baseHash">
   | Pick<
       SkillUpdateApproval,
-      "kind" | "name" | "displayName" | "draft" | "current" | "intent" | "removals" | "learnedFrom"
+      | "kind"
+      | "name"
+      | "displayName"
+      | "draft"
+      | "current"
+      | "intent"
+      | "removals"
+      | "learnedFrom"
+      | "baseHash"
     >;
 
 export type SkillApprovalOutcome =
   | { state: "saved"; name: string; edited: boolean }
   | { state: "skipped" }
   | { state: "failed" }
+  | { state: "changed" }
   | { state: "not_saved"; reason: "expired" | "conversation_ended" | "duplicate_tool_call" };
 
 export const useSkillApprovalStore = create<{ entries: Record<string, SkillApprovalEntry> }>(
@@ -99,7 +112,7 @@ function entryFor(key: string): SkillApprovalEntry | undefined {
   return useSkillApprovalStore.getState().entries[key];
 }
 
-type SkillCreatePatch = Pick<SkillCreateApproval, "replacesExisting">;
+type SkillCreatePatch = Pick<SkillCreateApproval, "replacesExisting" | "baseHash">;
 
 function patchEntry(
   key: string,
@@ -207,17 +220,23 @@ export async function saveSkillApproval(key: string): Promise<void> {
       return;
     }
     if (check.existing && !(entry.replacesExisting && check.name === entry.name)) {
-      reopen(key, { name: check.name, replacesExisting: true });
+      reopen(key, { name: check.name, replacesExisting: true, baseHash: check.hash });
       return;
     }
   }
+  // The hash the card was shown against, so a skill changed since isn't overwritten unseen.
+  const base = entry.baseHash === undefined ? {} : { baseHash: entry.baseHash };
   const saving =
     entry.kind === "update"
-      ? window.electronAPI?.skillsApplyUpdate?.(entry.draft)
-      : window.electronAPI?.skillsSaveProposal?.(entry.draft);
+      ? window.electronAPI?.skillsApplyUpdate?.({ ...entry.draft, ...base })
+      : window.electronAPI?.skillsSaveProposal?.({ ...entry.draft, ...base });
   const result = await saving?.catch(() => null);
   if (result && !result.ok && "problems" in result) {
     reopen(key, { problems: result.problems });
+    return;
+  }
+  if (result && !result.ok && result.error === "changed") {
+    settle(key, { state: "changed" }, { state: "outdated" });
     return;
   }
   if (!result?.ok) {

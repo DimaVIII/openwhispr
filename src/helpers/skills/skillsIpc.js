@@ -40,6 +40,7 @@ function isProposal(proposal) {
   return (
     Boolean(proposal) &&
     ["title", "description", "instructions"].every((key) => typeof proposal[key] === "string") &&
+    isOptional(proposal.baseHash, "string") &&
     isProposalFiles(proposal.files)
   );
 }
@@ -50,6 +51,7 @@ function isUpdate(update) {
     isSkillFolderName(update.name) &&
     isOptional(update.description, "string") &&
     isOptional(update.instructions, "string") &&
+    isOptional(update.baseHash, "string") &&
     isProposalFiles(update.files)
   );
 }
@@ -67,6 +69,7 @@ function registerSkillsIpc({ ipcMain, library, shell, broadcast }) {
   const saved = (result) => {
     if (!result) return INVALID;
     if (result.problems) return { ok: false, problems: result.problems };
+    if (result.changed) return { ok: false, error: "changed" };
     changed();
     return { ok: true, ...result };
   };

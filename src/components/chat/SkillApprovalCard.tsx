@@ -416,6 +416,9 @@ export function SkillApprovalCard({ entry }: { entry: SkillApprovalEntry }): Rea
         {entry.state === "changed_since" && (
           <p className="mt-2 text-muted-foreground">{t("skills.approval.undoStale")}</p>
         )}
+        {entry.state === "outdated" && (
+          <p className="mt-2 text-muted-foreground">{t("skills.approval.outdated")}</p>
+        )}
         {entry.state === "skipped" && (
           <p className="mt-2 text-muted-foreground">
             {isUpdate ? t("skills.approval.skippedUpdate") : t("skills.approval.skippedCreate")}

@@ -87,7 +87,10 @@ test("a malformed name or upload item is refused before the library runs", async
   for (const input of [null, { ...draft, title: 3 }, { ...draft, files: [upload({ data: [] })] }]) {
     assert.deepEqual(await call("skills-create", input), INVALID);
   }
-  assert.deepEqual(await call("skills-add-recommended", "meeting-decisions", { title: 1 }), INVALID);
+  assert.deepEqual(
+    await call("skills-add-recommended", "meeting-decisions", { title: 1 }),
+    INVALID
+  );
   const copy = { title: "a", description: "b" };
   assert.deepEqual(await call("skills-add-recommended", "../x", copy), INVALID);
 
@@ -158,7 +161,11 @@ test("uploads a window was still reading when it closed or reloaded are let go o
 
     assert.deepEqual(await previewed, { items: [late] }, what);
     const discards = library.calls.filter(([method]) => method === "discardUploads");
-    assert.deepEqual(discards.map(([, tokens]) => tokens), discarded, what);
+    assert.deepEqual(
+      discards.map(([, tokens]) => tokens),
+      discarded,
+      what
+    );
   }
 });
 
@@ -334,6 +341,25 @@ test("a proposal that can't be saved reports why and broadcasts nothing", async 
     error: "noSpace",
   });
   assert.deepEqual([...refused.broadcasts, ...full.broadcasts], []);
+});
+
+test("a save from a card made before the skill changed is refused without a broadcast", async () => {
+  const stale = setup({
+    saveProposal: () => ({ changed: true }),
+    applyUpdate: () => ({ changed: true }),
+  });
+  const update = { name: "meeting-prep", instructions: "New", files: [], baseHash: "a".repeat(64) };
+
+  assert.deepEqual(await stale.call("skills-save-proposal", { ...proposal, baseHash: "b" }), {
+    ok: false,
+    error: "changed",
+  });
+  assert.deepEqual(await stale.call("skills-apply-update", update), {
+    ok: false,
+    error: "changed",
+  });
+  assert.deepEqual(await stale.call("skills-apply-update", { ...update, baseHash: 1 }), INVALID);
+  assert.deepEqual(stale.broadcasts, []);
 });
 
 const update = { name: "meeting-prep", instructions: "New steps", files: [] };

@@ -109,10 +109,7 @@ test("Skip and expiry resolve without writing", async (t) => {
 
   assert.deepEqual(await skipped, { state: "skipped" });
   assert.deepEqual(await expired, { state: "not_saved", reason: "expired" });
-  assert.deepEqual(
-    [entryOf("call-1").state, entryOf("call-2").state],
-    ["skipped", "not_saved"]
-  );
+  assert.deepEqual([entryOf("call-1").state, entryOf("call-2").state], ["skipped", "not_saved"]);
   assert.deepEqual(calls.save, []);
 });
 
@@ -165,6 +162,43 @@ test("a save main refuses shows as failed", async (t) => {
 
   assert.deepEqual(await outcome, { state: "failed" });
   assert.equal(entryOf("call-1").state, "failed");
+});
+
+test("Save sends the hash the card was made against, and a changed skill ends the card", async (t) => {
+  const electron = fakeElectron({ ok: false, error: "changed" }, () => ({
+    name: "weekly-recap",
+    existing: true,
+    problems: [],
+    hash: "h2",
+  }));
+  const { store, entryOf, calls } = await freshStore(t, electron);
+  const request = { ...CREATE, name: "weekly-recap", replacesExisting: true, baseHash: "h1" };
+
+  const outcome = store.requestSkillApproval(context("call-1").value, request);
+  await store.saveSkillApproval(entryOf("call-1").key);
+
+  assert.deepEqual(calls.save, [{ ...PROPOSAL, baseHash: "h1" }]);
+  assert.deepEqual(await outcome, { state: "changed" });
+  assert.equal(entryOf("call-1").state, "outdated");
+});
+
+test("an edited title that names a skill takes that skill's hash for the next Save", async (t) => {
+  const electron = fakeElectron(undefined, () => ({
+    name: "weekly-recap",
+    existing: true,
+    problems: [],
+    hash: "h1",
+  }));
+  const { store, entryOf, calls } = await freshStore(t, electron);
+
+  store.requestSkillApproval(context("call-1").value, CREATE);
+  const { key } = entryOf("call-1");
+  await store.saveSkillApproval(key);
+  assert.deepEqual(calls.save, []);
+  assert.equal(entryOf("call-1").baseHash, "h1");
+
+  await store.saveSkillApproval(key);
+  assert.deepEqual(calls.save, [{ ...PROPOSAL, baseHash: "h1" }]);
 });
 
 test("a duplicate tool call doesn't steal the first card", async (t) => {
@@ -280,4 +314,3 @@ test("a turn that ends while Save checks the name doesn't reopen the card", asyn
   assert.equal(entryOf("call-1").state, "not_saved");
   assert.deepEqual(calls.save, []);
 });
-
