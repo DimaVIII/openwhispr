@@ -389,8 +389,18 @@ describe('buildChatPayload', () => {
       '- Sources: CRM and Stripe exports\n- Owner: Dana',
       '```yaml\n- source: ./data\n```',
       '**Source:** the CFO forecast in Pricing sync',
+      'Pipeline:\n- Sources: CRM and Stripe exports\n- Owner: Dana',
+      'Article:\n- Title: X\n- Source: Reuters\n- Date: Oct 1',
     ])('keep text that only mentions a source: %j', (answer) => {
-      expect(historyText(answer)).toContain(answer.split('\n')[0]);
+      expect(historyText(answer)).toContain(answer);
+    });
+
+    it('keeps a source item in the answer\u2019s own list while dropping the closing source', () => {
+      const text = historyText(
+        'Key points:\n- Revenue up 8%\n- Sources: CRM and Stripe\n- Margins flat\n\n**Source:** Pricing sync',
+      );
+      expect(text).toContain('- Sources: CRM and Stripe\n- Margins flat');
+      expect(text).not.toContain('Pricing sync');
     });
   });
 

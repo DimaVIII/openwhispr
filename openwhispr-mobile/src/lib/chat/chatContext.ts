@@ -54,21 +54,30 @@ const NO_NOTES_SENT =
 
 // An earlier answer's closing "Source: …" block is the cue a follow-up with no notes of its own
 // copies. Only a block at the very end goes, so a source mentioned in the answer itself, or in its
-// code, stays; other languages' labels rely on NO_NOTES_SENT alone.
+// code, stays. Other languages' labels, and titles on plain lines, rely on NO_NOTES_SENT alone.
 const SOURCE_LABEL = /^[\s>#*_-]*(?:\d+\.\s*)?(?:sources?|source\(s\)|notes? used)[*_]*\s*(?::|$)/i;
 const LIST_LINE = /^\s*(?:[-*+]|\d+\.)\s+\S/;
 
 const withoutClosingSources = (text: string): string => {
   const lines = text.split('\n');
-  let cut = lines.length;
-  for (let index = lines.length - 1; index >= 0; index -= 1) {
+  let index = lines.length - 1;
+  const skipBlank = (): void => {
+    while (index >= 0 && !lines[index].trim()) index -= 1;
+  };
+  // A closing list counts only under a label line of its own ("Sources:" then "- Untitled"); a
+  // "- Source: X" item inside the answer's own list is content.
+  skipBlank();
+  while (index >= 0 && LIST_LINE.test(lines[index])) index -= 1;
+  let cut = -1;
+  for (skipBlank(); index >= 0; skipBlank()) {
     const line = lines[index];
-    if (SOURCE_LABEL.test(line)) cut = index;
-    else if (line.trim() && !LIST_LINE.test(line)) break;
+    if (!SOURCE_LABEL.test(line) || LIST_LINE.test(line)) break;
+    cut = index;
+    index -= 1;
   }
-  const kept = lines.slice(0, cut).join('\n').trim();
+  if (cut < 0) return text;
   // An answer that was nothing but its source is kept whole, or a follow-up has nothing to refer to.
-  return kept || text;
+  return lines.slice(0, cut).join('\n').trim() || text;
 };
 
 const withoutSourceLines = (history: ChatMessage[]): ChatMessage[] =>
