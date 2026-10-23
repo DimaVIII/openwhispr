@@ -4893,6 +4893,8 @@
       "undone": "Rückgängig gemacht. Der Skill ist wieder wie vorher.",
       "undoStale": "Rückgängig machen nicht möglich. Der Skill wurde seitdem geändert.",
       "outdated": "Nicht gespeichert. Der Skill wurde geändert, nachdem diese Karte erstellt wurde.",
+      "unchangedLines_one": "⋯ {{count}} unveränderte Zeile",
+      "unchangedLines_other": "⋯ {{count}} unveränderte Zeilen",
       "undoFailed": "Rückgängig machen nicht möglich. Versuche es erneut.",
       "failed": "Der Skill konnte nicht gespeichert werden.",
       "notSaved": "Es wurde nichts gespeichert.",

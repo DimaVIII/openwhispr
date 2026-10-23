@@ -4893,6 +4893,8 @@
       "undone": "Undone. The skill is back as it was.",
       "undoStale": "Couldn't undo. The skill has changed since.",
       "outdated": "Not saved. The skill changed after this card was made.",
+      "unchangedLines_one": "⋯ {{count}} unchanged line",
+      "unchangedLines_other": "⋯ {{count}} unchanged lines",
       "undoFailed": "Couldn't undo. Try again.",
       "failed": "Couldn't save the skill.",
       "notSaved": "Nothing was saved.",

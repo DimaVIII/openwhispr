@@ -4721,6 +4721,8 @@
       "undone": "Desfeito. A habilidade voltou a ser como era.",
       "undoStale": "Não foi possível desfazer. A habilidade mudou desde então.",
       "outdated": "Não salvo. A habilidade mudou depois que este cartão foi criado.",
+      "unchangedLines_one": "⋯ {{count}} linha sem alterações",
+      "unchangedLines_other": "⋯ {{count}} linhas sem alterações",
       "undoFailed": "Não foi possível desfazer. Tente novamente.",
       "failed": "Não foi possível salvar a habilidade.",
       "notSaved": "Nada foi salvo.",

@@ -4721,6 +4721,8 @@
       "undone": "已撤销，技能已恢复原样。",
       "undoStale": "无法撤销，此后技能已被更改。",
       "outdated": "未保存。此卡片创建后技能已被更改。",
+      "unchangedLines_one": "⋯ {{count}} 行未更改",
+      "unchangedLines_other": "⋯ {{count}} 行未更改",
       "undoFailed": "无法撤销，请重试。",
       "failed": "无法保存技能。",
       "notSaved": "未保存任何内容。",

@@ -4721,6 +4721,8 @@
       "undone": "Annullato. La skill è tornata com'era.",
       "undoStale": "Impossibile annullare. La skill è cambiata nel frattempo.",
       "outdated": "Non salvato. La skill è cambiata dopo la creazione di questa scheda.",
+      "unchangedLines_one": "⋯ {{count}} riga invariata",
+      "unchangedLines_other": "⋯ {{count}} righe invariate",
       "undoFailed": "Impossibile annullare. Riprova.",
       "failed": "Impossibile salvare la skill.",
       "notSaved": "Non è stato salvato nulla.",

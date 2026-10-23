@@ -4893,6 +4893,8 @@
       "undone": "Annulé. La compétence est revenue à son état précédent.",
       "undoStale": "Impossible d'annuler. La compétence a changé depuis.",
       "outdated": "Non enregistré. La compétence a changé après la création de cette carte.",
+      "unchangedLines_one": "⋯ {{count}} ligne inchangée",
+      "unchangedLines_other": "⋯ {{count}} lignes inchangées",
       "undoFailed": "Impossible d'annuler. Réessayez.",
       "failed": "Impossible d'enregistrer la compétence.",
       "notSaved": "Rien n'a été enregistré.",

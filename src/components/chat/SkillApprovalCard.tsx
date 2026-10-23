@@ -1,5 +1,6 @@
 import {
   useId,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent,
@@ -24,7 +25,7 @@ import {
   type SkillCreateApproval,
   type SkillUpdateApproval,
 } from "../../stores/skillApprovalStore";
-import { lineDiff } from "../../utils/lineDiff";
+import { foldUnchanged, lineDiff } from "../../utils/lineDiff";
 import { formatShortDate, normalizeDbDate } from "../../utils/dateFormatting";
 
 const FIELD_CLASS = "w-full rounded-md border border-border/70 bg-background px-2 py-1";
@@ -183,40 +184,53 @@ function changedParts(entry: SkillUpdateApproval, descriptionLabel: string): Cha
   ];
 }
 
+// Unchanged runs fold to a count, and the part scrolls past a fixed height, so a one-line change
+// to a long file stays short in the narrow voice panel.
 function DiffPart({ part }: { part: ChangedPart }): ReactElement {
   const { t } = useTranslation();
+  // Every keystroke in the editor renders the card again; the diff only changes with the text.
+  const lines = useMemo(
+    () => foldUnchanged(lineDiff(part.before, part.after)),
+    [part.before, part.after]
+  );
   return (
     <div
       data-diff-part={part.key}
       dir="ltr"
-      className="mt-1.5 overflow-x-auto rounded-md border border-border/70 bg-background font-mono text-[11px] leading-5"
+      className="mt-1.5 max-h-72 overflow-auto rounded-md border border-border/70 bg-background font-mono text-[11px] leading-5"
     >
-      <div className="border-b border-border/60 px-2.5 py-1 text-muted-foreground/80">
+      <div className="sticky top-0 border-b border-border/60 bg-background px-2.5 py-1 text-muted-foreground/80">
         {part.label}
       </div>
-      {lineDiff(part.before, part.after).map((line, index) => (
-        <div
-          key={index}
-          data-diff={line.kind}
-          className={cn(
-            "flex gap-2 px-2.5",
-            line.kind === "+" && "bg-success/10 text-success",
-            line.kind === "-" &&
-              "bg-destructive/10 text-destructive line-through decoration-destructive/40",
-            line.kind === " " && "text-muted-foreground"
-          )}
-        >
-          <span aria-hidden="true" className="w-2 shrink-0 select-none">
-            {line.kind === " " ? "" : line.kind}
-          </span>
-          {line.kind !== " " && (
-            <span className="sr-only">
-              {t(line.kind === "+" ? "skills.approval.added" : "skills.approval.removed")}
+      {lines.map((line, index) =>
+        line.kind === "fold" ? (
+          <div key={index} data-diff="fold" className="px-2.5 text-muted-foreground/70">
+            {t("skills.approval.unchangedLines", { count: line.count })}
+          </div>
+        ) : (
+          <div
+            key={index}
+            data-diff={line.kind}
+            className={cn(
+              "flex gap-2 px-2.5",
+              line.kind === "+" && "bg-success/10 text-success",
+              line.kind === "-" &&
+                "bg-destructive/10 text-destructive line-through decoration-destructive/40",
+              line.kind === " " && "text-muted-foreground"
+            )}
+          >
+            <span aria-hidden="true" className="w-2 shrink-0 select-none">
+              {line.kind === " " ? "" : line.kind}
             </span>
-          )}
-          <span className="whitespace-pre-wrap">{line.text}</span>
-        </div>
-      ))}
+            {line.kind !== " " && (
+              <span className="sr-only">
+                {t(line.kind === "+" ? "skills.approval.added" : "skills.approval.removed")}
+              </span>
+            )}
+            <span className="whitespace-pre-wrap">{line.text}</span>
+          </div>
+        )
+      )}
     </div>
   );
 }
