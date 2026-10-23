@@ -61,8 +61,9 @@ export function ownsNote(note: NoteOwnership, currentUserId: string | null | und
 }
 
 /**
- * Delete a team-space note: the note's owner, a space admin, or a workspace
- * owner/admin. Mirrors the server rule — client checks are cosmetic.
+ * Delete a team-space note: the note's owner, or someone with manage_settings
+ * on the space or the workspace (owner/admin under the role fallback).
+ * Mirrors the server rule — client checks are cosmetic.
  * Space rules only: a cloud-backed PERSONAL note shared with this user
  * passes here (private space is unenforced) but may still be vetoed by its
  * note-level ACL — compose with sharedNoteBlocksDelete (notePermissions).
@@ -83,8 +84,8 @@ export function canDeleteSpaceNote(
 
 /**
  * Change a team-space note's scope (move it to another space): the note's
- * owner or a workspace owner/admin. A space admin who is only a workspace
- * member may delete a teammate's note but not change its audience.
+ * owner or a workspace with manage_settings. Space-level manage_settings alone
+ * may delete a teammate's note but not change its audience.
  */
 export function canChangeSpaceNoteScope(
   note: NoteOwnership,
@@ -97,9 +98,10 @@ export function canChangeSpaceNoteScope(
 }
 
 /**
- * Move or delete a team-space folder: a space admin or a workspace
- * owner/admin. Members keep creating, renaming, and using folders — only the
- * destructive/scope-changing actions are gated.
+ * Move or delete a team-space folder: manage_settings on the space or the
+ * workspace (admins/owners under the role fallback). Members keep creating,
+ * renaming, and using folders — only the destructive/scope-changing actions
+ * are gated.
  */
 export function canMoveOrDeleteSpaceFolder(
   space: SpaceRef | null | undefined,

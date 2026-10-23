@@ -8,7 +8,7 @@ const WORKSPACES = [
     id: "team",
     plan: "business",
     status: "active",
-    capabilities: ["manage_members", "create_spaces"],
+    capabilities: { manage_members: true, create_spaces: true },
   },
 ];
 
@@ -102,7 +102,7 @@ test("no account: nothing is cached and the cache is not read", async (t) => {
 });
 
 test("a failure with a list already in memory keeps that list", async (t) => {
-  const other = [{ id: "memory", plan: "business", status: "active", capabilities: [] }];
+  const other = [{ id: "memory", plan: "business", status: "active", capabilities: {} }];
   const { store } = await loadStore(t, {
     initialStorage: { [CACHE_KEY]: cacheEntry("acct-1") },
     list: async () => other,
@@ -130,6 +130,8 @@ for (const [name, raw] of [
     "workspaces not an array",
     JSON.stringify({ accountId: "acct-1", fetchedAt: 1, workspaces: {} }),
   ],
+  ["null entry", cacheEntry("acct-1", [null])],
+  ["entry without a string id", cacheEntry("acct-1", [{ id: 7, plan: "business" }])],
 ]) {
   test(`unreadable cache is ignored (${name})`, async (t) => {
     const { store } = await loadStore(t, {

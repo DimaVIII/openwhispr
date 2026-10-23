@@ -63,7 +63,11 @@ function readWorkspaceListCache(accountId: string | null): Workspace[] | null {
       workspaces?: unknown;
     };
     if (cachedAccountId !== accountId || !Array.isArray(workspaces)) return null;
-    return workspaces as Workspace[];
+    // A malformed entry would throw in later `.find(w => w.id …)` calls.
+    const wellFormed = workspaces.every(
+      (entry) => entry && typeof entry === "object" && typeof entry.id === "string"
+    );
+    return wellFormed ? (workspaces as Workspace[]) : null;
   } catch {
     return null;
   }
