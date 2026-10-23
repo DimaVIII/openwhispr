@@ -45,7 +45,7 @@ test("the catalog lists name and description, most recently used first", () => {
     [
       summary("weekly-recap", "Recaps my\n  week.", null),
       summary("meeting-prep", "Briefs me before meetings.", "2026-10-20T09:00:00.000Z"),
-      summary("decision-log", "Keeps decisions.", "2026-10-21T09:00:00.000Z"),
+      summary("meeting-decisions", "Keeps decisions.", "2026-10-21T09:00:00.000Z"),
     ],
     2_000
   );
@@ -53,7 +53,7 @@ test("the catalog lists name and description, most recently used first", () => {
   assert.equal(
     catalog,
     [
-      "- decision-log: Keeps decisions.",
+      "- meeting-decisions: Keeps decisions.",
       "- meeting-prep: Briefs me before meetings.",
       "- weekly-recap: Recaps my week.",
     ].join("\n")
@@ -65,12 +65,12 @@ test("the catalog keeps names and drops the least-used descriptions past its bud
     [
       summary("weekly-recap", "Recaps my week every Friday."),
       summary("meeting-prep", "Briefs me before every meeting I have.", "2026-10-20T09:00:00.000Z"),
-      summary("decision-log", "Keeps decisions.", "2026-10-21T09:00:00.000Z"),
+      summary("meeting-decisions", "Keeps decisions.", "2026-10-21T09:00:00.000Z"),
     ],
     30
   );
 
-  assert.equal(catalog, "- decision-log: Keeps decisions.\n- meeting-prep\n- weekly-recap");
+  assert.equal(catalog, "- meeting-decisions: Keeps decisions.\n- meeting-prep\n- weekly-recap");
 });
 
 test("a skill block wraps the body as data and escapes a closing tag inside it", () => {
@@ -207,19 +207,19 @@ test(
       outsideWindow,
       ...Array.from({ length: 16 }, (_, index) => userTurn(`message ${index}`)),
       assistantTurn([loadCall({ name: "meeting-prep" }), loadCall({ name: "one" }, "executing")]),
-      assistantTurn([loadCall({ name: "decision-log" }), { ...loadCall({}), name: "x" }]),
+      assistantTurn([loadCall({ name: "meeting-decisions" }), { ...loadCall({}), name: "x" }]),
       assistantTurn([loadCall({ name: "meeting-prep" })]),
       userTurn("and now?"),
     ];
     assert.equal(history.length, 21);
 
-    assert.deepEqual(skillContext.activeSkillNames(history, { name: "decision-log" }), [
-      { name: "decision-log" },
+    assert.deepEqual(skillContext.activeSkillNames(history, { name: "meeting-decisions" }), [
+      { name: "meeting-decisions" },
       { name: "meeting-prep" },
     ]);
     assert.deepEqual(
       skillContext.activeSkillNames(history, { name: "skill-creator", builtin: true }),
-      [{ name: "skill-creator", builtin: true }, { name: "meeting-prep" }, { name: "decision-log" }]
+      [{ name: "skill-creator", builtin: true }, { name: "meeting-prep" }, { name: "meeting-decisions" }]
     );
   }
 );
