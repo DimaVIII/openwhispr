@@ -570,8 +570,8 @@ describe('NoteEditorScreen generated meeting context', () => {
     ['android', 'meeting', 1, false],
     ['ios', 'personal', 1, false],
   ] as const)(
-    'selects personal cleanup instructions on %s for %s default=%s',
-    async (platform, noteType, isDefault, usesPersonalInstructions) => {
+    'selects desktop default note instructions on %s for %s default=%s',
+    async (platform, noteType, isDefault, usesDesktopInstructions) => {
       const originalPlatform = Platform.OS;
       Platform.OS = platform;
       mockActionsState.actions = [defaultAction({ isDefault })];
@@ -589,15 +589,17 @@ describe('NoteEditorScreen generated meeting context', () => {
           .calls[0][0];
         expect(temperature).toBe(0.3);
         expect(systemPrompt).toContain('OpenWhispr');
-        if (usesPersonalInstructions) {
-          expect(systemPrompt).toContain('You edit dictated personal notes.');
-          expect(systemPrompt).not.toContain('You are a note enhancement assistant.');
+        if (usesDesktopInstructions) {
+          expect(systemPrompt).toContain("Preserve the source's meaning when summarizing");
+          expect(systemPrompt).toContain('You are a note enhancement assistant.');
           expect(systemPrompt).not.toContain('Transform this meeting into notes.');
           await waitFor(() =>
             expect(mockUpdateNote).toHaveBeenCalledWith(
               7,
               expect.objectContaining({
-                enhancementPrompt: expect.stringContaining('You edit dictated personal notes.'),
+                enhancementPrompt: expect.stringContaining(
+                  'Transform the provided content into clean, well-structured notes',
+                ),
               }),
             ),
           );

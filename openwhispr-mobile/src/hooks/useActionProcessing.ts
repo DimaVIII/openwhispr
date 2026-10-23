@@ -6,10 +6,13 @@ import { generateNoteTitle } from '@/utils/generateTitle';
 import {
   buildActionSystemPrompt,
   isDefaultGenerateNotesAction,
-  PERSONAL_NOTE_INSTRUCTIONS,
   type GenerateNotesInputKind,
 } from '@/lib/notes/generateNotesPrompt';
 import type { Action } from '@/data';
+import {
+  DESKTOP_DEFAULT_NOTE_ACTION,
+  isNothingToSummarizeReply,
+} from '@/lib/notes/desktopDefaultNotesPrompt';
 import type { ReasoningRoutingOptions } from '@/types';
 import { unwrapGeneratedMarkdown } from '@/lib/notes/unwrapGeneratedMarkdown';
 
@@ -49,17 +52,17 @@ export function useActionProcessing({ onSuccess, onError }: UseActionProcessingO
 
       try {
         const inputKind = options.inputKind ?? 'plain-note';
-        const isAndroidPersonalCleanup =
+        const usesDesktopDefaultNotes =
           Platform.OS === 'android' &&
           inputKind === 'plain-note' &&
           isDefaultGenerateNotesAction(action);
-        const actionPrompt = isAndroidPersonalCleanup ? PERSONAL_NOTE_INSTRUCTIONS : action.prompt;
+        const actionPrompt = usesDesktopDefaultNotes ? DESKTOP_DEFAULT_NOTE_ACTION : action.prompt;
         const systemPrompt = buildActionSystemPrompt({
           actionPrompt,
           inputKind,
           isDefaultGenerateNotesAction: isDefaultGenerateNotesAction(action),
           customDictionary: options.customDictionary,
-          personalNoteCleanup: isAndroidPersonalCleanup,
+          desktopDefaultNotes: usesDesktopDefaultNotes,
         });
         const cfg = useConfigStore.getState().config;
 
@@ -77,6 +80,12 @@ export function useActionProcessing({ onSuccess, onError }: UseActionProcessingO
           Platform.OS === 'android' && isDefaultGenerateNotesAction(action)
             ? unwrapGeneratedMarkdown(result.text)
             : result.text;
+
+        if (usesDesktopDefaultNotes && isNothingToSummarizeReply(enhancedContent)) {
+          throw new Error(
+            'There is no substantive content to summarize. Your original note is unchanged.',
+          );
+        }
 
         let generatedTitle: string | undefined;
         if ((cfg?.autoGenerateNoteTitle ?? true) && options.shouldGenerateTitle?.() !== false) {

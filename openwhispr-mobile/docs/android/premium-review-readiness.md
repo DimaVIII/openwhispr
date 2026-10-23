@@ -2,6 +2,12 @@
 
 This is a requirements audit against the 15 October 2026 goal brief, including the Android-only correction. It is not a completion certificate. The [implementation plan](premium-experience-plan.md) preserves the chronological checkpoints; [acceptance](acceptance.md) distinguishes baseline checks from later builds. A checked implementation item does not establish physical-device or provider acceptance.
 
+## 23 October — desktop default prompt on Android
+
+Android's default action for ordinary notes now uses the desktop AI Summary system prompt, including its source-fidelity rules and default action instructions, as requested. An inference-boundary test compiles the desktop source independently and checks exact parity with the mobile bundled copy. Custom dictionary spellings still append after the prompt. Meeting, custom-action and iOS routes keep their existing behavior. The desktop empty-content marker is handled before publishing a result, preserving the original note instead of saving the marker.
+
+The full mobile suite passes 308 suites / 3,705 tests; TypeScript, scoped ESLint and changed-file formatting pass. The two repeated host Qwen3 1.7B Q4_K_M cases still invent owners/dates and restructure paragraphs as tables. Prompt parity is implemented; grammar, source fidelity and paragraph quality are **not accepted**. This is a source change, absent from installed code19 and the previously built code20. No release or model/sampling change is included.
+
 ## 22 October — default-folder restart repair
 
 The Play-installed code19 local workspace displayed duplicate empty Personal and Meetings folders. A reproduction running the actual migration against SQLite showed that account-switch deletion followed by remote-folder inserts assigns new local IDs; the next launch then recreated fixed IDs 1 and 2. The migration now reuses existing private defaults and retires only empty, unchanged legacy seeds that have a synced counterpart. It preserves custom names/order, sync identities, team folders, deletion tombstones, recovery records and all note references, including deleted notes. It no longer resets whichever folder happens to have ID 1 to sort order zero.

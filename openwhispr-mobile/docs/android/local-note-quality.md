@@ -1,5 +1,13 @@
 # Android local note cleanup candidate
 
+## Current source — 23 October 2026
+
+At Josh's request, Android ordinary notes using the default action now receive the desktop default AI Summary prompt. The full system prompt is byte-identical to the desktop compiler output at source `7aaef955`, before the existing optional mobile dictionary suffix. An inference-boundary test protects this parity. Meetings, custom actions, iOS, model selection and sampling keep their previous behavior. The desktop `NOTHING_TO_SUMMARIZE` response is intercepted so it does not replace the original note.
+
+**Quality remains unaccepted.** Two repeated host Qwen3 1.7B Q4_K_M cases with this prompt produced tables and invented owners or dates. These reproduce the earlier desktop-prompt comparison; they are not evidence about the shipped desktop app's own model/runtime. The prompt choice does not waive source-fidelity or paragraph acceptance. The change is not yet in an installed candidate.
+
+## Historical Qwen3 candidate and cleanup experiments
+
 The previous balanced Qwen2.5 1.5B model changed a conditional commitment from “can collect” to “will collect” in the installed Android app, including at temperature zero. It also invented task dates in an earlier repeated run. Routing tests passed while the generated text was wrong.
 
 The candidate replaces the balanced model with **Qwen3 1.7B Q4_K_M** and separates Android personal-note cleanup from the shared meeting/formatting instructions. Meeting prompts, custom actions and iOS prompt selection retain their existing routes. Android personal cleanup keeps the original questions, conditions and sentence order, removes unquoted fillers, and fixes grammar/punctuation. Raw note content is retained separately.
