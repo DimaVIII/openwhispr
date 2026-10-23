@@ -183,14 +183,18 @@ export default function ChatView({
             };
       setChatSkills((skills) => ({ ...skills, attached: skill }));
       if (request.kind === "create" && request.draft) {
-        const { title, description } = request.draft;
-        void sendWithSkill(
+        const { title, description, instructions, fileNames } = request.draft;
+        const draftText = [
           t("skills.chat.draftPrompt", {
             name: title || t("skills.chat.noneYet"),
             description: description || t("skills.chat.noneYet"),
           }),
-          skill
-        );
+          ...(instructions ? [t("skills.chat.draftInstructions", { instructions })] : []),
+          ...(fileNames.length > 0
+            ? [t("skills.chat.draftFiles", { files: fileNames.join(", ") })]
+            : []),
+        ].join("\n");
+        void sendWithSkill(draftText, skill);
       }
       onSkillRequestHandled?.();
     });

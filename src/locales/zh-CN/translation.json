@@ -4701,6 +4701,8 @@
       "creatorName": "技能创建器",
       "creatorOpening": "您经常反复做什么事？跟我讲讲上一次的情况，或者选一条笔记作为起点。",
       "draftPrompt": "帮我完成这个技能。\n名称：{{name}}\n描述：{{description}}",
+      "draftInstructions": "目前的说明：\n{{instructions}}",
+      "draftFiles": "我添加的文件：{{files}}",
       "noneYet": "（暂无）"
     },
     "approval": {

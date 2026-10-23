@@ -4873,6 +4873,8 @@
       "creatorName": "Skill-Ersteller",
       "creatorOpening": "Was machst du immer wieder? Erzähl mir, wie es beim letzten Mal lief, oder wähle eine Notiz als Ausgangspunkt.",
       "draftPrompt": "Hilf mir, diesen Skill fertigzustellen.\nName: {{name}}\nBeschreibung: {{description}}",
+      "draftInstructions": "Anweisungen bisher:\n{{instructions}}",
+      "draftFiles": "Hinzugefügte Dateien: {{files}}",
       "noneYet": "(noch nichts)"
     },
     "approval": {

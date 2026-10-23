@@ -118,8 +118,16 @@ export interface SkillRef {
 
 /** How the Skills page opens a chat: with one skill attached, or with the skill creator. */
 export type SkillChatStart =
-  | { kind: "try"; name: string; displayName: string }
-  | { kind: "create"; draft?: { title: string; description: string } };
+  { kind: "try"; name: string; displayName: string } | { kind: "create"; draft?: SkillChatDraft };
+
+/** What Draft with assistant hands the skill creator from the Create skill form. */
+export interface SkillChatDraft {
+  title: string;
+  description: string;
+  instructions: string;
+  /** The names of the files the form holds; their content stays in the form. */
+  fileNames: string[];
+}
 
 /** A chat start on its way to the chat view; a new id is a new request. */
 export type SkillChatRequest = SkillChatStart & { id: number };

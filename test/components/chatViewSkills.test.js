@@ -160,7 +160,7 @@ test("Create with assistant opens a new chat with the creator chip and its openi
 });
 
 test("Draft with assistant sends the name and description into the creator chat", async (t) => {
-  const draft = { title: "Weekly report", description: "" };
+  const draft = { title: "Weekly report", description: "", instructions: "", fileNames: [] };
   await renderChatView(t, { id: 3, kind: "create", draft });
 
   assert.equal(globalThis.__sends.length, 1);
@@ -245,6 +245,28 @@ test("Open skill on a saved card goes to the skill", async (t) => {
   assert.deepEqual(calls.opened, ["meeting-prep"]);
 });
 
+test("Draft with assistant hands the creator the form's instructions and file names", async (t) => {
+  const draft = {
+    title: "Weekly report",
+    description: "",
+    instructions: "## Steps\nSum up the week.",
+    fileNames: ["references/example.md"],
+  };
+  await renderChatView(t, { id: 3, kind: "create", draft });
+
+  const [sent] = globalThis.__sends;
+  assert.match(sent.text, /skills\.chat\.draftPrompt/);
+  assert.match(sent.text, /skills\.chat\.draftInstructions.*Sum up the week/s);
+  assert.match(sent.text, /skills\.chat\.draftFiles.*references\/example\.md/);
+  assert.deepEqual(sent.options.attachedSkill, { name: "skill-creator", builtin: true });
+});
+
+test("Draft with assistant on an empty form only opens the creator", async (t) => {
+  await renderChatView(t, { id: 3, kind: "create" });
+
+  assert.deepEqual(globalThis.__sends, []);
+});
+
 test("Open skill waits for the turn to finish", async (t) => {
   // Leaving the chat ends a running turn, and a turn holding only the card isn't saved then.
   globalThis.__agentState = "streaming";
@@ -322,7 +344,12 @@ test("Draft with assistant sends once under React's development double mount", a
     mockModules,
   });
   const { default: ChatView } = await vite.ssrLoadModule("/components/chat/ChatView.tsx");
-  const draft = { title: "Weekly report", description: "Sums up my week." };
+  const draft = {
+    title: "Weekly report",
+    description: "Sums up my week.",
+    instructions: "",
+    fileNames: [],
+  };
   const view = React.createElement(ChatView, {
     skillRequest: { id: 4, kind: "create", draft },
     onSkillRequestHandled() {},

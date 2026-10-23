@@ -1409,6 +1409,8 @@
       "creatorName": "منشئ المهارات",
       "creatorOpening": "ما الذي تفعله مرارًا وتكرارًا؟ احكِ لي عن آخر مرة، أو اختر ملاحظة لتبدأ منها.",
       "draftPrompt": "ساعدني في إكمال هذه المهارة.\nالاسم: {{name}}\nالوصف: {{description}}",
+      "draftInstructions": "التعليمات حتى الآن:\n{{instructions}}",
+      "draftFiles": "الملفات التي أضفتها: {{files}}",
       "noneYet": "(لا شيء بعد)"
     },
     "approval": {

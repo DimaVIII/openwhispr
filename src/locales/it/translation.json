@@ -4701,6 +4701,8 @@
       "creatorName": "Creatore di skill",
       "creatorOpening": "Cosa fai di continuo? Raccontami l'ultima volta, oppure scegli una nota da cui partire.",
       "draftPrompt": "Aiutami a completare questa skill.\nNome: {{name}}\nDescrizione: {{description}}",
+      "draftInstructions": "Istruzioni finora:\n{{instructions}}",
+      "draftFiles": "File che ho aggiunto: {{files}}",
       "noneYet": "(ancora niente)"
     },
     "approval": {

@@ -4701,6 +4701,8 @@
       "creatorName": "技能建立工具",
       "creatorOpening": "您經常反覆做什麼事？跟我說說上一次的情況，或選一則筆記作為起點。",
       "draftPrompt": "幫我完成這個技能。\n名稱：{{name}}\n描述：{{description}}",
+      "draftInstructions": "目前的說明：\n{{instructions}}",
+      "draftFiles": "我新增的檔案：{{files}}",
       "noneYet": "（尚無）"
     },
     "approval": {

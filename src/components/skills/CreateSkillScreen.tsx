@@ -16,7 +16,7 @@ import {
   useSkillsStore,
   type SkillCreateDraft,
 } from "../../stores/skillsStore";
-import type { SkillProblemCode } from "../../types/skills";
+import type { SkillChatDraft, SkillProblemCode } from "../../types/skills";
 import { MAX_SKILL_BYTES, problemKey, writeFailedToast } from "./skillCopy";
 
 type Field = "name" | "description" | "instructions";
@@ -47,8 +47,9 @@ function fieldFor(code: SkillProblemCode): Field | null {
 interface CreateSkillScreenProps {
   onCreated: (name: string) => void;
   onBack: () => void;
-  /** Hands the name and description to the skill creator chat; the draft stays here. */
-  onDraftWithAssistant?: (draft: { title: string; description: string }) => void;
+  /** Hands what the form holds to the skill creator chat, or nothing for an empty form; the
+   *  draft stays here. */
+  onDraftWithAssistant?: (draft?: SkillChatDraft) => void;
 }
 
 export function CreateSkillScreen({
@@ -367,10 +368,16 @@ export function CreateSkillScreen({
                 variant="ghost"
                 size="sm"
                 onClick={() =>
-                  onDraftWithAssistant({
-                    title: draft.title.trim(),
-                    description: draft.description.trim(),
-                  })
+                  onDraftWithAssistant(
+                    hasContent(draft)
+                      ? {
+                          title: draft.title.trim(),
+                          description: draft.description.trim(),
+                          instructions: draft.instructions.trim(),
+                          fileNames: draft.files.map((file) => file.fileName),
+                        }
+                      : undefined
+                  )
                 }
                 className="-ms-2"
               >

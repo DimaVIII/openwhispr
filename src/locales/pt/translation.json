@@ -4701,6 +4701,8 @@
       "creatorName": "Criador de habilidades",
       "creatorOpening": "O que você faz repetidamente? Conte como foi da última vez ou escolha uma nota para começar.",
       "draftPrompt": "Me ajude a terminar esta habilidade.\nNome: {{name}}\nDescrição: {{description}}",
+      "draftInstructions": "Instruções até agora:\n{{instructions}}",
+      "draftFiles": "Arquivos que adicionei: {{files}}",
       "noneYet": "(nada ainda)"
     },
     "approval": {

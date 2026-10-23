@@ -4873,6 +4873,8 @@
       "creatorName": "Créateur de compétences",
       "creatorOpening": "Que faites-vous encore et encore ? Racontez-moi la dernière fois, ou choisissez une note pour commencer.",
       "draftPrompt": "Aidez-moi à terminer cette compétence.\nNom : {{name}}\nDescription : {{description}}",
+      "draftInstructions": "Instructions pour l’instant :\n{{instructions}}",
+      "draftFiles": "Fichiers ajoutés : {{files}}",
       "noneYet": "(rien pour l'instant)"
     },
     "approval": {

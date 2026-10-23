@@ -4873,6 +4873,8 @@
       "creatorName": "Skill creator",
       "creatorOpening": "What do you do over and over? Talk me through the last time, or pick a note to start from.",
       "draftPrompt": "Help me finish this skill.\nName: {{name}}\nDescription: {{description}}",
+      "draftInstructions": "Instructions so far:\n{{instructions}}",
+      "draftFiles": "Files I added: {{files}}",
       "noneYet": "(none yet)"
     },
     "approval": {

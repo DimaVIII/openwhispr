@@ -4701,6 +4701,8 @@
       "creatorName": "スキル作成ツール",
       "creatorOpening": "何度も繰り返していることは何ですか？前回どうだったか教えてください。ノートを選んで始めることもできます。",
       "draftPrompt": "このスキルの仕上げを手伝ってください。\n名前: {{name}}\n説明: {{description}}",
+      "draftInstructions": "ここまでの手順:\n{{instructions}}",
+      "draftFiles": "追加したファイル: {{files}}",
       "noneYet": "（未入力）"
     },
     "approval": {
