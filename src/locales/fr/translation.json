@@ -3910,7 +3910,7 @@
       "allWords": "Tous les mots",
       "personal": "Personnels",
       "group": "Partagés",
-      "allShared": "Tous les partagés",
+      "allShared": "Tous",
       "everyoneAt": "Tout le monde chez {{workspace}}",
       "hidden": "Masqués",
       "add": {

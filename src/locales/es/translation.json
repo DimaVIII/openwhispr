@@ -3611,7 +3611,7 @@
       "allWords": "Todas las palabras",
       "personal": "Personal",
       "group": "Compartidas",
-      "allShared": "Todas las compartidas",
+      "allShared": "Todas",
       "everyoneAt": "Todos en {{workspace}}",
       "hidden": "Ocultas",
       "add": {
