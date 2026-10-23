@@ -16,7 +16,7 @@ import { useToast } from "../ui/useToast";
 import { WorkspacesService, type SeatPreview } from "../../services/WorkspacesService";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { workspaceCan } from "../../lib/capabilities";
-import { hasActiveWorkspaceSubscription, hasSubscription } from "../../lib/workspaceBilling";
+import { hasActiveWorkspaceSubscription } from "../../lib/workspaceBilling";
 import { formatAmount } from "../../utils/formatAmount";
 import type { Workspace } from "../../types/electron";
 
@@ -36,7 +36,8 @@ export default function WorkspaceBillingCard({ workspace, onRefreshEntitlement }
     void onRefreshEntitlement?.();
   });
   const canManageBilling = workspaceCan(workspace, "manage_billing");
-  const subscribed = hasSubscription(workspace);
+  // Owners receive the Stripe id; `has_subscription` also covers manual plans with no Stripe sub.
+  const subscribed = Boolean(workspace.stripe_subscription_id);
   const canAddSeats = subscribed && hasActiveWorkspaceSubscription(workspace);
   const seatsUsed = workspace.seats_used ?? workspace.seats;
   const seatsTotal = Math.max(workspace.seats, seatsUsed);

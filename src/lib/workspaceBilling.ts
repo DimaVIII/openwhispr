@@ -10,8 +10,10 @@ type WorkspaceBillingState = Pick<
 >;
 
 /**
- * Whether the workspace has a Stripe subscription. APIs that predate
- * `has_subscription` only send the raw subscription id.
+ * The API's checkout gate: a Stripe subscription, or a paid plan provisioned
+ * without one. Not "a Stripe subscription exists" — use the raw
+ * `stripe_subscription_id` for Stripe-only actions. APIs that predate
+ * `has_subscription` only send the raw id.
  */
 export function hasSubscription(
   workspace: Pick<Workspace, "has_subscription" | "stripe_subscription_id">
@@ -54,11 +56,12 @@ export function isEnterpriseConsoleAvailable(
  * An owned workspace with a live, entitled Stripe subscription on a lower plan
  * can upgrade in place (subscription price swap, no new checkout). Manually
  * provisioned plans have no subscription to update, so they stay sales-led.
+ * Reads the raw id, not `has_subscription`, which also covers manual plans.
  */
 export function canUpgradeWorkspaceToEnterprise(workspace: WorkspaceBillingState): boolean {
   return (
     workspaceCan(workspace, "manage_billing") &&
-    hasSubscription(workspace) &&
+    Boolean(workspace.stripe_subscription_id) &&
     hasActiveWorkspaceSubscription(workspace) &&
     workspace.plan !== "enterprise"
   );

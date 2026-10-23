@@ -143,7 +143,7 @@ test("hasSubscription falls back to the Stripe id", () => {
   assert.equal(hasSubscription({ stripe_subscription_id: null }), false);
 });
 
-test("billing gates follow capabilities and has_subscription over the role and Stripe id", () => {
+test("billing gates follow capabilities over the role", () => {
   const capabilities = (overrides = {}) => ({
     manage_members: true,
     manage_teams: true,
@@ -165,8 +165,25 @@ test("billing gates follow capabilities and has_subscription over the role and S
     isEnterpriseConsoleAvailable({ ...blockedOwner, plan: "enterprise", status: "active" }),
     false
   );
-  // has_subscription wins when the API no longer sends the raw Stripe id.
-  const subscribed = workspace({ plan: "business", has_subscription: true });
-  assert.equal(canSelfServeEnterprise(subscribed), false);
-  assert.equal(canUpgradeWorkspaceToEnterprise(subscribed), true);
+});
+
+test("has_subscription drives the checkout gate", () => {
+  // The API reports the checkout gate, so a flagged free workspace cannot check out.
+  const flagged = workspace({ has_subscription: true });
+  assert.equal(canSelfServeEnterprise(flagged), false);
+});
+
+test("an owner of a manually provisioned plan stays sales-led", () => {
+  const manual = workspace({
+    plan: "business",
+    status: "active",
+    stripe_subscription_id: null,
+    has_subscription: true,
+  });
+  assert.equal(canSelfServeEnterprise(manual), false);
+  assert.equal(canUpgradeWorkspaceToEnterprise(manual), false);
+  assert.deepEqual(enterpriseTileCta([{ id: "a", ...manual }], null), {
+    action: "contactSales",
+    ownerName: null,
+  });
 });
