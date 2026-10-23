@@ -4705,6 +4705,7 @@
       "createHeader": "Crea skill",
       "newSkill": "Nuova skill",
       "replacesExisting": "Hai già questa skill. Salvandola la aggiorni.",
+      "replacesExistingTurnsOn": "Hai già questa skill. Salvandola la aggiorni e la attivi.",
       "nameLabel": "Nome della skill",
       "descriptionLabel": "Quando si usa",
       "seeFull": "Vedi la skill completa",

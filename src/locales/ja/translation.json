@@ -4705,6 +4705,7 @@
       "createHeader": "スキルを作成",
       "newSkill": "新しいスキル",
       "replacesExisting": "このスキルはすでにあります。保存すると更新されます。",
+      "replacesExistingTurnsOn": "このスキルはすでにあります。保存すると更新され、オンになります。",
       "nameLabel": "スキル名",
       "descriptionLabel": "使われる場面",
       "seeFull": "スキル全体を見る",

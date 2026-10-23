@@ -4875,6 +4875,7 @@
       "createHeader": "Skill erstellen",
       "newSkill": "Neuer Skill",
       "replacesExisting": "Diesen Skill hast du schon. Beim Speichern wird er aktualisiert.",
+      "replacesExistingTurnsOn": "Diesen Skill hast du schon. Beim Speichern wird er aktualisiert und eingeschaltet.",
       "nameLabel": "Name des Skills",
       "descriptionLabel": "Wann er genutzt wird",
       "seeFull": "Ganzen Skill ansehen",

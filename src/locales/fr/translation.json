@@ -4875,6 +4875,7 @@
       "createHeader": "Créer une compétence",
       "newSkill": "Nouvelle compétence",
       "replacesExisting": "Vous avez déjà cette compétence. L'enregistrer la met à jour.",
+      "replacesExistingTurnsOn": "Vous avez déjà cette compétence. L'enregistrer la met à jour et l'active.",
       "nameLabel": "Nom de la compétence",
       "descriptionLabel": "Quand l'utiliser",
       "seeFull": "Voir la compétence complète",

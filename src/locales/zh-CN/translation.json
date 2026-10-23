@@ -4705,6 +4705,7 @@
       "createHeader": "创建技能",
       "newSkill": "新技能",
       "replacesExisting": "您已经有这个技能，保存后会更新它。",
+      "replacesExistingTurnsOn": "您已经有这个技能，保存后会更新并开启它。",
       "nameLabel": "技能名称",
       "descriptionLabel": "何时使用",
       "seeFull": "查看完整技能",

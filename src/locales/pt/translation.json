@@ -4705,6 +4705,7 @@
       "createHeader": "Criar habilidade",
       "newSkill": "Nova habilidade",
       "replacesExisting": "Você já tem esta habilidade. Salvar vai atualizá-la.",
+      "replacesExistingTurnsOn": "Você já tem esta habilidade. Salvar vai atualizá-la e ativá-la.",
       "nameLabel": "Nome da habilidade",
       "descriptionLabel": "Quando é usada",
       "seeFull": "Ver a habilidade completa",

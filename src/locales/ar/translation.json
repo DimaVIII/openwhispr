@@ -1414,6 +1414,7 @@
       "createHeader": "إنشاء مهارة",
       "newSkill": "مهارة جديدة",
       "replacesExisting": "لديك هذه المهارة بالفعل. الحفظ سيحدّثها.",
+      "replacesExistingTurnsOn": "لديك هذه المهارة بالفعل. الحفظ سيحدّثها ويفعّلها.",
       "nameLabel": "اسم المهارة",
       "descriptionLabel": "متى تُستخدم",
       "seeFull": "عرض المهارة كاملة",

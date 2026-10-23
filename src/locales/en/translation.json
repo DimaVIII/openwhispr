@@ -4875,6 +4875,7 @@
       "createHeader": "Create skill",
       "newSkill": "New skill",
       "replacesExisting": "You already have this skill. Saving updates it.",
+      "replacesExistingTurnsOn": "You already have this skill. Saving updates it and turns it on.",
       "nameLabel": "Skill name",
       "descriptionLabel": "When it's used",
       "seeFull": "See full skill",
