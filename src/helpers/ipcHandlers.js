@@ -2159,9 +2159,19 @@ class IPCHandlers {
       return this.databaseManager.upsertDictionaryFromCloud(cloudEntry);
     });
 
-    ipcMain.handle("db-mark-dictionary-synced", async (_event, id, cloudId) => {
-      return this.databaseManager.markDictionaryEntrySynced(id, cloudId);
-    });
+    ipcMain.handle(
+      "db-mark-dictionary-synced",
+      async (_event, id, cloudId, serverUpdatedAt, expectedWord, expectedSource, serverSource) => {
+        return this.databaseManager.markDictionaryEntrySynced(
+          id,
+          cloudId,
+          serverUpdatedAt,
+          expectedWord,
+          expectedSource,
+          serverSource
+        );
+      }
+    );
 
     ipcMain.handle("db-hard-delete-dictionary", async (_event, id) => {
       return this.databaseManager.hardDeleteDictionaryEntry(id);
