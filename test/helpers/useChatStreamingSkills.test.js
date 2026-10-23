@@ -326,9 +326,13 @@ const OPENING =
 test("the attached creator learns the user's skills, connected apps and tool use", async (t) => {
   const creator = { attachedSkill: { name: "skill-creator", builtin: true } };
   const cloud = skillsApi();
-  const tools = await renderChat(t, { ...SKILLS_ON, allowConnectors: true }, {
-    electronAPI: cloud.api,
-  });
+  const tools = await renderChat(
+    t,
+    { ...SKILLS_ON, allowConnectors: true },
+    {
+      electronAPI: cloud.api,
+    }
+  );
   const { useConnectorStatusStore } = await tools.vite.ssrLoadModule(
     "/stores/connectorStatusStore.ts"
   );
@@ -343,8 +347,8 @@ test("the attached creator learns the user's skills, connected apps and tool use
   assert.ok(
     block.endsWith(
       `</skill_content>\n${OPENING}\nThe user's skills (name: when to use it):\n` +
-        "- meeting-prep: Briefs me before meetings.\n- weekly-recap: Recaps my week on Fridays.\n" +
-        "Connected apps: Slack"
+        "<skill_catalog>\n- meeting-prep: Briefs me before meetings.\n" +
+        "- weekly-recap: Recaps my week on Fridays.\n</skill_catalog>\nConnected apps: Slack"
     ),
     block
   );
@@ -384,7 +388,9 @@ const catalogOf = (sent) => {
   const start = prompt.indexOf(`${CATALOG_INTRO}\n`);
   if (start < 0) return null;
   const rest = prompt.slice(start + CATALOG_INTRO.length + 1);
-  return rest.slice(0, rest.indexOf("\n\n"));
+  const fenced = rest.slice(0, rest.indexOf("\n\n"));
+  assert.match(fenced, /^<skill_catalog>\n[\s\S]*\n<\/skill_catalog>$/);
+  return fenced.slice("<skill_catalog>\n".length, -"\n</skill_catalog>".length);
 };
 const loadSkillEnum = (definitions) =>
   definitions.find((tool) => tool.name === "load_skill")?.parameters.properties.name.enum;
@@ -452,27 +458,21 @@ test("an invalid skill is left out of the catalog and the load_skill enum", asyn
   assert.deepEqual(loadSkillEnum(toolDefinitions[0]), ["meeting-prep"]);
 });
 
-test(
-  "a skill loaded in an earlier turn is re-sent in the next turn's model-only text",
-  async (t) => {
-    const { api, calls } = skillsApi();
-    const { captured, sentMessages } = await renderChat(t, SKILLS_ON, { electronAPI: api });
-    const history = [
-      userMessage("u1", "prep me"),
-      loadedEarlier("meeting-prep"),
-      userMessage("u2", "and the agenda?"),
-    ];
+test("a skill loaded in an earlier turn is re-sent in the next turn's model-only text", async (t) => {
+  const { api, calls } = skillsApi();
+  const { captured, sentMessages } = await renderChat(t, SKILLS_ON, { electronAPI: api });
+  const history = [
+    userMessage("u1", "prep me"),
+    loadedEarlier("meeting-prep"),
+    userMessage("u2", "and the agenda?"),
+  ];
 
-    await captured.sendToAI("and the agenda?", history);
+  await captured.sendToAI("and the agenda?", history);
 
-    assert.equal(
-      latestUserText(sentMessages[0]),
-      withRequest(MEETING_PREP_BLOCK, "and the agenda?")
-    );
-    assert.equal(userTurns(sentMessages[0])[0].content, "prep me");
-    assert.deepEqual(calls.reads, [{ name: "meeting-prep", withFiles: false }]);
-  }
-);
+  assert.equal(latestUserText(sentMessages[0]), withRequest(MEETING_PREP_BLOCK, "and the agenda?"));
+  assert.equal(userTurns(sentMessages[0])[0].content, "prep me");
+  assert.deepEqual(calls.reads, [{ name: "meeting-prep", withFiles: false }]);
+});
 
 test("a skill the user took off the chat isn't re-sent, though the model loaded it", async (t) => {
   const { api, calls } = skillsApi();

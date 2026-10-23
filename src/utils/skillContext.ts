@@ -15,11 +15,35 @@ const FILE_CUT = "[The rest of this file was cut to fit.]";
 // Each list of file names gets at most this share of a skill's budget, so a skill with
 // hundreds of files can't push its own instructions out.
 const FILE_NAMES_SHARE = 8;
+// A description in the skills list says when to use the skill; past this it is cut.
+const CATALOG_DESCRIPTION_MAX_CHARS = 300;
+
+// Each letter as written, or its full-width form, in either case.
+const anyWidth = (word: string): string =>
+  [...word].map((char) => `[${char}${String.fromCharCode(char.charCodeAt(0) + 0xfee0)}]`).join("");
+// A tag that opens or closes one of the blocks skill text is fenced in, however it is written:
+// any case, spaced out, or with full-width or small look-alike brackets.
+const FENCE_TAG = new RegExp(
+  `[<\uff1c\ufe64](?=\\s*[/\uff0f]?\\s*${anyWidth("skill")}[\\s_\uff3f-]*(?:${[
+    "content",
+    "file",
+    "catalog",
+  ]
+    .map(anyWidth)
+    .join("|")}))`,
+  "giu"
+);
 
 const oneLine = (text: string): string => text.replace(/\s+/g, " ").trim();
-// A skill's text is data: a closing tag inside it must not end its block early.
-const asData = (text: string): string => text.replace(/<\/skill_/g, "<\\/skill_").trimEnd();
-const asAttribute = (text: string): string => oneLine(text).replace(/"/g, "&quot;");
+// A skill's text is data: no tag inside it may end its block early or open another.
+const asData = (text: string): string => text.replace(FENCE_TAG, "&lt;").trimEnd();
+const asAttribute = (text: string): string => asData(oneLine(text)).replace(/"/g, "&quot;");
+const catalogDescription = (text: string): string => {
+  const chars = [...asData(oneLine(text))];
+  return chars.length > CATALOG_DESCRIPTION_MAX_CHARS
+    ? `${chars.slice(0, CATALOG_DESCRIPTION_MAX_CHARS).join("").trimEnd()}…`
+    : chars.join("");
+};
 const lastUse = (skill: SkillSummary): string => skill.lastUsedAt ?? "";
 
 // The leading whole lines of `text` that fit, marked when cut. One token stays free for the
@@ -62,22 +86,23 @@ const fileBlock = (file: SkillForModel["files"][number]): string =>
   `<skill_file path="${asAttribute(file.path)}">\n${asData(file.content ?? "")}\n</skill_file>`;
 
 /**
- * One line per skill, most recently used first. Past the budget the least-used lose their
- * descriptions, but every name stays.
+ * One line per skill, most recently used first, fenced as data: descriptions can come from an
+ * uploaded skill. Past the budget the least-used lose their descriptions, but every name stays.
  */
 export function buildSkillCatalog(skills: SkillSummary[], maxTokens: number): string {
   const ordered = [...skills].sort((a, b) =>
     lastUse(a) < lastUse(b) ? 1 : lastUse(a) > lastUse(b) ? -1 : 0
   );
-  const lines = ordered.map((skill) => `- ${skill.name}: ${oneLine(skill.description)}`);
+  const lines = ordered.map((skill) => `- ${skill.name}: ${catalogDescription(skill.description)}`);
+  const fenced = (): string => ["<skill_catalog>", ...lines, "</skill_catalog>"].join("\n");
   for (
     let index = lines.length - 1;
-    index >= 0 && estimateNoteTokens(lines.join("\n")) > maxTokens;
+    index >= 0 && estimateNoteTokens(fenced()) > maxTokens;
     index -= 1
   ) {
     lines[index] = `- ${ordered[index].name}`;
   }
-  return lines.join("\n");
+  return fenced();
 }
 
 /**
