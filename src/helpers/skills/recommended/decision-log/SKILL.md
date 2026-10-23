@@ -2,7 +2,7 @@
 name: decision-log
 description: "Finds the decisions in the user's meeting notes, with the date and meeting of each. Use when the user asks what was decided."
 metadata:
-  display_name: "Decision log"
+  display_name: "Meeting decisions"
 ---
 
 ## Purpose

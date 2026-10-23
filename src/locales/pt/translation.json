@@ -4688,7 +4688,7 @@
         "description": "Reúne o que mudou desde a minha última reunião individual com alguém. Use quando eu pedir para me preparar para um 1:1."
       },
       "decision-log": {
-        "title": "Registro de decisões",
+        "title": "Decisões das reuniões",
         "description": "Encontra as decisões nas notas das minhas reuniões, com a data e a reunião de cada uma. Use quando eu perguntar o que decidimos."
       }
     },
