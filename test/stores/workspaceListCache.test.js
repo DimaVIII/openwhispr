@@ -51,8 +51,10 @@ const failing = async () => {
   throw new Error("offline");
 };
 
-const cacheEntry = (accountId, workspaces = WORKSPACES) =>
-  JSON.stringify({ accountId, fetchedAt: 1, workspaces });
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const cacheEntry = (accountId, workspaces = WORKSPACES, fetchedAt = Date.now()) =>
+  JSON.stringify({ accountId, fetchedAt, workspaces });
 
 test("successful refresh caches the list for this account", async (t) => {
   const { storage, store } = await loadStore(t);
@@ -128,8 +130,10 @@ for (const [name, raw] of [
   ["bad JSON", "{not json"],
   [
     "workspaces not an array",
-    JSON.stringify({ accountId: "acct-1", fetchedAt: 1, workspaces: {} }),
+    JSON.stringify({ accountId: "acct-1", fetchedAt: Date.now(), workspaces: {} }),
   ],
+  ["older than 30 days", cacheEntry("acct-1", WORKSPACES, Date.now() - 31 * DAY_MS)],
+  ["no fetchedAt", JSON.stringify({ accountId: "acct-1", workspaces: WORKSPACES })],
   ["null entry", cacheEntry("acct-1", [null])],
   ["entry without a string id", cacheEntry("acct-1", [{ id: 7, plan: "business" }])],
 ]) {

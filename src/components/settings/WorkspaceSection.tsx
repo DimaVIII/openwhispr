@@ -199,6 +199,22 @@ export default function WorkspaceSection({ initialSubTab }: Props) {
         </div>
       </div>
 
+      {/* The last refresh failed, so this is the list from memory or the cache. */}
+      {error && (
+        <div
+          role="status"
+          className="flex items-center gap-3 rounded-lg border border-border/70 dark:border-border-subtle/70 bg-card/50 dark:bg-surface-2/50 px-3 py-2"
+        >
+          <p className="flex-1 text-xs text-muted-foreground">
+            {t("settingsPage.workspace.staleList")}
+          </p>
+          <Button size="sm" variant="outline" onClick={() => void refresh()} disabled={loading}>
+            {loading && <Loader2 className="me-1.5 h-3.5 w-3.5 animate-spin" />}
+            {t("settingsPage.workspace.loadError.retry")}
+          </Button>
+        </div>
+      )}
+
       <div className="border-b border-border/70 dark:border-border-subtle/60 -mx-1">
         <div role="tablist" className="flex gap-0.5 px-1">
           {visibleTabs.map((id) => (

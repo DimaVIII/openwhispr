@@ -35,9 +35,11 @@ function writeActiveWorkspaceId(id: string | null): void {
   else localStorage.removeItem(ACTIVE_WORKSPACE_KEY);
 }
 
-// Last successful workspace list, kept so the switcher and settings still work offline. It is
-// only read for the account that wrote it.
+// Last successful workspace list, shown when a signed-in session can't load the list (the API
+// is unreachable or the request fails). It is only read for the account that wrote it, and only
+// while it is recent: the server still decides every action, but a list this old is likely wrong.
 export const WORKSPACE_LIST_CACHE_KEY = "workspaceListCache";
+const WORKSPACE_LIST_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 function writeWorkspaceListCache(accountId: string | null, workspaces: Workspace[]): void {
   if (typeof window === "undefined" || !accountId) return;
@@ -58,11 +60,19 @@ function readWorkspaceListCache(accountId: string | null): Workspace[] | null {
     if (!raw) return null;
     const cached: unknown = JSON.parse(raw);
     if (!cached || typeof cached !== "object") return null;
-    const { accountId: cachedAccountId, workspaces } = cached as {
+    const {
+      accountId: cachedAccountId,
+      fetchedAt,
+      workspaces,
+    } = cached as {
       accountId?: unknown;
+      fetchedAt?: unknown;
       workspaces?: unknown;
     };
     if (cachedAccountId !== accountId || !Array.isArray(workspaces)) return null;
+    if (typeof fetchedAt !== "number" || Date.now() - fetchedAt > WORKSPACE_LIST_CACHE_MAX_AGE_MS) {
+      return null;
+    }
     // A malformed entry would throw in later `.find(w => w.id …)` calls.
     const wellFormed = workspaces.every(
       (entry) => entry && typeof entry === "object" && typeof entry.id === "string"
@@ -181,8 +191,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
           { error: (error as Error).message },
           "workspaces"
         );
-        // Offline with nothing in memory: show the last list this account saw. `error` stays
-        // true so the reconnect retry replaces it with the server's answer.
+        // Nothing in memory: show the last list this account saw. `error` stays true so the
+        // reconnect retry replaces it with the server's answer and the UI marks it out of date.
         const cached =
           get().workspaces.length === 0
             ? readWorkspaceListCache(usePolicyStore.getState().accountId)
