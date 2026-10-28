@@ -51,10 +51,14 @@ import {
 } from "../../utils/skillContext";
 import { pickSkillForRequest } from "../../utils/localSkillPick";
 import type { SkillRef, SkillSummary } from "../../types/skills";
-import { getDictionaryHintWords } from "../../utils/snippets";
+import { getLlmDictionaryWords } from "../../utils/snippets";
 import { noteAttendeesContext, withoutAttendeesFence } from "../../utils/noteAttendees";
 import { FULL_TRANSCRIPT_MAX_TOKENS } from "../../utils/transcriptEvidence";
 import { createToolRegistry } from "../../services/tools";
+import type { SharedDictionaryWord } from "../../services/tools/dictionaryTool";
+import { setSharedWordsHidden } from "../../services/sharedDictionaryActions";
+import { readActiveWorkspaceId } from "../../stores/workspaceStore";
+import { selectAppliedSharedWords } from "../../utils/sharedDictionaryHints";
 import {
   executeTool,
   type HoldDeliveryOptions,
@@ -78,6 +82,32 @@ const RAG_NOTE_SNIPPET_LENGTH = 500;
 const STREAM_FLUSH_INTERVAL_MS = 32;
 
 const LOCAL_TOOL_MIN_PARAMS_B = 4;
+
+// The tool reads the DB mirror over IPC (not the control panel's store), so it
+// also works from the dictation window, for the workspace every window uses now.
+async function readAppliedSharedWords(): Promise<SharedDictionaryWord[]> {
+  const workspaceId = readActiveWorkspaceId();
+  if (!workspaceId) return [];
+  try {
+    const snapshot = await window.electronAPI?.getSharedDictionary?.(workspaceId);
+    if (!snapshot) return [];
+    return selectAppliedSharedWords(snapshot, getSettings());
+  } catch (error) {
+    // The assistant then treats shared words as absent rather than failing the call.
+    logger.warn(
+      "Failed to read the shared dictionary for the assistant",
+      { error: (error as Error)?.message },
+      "dictionary"
+    );
+    return [];
+  }
+}
+
+async function hideAppliedSharedWords(ids: string[]): Promise<void> {
+  const workspaceId = readActiveWorkspaceId();
+  if (!workspaceId) throw new Error("No active workspace");
+  await setSharedWordsHidden(workspaceId, ids, true);
+}
 
 function estimateModelSizeB(modelId: string): number {
   const match = modelId.match(/-([\d.]+)[bB]/);
@@ -512,6 +542,8 @@ export function useChatStreaming({
                 getDictionary: () => getSettings().customDictionary,
                 updateDictionary: (changes) =>
                   useSettingsStore.getState().updateCustomDictionary(changes),
+                getSharedWords: readAppliedSharedWords,
+                hideSharedWords: hideAppliedSharedWords,
                 getSnippets: () => getSettings().snippets,
                 setSnippets: (snippets) => useSettingsStore.getState().setSnippets(snippets),
               },
@@ -678,7 +710,7 @@ export function useChatStreaming({
               : undefined,
             skillContent: skillBlocks.length > 0,
           }),
-          getDictionaryHintWords(settings),
+          getLlmDictionaryWords(settings, { includeTriggers: true }),
           settings.uiLanguage
         );
 

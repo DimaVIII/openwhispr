@@ -1328,7 +1328,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     serverUpdatedAt,
     expectedWord,
     expectedSource,
-    serverSource
+    serverSource,
+    pushed
   ) =>
     ipcRenderer.invoke(
       "db-mark-dictionary-synced",
@@ -1337,11 +1338,36 @@ contextBridge.exposeInMainWorld("electronAPI", {
       serverUpdatedAt,
       expectedWord,
       expectedSource,
-      serverSource
+      serverSource,
+      pushed
     ),
   hardDeleteDictionary: (id) => ipcRenderer.invoke("db-hard-delete-dictionary", id),
   clearDictionaryCloudId: (id) => ipcRenderer.invoke("db-clear-dictionary-cloud-id", id),
   broadcastDictionaryUpdated: () => ipcRenderer.invoke("db-broadcast-dictionary-updated"),
+  getDictionaryEntriesByWords: (words) =>
+    ipcRenderer.invoke("db-get-dictionary-entries-by-words", words),
+  markDictionaryWordsShared: (words, sharedAt, options) =>
+    ipcRenderer.invoke("db-mark-dictionary-words-shared", words, sharedAt, options),
+  getMovedDictionaryWords: () => ipcRenderer.invoke("db-get-moved-dictionary-words"),
+  retireMovedDictionaryWords: (words, options) =>
+    ipcRenderer.invoke("db-retire-moved-dictionary-words", words, options),
+  reviveRetiredDictionaryWords: (words) =>
+    ipcRenderer.invoke("db-revive-retired-dictionary-words", words),
+
+  getSharedDictionary: (workspaceId) => ipcRenderer.invoke("db-shared-dictionary-get", workspaceId),
+  applySharedDictionaryPull: (workspaceId, change) =>
+    ipcRenderer.invoke("db-shared-dictionary-apply-pull", workspaceId, change),
+  replaceSharedDictionary: (workspaceId, full) =>
+    ipcRenderer.invoke("db-shared-dictionary-replace", workspaceId, full),
+  applySharedDictionaryHides: (workspaceId, change) =>
+    ipcRenderer.invoke("db-shared-dictionary-apply-hides", workspaceId, change),
+  replaceSharedDictionaryHides: (workspaceId, hidden) =>
+    ipcRenderer.invoke("db-shared-dictionary-replace-hides", workspaceId, hidden),
+  clearSharedDictionary: (workspaceId) =>
+    ipcRenderer.invoke("db-shared-dictionary-clear", workspaceId),
+  pruneSharedDictionary: (keepWorkspaceIds) =>
+    ipcRenderer.invoke("db-shared-dictionary-prune", keepWorkspaceIds),
+  setSharedDictionaryHints: (hints) => ipcRenderer.invoke("dictionary-set-shared-hints", hints),
 
   getPendingSnippets: () => ipcRenderer.invoke("db-get-pending-snippets"),
   getPendingSnippetDeletes: () => ipcRenderer.invoke("db-get-pending-snippet-deletes"),

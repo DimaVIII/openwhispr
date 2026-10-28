@@ -8,6 +8,7 @@ import { followsSystemDefaultMic } from "../helpers/micSelectionRecovery";
 import { resolvePreferredMicrophone } from "../helpers/microphoneSelection";
 import { ActiveMicRecoveryController } from "../helpers/activeMicRecovery";
 import { getBaseLanguageCode } from "../utils/languageSupport";
+import { getKeytermDictionaryWords } from "../utils/snippets";
 import {
   resolveInitialSpeakerCountOverride,
   resolveParticipantSpeakerCountSync,
@@ -211,7 +212,7 @@ const getMeetingTranscriptionOptions = () => {
       managedProviders: useStreamingProvidersStore.getState().providers,
       cortiEnvironment: state.cortiEnvironment,
       cortiTenant: state.cortiTenant,
-      keyterms: (state.customDictionary ?? []).filter(Boolean),
+      keyterms: getKeytermDictionaryWords(state).filter(Boolean),
     }),
     enterpriseIdentity,
     enterpriseSetupMode: state.enterpriseTranscriptionSetupMode,
